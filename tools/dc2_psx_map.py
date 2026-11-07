@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """Map functions of the PC version (Dino2.exe) to the PS1 version
-(SLUS_012.79 + area overlays ST0..ST9.BIN).
+(SLUS_012.79 and its code overlays *.BIN, all in one folder).
 
 The PC game code is a port of the PS1 code: the functions correspond almost
 one to one and use the same structure layouts. Starting from anchors (the
@@ -11,13 +11,16 @@ two functions use.
 
   usage: dc2_psx_map.py game/Dino2.exe game/PSX [-o tools/dc2_psx_map.csv]
 
-Output CSV: pc address, PS1 address, where the PS1 code lives (exe or STn
-overlay, loaded at 0x800D5800), score (0..1: shared structure offsets and
-constants, size), callees (paired callees that are also callees of the
-partner / paired callees), name (from dc2_labels.csv). Needs capstone.
-Not covered: the enemies' code, which the PS1 version keeps in further
-overlays at 0x800D0000 (type handler tables point there).
-Only addresses are written; nothing of the game itself.""" 
+PS1 overlays (load addresses in PSX.BASES): ST0..9 areas (0x800D5800),
+E00..EA0 one enemy kind each (0x800D0000; the area tables' type slots
+2.. point at fixed entry offsets, the loaded E file supplies the code),
+WEPxx weapons, menus (SAVE, OPTION, SUBSCRx, RESxx, LOAD), title/result.
+
+Output CSV: pc address, PS1 address, where the PS1 code lives (exe or the
+overlay's name), score (0..1: shared structure offsets and constants,
+size), callees (paired callees that are also callees of the partner /
+paired callees), name (from dc2_labels.csv). Needs capstone.
+Only addresses are written; nothing of the game itself."""
 import argparse, csv, os, struct, sys
 from capstone import Cs, CS_ARCH_X86, CS_MODE_32, CS_ARCH_MIPS, CS_MODE_MIPS32, CS_MODE_LITTLE_ENDIAN
 from capstone.x86 import X86_OP_IMM, X86_OP_MEM
@@ -96,28 +99,46 @@ class PC:
 
 # --------------------------------------------------------------- PS1 side
 class PSX:
-    OVL_BASE = 0x800D5800
+    # overlays and where the PS1 version loads them (file table at 0x80019460
+    # and jump tables inside the overlays)
+    BASES = [('ST%d' % n, 0x800D5800) for n in range(10)] + \
+            [(n, 0x800D0000) for n in ('E00', 'E10', 'E20', 'E30', 'E31', 'E32', 'E40', 'E50', 'E60', 'E70',
+                                       'E80', 'E90', 'EA0')] + \
+            [(n, 0x800D5800) for n in ('LOGO', 'M_TITLE', 'TITLE2', 'OPENING', 'ENDING', 'M_RESULT')] + \
+            [(n, 0x801C1500) for n in ('LOAD', 'SAVE', 'OPTION', 'SUBSCR3', 'SUBSCR6')] + \
+            [(n, 0x80150000) for n in ('RES00', 'RES01', 'RES02')] + \
+            [('WEP%02X' % n, 0x8017E500) for n in range(0x0D)] + \
+            [('WEP%02X' % n, 0x80120000) for n in range(0x0D, 0x14)]
 
     def __init__(self, folder):
         d = open(os.path.join(folder, 'SLUS_012.79'), 'rb').read()
         load, size = struct.unpack_from('<I', d, 0x18)[0], struct.unpack_from('<I', d, 0x1C)[0]
-        self.parts = [('exe', load, d[0x800:0x800 + size])]
+        self.exe = (load, d[0x800:0x800 + size])
         self.ovl = {}
-        for n in range(10):
-            p = os.path.join(folder, 'ST%d.BIN' % n)
-            if os.path.exists(p): self.ovl[n] = open(p, 'rb').read()
+        for name, base in self.BASES:
+            p = os.path.join(folder, name + '.BIN')
+            if os.path.exists(p): self.ovl[name] = (base, open(p, 'rb').read())
         self.md = Cs(CS_ARCH_MIPS, CS_MODE_MIPS32 + CS_MODE_LITTLE_ENDIAN); self.md.detail = True
         self.cache = {}
 
     def mem(self, where):
-        if where == 'exe': return self.parts[0][1], self.parts[0][2]
-        return self.OVL_BASE, self.ovl[where]
+        return self.exe if where == 'exe' else self.ovl[where]
 
-    def where(self, a, area=None):
-        b, d = self.mem('exe')
+    def where(self, a, ctx=None):
+        b, d = self.exe
         if b <= a < b + len(d): return 'exe'
-        if area is not None and area in self.ovl and self.OVL_BASE <= a < self.OVL_BASE + len(self.ovl[area]): return area
+        if ctx in self.ovl:
+            b, d = self.ovl[ctx]
+            if b <= a < b + len(d): return ctx
         return None
+
+    def candidates(self, a):
+        """overlays that have a function start at a"""
+        out = []
+        for name, (b, d) in self.ovl.items():
+            o = a - b
+            if 0 <= o <= len(d) - 4 and (struct.unpack_from('<I', d, o)[0] >> 16) == 0x27BD: out.append(name)
+        return out
 
     def u32(self, where, a):
         b, d = self.mem(where)
@@ -191,7 +212,7 @@ PC_AREA_TABS = [  # Area0..9_SetTables (0x48D170 + 0x40 n): 0x87DCA0, 0x87F948, 
 
 def psx_area_tables(px, n):
     """pointers stored by the overlay's area set-up (G+0x21C = area)"""
-    d = px.ovl[n]; w = struct.unpack_from('<%dI' % (len(d) // 4), d, 0)
+    d = px.ovl[n][1]; w = struct.unpack_from('<%dI' % (len(d) // 4), d, 0)
     st = next(i for i in range(len(w)) if (w[i] & 0xFFFF) == 0x21C and (w[i] >> 26) == 0x29)
     out = []
     for i in range(max(0, st - 8), min(st + 40, len(w) - 2)):
@@ -248,21 +269,27 @@ def main():
         if not pc.is_code(p): return
         pairs[p] = (where, s, sc); rev[(where, s)] = p; todo.append(p)
 
+    def best_cand(x, t):
+        c = [(score(pc.func(x), px.func(w, t)), w) for w in px.candidates(t)]
+        return max(c) if c else (0, None)
+
+    flat = sorted(t for tt in PC_AREA_TABS for t in tt)
     for n, tabs in enumerate(PC_AREA_TABS):
-        if n not in px.ovl: continue
-        flat = sorted(t for tt in PC_AREA_TABS for t in tt)
-        for pt, st in zip(tabs, psx_area_tables(px, n)):
+        ov = 'ST%d' % n
+        if ov not in px.ovl: continue
+        for pt, st in zip(tabs, psx_area_tables(px, ov)):
             nxt = next((t for t in flat if t > pt), pt + 0x80)
             for k in range((nxt - pt) // 4):
                 v1 = pc.u32(pt + 4 * k)
-                where = px.where(st + 4 * k, n)
+                where = px.where(st + 4 * k, ov)
                 if where is None: break
                 v2 = px.u32(where, st + 4 * k)
-                w2 = px.where(v2, n)
-                if pc.is_code(v1) and w2 is not None: add(v1, w2, v2, 1.0)
-
-    def ps_resolve(t, area):
-        return px.where(t, area if isinstance(area, int) else None)
+                if not pc.is_code(v1): continue
+                w2 = px.where(v2, ov)
+                if w2 is not None: add(v1, w2, v2, 1.0)
+                else:                                       # enemy code: one of the E overlays
+                    sc, w2 = best_cand(v1, v2)
+                    if w2 is not None and sc >= 0.3: add(v1, w2, v2, sc)
 
     # whole-program call graphs for the upward step
     pc_funcs = set(names) | {p for p in pairs}
@@ -289,6 +316,7 @@ def main():
         b, d = px.mem(where)
         for i in range(0, len(d) - 4, 4):
             w = struct.unpack_from('<I', d, i)[0]
+            if (w >> 16) == 0x27BD and where != 'exe': ps_funcs.add((where, b + i))
             if w >> 26 == 3:
                 t = 0x80000000 | ((w & 0x3FFFFFF) << 2)
                 wt = px.where(t, where if where != 'exe' else None)
@@ -349,24 +377,33 @@ def main():
             if x not in pairs and y not in rev: add(x, y[0], y[1], v); found += 1
         return found
 
+    def ps_resolve(t, ctx):
+        return px.where(t, ctx)
+
     while True:
       while todo:
           p = todo.pop(0)
           where, s, _ = pairs[p]
           if not pc.is_code(p): continue
           pf = pc.func(p); sf = px.func(where, s)
-          area = where if isinstance(where, int) else None
+          area = where if where != 'exe' else None
           ca = [t for t in pf[1] if pc.is_code(t)]
           cb = [(ps_resolve(t, area), t) for t in sf[1]]
-          cb = [x for x in cb if x[0] is not None]
+          cb = [x for x in cb if x[0] is not None or px.candidates(x[1])]   # None: one of the overlays
+
+          def resolve(x, y):
+              return (best_cand(x, y[1])[1], y[1]) if y[0] is None else y
 
           def sim(x, y):
+              y = resolve(x, y)
+              if y[0] is None: return 0.0
               if x in pairs: return 3.0 if pairs[x][:2] == y else 0.0
               if y in rev: return 0.0
               return score(pc.func(x), px.func(*y))
 
           for i, j in align(ca, cb, sim):
-              x, y = ca[i], cb[j]
+              x, y = ca[i], resolve(ca[i], cb[j])
+              if y[0] is None: continue
               sc = score(pc.func(x), px.func(*y))
               if sc >= 0.35 or (sc >= 0.2 and len(ca) == len(cb)): add(x, y[0], y[1], sc)
           # function tables used by both (state tables, dispatch tables)
@@ -387,14 +424,15 @@ def main():
               w0 = px.where(y, area)
               for k in range(min(pc_tab(x), ps_tab(y))):
                   v1, v2 = pc.u32(x + 4 * k), px.u32(w0, y + 4 * k)
-                  add(v1, px.where(v2, area), v2, 0.9)
+                  w2 = px.where(v2, area)
+                  if w2 is not None: add(v1, w2, v2, 0.9)
       if upward(): continue
       if not global_pass(): break
 
     def consistency(p):
         """paired callees of p whose partner is a callee of p's partner: 'n/m'"""
         where, s, _ = pairs[p]
-        area = where if isinstance(where, int) else None
+        area = where if where != 'exe' else None
         cb = {(px.where(t, area), t) for t in px.func(where, s)[1]}
         ca = [t for t in dict.fromkeys(pc.func(p)[1]) if t in pairs]
         return '%d/%d' % (sum(1 for t in ca if pairs[t][:2] in cb), len(ca))
@@ -404,7 +442,7 @@ def main():
         w = csv.writer(f)
         w.writerow(['pc', 'psx', 'where', 'score', 'callees', 'name'])
         for p, (where, s, sc) in rows:
-            w.writerow(['0x%06X' % p, '0x%08X' % s, 'exe' if where == 'exe' else 'ST%d' % where, '%.2f' % sc,
+            w.writerow(['0x%06X' % p, '0x%08X' % s, where, '%.2f' % sc,
                         consistency(p), names.get(p, '')])
     game = [p for p in pairs if any(lo <= p < hi for lo, hi in PC.GAME)]
     lib = [p for p in pairs if PC.PCL[0] <= p < PC.PCL[1]]

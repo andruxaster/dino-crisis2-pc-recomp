@@ -12,7 +12,7 @@ own copy of the game. Put it in `game/` (ignored by git):
 | folder | contents |
 |---|---|
 | `include/`, `src/`, `tests/` | the recompilation (below) |
-| `tools/` | Python tools for the data formats: containers/LZSS (`dc2dat.py`), rooms, collision, cameras (`dc2room.py`), room scripts (`dc2script.py`), objects and enemy sets (`dc2objects.py`), models, animations, cutscenes; `dc2_labels.csv` (function/data names, `ghidra_apply_labels.py`), room and file tables; `dc2_psx_map.py` → `dc2_psx_map.csv`: PC functions paired with the PS1 version's (SLUS_012.79 and the area overlays ST0..9.BIN, put in `game/PSX/`) |
+| `tools/` | Python tools for the data formats: containers/LZSS (`dc2dat.py`), rooms, collision, cameras (`dc2room.py`), room scripts (`dc2script.py`), objects and enemy sets (`dc2objects.py`), models, animations, cutscenes; `dc2_labels.csv` (function/data names, `ghidra_apply_labels.py`), room and file tables; `dc2_psx_map.py` → `dc2_psx_map.csv`: PC functions paired with the PS1 version's (SLUS_012.79 and its code overlays: areas ST0..9, enemies E00..EA0, weapons, menus; put in `game/PSX/`) |
 | `docs/` | formats and engine notes as C headers: `dc2_game_flow.h` (files, rooms, collision, scripts, objects, models), `dc2_pc_prims.h`, `dc2_texcache.h`, `dc2_render_states.h` |
 | `viewer/` | `dc2view`: SDL2/GL room viewer (backgrounds, masks, models, collision, doors, script-placed dinosaurs) |
 
