@@ -25,8 +25,8 @@ One source tree, three builds:
 | build | what | status |
 |---|---|---|
 | `build/dinput.dll` | hook DLL: put next to `Dino2.exe`, redirects the original functions to the C ones | runs inside the game |
-| `build/harness_stub.exe` + `harness.dll` | checks every C function against the original code | 243 functions, ~353 000 checks, 0 differences |
-| `build/dc2` (Linux) | the game started like WinMain: task system, root task, per-frame work; headless, prints a trace | boots: CORE.DAT, warning and Capcom screens, save scan, title (menu, opening movie / attract demo in turn); buttons can be given on the command line; stops at Game_Start 0x4826F0 |
+| `build/harness_stub.exe` + `harness.dll` | checks every C function against the original code | 275 functions, ~395 000 checks, 0 differences |
+| `build/dc2` (Linux) | the game started like WinMain: task system, root task, per-frame work; headless, prints a trace | boots: CORE.DAT, warning and Capcom screens, save scan, title (menu, opening movie / attract demo in turn); buttons can be given on the command line; New Game runs the opening and the game task into room ST101 (file loads, room set-up, room script start); stops where the player's model would be built (0x47FE10) |
 | `build/smoke` (Linux) | the C game code without any exe code, on an emulated memory image | rooms loaded and set up by the game's own code (File_Process, Room_SetPointers, Script_Init), script VM, animation: 80 of 89 room scripts run 600 frames; 9 stop on cutscene data (SCxx.DAT) that is not loaded yet |
 
 The Dreamcast (KallistiOS) build will reuse the standalone path once the
@@ -78,7 +78,7 @@ Checked under wine 9 (32-bit prefix): all 26 hooks installed; after one
 minute Lzss_Decode 23 calls, Flag_Check 62 000, Script_Run every frame,
 PointInQuad 5 000.
 
-## Reimplemented (243)
+## Reimplemented (275)
 
 The authoritative list is `src/hook/hooks.c`. By area:
 
@@ -96,6 +96,7 @@ The authoritative list is `src/hook/hooks.c`. By area:
 | loading and room set-up | Enemy_LoadModel, Stage_Load, File_IsBusy; Room_SetPointers, Room_AllocObjects, Room_Reset, CamZones_Init, Aot_Reset; Script_Init, Script_Tick and its skip/event modes | src/game/room.c |
 | root task and tasks | RootTask and its boot modes (boot, logo, warning, to title), Screen_LoadImage, Save_ScanTask; Task_Kill; host coroutines for the task system in standalone builds | src/game/root.c, src/game/task.c |
 | title | TitleTask, menu (new game / load / options), difficulty choice, opening movie and attract demo, animated labels and their sprites | src/game/title.c |
+| game task | Game_Start, opening task, new-game state, game task modes init / area tables / room enter / play, room / door / armour / music loads, checkpoint copy, room sound tables | src/game/game.c |
 | PC layer: GTE | all 80 libgte functions of the port (0x4C08E0..0x4C24C0): rsin/rcos/ratan2, roots, geometry state, Apply/Mul/Rot/Scale/Transpose matrix, RotTransPers 1/3/4 and the float projection, depth cue, normal colour, register loads/stores, rtps/rtpt/nclip/ncct, PC depth stores | src/game/gte.c, include/dc2/gte.h |
 
 The game runs as cooperative tasks (4 slots, `Task_Sleep(n)` gives up the
@@ -136,9 +137,8 @@ alone and the harness ignores them.
 
 ## Next
 
-The script VM and the keyframe animation are complete. Next: the game start (Game_Start 0x4826F0) and the room-change sequence,
-so that `dc2` reaches the first room by itself; then the object type
-handlers (Enemy_LoadModel 0x482070), the object
+The script VM and the keyframe animation are complete. Next: the player (set-up 0x47FE10 and its type handler), then the room
+change (game mode 4, 0x451990) and the enemies' type handlers (Enemy_LoadModel 0x482070), the object
 type handlers (*0x87DCA0), sound/BGM (0x48C9C0..0x48CE60), messages
 (0x4718F0), fades and menus. Then the libgpu side
 of the PC layer (primitives, DrawOTag, texture cache) — rewritten for

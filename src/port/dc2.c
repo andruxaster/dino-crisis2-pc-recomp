@@ -10,6 +10,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <libgen.h>
+#include <setjmp.h>
+#include <signal.h>
 #include "dc2/game.h"
 #include "dc2/orig.h"
 #include "dc2/pcio.h"
@@ -35,6 +37,12 @@ static int load_image(const char *exe)
     free(d);
     return 1;
 }
+
+/* game code reads data that code not rewritten yet would have set up (the
+   player's model, ...): a fault ends the run with a report */
+static sigjmp_buf g_fault;
+static volatile int g_fault_sig;
+static void on_fault(int sig) { g_fault_sig = sig; siglongjmp(g_fault, 1); }
 
 /* the game part of one frame of WinMain's loop (graphics and timing left out) */
 static void game_frame(void)
@@ -78,8 +86,15 @@ int main(int argc, char **argv)
     Snd_ReleaseAll();
     Task_Start(0, U8(0x87DE08) ? 0x471EC0 : 0x46D710);
 
-    u32 last_mode = 0xFFFFFFFF, last_file = 0xFFFFFFFF, last_tasks = 0xFFFFFFFF;
-    for (int f = 0; f < frames; f++) {
+    static u32 last_mode = 0xFFFFFFFF, last_file = 0xFFFFFFFF, last_tasks = 0xFFFFFFFF;
+    static int f;
+    if (sigsetjmp(g_fault, 1)) {
+        printf("frame %4d: stopped by %s: data of code not rewritten yet (game mode %u, room %X%02X)\n", f,
+               g_fault_sig == SIGFPE ? "SIGFPE" : "SIGSEGV", U16(G() + 0x664), U8(G() + 0x1091), U8(G() + 0x1090));
+        return 2;
+    }
+    signal(SIGSEGV, on_fault); signal(SIGFPE, on_fault);
+    for (f = 0; f < frames; f++) {
         if (U16(0x87FFEA) && U16(0x87FFE8) != last_file) {
             last_file = U16(0x87FFE8);
             gptr nm = U32(0x71B230 + last_file * 4);
@@ -95,6 +110,12 @@ int main(int argc, char **argv)
         if (U16(G() + 0x76C) && title != last_title) {        /* once the title runs */
             printf("frame %4d: title screen %u step %u/%u cursor %d\n", f, title & 0xFF, (title >> 8) & 0xFF, title >> 16, S8(0x759EF2));
             last_title = title;
+        }
+        static u32 last_game = 0xFFFFFFFF;
+        u32 gm = U16(G() + 0x664) | U8(G() + 0x1091) << 16 | U8(G() + 0x1090) << 8;
+        if (gm != last_game && U16(G() + 0x664)) {
+            printf("frame %4d: game mode %u, room ST%X%02X\n", f, gm & 0xFF, gm >> 16, (gm >> 8) & 0xFF);
+            last_game = gm;
         }
         u32 tasks = 0;
         for (int i = 0; i < 4; i++) tasks |= (u32)(U16(A_TASK_SLOTS + i * 0x20) != 0) << i;

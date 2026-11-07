@@ -254,7 +254,7 @@ void DC2CALL Title_Demo(gptr t)                                     /* 0x4A5BF0 
     switch ((s16)G16(0x770)) {
     case 0:
         G16(0x770)++;
-        Demo_Init();
+        Game_ClearState();
         memcpy(MEM(t + 0x30), MEM(G() + 0x14EC), 16);
         load_wait_raw(U8(t + 0x29) + 0x23u, 0x65F500);    /* DEMO0x.TRG */
         memcpy(MEM(G() + 0x108C), MEM(0x65F504), 0x118 * 4);
@@ -266,13 +266,13 @@ void DC2CALL Title_Demo(gptr t)                                     /* 0x4A5BF0 
         U16(t) = 0;
         G16(0x664) = 0;
         U8(G() + 0x662) = 1;
-        Fn_451120();
-        Fn_4512F0();
+        Game_Init();
+        Game_AreaLoad();
         break;
     case 1:
         G16(0x770)++;
         U16(0x87DE10) = U16(0x65F500);
-        Fn_451330();
+        Game_RoomEnter();
         Flag_Set(2, 0xF, 1);
         break;
     case 2: {
@@ -281,7 +281,7 @@ void DC2CALL Title_Demo(gptr t)                                     /* 0x4A5BF0 
         U32(t + 0x2C) = e + 0x10;
         U16(0x87DC08) = U16(e);
         U16(0x87DC94) = U16(e + 2);
-        Demo_Input();
+        Game_Play();
         u16 tm = U16(t);
         if (tm >= 0x244 || (tm > 0x14 && (U32(0x87DC12) & 0x970))) Fade_Set(1, 0xA, 1);
         if (U8(G() + 0x814) == 1 && !Flag_Check(2, 6)) G16(0x770)++;

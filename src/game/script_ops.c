@@ -358,7 +358,7 @@ u32 DC2CALL ScrOp_Call478B80(gptr t)                               /* 4C */
 
 u32 DC2CALL ScrOp_Call481D20(gptr t)                               /* 4D */
 {
-    Fn_481D20(S(t, 0));
+    Door_Load(S(t, 0));
     ADV(t);
     return 0;
 }
@@ -483,7 +483,7 @@ u32 DC2CALL ScrOp_PartHide(gptr t)                                 /* 58: part(s
 u32 DC2CALL ScrOp_Texture(gptr t)                                  /* 59: upload texture page + CLUT */
 {
     if (Flag_Check(9, 0x33)) {
-        Fn_481DC0(S(t, 0));
+        Armor_Load(S(t, 0));
         gptr r = Tmp_Push(8);
         U16(r) = U16(SP_(t) + 0xC); U16(r + 2) = U16(SP_(t) + 8);
         U16(r + 4) = 0x80; U16(r + 6) = 0x100;

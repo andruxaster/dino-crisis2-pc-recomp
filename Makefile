@@ -6,7 +6,7 @@ CC32   ?= i686-w64-mingw32-gcc
 CC     ?= cc
 CFLAGS  = -std=gnu11 -O2 -Wall -Wextra -Wno-unused-parameter -Iinclude -fexcess-precision=standard
 GAME    = src/game/lzss.c src/game/flag.c src/game/geom.c src/game/script_vm.c \
-          src/game/script_obj.c src/game/script_ops.c src/game/script_aot.c src/game/anim.c src/game/file.c src/game/pcio.c src/game/room.c src/game/root.c src/game/title.c src/game/task.c src/game/gte.c src/game/orig.c \
+          src/game/script_obj.c src/game/script_ops.c src/game/script_aot.c src/game/anim.c src/game/file.c src/game/pcio.c src/game/room.c src/game/root.c src/game/title.c src/game/game.c src/game/task.c src/game/gte.c src/game/orig.c \
           src/hook/hooks.c
 DINO2  ?= game/Dino2.exe
 DATA   ?= game/Data
@@ -17,11 +17,13 @@ all: $(OUT)/dinput.dll $(OUT)/harness.dll $(OUT)/harness_stub.exe
 $(OUT):
 	mkdir -p $(OUT)
 
-$(OUT)/dinput.dll: $(GAME) src/hook/dllmain.c | $(OUT)
-	$(CC32) $(CFLAGS) -DDC2_IN_PROCESS -shared -o $@ $^ -Wl,--kill-at -static-libgcc
+HDRS    = $(wildcard include/dc2/*.h) src/hook/hooks.h
 
-$(OUT)/harness.dll: $(GAME) tests/harness.c | $(OUT)
-	$(CC32) $(CFLAGS) -DDC2_IN_PROCESS -shared -o $@ $^ -Wl,--image-base,0x10000000 -Wl,--out-implib,$(OUT)/libharness.a -static-libgcc
+$(OUT)/dinput.dll: $(GAME) src/hook/dllmain.c $(HDRS) | $(OUT)
+	$(CC32) $(CFLAGS) -DDC2_IN_PROCESS -shared -o $@ $(filter %.c,$^) -Wl,--kill-at -static-libgcc
+
+$(OUT)/harness.dll: $(GAME) tests/harness.c $(HDRS) | $(OUT)
+	$(CC32) $(CFLAGS) -DDC2_IN_PROCESS -shared -o $@ $(filter %.c,$^) -Wl,--image-base,0x10000000 -Wl,--out-implib,$(OUT)/libharness.a -static-libgcc
 
 $(OUT)/harness_stub.exe: tests/stub.c $(OUT)/harness.dll
 	$(CC32) -O2 -o $@ tests/stub.c -L$(OUT) -lharness -Wl,--image-base,0x400000 -Wl,--disable-dynamicbase -static-libgcc
@@ -33,8 +35,8 @@ check: $(OUT)/harness_stub.exe
 	WINEDEBUG=-all wine $(OUT)/harness_stub.exe "$$(winepath -w $(DINO2))" "$$(winepath -w $(DATA))"
 
 linux: $(OUT)/libdc2game.a $(OUT)/smoke $(OUT)/dc2
-$(OUT)/libdc2game.a: $(GAME) | $(OUT)
-	for f in $(GAME); do $(CC) $(CFLAGS) -c $$f -o $(OUT)/$$(basename $$f .c).o || exit 1; done
+$(OUT)/libdc2game.a: $(GAME) $(HDRS) | $(OUT)
+	for f in $(filter %.c,$^); do $(CC) $(CFLAGS) -c $$f -o $(OUT)/$$(basename $$f .c).o || exit 1; done
 	ar rcs $@ $(addprefix $(OUT)/,$(notdir $(GAME:.c=.o)))
 $(OUT)/smoke: src/port/smoke.c $(OUT)/libdc2game.a
 	$(CC) $(CFLAGS) -o $@ $^ -lm

@@ -21,6 +21,6 @@ void DC2CALL Task_Sleep(u32 n);
 
 #ifndef DC2_IN_PROCESS
 extern const char *g_pc_root;     /* folder that holds "data" (default ".") */
-#define HEAP_SIZE 0x800000u       /* after the image and the TMP area */
+#define HEAP_SIZE 0x2000000u      /* after the image and the TMP area; music streams are ~8 MB */
 #endif
 #endif

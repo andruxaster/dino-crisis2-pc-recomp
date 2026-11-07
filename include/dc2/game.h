@@ -194,6 +194,40 @@ void DC2CALL Title_Init(gptr t);                                        /* 0x4A5
 void DC2CALL Title_Run(gptr t);                                         /* 0x4A5790 */
 void DC2CALL TitleTask(void);                                           /* 0x4A5730 */
 
+/* game.c -- game start, opening, game task */
+void DC2CALL Game_Start(u32 mode);                                      /* 0x4826F0 */
+void DC2CALL Pause_LoadScreen(void);                                    /* 0x4827F0 */
+void DC2CALL Room_LoadDat(void);                                        /* 0x481C10 */
+u32  DC2CALL Snd_RoomMusic(void);                                       /* 0x48CBD0 */
+void DC2CALL Room_LoadExtra(u32 v);                                     /* 0x481CA0 */
+void DC2CALL Door_Load(u32 n);                                          /* 0x481D20 */
+void DC2CALL Armor_Load(u32 n);                                         /* 0x481DC0 */
+void DC2CALL Checkpoint_Save(void);                                     /* 0x48F2C0 */
+void DC2CALL Checkpoint_Load(void);                                     /* 0x48F330 */
+void DC2CALL Area0_SetTables(void);                                     /* 0x48D170 */
+void DC2CALL Area1_SetTables(void);                                     /* 0x48D1B0 */
+void DC2CALL Area2_SetTables(void);                                     /* 0x48D1F0 */
+void DC2CALL Area3_SetTables(void);                                     /* 0x48D230 */
+void DC2CALL Area4_SetTables(void);                                     /* 0x48D270 */
+void DC2CALL Area5_SetTables(void);                                     /* 0x48D2B0 */
+void DC2CALL Area6_SetTables(void);                                     /* 0x48D2F0 */
+void DC2CALL Area7_SetTables(void);                                     /* 0x48D330 */
+void DC2CALL Area8_SetTables(void);                                     /* 0x48D370 */
+void DC2CALL Area9_SetTables(void);                                     /* 0x48D3B0 */
+void DC2CALL Snd_InitRoomTables(void);                                  /* 0x48BF00 */
+void DC2CALL Game_ClearState(void);                                     /* 0x4510D0 */
+void DC2CALL Game_NewState(void);                                       /* 0x450E00 */
+void DC2CALL Opening_Init(gptr r);                                      /* 0x475660 */
+void DC2CALL Opening_Movie(gptr r);                                     /* 0x4756A0 */
+void DC2CALL Opening_Run(gptr r);                                       /* 0x475680 */
+void DC2CALL Opening_ToGame(gptr r);                                    /* 0x475700 */
+void DC2CALL OpeningTask(void);                                         /* 0x475630 */
+void DC2CALL Game_Init(void);                                           /* 0x451120 */
+void DC2CALL Game_AreaLoad(void);                                       /* 0x4512F0 */
+void DC2CALL Game_RoomEnter(void);                                      /* 0x451330 */
+void DC2CALL Game_Play(void);                                           /* 0x451790 */
+void DC2CALL GameTask(void);                                            /* 0x4510F0 */
+
 /* handler used for an opcode that is not reimplemented yet: in the hook
  * build it calls the original code, elsewhere it reports and stops the thread */
 typedef u32 (DC2CALL *ScrOpFn)(gptr thr);

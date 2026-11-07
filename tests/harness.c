@@ -136,12 +136,16 @@ static u32 call(void *f, int n, const u32 *a)
     }
 }
 
+static const char *g_cur_name;
+static int g_cur_orig;
 static int check(u32 addr, void *fn, const char *name, int nargs, const u32 *args, u32 rmask)
 {
+    g_cur_name = name; g_cur_orig = 1;
     snap(snap0);
     u32 r0 = call((void *)(uintptr_t)addr, nargs, args);
     snap(snap1);
     restore(snap0);
+    g_cur_orig = 0;
     u32 r1 = call(fn, nargs, args);
     int ok = compare(name, r0, r1, rmask);
     restore(snap1);                     /* continue from the original's state */
@@ -495,7 +499,7 @@ static Stub g_stubs[] = {
     {0x405DE0, "dd"}, {0, ""}, {0x403A30, ""}, {0x448080, "d"}, {0x448580, "b"},
     {0x448620, "d"}, {0x4529C0, "d"}, {0x450A70, "ddd"}, {0x46FBC0, "ddd"}, {0x4718F0, "dddd"},
     {0x473130, "d"}, {0x4731F0, ""}, {0x474B20, "d"}, {0x478B80, "dd"}, {0x47A8C0, "ddpp", {16, 8}},
-    {0x481D20, "d"}, {0x481DC0, "d"}, {0, ""}, {0, ""}, {0x48C0B0, "pd", {0x60}},
+    {0, ""}, {0, ""}, {0, ""}, {0, ""}, {0x48C0B0, "pd", {0x60}},
     {0x48C600, "d"}, {0x48C640, "ddd"}, {0x48C9C0, "w"}, {0x48CD70, "dd"}, {0x48CE20, "bwww"},
     {0x48CE60, "d"}, {0x48D070, "dd"}, {0x48D730, "d"}, {0, ""}, {0x48F880, "ddww"},
     {0x495E90, "wwwww"}, {0x4B4D20, "pd", {8}}, {0x4B4DB0, "pd", {8}}, {0x4DDDA2, ""},
@@ -512,9 +516,14 @@ static Stub g_stubs[] = {
     {0x4C0560, "dd"},        /* 58: Pc_SeekSet */
     {0x4C29D6, "d"},         /* 59: Task_Chain */
     /* 60..: title */
-    {0x4510D0, ""}, {0x451120, ""}, {0x4512F0, ""}, {0x451330, ""}, {0x451790, ""}, {0x4826F0, "d"},
+    {0, ""}, {0, ""}, {0, ""}, {0, ""}, {0, ""}, {0, ""},
     {0x494BA0, "ddddddd"}, {0x4C0600, "ddd"}, {0x4C0690, "d"}, {0x4C05D0, "dd"}, {0x4C06F0, "ddddd"},
+    /* 71..: game task */
+    {0x496410, ""}, {0x46FC50, "d"}, {0x403480, ""}, {0x470CB0, ""}, {0x452450, ""}, {0x48FB50, "d"},
+    {0x47FE10, "d"}, {0x4BF130, "d"}, {0x48CA10, ""}, {0x403520, ""}, {0x46B8C0, ""}, {0x407170, ""},
+    {0x491B10, "bb"}, {0x48CB40, ""}, {0x4A7250, ""}, {0x405E40, ""}, {0x472FD0, ""}, {0x452370, ""},
 };
+#define STUB_GAME 71
 #define STUB_LOAD 50
 #define STUB_FILE 36
 #define NSTUBS (int)(sizeof g_stubs / sizeof g_stubs[0])
@@ -557,13 +566,15 @@ REC(23) REC(24) REC(25) REC(26) REC(27) REC(28) REC(29) REC(30) REC(31) REC(32) 
 REC(34) REC(35) REC(36) REC(37) REC(38) REC(39) REC(40) REC(41) REC(42) REC(43) REC(44) REC(45)
 REC(46) REC(47) REC(48) REC(49) REC(50) REC(51) REC(52) REC(53) REC(54) REC(55) REC(56) REC(57)
 REC(58) REC(59) REC(60) REC(61) REC(62) REC(63) REC(64) REC(65) REC(66) REC(67) REC(68) REC(69)
-REC(70)
+REC(70) REC(71) REC(72) REC(73) REC(74) REC(75) REC(76) REC(77) REC(78) REC(79) REC(80) REC(81)
+REC(82) REC(83) REC(84) REC(85) REC(86) REC(87) REC(88)
 static void *const g_recs[] = {rec0, rec1, rec2, rec3, rec4, rec5, rec6, rec7, rec8, rec9, rec10,
     rec11, rec12, rec13, rec14, rec15, rec16, rec17, rec18, rec19, rec20, rec21, rec22, rec23,
     rec24, rec25, rec26, rec27, rec28, rec29, rec30, rec31, rec32, rec33, rec34, rec35, rec36, rec37,
     rec38, rec39, rec40, rec41, rec42, rec43, rec44, rec45, rec46, rec47, rec48, rec49, rec50, rec51,
     rec52, rec53, rec54, rec55, rec56, rec57, rec58, rec59, rec60, rec61, rec62, rec63,
-    rec64, rec65, rec66, rec67, rec68, rec69, rec70};
+    rec64, rec65, rec66, rec67, rec68, rec69, rec70, rec71, rec72, rec73, rec74, rec75, rec76, rec77,
+    rec78, rec79, rec80, rec81, rec82, rec83, rec84, rec85, rec86, rec87, rec88};
 /* Task_Sleep: the file loader "runs" while the task sleeps */
 static u32 __cdecl ts_sleep(u32 n)
 { u32 v[5] = {n, U16(0x87FFE8)}; rec_common(STUB_LOAD, v); U16(0x87FFEA) = 0; return 0; }   /* + file asked for */
@@ -654,7 +665,8 @@ static void ops2_args(u8 op, gptr t)
     case 0x54: U32(g + 0xA7C) = rnd() % 16; A(0) = rnd() % 3; break;
     case 0x58: { gptr part = U32(O_OBJ + SEL(t) * 0x260 + 0x64);
                A(1) = U32(part + 0x54) && rnd() % 2; A(0) = rnd() % 3; break; }
-    case 0x59: Flag_Set(9, 0x33, rnd() & 1); break;
+    case 0x59: Flag_Set(9, 0x33, rnd() & 1); A(0) = rnd() % 2; U16(0x87FFEA) = rnd() % 2; break;
+    case 0x4D: A(0) = rnd() % 16; U16(g + 0x680) = rnd() % 2 ? 0xFFFF : rnd() % 16; U16(0x87FFEA) = rnd() % 2; break;
     case 0x49: case 0x55: break;
     }
 #undef A
@@ -1264,6 +1276,41 @@ static void test_root(void)
     stubs_install(0);
 }
 
+/* ---- game start, opening, game task ----------------------------------------------- */
+static void fake_room_block(void)
+{
+    gptr h = 0x5E0000, sc = 0x5E1000;
+    memset(MEM(h), 0, 0x40);
+    for (int k = 0; k < 0x30; k += 4) U32(h + k) = 0x5E2000 + 0x100 * (k / 4);
+    U32(h + 0xC) = 0x5E2C00; U32(0x5E2C00) = rnd() % 4;          /* camera zones */
+    U32(h + 0x14) = sc; U32(h + 0x2C) = 0x690000;
+    memset(MEM(sc), 0, 0x200);
+    for (int k = 2; k < 0xC; k++) U8(sc + k) = (u8)(1 + rnd() % 6);
+    U8(sc + 0xB) = 10;                                            /* threads */
+    U32(sc + 0xC) = 0x100;                                        /* globals after the routines */
+    U32(sc + 0x1C) = 0x40; U8(sc + 0x1C + 0x40) = 0x04;           /* routine 0: return */
+}
+
+static void game_state(void)
+{
+    gptr g = G();
+    for (u32 k = 0x660; k < 0x680; k += 2) U16(g + k) = rnd() % 3 ? rnd() % 6 : (u16)rnd();
+    U16(g + 0x664) = rnd() % 4;
+    for (u32 k = 0x674; k < 0x684; k += 2) U16(g + k) = rnd() % 2 ? 0xFFFF : rnd() % 0x200;
+    U8(g + 0x1091) = rnd() % 10; U8(g + 0x1090) = rnd() % 5;
+    U8(g + 0x662) = rnd() % 2; U8(g + 0x926) = rnd() % 2; U8(g + 0x927) = rnd() % 4 == 0 ? 1 + rnd() % 2 : 0;
+    U8(g + 0x108E) = rnd() % 3; U8(g + 0x108F) = rnd() % 4; U8(g + 0x850) = rnd() % 8; U8(g + 0x1094) = (u8)rnd();
+    for (u32 k = 0x10AC; k < 0x10B4; k += 2) U16(g + k) = (u16)rnd();
+    for (u32 k = 0x840; k < 0x848; k += 2) U16(g + k) = (u16)rnd();
+    U8(g + 0x14F0) = rnd() % 3; U8(g + 0x14F1) = (u8)rnd(); U8(g + 0x14F2) = rnd() % 2;
+    U16(0x87FBD4) = rnd() % 2 ? 0xFFFF : (u16)rnd(); U16(0x87FFEA) = rnd() % 2;
+    U32(0x87DC94) = rnd() % 2 ? 0 : (rnd() & 0x901);
+    gptr pl = O_OBJ; U32(g + 0x940) = pl; U16(pl + 0x174) = rnd() % 3 == 0; U8(pl + 0x54) = rnd() % 3 ? 1 : 0;
+    u32 fl[][2] = {{2, 0x1B}, {2, 6}, {2, 0xF}, {1, 9}, {1, 0x10}, {1, 0xA}, {2, 0x25}, {2, 8}, {2, 0x11}, {2, 0x10}, {3, 9}, {2, 0x17}};
+    for (unsigned k = 0; k < sizeof fl / sizeof fl[0]; k++) Flag_Set(fl[k][0], fl[k][1], rnd() % 5 == 0);
+    U16(0x87DE10) = (u16)rnd();
+}
+
 /* ---- title screen ---------------------------------------------------------------- */
 static void title_state(void)
 {
@@ -1281,6 +1328,8 @@ static void title_state(void)
     U8(0x87DC90) = rnd() % 3; U8(g + 0x814) = rnd() % 2;
     U32(0x87DC98) = 0x6D0000; U32(0x87F94C) = 0x6CF800; U32(0x87DE0C) = rnd() & 1;
     U16(0x87FFEA) = rnd() % 2;
+    if (U16(g + 0x76E) == 3 || U16(g + 0x76C) == 5 || U8(t + 0x28)) { game_state(); fake_room_block(); }
+    U16(0x87FFEA) = rnd() % 2;
 }
 
 static void test_title(void)
@@ -1292,6 +1341,7 @@ static void test_title(void)
         U8(a + 5) = rnd() % 4;                      /* frame time, 0 and 1 are special */
     }
     for (u32 a = 0x65F500; a < 0x65F800; a += 4) U32(a) = rnd();
+    U8(0x65F508) = 1; U8(0x65F509) = 2;          /* the demo's game state: a real room (area 2, room 1) */
     static const struct { u32 addr; void *fn; const char *name; } F[] = {
         {0x4A5760, Title_Init, "Title_Init"}, {0x4A5790, Title_Run, "Title_Run"},
         {0x4A57B0, Title_Menu, "Title_Menu"}, {0x4A5B30, Title_Attract, "Title_Attract"},
@@ -1314,6 +1364,48 @@ static void test_title(void)
         check(0x4A63A0, Title_AnimStep, "Title_AnimStep", 2, b, 0xFFFFFFFF);
         u32 c[4] = {(u32)(rnd() % 400) - 50, (u32)(rnd() % 300) - 50, rnd(), 0x625800 + 8 * (rnd() % 0x40)};
         check(0x4A6210, Title_Draw, "Title_Draw", 4, c, 0);
+    }
+    stubs_install(0);
+}
+
+static void test_game(void)
+{
+    stubs_install(1);
+    script_setup();
+    static const struct { u32 addr; void *fn; const char *name; int nargs; } F[] = {
+        {0x4826F0, Game_Start, "Game_Start", 1}, {0x4827F0, Pause_LoadScreen, "Pause_LoadScreen", 0},
+        {0x481C10, Room_LoadDat, "Room_LoadDat", 0}, {0x481CA0, Room_LoadExtra, "Room_LoadExtra", 1},
+        {0x481D20, Door_Load, "Door_Load", 1}, {0x481DC0, Armor_Load, "Armor_Load", 1},
+        {0x48F2C0, Checkpoint_Save, "Checkpoint_Save", 0}, {0x48F330, Checkpoint_Load, "Checkpoint_Load", 0},
+        {0x48BF00, Snd_InitRoomTables, "Snd_InitRoomTables", 0}, {0x48CBD0, Snd_RoomMusic, "Snd_RoomMusic", 0},
+        {0x4510D0, Game_ClearState, "Game_ClearState", 0}, {0x450E00, Game_NewState, "Game_NewState", 0},
+        {0x475660, Opening_Init, "Opening_Init", 1}, {0x4756A0, Opening_Movie, "Opening_Movie", 1},
+        {0x475680, Opening_Run, "Opening_Run", 1}, {0x475700, Opening_ToGame, "Opening_ToGame", 1},
+        {0x451120, Game_Init, "Game_Init", 0}, {0x4512F0, Game_AreaLoad, "Game_AreaLoad", 0},
+        {0x451330, Game_RoomEnter, "Game_RoomEnter", 0}, {0x451790, Game_Play, "Game_Play", 0},
+    };
+    void *areas[10] = {Area0_SetTables, Area1_SetTables, Area2_SetTables, Area3_SetTables, Area4_SetTables,
+                       Area5_SetTables, Area6_SetTables, Area7_SetTables, Area8_SetTables, Area9_SetTables};
+    for (int i = 0; i < iters; i++) {
+        for (unsigned k = 0; k < sizeof F / sizeof F[0]; k++) {
+            game_state();
+            fake_room_block();
+            U32(LOG_BASE) = 0;
+            u32 a[1];
+            switch (k) {
+            case 0: a[0] = rnd() % 20; break;
+            case 3: a[0] = (rnd() % 4) << 8 | rnd() % 8; break;
+            case 4: a[0] = rnd() % 20; break;
+            case 5: a[0] = rnd() % 2; break;
+            default: a[0] = 0x74DB90; U8(0x74DB91) = 0; U8(0x74DB92) = rnd() % 4; break;
+            }
+            g_stubs[STUB_GAME + 12].ret = rnd();
+            sprintf(g_what, "mode %u area %u room %u extra %u arg %X", U16(G() + 0x664), U8(G() + 0x1091), U8(G() + 0x1090), U8(G() + 0x927), a[0]);
+            check(F[k].addr, F[k].fn, F[k].name, F[k].nargs, a, F[k].nargs ? 0 : 0);
+        }
+        u32 a0 = rnd() % 10;
+        U32(LOG_BASE) = 0;
+        check(0x48D170 + 0x40 * a0, areas[a0], "AreaN_SetTables", 0, NULL, 0);
     }
     stubs_install(0);
 }
@@ -1358,9 +1450,16 @@ static void test_lzss(const char *dir)
  * game image, so this never returns */
 static LONG WINAPI on_crash(EXCEPTION_POINTERS *e)
 {
-    printf("CRASH %08lX at %p (address %p) during [%s] after %d checks\n",
+    printf("CRASH %08lX at %p (address %p) in %s (%s) during [%s] after %d checks\n",
            e->ExceptionRecord->ExceptionCode, e->ExceptionRecord->ExceptionAddress,
-           (void *)e->ExceptionRecord->ExceptionInformation[1], g_what, g_tests);
+           (void *)e->ExceptionRecord->ExceptionInformation[1], g_cur_name ? g_cur_name : "?",
+           g_cur_orig ? "original" : "new", g_what, g_tests);
+    {   /* return addresses near the top of the stack */
+        u32 *sp = (u32 *)(uintptr_t)e->ContextRecord->Esp;
+        printf("stack:");
+        for (int i = 0; i < 24; i++) if (sp[i] >= 0x401000 && sp[i] < 0x4CD000) printf(" %08X", sp[i]);
+        printf("\n");
+    }
     fflush(stdout);
     TerminateProcess(GetCurrentProcess(), 4);
     return EXCEPTION_CONTINUE_SEARCH;
@@ -1383,7 +1482,7 @@ __declspec(dllexport) void harness_main(int argc, char **argv)
     struct { const char *name; void (*fn)(void); } T[] = {
         {"flags", test_flags}, {"geometry", test_geom}, {"script values", test_script_values},
         {"script opcodes", test_script_ops}, {"script objects", test_objects},
-        {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"loading", test_room}, {"title", test_title},
+        {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"loading", test_room}, {"title", test_title}, {"game task", test_game},
     };
     for (unsigned i = 0; i < sizeof T / sizeof T[0]; i++) {
         int f0 = g_fail, t0 = g_tests;

@@ -23,8 +23,6 @@
     V(Fn_474B20,          0x474B20, (gptr e), (e)) \
     V(Fn_478B80,          0x478B80, (u32 a, u32 b), (a, b)) \
     V(Fn_47A8C0,          0x47A8C0, (gptr obj, u32 mode, gptr a, gptr b), (obj, mode, a, b)) \
-    V(Fn_481D20,          0x481D20, (u32 a), (a)) \
-    V(Fn_481DC0,          0x481DC0, (u32 a), (a)) \
     V(Fn_48C0B0,          0x48C0B0, (gptr obj, u32 a), (obj, a)) \
     V(Fn_48C600,          0x48C600, (u32 a), (a)) \
     V(Fn_48C640,          0x48C640, (u32 a, u32 b, u32 c), (a, b, c)) \
@@ -51,12 +49,24 @@
     V(Fn_48D470,          0x48D470, (gptr e), (e)) \
     V(Fn_478790,          0x478790, (void), ()) \
     V(Snd_ReleaseAll,     0x48C080, (void), ()) \
-    V(Demo_Init,          0x4510D0, (void), ()) \
-    V(Fn_451120,          0x451120, (void), ()) \
-    V(Fn_4512F0,          0x4512F0, (void), ()) \
-    V(Fn_451330,          0x451330, (void), ()) \
-    V(Demo_Input,         0x451790, (void), ()) \
-    V(Game_Start,         0x4826F0, (u32 mode), (mode)) \
+    V(Fn_496410,          0x496410, (void), ()) \
+    V(Fn_46FC50,          0x46FC50, (u32 a), (a)) \
+    V(Fn_403480,          0x403480, (void), ()) \
+    V(Fn_470CB0,          0x470CB0, (void), ()) \
+    V(Fn_452450,          0x452450, (void), ()) \
+    V(Fn_48FB50,          0x48FB50, (u32 a), (a)) \
+    V(Fn_47FE10,          0x47FE10, (gptr obj), (obj)) \
+    V(Fn_4BF130,          0x4BF130, (u32 a), (a)) \
+    V(Fn_48CA10,          0x48CA10, (void), ()) \
+    V(Fn_403520,          0x403520, (void), ()) \
+    V(Fn_46B8C0,          0x46B8C0, (void), ()) \
+    V(Fn_407170,          0x407170, (void), ()) \
+    F(u32, Fn_491B10,     0x491B10, (u32 area, u32 room), (area, room)) \
+    V(Fn_48CB40,          0x48CB40, (void), ()) \
+    V(Fn_4A7250,          0x4A7250, (void), ()) \
+    V(Fn_405E40,          0x405E40, (void), ()) \
+    V(Fn_472FD0,          0x472FD0, (void), ()) \
+    V(Fn_452370,          0x452370, (void), ()) \
     V(Text_Draw,          0x494BA0, (gptr s, u32 x, u32 y, u32 w, u32 col, u32 a, u32 b), (s, x, y, w, col, a, b)) \
     V(Gpu_DrawOT,         0x4C0600, (gptr ot, gptr a, gptr b), (ot, a, b)) \
     V(Gpu_SetSprt,        0x4C0690, (gptr p), (p)) \
