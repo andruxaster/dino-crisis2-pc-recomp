@@ -1,0 +1,399 @@
+/* harness.exe -- checks every reimplemented function against the original.
+ * Loads Dino2.exe at its own base 0x400000 inside this process (no game
+ * start-up is run), then for each test: snapshot memory, run the original,
+ * keep the result, restore, run the reimplementation, compare return value
+ * and every byte of the writable sections.
+ *   usage: harness Dino2.exe [DATA_DIR] [-n ITERATIONS]
+ * Build: i686-w64-mingw32 as harness.dll + harness_stub.exe (image base
+ * 0x400000, reserves the game's range), run on Windows/wine. */
+#include <windows.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include "dc2/game.h"
+#include "../src/hook/hooks.h"
+
+u8 *g_membase = (u8 *)IMAGE_BASE;
+
+/* ---------------------------------------------------------- PE image load */
+static int load_image(const char *path)
+{
+    FILE *f = fopen(path, "rb");
+    if (!f) { printf("cannot open %s\n", path); return 0; }
+    fseek(f, 0, SEEK_END); long n = ftell(f); fseek(f, 0, SEEK_SET);
+    u8 *d = malloc(n); fread(d, 1, n, f); fclose(f);
+    u32 pe = *(u32 *)(d + 0x3C);
+    u16 nsec = *(u16 *)(d + pe + 6), optsz = *(u16 *)(d + pe + 20);
+    u32 base = *(u32 *)(d + pe + 24 + 28), size = *(u32 *)(d + pe + 24 + 56);
+    if (base != IMAGE_BASE || size != IMAGE_SIZE) { printf("unexpected image %x/%x\n", base, size); return 0; }
+    /* the range belongs to the stub image: make it writable/executable, clear it */
+    u8 *m = (u8 *)IMAGE_BASE;
+    DWORD old;
+    if (!VirtualProtect(m + 0x1000, IMAGE_SIZE - 0x1000, PAGE_EXECUTE_READWRITE, &old)) {
+        printf("cannot unprotect 0x401000 (err %lu): run through harness_stub.exe\n", GetLastError()); return 0;
+    }
+    memset(m + 0x1000, 0, IMAGE_SIZE - 0x1000);
+    /* headers stay the stub's (the loader still refers to them) */
+    for (int i = 0; i < nsec; i++) {
+        u8 *s = d + pe + 24 + optsz + 40 * i;
+        u32 va = *(u32 *)(s + 12), rs = *(u32 *)(s + 16), ro = *(u32 *)(s + 20);
+        if (rs) memcpy(m + va, d + ro, rs);
+    }
+    /* imports: real functions where available (never called by the tests) */
+    u32 imp = *(u32 *)(d + pe + 24 + 104);
+    for (u32 o = imp; *(u32 *)(m + o + 12); o += 20) {
+        HMODULE lib = LoadLibraryA((char *)m + *(u32 *)(m + o + 12));
+        u32 *ilt = (u32 *)(m + (*(u32 *)(m + o) ? *(u32 *)(m + o) : *(u32 *)(m + o + 16)));
+        u32 *iat = (u32 *)(m + *(u32 *)(m + o + 16));
+        for (; *ilt; ilt++, iat++) {
+            FARPROC p = NULL;
+            if (lib) p = (*ilt & 0x80000000) ? GetProcAddress(lib, (char *)(uintptr_t)(*ilt & 0xFFFF))
+                                            : GetProcAddress(lib, (char *)m + *ilt + 2);
+            *iat = (u32)(uintptr_t)p;
+        }
+    }
+    free(d);
+    return 1;
+}
+
+/* ------------------------------------------------------- snapshot compare */
+typedef struct { u32 lo, hi; } Range;
+static const Range RW[] = { {0x4E8000, 0x703000},      /* .psxseg */
+                            {0x71B000, 0x882000} };    /* .data + bss */
+static u8 *snap0[2], *snap1[2];
+
+static void snap(u8 **dst) { for (int i = 0; i < 2; i++) memcpy(dst[i], MEM(RW[i].lo), RW[i].hi - RW[i].lo); }
+static void restore(u8 **src) { for (int i = 0; i < 2; i++) memcpy(MEM(RW[i].lo), src[i], RW[i].hi - RW[i].lo); }
+
+static int g_fail, g_tests;
+static char g_what[256];
+
+/* after the reimplementation ran: compare with snap1 (original's result) */
+static int compare(const char *name, u32 r_orig, u32 r_new, u32 rmask)
+{
+    g_tests++;
+    if ((r_orig & rmask) != (r_new & rmask)) {
+        if (g_fail++ < 20) printf("FAIL %s: return %08X, original %08X  [%s]\n", name, r_new, r_orig, g_what);
+        return 0;
+    }
+    for (int i = 0; i < 2; i++) {
+        u8 *cur = MEM(RW[i].lo);
+        u32 n = RW[i].hi - RW[i].lo;
+        if (memcmp(cur, snap1[i], n)) {
+            u32 k = 0; while (cur[k] == snap1[i][k]) k++;
+            if (g_fail++ < 20) printf("FAIL %s: memory %08X = %02X, original %02X  [%s]\n",
+                                      name, RW[i].lo + k, cur[k], snap1[i][k], g_what);
+            return 0;
+        }
+    }
+    return 1;
+}
+
+/* run original (address) and new function with the same arguments */
+typedef u32 (__cdecl *F0)(void);
+typedef u32 (__cdecl *F1)(u32);
+typedef u32 (__cdecl *F2)(u32, u32);
+typedef u32 (__cdecl *F3)(u32, u32, u32);
+typedef u32 (__cdecl *F4)(u32, u32, u32, u32);
+
+static u32 call(void *f, int n, const u32 *a)
+{
+    switch (n) {
+    case 0: return ((F0)f)();
+    case 1: return ((F1)f)(a[0]);
+    case 2: return ((F2)f)(a[0], a[1]);
+    case 3: return ((F3)f)(a[0], a[1], a[2]);
+    default: return ((F4)f)(a[0], a[1], a[2], a[3]);
+    }
+}
+
+static int check(u32 addr, void *fn, const char *name, int nargs, const u32 *args, u32 rmask)
+{
+    snap(snap0);
+    u32 r0 = call((void *)(uintptr_t)addr, nargs, args);
+    snap(snap1);
+    restore(snap0);
+    u32 r1 = call(fn, nargs, args);
+    int ok = compare(name, r0, r1, rmask);
+    restore(snap1);                     /* continue from the original's state */
+    return ok;
+}
+
+/* ------------------------------------------------------------------ random */
+static u32 rs = 0x2468ACE1;
+static u32 rnd(void) { rs ^= rs << 13; rs ^= rs >> 17; rs ^= rs << 5; return rs; }
+static s32 rnd_s16(void) { return (s16)rnd(); }
+
+/* ------------------------------------------------------------------- tests */
+static int iters = 2000;
+
+static void test_flags(void)
+{
+    for (int i = 0; i < iters; i++) {
+        u32 g = rnd() % 12, cnt = U32(A_FLAG_GROUPS + g * 8 + 4);
+        u32 a[3] = {g, rnd() % cnt, rnd() & 1};
+        if (rnd() % 16 == 0) { a[0] = 1; a[1] = 0; }
+        sprintf(g_what, "group %u bit %u on %u", a[0], a[1], a[2]);
+        check(0x46FAA0, Flag_Set, "Flag_Set", 3, a, 0);
+        check(0x46FB20, Flag_Check, "Flag_Check", 2, a, 0xFFFFFFFF);
+        u32 b[3] = {0x6F0000 + (rnd() % 64) * 4, rnd() % 256, rnd() & 1};
+        check(0x46FB50, Bits_Set, "Bits_Set", 3, b, 0);
+        check(0x46FB90, Bits_Check, "Bits_Check", 2, b, 0xFFFFFFFF);
+    }
+}
+
+static void test_geom(void)
+{
+    gptr pos = 0x6F1000, quad = 0x6F1010;
+    for (int i = 0; i < iters * 4; i++) {
+        int sc = (rnd() & 1) ? 0x3FFF : 0x7FFF;           /* also big coordinates */
+        for (int k = 0; k < 3; k++) S16(pos + 2 * k) = (s16)((s32)(rnd() % (2 * sc + 1)) - sc);
+        if (i & 1) {       /* convex quad around a point, so that hits happen */
+            s32 cx = rnd_s16() / 4, cz = rnd_s16() / 4, r = 200 + rnd() % 8000;
+            S16(quad + 0) = cx - r; S16(quad + 2) = cz + r; S16(quad + 4) = cx + r; S16(quad + 6) = cz + r;
+            S16(quad + 8) = cx + r; S16(quad + 10) = cz - r; S16(quad + 12) = cx - r; S16(quad + 14) = cz - r;
+            S16(pos) = cx + (s32)(rnd() % (4 * r)) - 2 * r; S16(pos + 4) = cz + (s32)(rnd() % (4 * r)) - 2 * r;
+            switch (rnd() % 4) {           /* points on a corner or an edge: equality in the tests */
+            case 0: { int v = rnd() % 4; S16(pos) = S16(quad + 4 * v); S16(pos + 4) = S16(quad + 4 * v + 2); break; }
+            case 1: S16(pos) = cx + (s32)(rnd() % (2 * r)) - r; S16(pos + 4) = (rnd() & 1) ? cz + r : cz - r; break;
+            case 2: S16(pos + 4) = cz + (s32)(rnd() % (2 * r)) - r; S16(pos) = (rnd() & 1) ? cx + r : cx - r; break;
+            }
+        } else for (int k = 0; k < 8; k++) S16(quad + 2 * k) = rnd_s16() / 2;
+        u32 a[2] = {pos, quad};
+        sprintf(g_what, "pos %d,%d", S16(pos), S16(pos + 4));
+        check(0x48F790, PointInQuad, "PointInQuad", 2, a, 0xFFFFFFFF);
+    }
+    for (u32 area = 0; area < 10; area++)
+        for (u32 room = 0; room < 24; room++) {
+            u32 a[2] = {area, room};
+            sprintf(g_what, "area %u room %u", area, room);
+            check(0x472210, Room_GlobalIndex, "Room_GlobalIndex", 2, a, 0xFF);
+        }
+}
+
+/* script: scratch thread area and script image in .psxseg */
+#define T_BASE   0x6E0000u     /* 10 threads */
+#define S_BASE   0x6E1000u     /* routine table + code */
+#define GL_BASE  0x6E3000u     /* globals */
+
+static void script_setup(void)
+{
+    U32(A_G_PTR) = A_G_STATIC;
+    U32(A_SCR_THREADS) = T_BASE;
+    U32(A_SCR_GLOBALS) = GL_BASE;
+    U32(G() + G_SCRIPT) = S_BASE;
+    for (int i = 0; i < 64; i++) U32(GL_BASE + 4 * i) = rnd();
+    for (int i = 0; i < 16; i++) U32(S_BASE + 4 * i) = 0x40 + 0x80 * i;   /* routine offsets */
+}
+
+static void random_thread(gptr t)
+{
+    memset(MEM(t), 0, SCR_THREAD_SIZE);
+    for (int i = 4; i < 0x80; i += 4) U32(t + i) = rnd() % 7 == 0 ? (u32)((s32)(rnd() % 64) - 32) : rnd();
+    U32(t + T_SP) = t + 0x40 + 4 * (rnd() % 8);
+    for (int i = 0; i < 4; i++) U32(t + T_REG + 4 * i) = rnd() % 3 ? rnd() % 200 - 100 : rnd();
+    U8(t + T_COND) = (u8)rnd(); U8(t + T_DEPTH) = rnd() % 3; U8(t + T_STATE) = 1;
+    U32(t + T_PC) = S_BASE + 0x400 + 2 * (rnd() % 64);
+}
+
+static void test_script_values(void)
+{
+    script_setup();
+    gptr t = T_BASE;
+    for (int i = 0; i < iters; i++) {
+        random_thread(t);
+        u32 types[] = {0, 1, 2, 6, 3, 0x101, 4};
+        u32 ty = types[rnd() % 7];
+        s32 v = ty == 1 ? (s32)(rnd() % 4) : ty == 2 ? (s32)(rnd() % 8) - 2 : ty == 6 ? (s32)(rnd() % 64) : rnd_s16();
+        u32 a[4] = {t, ty, (u32)v, rnd()};
+        sprintf(g_what, "type %x v %d", ty, v);
+        check(0x48B8E0, Script_GetValue, "Script_GetValue", 3, a, 0xFFFFFFFF);
+        check(0x48B930, Script_SetValue, "Script_SetValue", 4, a, 0);
+        u32 b[3] = {rnd() % 4 ? rnd() % 2000 - 1000 : rnd(), rnd() % 4 ? rnd() % 40 - 20 : rnd(), rnd() % 30};
+        if (rnd() % 4 == 0) b[1] = b[0];                  /* equal operands: edge cases of compares */
+        if ((b[2] == 3 || b[2] == 4) && (b[1] == 0 || (b[1] == 0xFFFFFFFF && b[0] == 0x80000000))) b[1] = 7;
+        sprintf(g_what, "binop %u (%d, %d)", b[2], b[0], b[1]);
+        check(0x48B980, Script_BinOp, "Script_BinOp", 3, b, 0xFFFFFFFF);
+        u32 c[2] = {t, rnd() % 3 ? rnd() % 5 - 2 : rnd()};
+        check(0x48BB20, Script_SetCond, "Script_SetCond", 2, c, 0);
+    }
+}
+
+static void test_script_ops(void)
+{
+    static const struct { u8 op; u32 addr; void *fn; const char *name; } ops[] = {
+        {0x00, 0x489990, ScrOp_Nop, "ScrOp_Nop"},       {0x01, 0x4873C0, ScrOp_Load, "ScrOp_Load"},
+        {0x02, 0x487400, ScrOp_Store, "ScrOp_Store"},   {0x03, 0x487440, ScrOp_Arith, "ScrOp_Arith"},
+        {0x04, 0x4874D0, ScrOp_Return, "ScrOp_Return"}, {0x05, 0x487510, ScrOp_Push, "ScrOp_Push"},
+        {0x06, 0x487550, ScrOp_Pop, "ScrOp_Pop"},       {0x07, 0x487590, ScrOp_Branch, "ScrOp_Branch"},
+        {0x08, 0x4875D0, ScrOp_Call, "ScrOp_Call"},     {0x10, 0x487620, ScrOp_Wait, "ScrOp_Wait"},
+        {0x1C, 0x487B70, ScrOp_FlagSet, "ScrOp_FlagSet"}, {0x1D, 0x487BF0, ScrOp_FlagCheck, "ScrOp_FlagCheck"},
+    };
+    script_setup();
+    gptr t = T_BASE + SCR_THREAD_SIZE * 3;
+    for (int i = 0; i < iters; i++)
+        for (unsigned k = 0; k < sizeof ops / sizeof ops[0]; k++) {
+            random_thread(t);
+            gptr pc = U32(t + T_PC);
+            for (int b = 0; b < 8; b++) U8(pc + b) = (u8)rnd();
+            U8(pc) = ops[k].op;
+            u8 types[] = {0, 1, 2, 6, 4};
+            switch (ops[k].op) {
+            case 1: case 2: U8(pc + 1) = rnd() % 4; U8(pc + 2) = types[rnd() % 5]; S16(pc + 4) = rnd() % 8; break;
+            case 3: {
+                u8 opn = rnd() % 27; U8(pc + 1) = opn; U8(pc + 2) = rnd() % 5 == 0 ? 0xFF : rnd() % 4;
+                U8(pc + 3) = types[rnd() % 5]; S16(pc + 4) = rnd() % 8;
+                if (opn == 3 || opn == 4) { U8(pc + 3) = 0; S16(pc + 4) = 1 + rnd() % 9; }
+                if (U8(pc + 2) == 0xFF) { U8(pc + 1) = rnd() % 2; U8(pc + 3) = 0; S16(pc + 4) = rnd() % 5; }
+                break; }
+            case 5: case 6: U8(pc + 1) = types[rnd() % 5]; S16(pc + 2) = rnd() % 8; break;
+            case 7: U8(pc + 1) = rnd() % 10; S16(pc + 2) = (rnd() % 64) * 2 - 64; break;
+            case 8: S16(pc + 2) = rnd() % 16; break;
+            case 0x1C: case 0x1D: {
+                gptr sp = U32(t + T_SP); u32 g = rnd() % 12;
+                U32(sp + (ops[k].op == 0x1C ? 8 : 4)) = g;
+                U32(sp + (ops[k].op == 0x1C ? 4 : 0)) = rnd() % 8 == 0 ? 0xFF : rnd() % U32(A_FLAG_GROUPS + g * 8 + 4);
+                if (ops[k].op == 0x1C) { U32(sp) = rnd() & 1; if (rnd() % 4 == 0) { U32(sp + 8) = 1; U32(sp + 4) = 0xFF; } }
+                else if (U32(sp) == 0xFF) U32(sp) = 3;
+                break; }
+            }
+            u32 a[1] = {t};
+            sprintf(g_what, "bytes %02X %02X %02X %02X %02X %02X", U8(pc), U8(pc + 1), U8(pc + 2), U8(pc + 3), U8(pc + 4), U8(pc + 5));
+            check(ops[k].addr, ops[k].fn, ops[k].name, 1, a, 0xFFFFFFFF);
+        }
+}
+
+/* random programs made only of reimplemented opcodes, run by Script_Run */
+static void test_script_run(void)
+{
+    script_setup();
+    for (int i = 0; i < iters / 4; i++) {
+        /* 16 routines of 0x80 bytes: instructions on known boundaries,
+           forward branches only, few pushes and calls (stack stays in the thread) */
+        for (int r = 0; r < 16; r++) {
+            gptr p = S_BASE + 0x40 + 0x80 * r, end = p + 0x70;
+            gptr at[42]; int n = 0, br[40], nb = 0, pushes = 0, depth[42];
+            while (p + 12 < end && n < 40) {
+                u32 k = rnd() % 100;
+                at[n] = p; depth[n] = pushes;
+                if (k < 20 && pushes < 6) { U8(p) = 5; U8(p + 1) = rnd() % 3 ? 0 : 6; S16(p + 2) = rnd() % 16; p += 4; pushes++; }
+                else if (k < 30 && pushes > 0) { U8(p) = 6; U8(p + 1) = 1; S16(p + 2) = rnd() % 4; p += 4; pushes--; }
+                else if (k < 50) { U8(p) = 3; U8(p + 1) = rnd() % 22; U8(p + 2) = rnd() % 4; U8(p + 3) = 0; S16(p + 4) = 1 + rnd() % 5; p += 6; }
+                else if (k < 62) { U8(p) = 1; U8(p + 1) = rnd() % 4; U8(p + 2) = rnd() % 2 ? 1 : 2; S16(p + 4) = rnd() % 4; if (U8(p + 2) == 2 && pushes == 0) U8(p + 2) = 1; p += 6; }
+                else if (k < 74) { U8(p) = 7; U8(p + 1) = rnd() % 7; br[nb++] = n; p += 4; }
+                else if (k < 78 && r < 4) { U8(p) = 8; U8(p + 1) = 0; S16(p + 2) = r + 1 + rnd() % 3; p += 4; }
+                else if (k < 86) { U8(p) = 0x10; U8(p + 1) = 0; p += 2; }
+                else { U8(p) = 0; U8(p + 1) = 0; p += 2; }
+                n++;
+            }
+            /* balance the stack, then return */
+            at[n] = p; depth[n] = pushes;
+            U8(p) = 3; U8(p + 1) = 0; U8(p + 2) = 0xFF; U8(p + 3) = 0; S16(p + 4) = pushes; p += 6;
+            while (p < end + 0x10) { U8(p) = 4; U8(p + 1) = 0; p += 2; }
+            for (int j = 0; j < nb; j++) {           /* forward, to an instruction at the same stack depth */
+                int i0 = br[j], cand[42], nc = 0;
+                for (int q = i0 + 1; q <= n; q++) if (depth[q] == depth[i0]) cand[nc++] = q;
+                int tgt = nc ? cand[rnd() % nc] : i0 + 1;
+                if (!nc) { U8(at[i0] + 1) = 0x7; }       /* never taken: bit 7 is never set */
+                S16(at[i0] + 2) = (s16)(at[tgt] - at[i0]);
+            }
+        }
+        memset(MEM(T_BASE), 0, SCR_NTHREADS * SCR_THREAD_SIZE);
+        for (int th = 0; th < SCR_NTHREADS; th++)
+            if (rnd() & 1) {
+                u32 a[2] = {(u32)th, rnd() % 16};
+                check(0x48BDB0, Script_StartThread, "Script_StartThread", 2, a, 0);
+                /* keep waits short and the stack inside the thread */
+            }
+        for (int f = 0; f < 6; f++) {
+            for (int th = 0; th < SCR_NTHREADS; th++) {
+                gptr t = T_BASE + th * SCR_THREAD_SIZE;
+                if (U8(t + T_STATE) == 2 && U16(t + T_WAIT) > 3) U16(t + T_WAIT) = 2;
+                if (U32(t + T_SP) < t + 0x20 || U32(t + T_SP) > t + 0x80) U8(t + T_STATE) = 0;
+            }
+            sprintf(g_what, "program %d frame %d", i, f);
+            if (!check(0x48BC50, Script_Run, "Script_Run", 0, NULL, 0)) break;
+        }
+        u32 a[1] = {rnd() % 10};
+        check(0x48BE20, Script_KillThread, "Script_KillThread", 1, a, 0);
+    }
+}
+
+/* LZSS: every type 5/6 record of the game's .DAT files */
+static void test_lzss(const char *dir)
+{
+    char pat[MAX_PATH]; snprintf(pat, sizeof pat, "%s\\*.DAT", dir);
+    WIN32_FIND_DATAA fd; HANDLE h = FindFirstFileA(pat, &fd);
+    if (h == INVALID_HANDLE_VALUE) { printf("LZSS: no .DAT files in %s, skipped\n", dir); return; }
+    int nrec = 0;
+    do {
+        char path[MAX_PATH]; snprintf(path, sizeof path, "%s\\%s", dir, fd.cFileName);
+        FILE *f = fopen(path, "rb"); if (!f) continue;
+        u8 hdr[0x800];
+        if (fread(hdr, 1, 0x800, f) != 0x800) { fclose(f); continue; }
+        u32 off = 0x800;
+        for (int r = 0; r < 64; r++) {
+            u32 type = *(u32 *)(hdr + 32 * r), size = *(u32 *)(hdr + 32 * r + 4);
+            if (!memcmp(hdr + 32 * r, "dummy", 5) || (!type && !size)) continue;
+            if (type > 0x20) break;
+            if ((type == 5 || type == 6) && size && size < 0xF0000) {
+                gptr src = 0x610000, dst = 0x4E8000;           /* both inside .psxseg */
+                fseek(f, off, SEEK_SET);
+                if (fread(MEM(src), 1, size, f) == size) {
+                    memset(MEM(dst), 0, src - dst);
+                    u32 a[3] = {dst, src, size};
+                    sprintf(g_what, "%s record %d (%u bytes)", fd.cFileName, r, size);
+                    check(0x4041F0, Lzss_Decode, "Lzss_Decode", 3, a, 0);
+                    nrec++;
+                }
+            }
+            off += (size + 0x7FF) & ~0x7FFu;
+        }
+        fclose(f);
+    } while (FindNextFileA(h, &fd));
+    FindClose(h);
+    printf("LZSS: %d records\n", nrec);
+}
+
+/* called by harness_stub.exe, whose image covers 0x400000..0x883000 so that
+ * nothing else can sit there; the stub's own code is overwritten by the
+ * game image, so this never returns */
+static LONG WINAPI on_crash(EXCEPTION_POINTERS *e)
+{
+    printf("CRASH %08lX at %p (address %p) during [%s] after %d checks\n",
+           e->ExceptionRecord->ExceptionCode, e->ExceptionRecord->ExceptionAddress,
+           (void *)e->ExceptionRecord->ExceptionInformation[1], g_what, g_tests);
+    fflush(stdout);
+    TerminateProcess(GetCurrentProcess(), 4);
+    return EXCEPTION_CONTINUE_SEARCH;
+}
+
+__declspec(dllexport) void harness_main(int argc, char **argv)
+{
+    SetUnhandledExceptionFilter(on_crash);
+    const char *exe = argc > 1 ? argv[1] : "Dino2.exe", *data = NULL;
+    for (int i = 2; i < argc; i++) {
+        if (!strcmp(argv[i], "-n") && i + 1 < argc) iters = atoi(argv[++i]);
+        else data = argv[i];
+    }
+    if (!load_image(exe)) { fflush(stdout); TerminateProcess(GetCurrentProcess(), 2); }
+    for (int i = 0; i < 2; i++) {
+        snap0[i] = malloc(RW[i].hi - RW[i].lo);
+        snap1[i] = malloc(RW[i].hi - RW[i].lo);
+    }
+    U32(A_G_PTR) = A_G_STATIC;
+    struct { const char *name; void (*fn)(void); } T[] = {
+        {"flags", test_flags}, {"geometry", test_geom}, {"script values", test_script_values},
+        {"script opcodes", test_script_ops}, {"script run", test_script_run},
+    };
+    for (unsigned i = 0; i < sizeof T / sizeof T[0]; i++) {
+        int f0 = g_fail, t0 = g_tests;
+        T[i].fn();
+        printf("%-16s %6d checks, %d failed\n", T[i].name, g_tests - t0, g_fail - f0);
+    }
+    if (data) { int f0 = g_fail, t0 = g_tests; test_lzss(data);
+                printf("%-16s %6d checks, %d failed\n", "lzss", g_tests - t0, g_fail - f0); }
+    printf("hook table: %d functions; total %d checks, %d failed\n", g_nhooks, g_tests, g_fail);
+    fflush(stdout);
+    TerminateProcess(GetCurrentProcess(), g_fail != 0);
+}

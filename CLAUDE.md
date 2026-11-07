@@ -1,0 +1,23 @@
+# Notes for work on this repository
+
+Dino Crisis 2 PC (Dino2.exe, 2002) recompilation. The user writes in Russian:
+answer in Russian; code, comments and docs stay in English.
+
+* Never commit game data or game binaries (Dino2.exe, *.DAT/*.DBS/*.TEX,
+  movies, speech, screenshots of the game). Tools read the user's copy from
+  `game/` (or paths passed on the command line).
+* Do not render, view or send images of the game's characters; check model
+  rendering numerically (projected bounding boxes).
+* Game memory keeps the original layout: pointers inside game data are
+  32-bit original addresses (`gptr`), accessed only via `MEM()/U8()/U16()/U32()`.
+* A rewritten function keeps the original's address in a comment, goes into
+  `src/hook/hooks.c`, and is added to the harness (`tests/harness.c`) with
+  random + edge-case inputs. It is committed only when `make check` reports
+  0 differences. Mutation-check new tests (inject a bug, see it fail).
+* `make` needs i686-w64-mingw32-gcc; `make check` needs 32-bit wine
+  (WINEPREFIX defaults to ~/.wine-dc2re); `make linux` builds natively.
+* Names and addresses: `tools/dc2_labels.csv`; formats: `docs/dc2_game_flow.h`.
+* Disassembly: `objdump -d -M intel --start-address=... game/Dino2.exe`.
+  Regions: game 0x401000-0x46F000 and 0x471000-0x4B4000, Win32 glue
+  0x46F000-0x471000, PC layer (PsyQ on DirectX) 0x4B4000-0x4CD000, libjpeg
+  0x4CD000-0x4DD5C0, CRT after; .psxseg (PS1 RAM image) at 0x4E8000.

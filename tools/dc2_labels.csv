@@ -1,0 +1,368 @@
+address,kind,name,category,confidence,notes
+0x4C05D0,func,AddPrim,libgpu,high,"*ot = prim; prim->tag = old *ot | 0x80000000 if hi byte set (PC tag, 32-bit pointers)"
+0x4C0600,func,AddPrims,libgpu,high,"(ot, p0, p1): links chain p0..p1 into ot"
+0x4C0FA0,func,RotMatrix,libgte,high,"I -> RotMatrixZ, RotMatrixY, RotMatrixX (premultiply): M = Rx*Ry*Rz"
+0x4C0FF0,func,RotMatrixYXZ,libgte,high,"Z, X, Y premultiply: M = Ry*Rx*Rz"
+0x4C1040,func,RotMatrixZXY,libgte,medium,"Y, X, Z premultiply: M = Rz*Rx*Ry (name by math, check libgte list)"
+0x4C1090,func,RotMatrixZYX,libgte,high,"X, Y, Z premultiply: M = Rz*Ry*Rx"
+0x4C0E50,func,RotMatrixX,libgte,high,"builds Rx from rsin/rcos, MulMatrix0(Rx, m, m)"
+0x4C0EC0,func,RotMatrixY,libgte,high,
+0x4C0F30,func,RotMatrixZ,libgte,high,"(not on seam, called by RotMatrix*)"
+0x4C0CB0,func,MulMatrix0,libgte,high,"(m0, m1, m2): m2 = m0*m1, >>12"
+0x4C0B20,func,ApplyMatrixSV,libgte,high,"(m, SVECTOR in, SVECTOR out) >>12"
+0x4C0BA0,func,ApplyMatrixLV,libgte,medium,"(m, VECTOR in, VECTOR out)"
+0x4C0AA0,func,ApplyMatrix,libgte,medium,"(m, SVECTOR, VECTOR) no shift; internal MVMVA core used by gte_rt*"
+0x4C0C20,func,ApplyRotMatrixLV,libgte,medium,current GTE rotation * VECTOR
+0x4C10E0,func,ScaleMatrix,libgte,high,m[i][j] *= v[j] >>12
+0x4C1170,func,TransposeMatrix,libgte,high,
+0x4C11C0,func,OuterProduct12,libgte,low,cross product on VECTOR; check shift (OuterProduct0 vs 12)
+0x4C1A70,func,LoadAverageShort0,libgte,medium,"(v0, v1, p0, p1, out): (v0*p0 + v1*p1) >> 12"
+0x4C1AD0,func,LoadAverageCol,libgte,medium,same on u8 colour vectors
+0x4C1790,func,VectorNormalS,libgte,low,float normalisation of a vector; check in/out types
+0x4C08E0,func,rsin,libgte,high,"table at 0x73C064, 4096 = 360 deg"
+0x4C0920,func,rcos,libgte,high,rsin(a + 0x400)
+0x4C0940,func,ratan2,libgte,high,atan2 via fpatan * 2048/pi
+0x4C0960,func,SquareRoot0,libgte,high,(int)sqrt(x) via FPU
+0x4C0970,func,SquareRoot12,libgte,low,"sqrt(x/4096) via FPU, no rescale; verify against callers"
+0x4C1B40,func,SetRotMatrix,libgte,high,20 bytes -> GTE RT @0x87B3F8
+0x4C1B60,func,SetTransMatrix,libgte,high,m->t -> GTE TR @0x87B40C
+0x4C1A30,func,SetLightMatrix,libgte,medium,32 bytes -> 0x87B448 (L vs LR: confirm in NCC core 0x4C18E0)
+0x4C1A50,func,SetColorMatrix,libgte,medium,32 bytes -> 0x87B380
+0x4C0A70,func,SetBackColor,libgte,high,"(r,g,b) <<4 -> BK @0x87B3A8"
+0x4C0A10,func,SetGeomScreen,libgte,high,H @0x87B6E8
+0x4C0A00,func,ReadGeomScreen,libgte,high,
+0x4C09E0,func,SetGeomOffset,libgte,high,"(ofx, ofy) -> 0x87B6F8/0x87B6F4; added to H*x/z in RTPS (usually 160,120)"
+0x4C1220,func,RotTransPers,libgte,high,"RTPS on input SVECTOR, returns otz"
+0x4C1470,func,RotTransPers3,libgte,medium,3x RTPS
+0x4C15D0,func,RotTransPers4,libgte,medium,4x RTPS
+0x4C1C20,func,gte_ldv0,gte-macro,high,V0 @0x87B3C0
+0x4C1C40,func,gte_ldv3,gte-macro,high,"(v0, v1, v2) -> 0x87B3C0 / 0x87B3B8 / 0x87B3C8"
+0x4C1C80,func,gte_ldv3c,gte-macro,high,consecutive SVECTOR[3]
+0x4C1BA0,func,gte_ldclmv,gte-macro,high,matrix column -> IR
+0x4C1BD0,func,gte_ldrgb,gte-macro,high,RGBC @0x87B6EC
+0x4C1BE0,func,gte_ldsxy3,gte-macro,high,SXY0..2 @0x87B428..0x87B43C (floats on PC)
+0x4C1D70,func,gte_rtv0,gte-macro,high,RT*V0 -> IR
+0x4C1DB0,func,gte_rtv1,gte-macro,high,
+0x4C1DF0,func,gte_rtv2,gte-macro,high,
+0x4C1E30,func,gte_rtir,gte-macro,high,RT*IR -> IR
+0x4C1E70,func,gte_rtps,gte-macro,high,
+0x4C1F40,func,gte_rtpt,gte-macro,high,
+0x4C1D20,func,gte_nclip,gte-macro,high,float cross of SXY0..2 -> MAC0 @0x87B6F0
+0x4C1CC0,func,gte_nccs,gte-macro,medium,NCC on V0 via core 0x4C18E0
+0x4C1CE0,func,gte_ncct,gte-macro,medium,NCC on V0..V2
+0x4C2170,func,gte_stsv,gte-macro,high,IR1..3 -> SVECTOR
+0x4C2090,func,gte_stclmv,gte-macro,high,IR -> matrix column
+0x4C20C0,func,gte_stlvnl,gte-macro,high,MAC1..3 -> VECTOR
+0x4C20E0,func,gte_stopz,gte-macro,high,MAC0
+0x4C20F0,func,gte_stflg,gte-macro,high,FLAG @0x87B418
+0x4C2190,func,gte_stsxy,gte-macro,high,SXY2
+0x4C21B0,func,gte_stsxy3c,gte-macro,high,SXY0..2 consecutive
+0x4C21F0,func,gte_stsxy3_g3,gte-macro,high,"x,y at +8/+0x18/+0x28 (stride 0x10): fits POLY_G3 and POLY_FT3"
+0x4C2230,func,gte_stsxy3_gt3,gte-macro,medium,stride 0x14 (+8/+0x1C/+0x30); byte-identical to 0x4C2270
+0x4C2270,func,gte_stsxy3_gt3_b,gte-macro,medium,duplicate of 0x4C2230 (separate instantiation)
+0x4C22B0,func,gte_stsz,gte-macro,high,SZ3
+0x4C22C0,func,gte_stsz3,gte-macro,high,
+0x4C22E0,func,gte_stsz4,gte-macro,high,
+0x4C24B0,func,gte_stszotz,gte-macro,high,SZ3 >> 2
+0x4C2100,func,gte_strgb,gte-macro,high,RGB2
+0x4C2110,func,gte_strgb3,gte-macro,high,
+0x4C2130,func,gte_strgb3_gt3,gte-macro,medium,RGB0..2 -> +4/+0x18/+0x2C = POLY_GT3 colours
+0x4C2150,func,gte_strgb3_gt3_b,gte-macro,medium,duplicate of 0x4C2130
+0x4C1B90,func,PC_SetDepthScale,pc-only,medium,0x87B440 = 2*arg (float); divides SZ for D3D depth
+0x4C2310,func,PC_stsz4_g4,pc-only,medium,z -> +0x10/+0x20/+0x30/+0x40 (POLY_G4 / POLY_FT4)
+0x4C23D0,func,PC_stsz4_ft4,pc-only,medium,same layout as 0x4C2310
+0x4C2460,func,PC_stsz4_gt4,pc-only,high,z -> +0x10/+0x24/+0x38/+0x4C (POLY_GT4)
+0x4C2390,func,PC_stsz3_g3,pc-only,medium,z -> +0x10/+0x20/+0x30 (POLY_G3 / POLY_FT3)
+0x4C2420,func,PC_stsz3_gt3,pc-only,high,z -> +0x10/+0x24/+0x38 (POLY_GT3)
+0x4C2360,func,PC_stsz_g4_flat,pc-only,medium,one SZ3 to all 4 vertices of a G4/FT4
+0x4C0630,func,SetPolyG3,libgpu,high,code 0x30 + default float z 0.01
+0x4C0650,func,SetPolyG4,libgpu,high,code 0x38
+0x4C0670,func,SetLineF2,libgpu,high,code 0x40
+0x4C06A0,func,SetTile,libgpu,high,code 0x60
+0x4C0690,func,SetSprt,libgpu,high,code 0x64
+0x4C06C0,func,SetSemiTrans,libgpu,high,
+0x4C08A0,func,GetTPage,libgpu,high,"(tp, abr, x, y), standard bit layout"
+0x4C06F0,func,SetDrawMode,libgpu,high,"code 0xE8: tpage +4, flags +6 (bit0 dtd, bit1 dfe), RECT* tw +8"
+0x4C06E0,func,PC_SetPacketE4,libgpu,low,code 0xE4 has no DrawOTag case (default = skipped)
+0x4C06B0,func,SetMaskMarker,libgpu,high,"code 0x88: one mask group, inserted at ot[z]"
+0x4C0740,func,SetDrawVramOp,libgpu,medium,"code 0xEC + RECT + a,b -> DrawOTag calls 0x4B4A60(&rect,a,b)"
+0x4B4D20,func,LoadImage,libgpu-vram,high,"(RECT*, u32*) -> software VRAM 0x76448C"
+0x4B4DB0,func,LoadImage_IfChanged,libgpu-vram,high,"compares with VRAM first, writes only on change (CLUT records)"
+0x4B4B30,func,MoveImage,libgpu-vram,high,"(RECT*, x, y)"
+0x4B4A60,func,PC_VramOpClipped,libgpu-vram,low,"clips RECT to 1024x512, then 0x4C3BE6 + dirty mark"
+0x4B49F0,func,PC_VramRectHelper,libgpu-vram,low,
+0x4B4E60,func,SetFarColor,d3d,medium,"stores rgb, D3D3 SetRenderState(FOGCOLOR=0x22)"
+0x4B4F50,func,PC_SetFogEnable,d3d,high,"SetRenderState(FOGENABLE=0x1C, on/off)"
+0x4B4F90,func,PC_DDrawClear,d3d,low,DDBLTFX fill; called from 0x473210/0x4732C0
+0x4BEAC0,func,Masks_Upload,masks,low,called after build / depth shift
+0x4BB8D0,func,PC_TexSlot,d3d,low,"slot table 0x75DEFC, stride 0x164"
+0x4C24C0,func,PC_DrawSpecial,d3d,low,768 bytes x87; called once from 0x410710
+0x4C03F0,func,PCopen,libsn,high,"""%s%s"" path, 16 handles @0x87B330"
+0x4C0490,func,PCcreat,libsn,medium,
+0x4C04E0,func,PCread,libsn,high,"fread(buf,1,n,fp)"
+0x4C0510,func,PCwrite,libsn,high,
+0x4C05A0,func,PCclose,libsn,high,
+0x4C0580,func,PClseek,libsn,high,"fseek(fp, off, mode)"
+0x4C0560,func,PClseek_set,libsn,medium,"fseek(fp, off, SEEK_SET)"
+0x4C0540,func,PC_FileLength,libsn,medium,_filelength(_fileno(fp))
+0x4BF970,func,Snd_Play,sound,medium,DSound slot table 0x878328 (stride 12)
+0x4BFAA0,func,Snd_IsPlaying,sound,high,IDirectSoundBuffer::GetStatus
+0x4BFAE0,func,Snd_Stop,sound,high,::Stop
+0x4BFBD0,func,Snd_Free,sound,medium,Stop + Release
+0x4BFA20,func,Snd_SetVolume,sound,low,or SetPan; check vtbl offset
+0x4BFA60,func,Snd_SetPan,sound,low,
+0x4BFB00,func,Snd_Unknown_B00,sound,low,
+0x4BFB40,func,Snd_PauseResume,sound,low,flag 0x8
+0x4BF720,func,Snd_CreateFromWav,sound,medium,"(RIFF*, flags) -> DirectSound buffer handle"
+0x4BFC10,func,Strm_Open,stream,medium,"CreateEventA, table 0x866190 (stride 24)"
+0x4BFEE0,func,Strm_Play,stream,medium,"Play(0,0,LOOPING)"
+0x4BFF20,func,Strm_SetVolume,stream,low,
+0x4BFFA0,func,Strm_Stop,stream,medium,
+0x4BFFD0,func,Strm_Unknown_FD0,stream,low,
+0x4C0010,func,Strm_PauseResume,stream,low,
+0x4C0050,func,Strm_Close,stream,medium,CloseHandle
+0x4BE3C0,func,Masks_CreateVB,masks,high,"(count*6, pixels): D3D vertex buffer FVF 0x1C4, 6 TL vertices per mask"
+0x4BE430,func,Masks_SetQuad,masks,high,"(i, x, y, z): 16x16 screen tile, scaled by screen scale 0x8644BC"
+0x4BE6A0,func,Masks_ShiftDepth,masks,medium,re-depths all masks when G+0xC27 changes
+0x4BE6E0,func,Masks_BuildTexture,masks,medium,packs 18x18 tiles into textures (callback 0x4BEA80)
+0x4BEC40,func,Masks_FillMarker,masks,medium,"(i, packet): mask index/range into the 0x88 packet"
+0x4BF3A0,func,Movie_Open,movie,medium,CoCreateInstance + MultiByteToWideChar (DirectShow)
+0x4BF340,func,Movie_Close,movie,medium,
+0x4BF650,func,Movie_Ctl1,movie,low,vtbl+0x1C(1)
+0x4BF670,func,Movie_Ctl0,movie,low,vtbl+0x1C(0)
+0x4BF690,func,Movie_Poll,movie,low,
+0x4BF180,func,Input_ReadKeyboard,input,medium,IDirectInputDevice::GetDeviceState(0x100)
+0x4BEF40,func,Input_ReadPad,input,low,
+0x4BF130,func,Input_SetParam,input,low,-> 0x866140
+0x4BF330,func,Input_GetParam,input,low,<- 0x865EF8
+0x4BF250,func,Input_ResetKeyBinds,input,medium,copies 0x100 bytes 0x73BDB8 -> 0x865EFC
+0x4BF1E0,func,Input_FindKeyBind,input,low,table 0x865EFE
+0x4BF210,func,Input_SetKeyBind,input,low,
+0x4BF2A0,func,Input_SetJoyBind,input,low,table 0x8660FE
+0x4BF140,func,Input_KeyLookup,input,low,pairs @0x73BB98
+0x4BD480,func,PC_SetBuffer,pc-only,low,"free old, store 0x865EE4"
+0x4D2990,func,JPEG_Decode,libjpeg,high,"(dst, src, size, mode): IJG libjpeg wrapper; DBS backgrounds 320x240 -> 16-bit RGB"
+0x4D7290,func,Stub_Return0,pc-only,high,returns 0; PS1 call stubbed (CdSync/VSync-like?)
+0x4C2900,func,Task_RunAll,scheduler,high,
+0x4C2967,func,Task_InitStackBase,scheduler,high,
+0x4C2974,func,Task_Start,scheduler,high,
+0x4C29A9,func,Task_Sleep,scheduler,high,
+0x4C29D6,func,Task_Chain,scheduler,high,
+0x4C2A0D,func,Task_Kill,scheduler,high,
+0x4C18E0,func,gte_ncc_core,gte-macro,medium,"(v, rgb, out) shared by gte_nccs/gte_ncct"
+0x76448C,data,g_vram,data,high,software VRAM 1024x512x16
+0x87B3F8,data,gte_RT,data,high,rotation matrix
+0x87B40C,data,gte_TR,data,high,
+0x87B3C0,data,gte_V0,data,high,
+0x87B3B8,data,gte_V1,data,high,
+0x87B3C8,data,gte_V2,data,high,
+0x87B3D8,data,gte_MAC123,data,high,
+0x87B3E8,data,gte_IR123,data,high,
+0x87B418,data,gte_FLAG,data,high,
+0x87B428,data,gte_SXY_fifo,data,high,"3x {float x,y}"
+0x87B700,data,gte_SZ_fifo,data,high,
+0x87B6F0,data,gte_MAC0,data,high,
+0x87B6E8,data,gte_H,data,high,
+0x87B6EC,data,gte_RGBC,data,high,
+0x87B374,data,gte_RGB_fifo,data,high,
+0x87B3A8,data,gte_BK,data,high,
+0x87B380,data,gte_LCM,data,medium,
+0x87B448,data,gte_LLM,data,medium,
+0x87B440,data,pc_depth_scale,data,medium,
+0x73C064,data,rsin_tbl,data,high,
+0x73C050,data,g_identity_matrix,data,high,
+0x87B330,data,pc_file_handles,data,high,FILE*[16]
+0x73C870,data,task_slots,data,high,4 x 0x20
+0x878328,data,snd_slots,data,medium,
+0x866190,data,strm_slots,data,medium,
+0x4B50F0,func,DrawOTag,libgpu,high,"walks OT; flag 0x75DEF0 bit0 -> path A (no lines/fog), else D3D BeginScene..EndScene"
+0x4B5D00,func,PC_Draw_PolyF3,pc-draw,high,code 0x20
+0x4B6260,func,PC_Draw_PolyFT3,pc-draw,high,0x24
+0x4B6F50,func,PC_Draw_PolyF4,pc-draw,high,0x28
+0x4B70E0,func,PC_Draw_PolyFT4,pc-draw,high,0x2C
+0x4B7300,func,PC_Draw_PolyG3,pc-draw,high,0x30
+0x4B74D0,func,PC_Draw_PolyGT3,pc-draw,high,0x34
+0x4B76F0,func,PC_Draw_PolyG4,pc-draw,high,0x38
+0x4B7920,func,PC_Draw_PolyGT4,pc-draw,high,0x3C
+0x4B7BD0,func,PC_Draw_LineF2,pc-draw,high,0x40
+0x4B7E30,func,PC_Draw_LineF3,pc-draw,high,0x48
+0x4B8140,func,PC_Draw_LineF4,pc-draw,high,0x4C
+0x4B7CE0,func,PC_Draw_LineG2,pc-draw,high,0x50
+0x4B7F80,func,PC_Draw_LineG3,pc-draw,high,0x58
+0x4B82D0,func,PC_Draw_LineG4,pc-draw,high,0x5C
+0x4B8500,func,PC_Draw_Tile,pc-draw,high,0x60
+0x4B8740,func,PC_Draw_Sprt,pc-draw,high,0x64
+0x4B8660,func,PC_Draw_Tile1,pc-draw,high,0x68
+0x4B8EC0,func,PC_Draw_PolyFT4_2D,pc-draw,high,"0x6C PC-only, no z"
+0x4B8B20,func,PC_Draw_Sprt8,pc-draw,high,0x74
+0x4B8CF0,func,PC_Draw_Sprt16,pc-draw,high,0x7C
+0x4B8930,func,PC_Draw_SprtZ,pc-draw,medium,"0x80 PC-only, size / z"
+0x4B9400,func,PC_Draw_SprtScaled,pc-draw,medium,0x84 PC-only
+0x4BA120,func,PC_Draw_MaskMarker,pc-draw,medium,0x88: draws mask group (reads via other reg)
+0x4B9EA0,func,PC_Draw_Sprt8C,pc-draw,low,0x8C PC-only
+0x4B5F20,func,PC_CalcVertexColour,pc-draw,high,"(r,g,b,code,tpage,&argb): alpha by abr (0x80/0xFF/0xFF/0x40); COLOROP MODULATE2X or MODULATE with x2 clamp"
+0x4BA1D0,func,PC_DrawA_PolyF3,pc-draw,medium,path A handlers 0x4BA1D0..0x4BB3B0 mirror path B
+0x402520,func,NullDraw,pc-draw,high,bare ret; path A handler for all lines
+0x87BAF4,data,g_drawmode_tpage,data,high,
+0x87BAF6,data,g_drawmode_dfe,data,medium,
+0x87BAF7,data,g_drawmode_dtd,data,medium,also gates DrawOTag
+0x87BAEC,data,g_tex_window,data,medium,RECT
+0x75DEF0,data,g_render_flags,data,medium,bit0 selects DrawOTag path A
+0x865ED8,data,g_d3d_device3,data,high,IDirect3DDevice3*
+0x4B6470,func,Tex_Bind,pc-tex,high,"(tpage, clut): page=tpage&0x1F, mode=(tpage>>7)&3; find/create/reload; SetTexture(0)"
+0x4B6CD0,func,TexCache_Find,pc-tex,high,"(page, clut, mode) -> slot or 0x20; key = mode/clut + texture window; can mark dirty"
+0x4B6510,func,TexCache_Create,pc-tex,high,first free of 32 slots/page; 256x256; staging Lock->convert->Unlock->Blt
+0x4B6A00,func,TexCache_Reload,pc-tex,medium,"(page, slot) re-upload a dirty entry"
+0x4B6900,func,Clut_GetConverted,pc-tex,high,clut -> &g_vram_row[clut>>6].conv_palette[(clut&0x3F)*16]
+0x4B4BF0,func,ClutRow_Convert,pc-tex,high,"(x, row, n): BGR555 -> device format, 0x0000 -> alpha 0, stamp++"
+0x4B4790,func,TexCache_InvalidateRect,pc-tex,medium,"(rect, mark): mark=1 -> state 2, else Release + clear; also previous page (256-wide textures)"
+0x4B5A30,func,Tex_CreateSurface,pc-tex,medium,"DDSD 0x101007, DDSCAPS_TEXTURE, QI IDirect3DTexture2"
+0x4B5A10,func,Tex_GetPixelFormat,pc-tex,low,
+0x4C2A89,func,TexConv_4bpp,pc-tex,high,"asm, table 0x73C900[0]"
+0x4C2C2A,func,TexConv_8bpp,pc-tex,high,"asm, table 0x73C900[1]"
+0x4C2D5F,func,TexConv_15bpp,pc-tex,high,"asm, table 0x73C900[2]; 16-bit fast path when bpp==16"
+0x4C3DAC,func,TexConv_PackRGB,pc-tex,low,helper used by converters
+0x4B9100,func,PC_ClutStaleCheck_A,pc-tex,low,compares entry stamp with g_vram_row stamp
+0x4BA430,func,PC_ClutStaleCheck_B,pc-tex,low,checks entry state == 2
+0x75E488,data,g_tex_cache,data,high,PC_TEXCACHE_ENTRY[32][32]
+0x75CEE8,data,g_vram_row,data,high,PC_VRAM_ROW[512]
+0x865ECC,data,g_tex_staging,data,high,IDirectDrawSurface4* staging
+0x87BB42,data,g_tex_bpp,data,high,
+0x87BB43,data,g_tex_bytespp,data,high,
+0x87BB5C,data,g_tex_alpha_mask,data,high,
+0x73C900,data,g_tex_converters,data,high,fn[3]
+0x4B60A0,func,PC_SetBlendMode,pc-draw,high,"(code,tpage): abr0 SRCALPHA/INVSRCALPHA, 1 ONE/ONE, 2 ZERO/INVSRCCOLOR, 3 SRCALPHA/ONE"
+0x4B61C0,func,PC_SetDepthMode,pc-draw,high,tpage&0x400 no depth; &0x800 ZFUNC ALWAYS
+0x4B5E60,func,PC_SetFogForPrim,pc-draw,medium,(on) per packet
+0x4BBA30,func,D3D_InitRenderStates,d3d,high,"cull none, alpha test >8, bilinear, clamp, z lessequal"
+0x4BCB00,func,D3D_RestoreStates,d3d,low,re-applies alpha/fog/z states
+0x73B67C,data,g_semitrans_enable,data,medium,
+0x73B684,data,g_cur_colorop,data,high,"1 = MODULATE, 2 = MODULATE2X path"
+0x73B688,data,g_cur_abr,data,high,
+0x73B690,data,g_cur_depthflags,data,high,tpage & 0xC00
+0x865EEC,data,g_fog_on,data,medium,
+0x470190,func,WinMain,game,high,main loop inline
+0x470BF0,func,PC_VSync,game,high,message pump + timer frame pacing
+0x46D710,func,RootTask,game,high,g_root_modes[g_root.mode](&g_root); Task_Sleep(1)
+0x46D740,func,Root_Boot,game,medium,mode 0: loads CORE.DAT (0x15)
+0x46D7C0,func,Root_Mode1,game,low,
+0x46D880,func,Root_Mode2,game,low,
+0x46D970,func,Root_Mode3,game,low,
+0x471EC0,func,RootTask_Alt,game,low,used when 0x87DE08 set
+0x48C080,func,Game_Init,game,low,
+0x403E40,func,File_Tick,game,high,called once per frame from WinMain
+0x403E50,func,File_RequestLoad,game,high,(file_id)
+0x403A20,func,File_IsBusy,game,high,
+0x404290,func,File_Process,game,high,"open, header -> 0x6E6D00, read all, dispatch records"
+0x404280,func,File_Idle,game,high,
+0x4044C0,func,FileRec_Copy,game,high,type 0
+0x4044F0,func,FileRec_VramImage,game,high,type 1
+0x404680,func,FileRec_Clut,game,high,type 2
+0x4046C0,func,FileRec_SoundBank,game,high,"type 3: bank slot arg -> 0x87FBE0[slot] {data, data+0x100}; WAVs -> DirectSound buffers"
+0x404770,func,FileRec_SoundStream,game,high,"type 4: slot -> 0x87FB84 (stride 20), Strm_Open"
+0x4047F0,func,FileRec_Packed5,game,medium,type 5
+0x404810,func,FileRec_Packed6,game,medium,type 6
+0x4048F0,func,FileRec_Buffer,game,medium,type 7
+0x4041F0,func,Unpack,game,low,used by types 5/6 and LoadImage paths
+0x41EBB0,func,Room_LoadTask,game,high,rooms[room].dat_file_id
+0x4822D0,func,Stage_Load,game,high,"CORE00+stage, weapon files"
+0x46FAA0,func,Flag_Set,game,high,"(group, bit, on); 503 calls"
+0x46FB20,func,Flag_Check,game,high,"(group, bit); 465 calls"
+0x450A70,func,Fade_Set,game,low,G+0x804 block; 88 calls
+0x48D170,func,Area0_SetTables,game,high,area fns every 0x40 up to 0x48D3B0
+0x87DDF8,data,g_G,data,high,pointer to game work struct
+0x74D608,data,g_root,data,high,
+0x723AC8,data,g_root_modes,data,high,fn[4]
+0x71B230,data,g_file_names,data,high,char*[676]
+0x73825C,data,g_areas,data,high,10 x 24 bytes
+0x723C40,data,g_flag_groups,data,high,"12 x {bits*, count}"
+0x6E6D00,data,g_file_header_buf,data,high,".psxseg, 0x800"
+0x87FFE8,data,g_file_req_id,data,high,
+0x87FFEA,data,g_file_busy,data,high,
+0x71FEB0,data,g_door_files,data,high,
+0x703520,data,g_enemy_files,data,high,
+0x703598,data,g_kof_files,data,medium,KOF_P*.DAT: playable-dinosaur models (KOF_P00P shares rig+mesh with E00)
+0x703EE8,data,g_menu_files,data,medium,
+0x403AC0,func,Camera_Load,game,high,"DBS container for current camera: masks, JPEG, CLUT, PS1 bg; builds view"
+0x4BDC90,func,PC_DrawBackground,d3d,high,"(rgb16*, dirty): 256+64 textures, screen quad before DrawOTag"
+0x4C0770,func,PutDispEnv,libgpu,medium,copies 20 bytes to 0x87BAC0
+0x4C07A0,func,PutDrawEnv,libgpu,medium,compares isbg/r0g0b0 at +0x19..
+0x481E10,func,Room_SetPointers,game,high,"room block header -> G+0xA3C..0xA6C, G+0x7B8"
+0x403480,func,Camera_Reset,game,medium,
+0x4034D0,func,CamZones_Init,game,high,"G+0xA48 = *(u32*)A44 (zone count), A44 += 4, current camera = 0xFF"
+0x4035F0,func,CamZones_Check,game,high,"player (or followed obj) x/z + level obj+0x5A vs 0x2C-byte zones {flags,cam,level,extra,quad}; PointInQuad"
+0x4035B0,func,CamZones_FindForCamera,game,high,"(cam, zones) -> first zone whose camera == CAM+0x4C -> CAM+0x44"
+0x48F620,func,Camera_LookAt,game,high,"(target, eye, out): ax = ratan2(eye.y-target.y, horiz), ay = ratan2(eye.x-target.x, eye.z-target.z)+0x800; camera = RotMatrixZXY(-ax,-ay,roll)"
+0x48F5C0,func,Camera_Distance,game,low,-> CAM+0x34
+0x4036F0,func,Masks_Setup,masks,high,"(data+4, count, CAM+0x54 pixels): entries {u8 x/16, u8 y/16, s16 ot_z}"
+0x4CD000,func,libjpeg_region_start,libjpeg,medium,~275 functions up to CRT at 0x4DD5C0; replace with any JPEG decoder
+0x6C1500,data,g_bg_rgb16,data,high,"320x240 16-bit, ends at 0x6E6D00"
+0x6B9500,data,g_mask_data,data,high,u16 count + masks
+0x5E0000,data,g_room_block,data,high,room block (type 5 of ST*.DAT)
+0x5A0000,data,g_unpack_scratch,data,high,LZSS scratch for VRAM records
+0x6EEF80,data,g_room_table_6EEF80,data,low,type 0 record of ST*.DAT (0xB0 bytes)
+0x403760,func,Masks_Draw,masks,high,per frame: 0x88 marker per mask into ot[(buf<<10)+z]
+0x87BC00,data,g_ot,data,high,"2 x 1024 entries, buffer index 0x87DE0C"
+0x87DE0C,data,g_ot_buffer,data,high,
+0x864490,data,g_mask_verts,data,medium,
+0x864494,data,g_mask_vert_count,data,medium,
+0x87FBE0,data,g_sound_banks,data,high,"8 bytes per slot {data*, table*}"
+0x87FB84,data,g_sound_streams,data,medium,20 bytes per slot
+0x48D8B0,func,Object_SetModel,model,high,"(obj, block): builds part chain from PART table (+0x1C, 20 bytes)"
+0x48D740,func,Part_Alloc,model,medium,
+0x4834F0,func,MeshDrawGT3,model,high,"TRI 12 bytes: 3 u16 idx, uv2 uv0 uv1; rtpt, nclip cull, ncct, POLY_GT3 at ot[maxZ/16]"
+0x4832C0,func,MeshDrawGT4,model,high,"QUAD 16 bytes: 4 u16 idx, uv0..uv3; POLY_GT4"
+0x482940,func,EnvMapDraw,model,medium,object polys with UV from normals via ratan2 (reflection mapping)
+0x483290,func,Model_SetTexture,model,low,"(block, {tpage, clut, mode})"
+0x633000,data,g_enemy_model,data,high,E*.DAT type-5 model block
+0x662500,data,g_kof_model,data,high,KOF_P*.DAT type-5 model block
+0x87DC98,data,g_prim_ptr,data,high,current primitive buffer pointer
+0x48DDE0,func,Anim_Set,anim,high,"(obj, index or ptr >= 0x500000, ...): index into obj+0x88 table"
+0x48DEF0,func,Anim_Start,anim,high,"header: u16 frames, 3 table ptrs -> obj+0x9C/0xA0/0xA4; frames at +0x14, stride align4(16+6*parts)"
+0x48E3D0,func,Anim_ApplyFrame,anim,high,"cubic over 4 keys (obj+0x78..0x84); ch0 root pos, ch1 obj rot (+0xC0), parts rot -> part+0x48"
+0x48E100,func,Anim_Step,anim,medium,advances obj+0x98 time
+0x48DE80,func,Anim_Unknown_DE80,anim,low,uses obj+0x9C table
+0x48EF50,func,Object_UpdateSkeleton,anim,medium,"step, apply, blend (LoadAverageShort0), per-part matrices"
+0x48FF90,func,Part_BuildMatrix,anim,medium,RotMatrixYXZ(part+0x48)
+0x48FEA0,func,Part_BlendPose,anim,medium,LoadAverageShort0 cross-fade
+0x665D00,data,g_player_anims,data,high,WEP_P* block + 0x3800
+0x403EE0,func,Item_LoadIcon,game,high,"(index): ITEM.DAT entry 0x2800 = 128x64 8bpp -> VRAM 768,192 + CLUT row 497"
+0x403FD0,func,Map_LoadPage,game,high,"(index): MAP.DAT entry 0x10800 = 2 x 256x256 4bpp -> VRAM 448/384,0 + CLUT row 500"
+0x404100,func,File_LoadPicture,game,high,"(index): FILE.DAT entry 0x3800 = 128x96 8bpp -> VRAM 384,256 + CLUT row 497"
+0x4851E0,func,StaticObjDraw_A,model,medium,"objects of SC ""objects"" blocks; env-mapped UVs via ratan2"
+0x4854B0,func,StaticObjDraw_B,model,low,"(block, {tpage, clut, mode, colour})"
+0x486320,func,StaticObjDraw_C,model,low,
+0x485F00,func,StaticObjDraw_D,model,low,
+0x4C1350,func,GTE_Perspective,libgte,high,"sx = H*MAC1/MAC3 + OFX, sy = H*MAC2/MAC3 + OFY; near clamp at H/2"
+0x87B6F8,data,gte_OFX,data,high,
+0x87B6F4,data,gte_OFY,data,high,
+0x486FB0,func,Col_SegmentBlocked,game,high,"(obj, from, to, flag): from->to (x/z) vs edges of G+0xA4C polygons active on level trunc(-y/1000); object kind 0x80 player / 0x40 / 0x20"
+0x487160,func,Col_EdgeIntersect,game,high,"2D segment/segment test with bbox rejection"
+0x48F790,func,PointInQuad,game,medium,"(SVECTOR *pos, s16 quad[4][2]) x/z test used by camera and footstep zones"
+0x48C3B0,func,Footstep_Sound,game,high,"event code 0x30/0x31/0x50/0x51 -> G+0xA64 zones (level obj+0x5A, quad) -> code + 2*material"
+0x46B8C0,func,Room_SetLighting,game,medium,"G+0xA3C: SetBackColor(bytes 0..2) ambient"
+0x486D00,func,Waypoint_Nearest,game,medium,"G+0xA50 list, nearest by x/z distance -> obj+0x138/0x13C"
+0x48BB60,func,Script_Init,game,high,"G+0xA54: header 0x1C bytes (-> 0x7598C0), A54 += 0x1C, globals 0x87FC40 = A54 + hdr[3], clears 10 threads, starts routine 0 on thread 0"
+0x48BBF0,func,Script_ModeTick,game,medium,"calls 0x738DC0[0x87FC44] (script mode), frame counter 0x87FC4A"
+0x48BC50,func,Script_Run,game,high,"10 threads x 0xA4 at *0x87FC20; opcode table 0x738C40; handler returns 1 = yield"
+0x48BDB0,func,Script_StartThread,game,high,"(thread, routine): pc = A54 + table[routine], sp = thread+0x80, state 1"
+0x48BE20,func,Script_KillThread,game,high,"(thread) zero 0xA4 bytes"
+0x48B8E0,func,Script_GetValue,game,high,"(thr, type, v): 0 imm, 1 r[v], 2 sp[v], 6 globals[v], else imm"
+0x48B930,func,Script_SetValue,game,high,"(thr, type, v, x)"
+0x48B980,func,Script_BinOp,game,high,"(a, b, op) 26 ops via 0x48BAB0"
+0x48BB20,func,Script_SetCond,game,high,"value ==0 -> 0x2A, >0 -> 0x4C, <0 -> 0x70 (thread+0x9C)"
+0x48B040,func,AOT_Check,game,high,"each frame: G+0xA5C 32 x 40-byte trigger areas vs player level/x,z; kind handler 0x738B68"
+0x48B390,func,AOT_Door,game,high,"locked (+0x20 msg, +0x21 key flag group 8) -> message; else 0x7593B4 = &aot+0x14 (dest), clear AOTs, Task 0x41E2D0"
+0x41E2D0,func,Door_Task,game,medium,"door transition task started by AOT_Door"
+0x495E90,func,Menu_Open,game,medium,"(mode, ...) 1 item pickup, 2 item box; also script op 0x2C"
+0x738C40,data,g_script_ops,game,high,"96 opcode handlers (0x489990 = nop/unused)"
+0x738B68,data,g_aot_kinds,game,high,"12 AOT kind handlers (kind 4 unused)"
+0x482070,func,Enemy_LoadModel,game,high,"(type, variant): types 2..15 -> E*.DAT via 0x703520 (+ E*.TEX by variant for types 2/6/7), >=0x1D -> KOF_P*.DAT via 0x703598; G+0x680/0x682 = loaded type/variant"
+0x472230,func,EnemySet_Tick,game,medium,"random dinosaur spawner driven by the ENEMY SET at G+0xA68 (script op 0x4F); state G+0xA80"
+0x472210,func,Room_GlobalIndex,game,high,"(area, room) -> 0x70346C[area] + room"
+0x472C60,func,EnemySet_FindZone,game,medium,"zone (32-byte entries) that contains the player"
+0x446170,func,Prop_Move,game,medium,"type 16 room prop: model in the room block (obj+0x60)"
+0x703520,data,g_enemy_files,game,high,"8 bytes per type: u16 file id (E*.DAT), u16 0, u16 ?, u16 ?"
+0x703598,data,g_kof_files,game,high,"8 bytes per type-0x1D: KOF_P*.DAT"
+0x703E48,data,g_raptor_tex,game,high,"type 2 texture file by variant (10)"
+0x10B988,data,txt_dino_names,game,high,"file offset of the dinosaur file names (game text): Velociraptor .. Compsognathus = E00..EA0"

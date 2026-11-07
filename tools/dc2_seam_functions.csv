@@ -1,0 +1,148 @@
+address,call_sites,distinct_callers,size_bytes,instructions,x87_ops,com_vcalls,psxseg_refs,callees,imports,strings,hint,sample_callers,name,notes
+0x4C05D0,181,107,48,24,0,0,0,0,,,libgpu,0x406810 0x408630 0x408730 0x4089C0 0x409520 0x4097C0,AddPrim,"[high] *ot = prim; prim->tag = old *ot | 0x80000000 if hi byte set (PC tag, 32-bit pointers)"
+0x4C0FA0,163,142,80,41,0,0,0,3,,,libgte,0x408730 0x4089C0 0x409360 0x40A0F0 0x40B2E0 0x40C300,RotMatrix,"[high] I -> RotMatrixZ, RotMatrixY, RotMatrixX (premultiply): M = Rx*Ry*Rz"
+0x4C06F0,154,102,80,35,0,0,0,0,,,libgpu,0x408630 0x408730 0x4089C0 0x409520 0x4097C0 0x40A370,SetDrawMode,"[high] code 0xE8: tpage +4, flags +6 (bit0 dtd, bit1 dfe), RECT* tw +8"
+0x4C0B20,142,109,128,47,0,0,0,0,,,libgte,0x403840 0x408730 0x4089C0 0x409360 0x40A0F0 0x40B2E0,ApplyMatrixSV,"[high] (m, SVECTOR in, SVECTOR out) >>12"
+0x4C0FF0,123,101,80,41,0,0,0,3,,,libgte,0x401000 0x403840 0x4071E0 0x408370 0x40E710 0x40E880,RotMatrixYXZ,"[high] Z, X, Y premultiply: M = Ry*Rx*Rz"
+0x4C29A9,90,45,45,14,0,0,0,0,,,scheduler,0x40D710 0x41DB90 0x41E1C0 0x4462D0 0x4510F0 0x451330,Task_Sleep,[high]
+0x4C1B40,42,26,32,20,0,0,0,0,,,libgte,0x409360 0x40B2E0 0x40C300 0x40D1D0 0x410710 0x4135B0,SetRotMatrix,[high] 20 bytes -> GTE RT @0x87B3F8
+0x4C0940,34,14,32,11,5,0,0,0,,,libgte,0x40F240 0x410D10 0x411160 0x4273E0 0x448760 0x47A630,ratan2,[high] atan2 via fpatan * 2048/pi
+0x4C1C20,32,18,32,16,0,0,0,0,,,gte-macro,0x411E30 0x4135B0 0x413980 0x414850 0x415280 0x41C350,gte_ldv0,[high] V0 @0x87B3C0
+0x4C29D6,27,21,55,12,0,0,0,0,,,scheduler,0x403920 0x40D930 0x40DF80 0x41CA30 0x41ED10 0x451330,Task_Chain,[high]
+0x4C2170,26,9,32,16,0,0,0,0,,,gte-macro,0x413980 0x46E1E0 0x482940 0x483B00 0x483F40 0x4851E0,gte_stsv,[high] IR1..3 -> SVECTOR
+0x4C1B60,24,22,48,24,0,0,0,0,,,libgte,0x409360 0x40B2E0 0x40C300 0x40D1D0 0x410710 0x4135B0,SetTransMatrix,[high] m->t -> GTE TR @0x87B40C
+0x4C08E0,24,18,64,23,0,0,0,0,,,libgte,0x40F570 0x411E30 0x4122A0 0x412510 0x415080 0x428650,rsin,"[high] table at 0x73C064, 4096 = 360 deg"
+0x4C1C80,22,16,64,20,0,0,0,0,,,gte-macro,0x4135B0 0x414850 0x415280 0x46E1E0 0x482940 0x483B00,gte_ldv3c,[high] consecutive SVECTOR[3]
+0x4C0600,21,20,48,21,0,0,0,0,,,libgpu,0x40D710 0x40D930 0x446FD0 0x447140 0x447C50 0x451BE0,AddPrims,"[high] (ot, p0, p1): links chain p0..p1 into ot"
+0x4C1D70,19,11,64,12,0,0,0,1,,,gte-macro,0x413980 0x46E1E0 0x482940 0x483B00 0x483F40 0x4851E0,gte_rtv0,[high] RT*V0 -> IR
+0x4C0690,19,7,16,4,0,0,0,0,,,libgpu,0x419710 0x41A940 0x447E80 0x451BE0 0x46DD40 0x4A6210,SetSprt,[high] code 0x64
+0x4C0960,19,18,16,8,2,0,0,0,,,libgte,0x429920 0x42B750 0x432920 0x433600 0x43CF30 0x43ECC0,SquareRoot0,[high] (int)sqrt(x) via FPU
+0x4C0920,18,14,32,19,0,0,0,1,,,libgte,0x40F570 0x411E30 0x4122A0 0x412510 0x428650 0x448EB0,rcos,[high] rsin(a + 0x400)
+0x4B4A60,17,9,208,73,0,0,0,2,,,libgpu-vram,0x40F420 0x40FCD0 0x416C70 0x416CC0 0x41BBF0 0x46EA10,PC_VramOpClipped,"[low] clips RECT to 1024x512, then 0x4C3BE6 + dirty mark"
+0x4C1E70,17,12,208,41,0,0,0,3,,,gte-macro,0x411E30 0x4135B0 0x414850 0x415280 0x41C350 0x445E10,gte_rtps,[high]
+0x4C0A10,16,15,96,35,0,0,0,0,,,libgte,0x403AC0 0x40D710 0x40F240 0x415B00 0x41E820 0x446550,SetGeomScreen,[high] H @0x87B6E8
+0x4C2190,16,12,32,16,0,0,0,0,,,gte-macro,0x411E30 0x4135B0 0x414850 0x415280 0x41C350 0x445E10,gte_stsxy,[high] SXY2
+0x4BF330,16,16,16,12,0,0,0,0,,,input,0x47DC70 0x47E640 0x47E890 0x47EBB0 0x47F0F0 0x47F960,Input_GetParam,[low] <- 0x865EF8
+0x4C1040,15,13,80,41,0,0,0,3,,,libgte,0x403AC0 0x40E390 0x40E710 0x40EA50 0x40EC60 0x417430,RotMatrixZXY,"[medium] Y, X, Z premultiply: M = Rz*Rx*Ry (name by math, check libgte list)"
+0x4C1F40,15,15,336,71,0,0,0,3,,,gte-macro,0x4135B0 0x414850 0x415280 0x482940 0x4832C0 0x4834F0,gte_rtpt,[high]
+0x4C1BA0,15,4,48,20,0,0,0,0,,,gte-macro,0x4460A0 0x48FDE0 0x4A6DF0 0x4A7ED0,gte_ldclmv,[high] matrix column -> IR
+0x4C1E30,15,4,64,12,0,0,0,1,,,gte-macro,0x4460A0 0x48FDE0 0x4A6DF0 0x4A7ED0,gte_rtir,[high] RT*IR -> IR
+0x4C2090,15,4,48,19,0,0,0,0,,,gte-macro,0x4460A0 0x48FDE0 0x4A6DF0 0x4A7ED0,gte_stclmv,[high] IR -> matrix column
+0x4C1D20,15,15,80,29,11,0,0,1,,,gte-macro,0x482BD0 0x482F80 0x4832C0 0x4834F0 0x484270 0x484600,gte_nclip,[high] float cross of SXY0..2 -> MAC0 @0x87B6F0
+0x4C20E0,15,15,16,7,0,0,0,0,,,gte-macro,0x482BD0 0x482F80 0x4832C0 0x4834F0 0x484270 0x484600,gte_stopz,[high] MAC0
+0x4C0CB0,14,14,416,137,0,0,0,0,,,libgte,0x4135B0 0x415280 0x428F30 0x445D10 0x46E1E0 0x483B00,MulMatrix0,"[high] (m0, m1, m2): m2 = m0*m1, >>12"
+0x4C11C0,13,9,96,39,0,0,0,0,,,libgte,0x411E30 0x4122A0 0x41C770 0x453060 0x453AE0 0x453EE0,OuterProduct12,[low] cross product on VECTOR; check shift (OuterProduct0 vs 12)
+0x4C1A70,11,6,96,36,0,0,0,0,,,libgte,0x4177C0 0x417FF0 0x48E4B0 0x48EDC0 0x48EF50 0x48FEF0,LoadAverageShort0,"[medium] (v0, v1, p0, p1, out): (v0*p0 + v1*p1) >> 12"
+0x4C1BE0,10,10,64,16,0,0,0,0,,,gte-macro,0x482BD0 0x482F80 0x484270 0x484600 0x484910 0x484BD0,gte_ldsxy3,[high] SXY0..2 @0x87B428..0x87B43C (floats on PC)
+0x4C08A0,9,7,64,24,0,0,0,0,,,libgpu,0x413F70 0x4146A0 0x44AAD0 0x44B790 0x450B10 0x452450,GetTPage,"[high] (tp, abr, x, y), standard bit layout"
+0x4C06C0,8,6,32,14,0,0,0,0,,,libgpu,0x4146A0 0x418BA0 0x418D60 0x450B10 0x452450 0x4A7390,SetSemiTrans,[high]
+0x4C0BA0,8,8,128,53,0,0,0,0,,,libgte,0x414850 0x4460A0 0x44C130 0x46E1E0 0x483B00 0x484FB0,ApplyMatrixLV,"[medium] (m, VECTOR in, VECTOR out)"
+0x4C0A70,8,8,48,16,0,0,0,0,,,libgte,0x416140 0x41E8F0 0x46B8C0 0x46DC20 0x46E8C0 0x483B00,SetBackColor,"[high] (r,g,b) <<4 -> BK @0x87B3A8"
+0x4C09E0,8,8,32,17,0,0,0,0,,,libgte,0x452370 0x452BA0 0x46DD20 0x46E1E0 0x46EA10 0x483B00,SetFogNear,[low] 2 ints -> 0x87B6F8/0x87B6F4; could be SetFogNearFar
+0x4C1170,8,7,80,22,0,0,0,0,,,libgte,0x46E1E0 0x47B330 0x47B9E0 0x483B00 0x485D50 0x48F1D0,TransposeMatrix,[high]
+0x4C22C0,8,8,32,9,0,0,0,0,,,gte-macro,0x482940 0x4832C0 0x4834F0 0x483F40 0x4851E0 0x486320,gte_stsz3,[high]
+0x4C1BD0,7,5,16,7,0,0,0,0,,,gte-macro,0x46E1E0 0x483B00 0x4854B0 0x485D50 0x4A7510,gte_ldrgb,[high] RGBC @0x87B6EC
+0x4C04E0,6,5,48,26,0,0,0,1,,,libsn,0x403920 0x403AC0 0x404290 0x46C9E0 0x48D070,PCread,"[high] fread(buf,1,n,fp)"
+0x4C05A0,6,6,48,23,0,0,0,1,,,libsn,0x403920 0x403AC0 0x404290 0x46C9E0 0x46CAE0 0x48D070,PCclose,[high]
+0x4B4D20,6,5,144,62,0,0,0,1,,,libgpu-vram,0x403AC0 0x4044F0 0x404810 0x414E30 0x48AB90,LoadImage,"[high] (RECT*, u32*) -> software VRAM 0x76448C"
+0x4C1220,6,6,240,52,0,0,0,3,,,libgte,0x409360 0x40B2E0 0x40C300 0x40D1D0 0x44B790 0x497AE0,RotTransPers,"[high] RTPS on input SVECTOR, returns otz"
+0x4C0A00,6,6,16,12,0,0,0,0,,,libgte,0x40E390 0x40E880 0x417430 0x4177C0 0x417C20 0x418350,ReadGeomScreen,[high]
+0x4C21F0,6,6,64,19,0,0,0,0,,,gte-macro,0x4135B0 0x414850 0x415280 0x4A7840 0x4A7ED0 0x4A8930,gte_stsxy3_g3,"[high] x,y at +8/+0x18/+0x28 (stride 0x10): fits POLY_G3 and POLY_FT3"
+0x4C2310,6,6,80,29,12,0,0,0,,,pc-only,0x4135B0 0x414850 0x415280 0x4A7840 0x4A7ED0 0x4A8930,PC_stsz4_g4,[medium] z -> +0x10/+0x20/+0x30/+0x40 (POLY_G4 / POLY_FT4)
+0x4C22E0,6,6,48,18,0,0,0,0,,,gte-macro,0x4135B0 0x415280 0x4A7840 0x4A7ED0 0x4A8690 0x4A8930,gte_stsz4,[high]
+0x4C06A0,6,4,16,4,0,0,0,0,,,libgpu,0x4146A0 0x450B10 0x452450 0x4A7390,SetTile,[high] code 0x60
+0x4C1CE0,6,6,64,14,0,0,0,1,,,gte-macro,0x482940 0x4832C0 0x4834F0 0x483F40 0x486320 0x4A7510,gte_ncct,[medium] NCC on V0..V2
+0x4C03F0,5,5,160,61,0,0,0,2,,%s%s,libsn,0x403920 0x403AC0 0x404290 0x46C9E0 0x48D070,PCopen,"[high] ""%s%s"" path, 16 handles @0x87B330"
+0x4C1B90,5,5,16,7,3,0,0,0,,,pc-only,0x40F240 0x446550 0x451330 0x46EA10 0x4883D0,PC_SetDepthScale,[medium] 0x87B440 = 2*arg (float); divides SZ for D3D depth
+0x4C0EC0,5,4,112,43,0,0,0,3,,,libgte,0x412510 0x414BD0 0x416570 0x44C300,RotMatrixY,[high]
+0x4C0E50,5,4,112,42,0,0,0,3,,,libgte,0x412510 0x414BD0 0x416570 0x44C300,RotMatrixX,"[high] builds Rx from rsin/rcos, MulMatrix0(Rx, m, m)"
+0x4D7290,5,5,16,15,0,0,0,0,,,pc-only,0x4246D0 0x4248A0 0x4253B0 0x434730 0x434900,Stub_Return0,[high] returns 0; PS1 call stubbed (CdSync/VSync-like?)
+0x4BF130,5,4,16,9,0,0,0,0,,,input,0x451330 0x46E440 0x46E690 0x4A69C0,Input_SetParam,[low] -> 0x866140
+0x4C1DB0,5,4,64,12,0,0,0,1,,,gte-macro,0x46E1E0 0x483B00 0x485D50 0x4A7510,gte_rtv1,[high]
+0x4C1DF0,5,4,64,12,0,0,0,1,,,gte-macro,0x46E1E0 0x483B00 0x485D50 0x4A7510,gte_rtv2,[high]
+0x4C1A30,5,4,32,20,0,0,0,0,,,libgte,0x46E1E0 0x483B00 0x485D50 0x4A7510,SetLightMatrix,[medium] 32 bytes -> 0x87B448 (L vs LR: confirm in NCC core 0x4C18E0)
+0x4C1A50,5,4,32,20,0,0,0,0,,,libgte,0x46E1E0 0x483B00 0x485D50 0x4A7510,SetColorMatrix,[medium] 32 bytes -> 0x87B380
+0x4C21B0,5,5,64,20,0,0,0,0,,,gte-macro,0x482940 0x483F40 0x4851E0 0x486320 0x4A7510,gte_stsxy3c,[high] SXY0..2 consecutive
+0x4BFAA0,5,4,64,34,0,1,0,0,,,sound,0x48C700 0x48C8D0 0x48C950 0x48CA40,Snd_IsPlaying,[high] IDirectSoundBuffer::GetStatus
+0x4C0540,4,3,32,13,0,0,0,2,,,libsn,0x403920 0x404290 0x48D070,PC_FileLength,[medium] _filelength(_fileno(fp))
+0x4C0580,4,2,32,11,0,0,0,1,,,libsn,0x403AC0 0x404290,PClseek,"[high] fseek(fp, off, mode)"
+0x4B4DB0,4,4,176,76,0,0,0,1,,,libgpu-vram,0x403AC0 0x404680 0x4191F0 0x48AB90,LoadImage_IfChanged,"[high] compares with VRAM first, writes only on change (CLUT records)"
+0x4C0C20,4,4,144,43,0,0,0,0,,,libgte,0x4135B0 0x415280 0x41C350 0x4A71B0,ApplyRotMatrixLV,[medium] current GTE rotation * VECTOR
+0x4C10E0,4,3,144,44,0,0,0,0,,,libgte,0x428F30 0x48FDE0 0x4A7ED0,ScaleMatrix,[high] m[i][j] *= v[j] >>12
+0x4C22B0,4,4,16,7,0,0,0,0,,,gte-macro,0x445E10 0x44B030 0x4832C0 0x4A7840,gte_stsz,[high] SZ3
+0x4B4B30,4,2,80,27,0,0,0,0,,,libgpu-vram,0x46EA10 0x46EED0,MoveImage,"[high] (RECT*, x, y)"
+0x4BF1E0,4,3,48,19,0,0,0,0,,,input,0x4757B0 0x475840 0x476970,Input_FindKeyBind,[low] table 0x865EFE
+0x4BF2A0,4,1,64,33,0,0,0,0,,,input,0x475CC0,Input_SetJoyBind,[low] table 0x8660FE
+0x4C2110,4,4,32,9,0,0,0,0,,,gte-macro,0x482940 0x483F40 0x486320 0x4A7510,gte_strgb3,[high]
+0x4C1C40,4,2,64,16,0,0,0,0,,,gte-macro,0x4832C0 0x4834F0,gte_ldv3,"[high] (v0, v1, v2) -> 0x87B3C0 / 0x87B3B8 / 0x87B3C8"
+0x4C1790,3,3,336,100,60,0,0,1,,,libgte,0x40EA50 0x417C20 0x418350,VectorNormalS,[low] float normalisation of a vector; check in/out types
+0x4C0AA0,3,3,128,50,0,0,0,0,,,libgte,0x415860 0x428F30 0x445D10,ApplyMatrix,"[medium] (m, SVECTOR, VECTOR) no shift; internal MVMVA core used by gte_rt*"
+0x4BF210,3,1,64,33,0,0,0,0,,,input,0x476970,Input_SetKeyBind,[low]
+0x4BB8D0,3,1,224,81,0,0,0,1,,,d3d,0x4776D0,PC_TexSlot,"[low] slot table 0x75DEFC, stride 0x164"
+0x4C2270,3,3,64,19,0,0,0,0,,,gte-macro,0x4832C0 0x4A8690 0x4A8F40,gte_stsxy3_gt3_b,[medium] duplicate of 0x4C2230 (separate instantiation)
+0x4C2230,3,3,64,19,0,0,0,0,,,gte-macro,0x4834F0 0x4A8470 0x4A8C00,gte_stsxy3_gt3,[medium] stride 0x14 (+8/+0x1C/+0x30); byte-identical to 0x4C2270
+0x4BFAE0,3,3,32,16,0,1,0,0,,,sound,0x48C080 0x48C700 0x48D130,Snd_Stop,[high] ::Stop
+0x4BFA20,3,3,64,26,4,1,0,1,,,sound,0x48C4F0 0x48C700 0x48D070,Snd_SetVolume,[low] or SetPan; check vtbl offset
+0x4BFF20,3,3,64,26,4,1,0,1,,,stream,0x48C700 0x48CD40 0x48CE60,Strm_SetVolume,[low]
+0x4C20C0,3,2,32,9,0,0,0,0,,,gte-macro,0x4A6DF0 0x4A7ED0,gte_stlvnl,[high] MAC1..3 -> VECTOR
+0x4C20F0,3,3,16,7,0,0,0,0,,,gte-macro,0x4A8470 0x4A8690 0x4A8930,gte_stflg,[high] FLAG @0x87B418
+0x4BEAC0,2,2,112,43,0,2,0,1,,,masks,0x4036F0 0x403760,Masks_Upload,[low] called after build / depth shift
+0x4BF720,2,2,128,49,0,0,0,2,,,sound,0x4046C0 0x48D070,Snd_CreateFromWav,"[medium] (RIFF*, flags) -> DirectSound buffer handle"
+0x4C06E0,2,2,16,7,0,0,0,0,,,libgpu,0x406810 0x4946A0,PC_SetPacketE4,[low] code 0xE4 has no DrawOTag case (default = skipped)
+0x4C0740,2,2,48,19,0,0,0,0,,,libgpu,0x411080 0x4956C0,SetDrawVramOp,"[medium] code 0xEC + RECT + a,b -> DrawOTag calls 0x4B4A60(&rect,a,b)"
+0x4B4E60,2,2,240,83,6,8,0,0,,,d3d,0x415B00 0x4162B0,SetFarColor,"[medium] stores rgb, D3D3 SetRenderState(FOGCOLOR=0x22)"
+0x4B4F50,2,2,64,20,0,2,0,0,,,d3d,0x415B00 0x415CD0,PC_SetFogEnable,"[high] SetRenderState(FOGENABLE=0x1C, on/off)"
+0x4C0650,2,2,32,14,0,0,0,0,,,libgpu,0x418D60 0x494850,SetPolyG4,[high] code 0x38
+0x4C23D0,2,2,80,29,12,0,0,0,,,pc-only,0x418D60 0x445E10,PC_stsz4_ft4,[medium] same layout as 0x4C2310
+0x4C1090,2,2,80,41,0,0,0,3,,,libgte,0x448760 0x44DB60,RotMatrixZYX,"[high] X, Y, Z premultiply: M = Rz*Ry*Rx"
+0x4B4F90,2,2,224,84,0,4,0,0,,,d3d,0x473210 0x4732C0,PC_DDrawClear,[low] DDBLTFX fill; called from 0x473210/0x4732C0
+0x4C2460,2,2,80,29,12,0,0,0,,,pc-only,0x4832C0 0x4A8690,PC_stsz4_gt4,[high] z -> +0x10/+0x24/+0x38/+0x4C (POLY_GT4)
+0x4C2420,2,2,64,25,9,0,0,0,,,pc-only,0x4834F0 0x4A8470,PC_stsz3_gt3,[high] z -> +0x10/+0x24/+0x38 (POLY_GT3)
+0x4BF970,2,2,176,63,0,4,0,2,,,sound,0x48C4F0 0x48D070,Snd_Play,[medium] DSound slot table 0x878328 (stride 12)
+0x4BFBD0,2,2,64,32,0,1,0,0,,,sound,0x48CEB0 0x48D130,Snd_Free,[medium] Stop + Release
+0x4BE3C0,1,1,112,32,0,1,0,2,,,masks,0x4036F0,Masks_CreateVB,"[high] (count*6, pixels): D3D vertex buffer FVF 0x1C4, 6 TL vertices per mask"
+0x4BE430,1,1,624,186,45,0,0,0,,,masks,0x4036F0,Masks_SetQuad,"[high] (i, x, y, z): 16x16 screen tile, scaled by screen scale 0x8644BC"
+0x4BE6E0,1,1,144,47,0,0,0,2,,,masks,0x4036F0,Masks_BuildTexture,[medium] packs 18x18 tiles into textures (callback 0x4BEA80)
+0x4BE6A0,1,1,64,26,6,0,0,0,,,masks,0x403760,Masks_ShiftDepth,[medium] re-depths all masks when G+0xC27 changes
+0x4C06B0,1,1,16,7,0,0,0,0,,,libgpu,0x403760,SetMaskMarker,"[high] code 0x88: one mask group, inserted at ot[z]"
+0x4BEC40,1,1,48,14,0,0,0,0,,,masks,0x403760,Masks_FillMarker,"[medium] (i, packet): mask index/range into the 0x88 packet"
+0x4C0560,1,1,32,13,0,0,0,1,,,libsn,0x403920,PClseek_set,"[medium] fseek(fp, off, SEEK_SET)"
+0x4D2990,1,1,464,156,0,0,0,13,,,libjpeg,0x403AC0,JPEG_Decode,"[high] (dst, src, size, mode): IJG libjpeg wrapper; DBS backgrounds 320x240 -> 16-bit RGB"
+0x4B49F0,1,1,112,43,0,0,0,0,,,libgpu-vram,0x4044F0,PC_VramRectHelper,[low]
+0x4BFC10,1,1,256,88,0,1,0,4,KERNEL32!CreateEventA,,stream,0x404770,Strm_Open,"[medium] CreateEventA, table 0x866190 (stride 24)"
+0x4BD480,1,1,48,21,0,0,0,1,,,pc-only,0x4048F0,PC_SetBuffer,"[low] free old, store 0x865EE4"
+0x4C24C0,1,1,768,212,44,0,0,2,,,d3d,0x410710,PC_DrawSpecial,[low] 768 bytes x87; called once from 0x410710
+0x4C1470,1,1,352,93,0,0,0,3,,,libgte,0x418BA0,RotTransPers3,[medium] 3x RTPS
+0x4C0630,1,1,32,16,0,0,0,0,,,libgpu,0x418BA0,SetPolyG3,[high] code 0x30 + default float z 0.01
+0x4C2390,1,1,64,25,9,0,0,0,,,pc-only,0x418BA0,PC_stsz3_g3,[medium] z -> +0x10/+0x20/+0x30 (POLY_G3 / POLY_FT3)
+0x4C15D0,1,1,448,118,0,0,0,3,,,libgte,0x418D60,RotTransPers4,[medium] 4x RTPS
+0x4C2360,1,1,48,24,4,0,0,0,,,pc-only,0x41C350,PC_stsz_g4_flat,[medium] one SZ3 to all 4 vertices of a G4/FT4
+0x4C24B0,1,1,16,6,0,0,0,0,,,gte-macro,0x41C350,gte_stszotz,[high] SZ3 >> 2
+0x4C2974,1,1,53,17,0,0,0,0,,,scheduler,0x446460,Task_Start,[high]
+0x4C2A0D,1,1,68,9,0,0,0,0,,,scheduler,0x4466A0,Task_Kill,[high]
+0x4C0970,1,1,32,19,3,0,0,0,,,libgte,0x448760,SquareRoot12,"[low] sqrt(x/4096) via FPU, no rescale; verify against callers"
+0x4C0490,1,1,80,33,0,0,0,1,,,libsn,0x46CAE0,PCcreat,[medium]
+0x4C0510,1,1,48,26,0,0,0,1,,,libsn,0x46CAE0,PCwrite,[high]
+0x4BF3A0,1,1,688,240,0,7,0,5,KERNEL32!MultiByteToWideChar ole32!CoCreateInstance,,movie,0x473130,Movie_Open,[medium] CoCreateInstance + MultiByteToWideChar (DirectShow)
+0x4BF650,1,1,32,22,0,1,0,0,,,movie,0x473210,Movie_Ctl1,[low] vtbl+0x1C(1)
+0x4BF690,1,1,144,55,0,2,0,3,,,movie,0x473260,Movie_Poll,[low]
+0x4BF670,1,1,32,22,0,1,0,0,,,movie,0x473260,Movie_Ctl0,[low] vtbl+0x1C(0)
+0x4BF340,1,1,96,35,0,0,0,1,,,movie,0x4732C0,Movie_Close,[medium]
+0x4BF140,1,1,64,27,0,0,0,0,,,input,0x475840,Input_KeyLookup,[low] pairs @0x73BB98
+0x4BF180,1,1,96,38,0,2,0,1,,,input,0x476970,Input_ReadKeyboard,[medium] IDirectInputDevice::GetDeviceState(0x100)
+0x4BF250,1,1,32,19,0,0,0,0,,,input,0x476970,Input_ResetKeyBinds,[medium] copies 0x100 bytes 0x73BDB8 -> 0x865EFC
+0x4BEF40,1,1,496,147,0,5,0,0,,,input,0x478BF0,Input_ReadPad,[low]
+0x4C2150,1,1,32,8,0,0,0,0,,,gte-macro,0x4832C0,gte_strgb3_gt3_b,[medium] duplicate of 0x4C2130
+0x4C1CC0,1,1,32,14,0,0,0,1,,,gte-macro,0x4832C0,gte_nccs,[medium] NCC on V0 via core 0x4C18E0
+0x4C2100,1,1,16,7,0,0,0,0,,,gte-macro,0x4832C0,gte_strgb,[high] RGB2
+0x4C2130,1,1,32,8,0,0,0,0,,,gte-macro,0x4834F0,gte_strgb3_gt3,[medium] RGB0..2 -> +4/+0x18/+0x2C = POLY_GT3 colours
+0x4BFA60,1,1,64,26,4,1,0,1,,,sound,0x48C4F0,Snd_SetPan,[low]
+0x4BFEE0,1,1,64,33,0,1,0,0,,,stream,0x48CD40,Strm_Play,"[medium] Play(0,0,LOOPING)"
+0x4BFFA0,1,1,48,20,0,1,0,0,,,stream,0x48CE60,Strm_Stop,[medium]
+0x4C0050,1,1,144,62,0,2,0,1,KERNEL32!CloseHandle,,stream,0x48CF10,Strm_Close,[medium] CloseHandle
+0x4BFB00,1,1,64,23,0,1,0,1,,,sound,0x48CF60,Snd_Unknown_B00,[low]
+0x4BFFD0,1,1,64,23,0,1,0,1,,,stream,0x48CF60,Strm_Unknown_FD0,[low]
+0x4BFB40,1,1,144,62,0,2,0,2,,,sound,0x48CFB0,Snd_PauseResume,[low] flag 0x8
+0x4C0010,1,1,64,26,0,1,0,0,,,stream,0x48CFB0,Strm_PauseResume,[low]
+0x4C1AD0,1,1,112,54,0,0,0,0,,,libgte,0x48FAE0,LoadAverageCol,[medium] same on u8 colour vectors
+0x4C0670,1,1,32,18,0,0,0,0,,,libgpu,0x4949E0,SetLineF2,[high] code 0x40
