@@ -194,6 +194,25 @@ void DC2CALL Anim_Set(gptr o, gptr anim, u32 frame, u32 fl, u32 blend)    /* 0x4
     Anim_Start(o, anim, frame, fl, blend);
 }
 
+/* root motion: rotate the change of the root position into the world */
+static void root_motion(gptr o)
+{
+    gptr sv = Tmp_Push(0x28), mm = sv + 8;
+    U16(sv) = U16(o + 0xD0) = (u16)(U16(o + 0xC0) - U16(o + 0xC8));
+    U16(sv + 2) = U16(o + 0xD2) = (u16)(U16(o + 0xC2) - U16(o + 0xCA));
+    U16(sv + 4) = U16(o + 0xD4) = (u16)(U16(o + 0xC4) - U16(o + 0xCC));
+    RotMatrix(o + 0x48, mm);
+    ApplyMatrixSV(mm, sv, sv);
+    if (U8(G() + 0x1091) == 9 && U8(G() + 0x1090) == 3) {   /* room 903: scaled objects */
+        U16(o + 0x40) += (u16)((s32)((u32)(S32(o + 0x6C) >> 8) * (u32)S16(sv)) >> 4);
+        U16(o + 0x42) += (u16)((s32)((u32)(S32(o + 0x70) >> 8) * (u32)S16(sv + 2)) >> 4);
+        U16(o + 0x44) += (u16)((s32)((u32)(S32(o + 0x74) >> 8) * (u32)S16(sv + 4)) >> 4);
+    } else {
+        U16(o + 0x40) += U16(sv); U16(o + 0x42) += U16(sv + 2); U16(o + 0x44) += U16(sv + 4);
+    }
+    Tmp_Pop(0x28);
+}
+
 /* advance by one game frame; 1 when a non-looping animation reached its end */
 u32 DC2CALL Anim_Step(gptr o)                                       /* 0x48E100 */
 {
@@ -241,20 +260,126 @@ u32 DC2CALL Anim_Step(gptr o)                                       /* 0x48E100 
         return done;
     }
     if (!(fl & 0x40)) return 0;
-    /* root motion: rotate the change of the root position into the world */
-    gptr sv = Tmp_Push(0x28), mm = sv + 8;
-    U16(sv) = U16(o + 0xD0) = (u16)(U16(o + 0xC0) - U16(o + 0xC8));
-    U16(sv + 2) = U16(o + 0xD2) = (u16)(U16(o + 0xC2) - U16(o + 0xCA));
-    U16(sv + 4) = U16(o + 0xD4) = (u16)(U16(o + 0xC4) - U16(o + 0xCC));
-    RotMatrix(o + 0x48, mm);
-    ApplyMatrixSV(mm, sv, sv);
-    if (U8(G() + 0x1091) == 9 && U8(G() + 0x1090) == 3) {   /* room 903: scaled objects */
-        U16(o + 0x40) += (u16)((s32)((u32)(S32(o + 0x6C) >> 8) * (u32)S16(sv)) >> 4);
-        U16(o + 0x42) += (u16)((s32)((u32)(S32(o + 0x70) >> 8) * (u32)S16(sv + 2)) >> 4);
-        U16(o + 0x44) += (u16)((s32)((u32)(S32(o + 0x74) >> 8) * (u32)S16(sv + 4)) >> 4);
-    } else {
-        U16(o + 0x40) += U16(sv); U16(o + 0x42) += U16(sv + 2); U16(o + 0x44) += U16(sv + 4);
-    }
-    Tmp_Pop(0x28);
+    root_motion(o);
     return 0;
+}
+
+/* ---- two animation layers of the player (object 0) ---------------------------
+ * The player runs two animations at once (e.g. legs and upper body); each one
+ * keeps its state in a shadow object 0x7598D8 + layer * 0x260 and the part
+ * positions in 0x759D98 + layer * 0x78; the results are blended per part. */
+#define LAYER_OBJ(l)  (0x7598D8u + (l) * 0x260u)
+#define LAYER_POS(l)  (0x759D98u + (l) * 0x78u)
+
+static const u8 layer_fields[][2] = {     /* offset, size */
+    {0x78, 4}, {0x7C, 4}, {0x80, 4}, {0x84, 4}, {0x88, 4}, {0x8C, 4},
+    {0x90, 2}, {0x92, 2}, {0x94, 2}, {0x96, 2}, {0xC0, 2}, {0xC2, 2}, {0xC4, 2},
+    {0xAC, 1}, {0x02, 2} /* 0x102 */, {0x98, 2}, {0x9A, 2}, {0x9C, 4}, {0xA0, 4}, {0xA4, 4},
+    {0xB0, 4}, {0xB4, 4}, {0xB8, 4}, {0xBC, 4}, {0xC8, 2}, {0xCA, 2}, {0xCC, 2},
+    {0xAE, 1}, {0xAF, 1}, {0xD0, 2}, {0xD2, 2}, {0xD4, 2}, {0x0E, 2} /* 0x10E */,
+};
+
+static void copy_fields(gptr dst, gptr src)
+{
+    for (unsigned i = 0; i < sizeof layer_fields / sizeof layer_fields[0]; i++) {
+        u32 off = layer_fields[i][0] + (layer_fields[i][0] < 0x40 ? 0x100 : 0);
+        memcpy(MEM(dst + off), MEM(src + off), layer_fields[i][1]);
+    }
+}
+
+void DC2CALL Anim_SaveLayer(u32 l)                                  /* 0x48E9C0 */
+{
+    gptr o = U32(G() + 0x940), pos = LAYER_POS(l);
+    for (gptr p = U32(o + 0x64); p; p = U32(p + 0x54), pos += 8) {
+        U16(pos) = U16(p + 0x64); U16(pos + 2) = U16(p + 0x66); U16(pos + 4) = U16(p + 0x68);
+    }
+    copy_fields(LAYER_OBJ(l), o);
+}
+
+void DC2CALL Anim_LoadLayer(u32 l)                                  /* 0x48EBC0 */
+{
+    gptr o = U32(G() + 0x940), sh = LAYER_OBJ(l), pos = LAYER_POS(l);
+    for (gptr p = U32(sh + 0x64); p; p = U32(p + 0x54), pos += 8) {
+        U16(p + 0x64) = U16(pos); U16(p + 0x66) = U16(pos + 2); U16(p + 0x68) = U16(pos + 4);
+    }
+    copy_fields(o, sh);
+}
+
+/* 1 if bit "play time" of the table +0xA4 is set */
+u32 DC2CALL Anim_FrameFlag(gptr o)                                  /* 0x48E970 */
+{
+    gptr t = U32(o + 0xA4);
+    if (!t) return 0;
+    u32 i = U16(o + 0x92);
+    return (U32(t + (i >> 5) * 4) & (1u << (i & 31))) != 0;
+}
+
+/* the pose of layer 0 for the blend: object rotation, previous root, root
+   position of part 0, part rotations */
+static void layer0_pose(gptr o)
+{
+    gptr b = BLEND_BUF + 0x10 + U32(o + 0x68) * 8, p = U32(o + 0x64);
+    U16(b) = U16(o + 0xC0); U16(b + 2) = U16(o + 0xC2); U16(b + 4) = U16(o + 0xC4); b += 8;
+    U16(b) = U16(o + 0xC8); U16(b + 2) = U16(o + 0xCA); U16(b + 4) = U16(o + 0xCC); b += 8;
+    U16(b) = U16(p + 0x64); U16(b + 2) = U16(p + 0x66); U16(b + 4) = U16(p + 0x68); b += 8;
+    for (; p; p = U32(p + 0x54), b += 8) {
+        U16(b) = U16(p + 0x48); U16(b + 2) = U16(p + 0x4A); U16(b + 4) = U16(p + 0x4C);
+    }
+}
+
+/* mix layer 0 (saved pose) into the current pose with weight w of layer 1 */
+static void layer_mix(gptr o, s32 w)
+{
+    gptr b = BLEND_BUF + 0x10 + U32(o + 0x68) * 8, first = U32(o + 0x64);
+    LoadAverageShort0(b, o + 0xC0, 0x1000 - w, w, o + 0xC0);
+    b += 8;
+    LoadAverageShort0(b, o + 0xC8, 0x1000 - w, w, o + 0xC8);
+    b += 8;
+    LoadAverageShort0(b, first + 0x64, 0x1000 - w, w, first + 0x64);
+    b += 8;
+    for (gptr p = first; p; p = U32(p + 0x54), b += 8) {
+        if (U16(o + 0x102) & 0x100) Anim_BlendMatrix(b, p + 0x48, p + 0x48, w);
+        else Anim_BlendLinear(b, p + 0x48, p + 0x48, w);
+    }
+}
+
+void DC2CALL Anim_StartLayers(gptr anim0, gptr anim1, u32 frame, u32 fl, u32 blend, s32 w)  /* 0x48EDC0 */
+{
+    gptr o = U32(G() + 0x940);
+    Anim_SaveLayer(1);
+    fl |= 0x80000000u;
+    Anim_Start(o, anim0, frame, fl, blend);
+    Anim_SaveLayer(0);
+    layer0_pose(o);
+    Anim_LoadLayer(1);
+    Anim_Start(o, anim1, frame, fl, blend);
+    Anim_SaveLayer(1);
+    layer_mix(o, w);
+}
+
+u32 DC2CALL Anim_StepLayers(s32 w)                                  /* 0x48EF50 */
+{
+    gptr o = U32(G() + 0x940);
+    Anim_LoadLayer(0);
+    U16(o + 0x102) &= 0xFFDF;
+    Anim_Step(o);
+    Anim_SaveLayer(0);
+    layer0_pose(o);
+    Anim_LoadLayer(1);
+    U16(o + 0x102) &= 0xFFDF;
+    u32 done = Anim_Step(o);
+    Anim_SaveLayer(1);
+    layer_mix(o, w);
+    if (!done && (U8(o + 0x102) & 0x40)) root_motion(o);
+    return done;
+}
+
+void DC2CALL Player_AnimReset(void)                                 /* 0x48E930 */
+{
+    gptr o = U32(G() + 0x940);
+    U32(o + 0x54) = 1;
+    U32(o + 0x1DC) = 8;
+    U16(o + 0x174) = 0;
+    U32(o + 0x50) &= ~0x30u;
+    U8(o + 0x11B) = 0;
 }

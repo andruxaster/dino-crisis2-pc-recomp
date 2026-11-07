@@ -906,7 +906,7 @@ static void test_anim(void)
     stubs_install(1);
     for (int i = 0; i < iters; i++) {
         gptr o = AN_OBJ;
-        u32 a[5];
+        u32 a[10] = {0};
         anim_setup();
         U32(LOG_BASE) = 0;
         a[0] = o; a[1] = rnd() % 2 ? 1 + rnd() % 3 : 1 + rnd() % 8;
@@ -939,6 +939,35 @@ static void test_anim(void)
         else for (int k = 0; k < 9; k++) S16(m + 2 * k) = (s16)(rnd() % 8193) - 4096;
         u32 c[2] = {m, vo};
         check(0x48F1D0, Matrix_ToAngles, "Matrix_ToAngles", 2, c, 0xFFFFFFFF);
+        /* player layers: object 0 is the animated test object */
+        anim_setup(); U32(LOG_BASE) = 0;
+        U32(G() + 0x940) = o;
+        for (u32 l = 0; l < 2; l++) {
+            gptr sh = 0x7598D8 + l * 0x260;
+            for (u32 k = 0x78; k < 0x110; k += 4) U32(sh + k) = U32(o + k);
+            U32(sh + 0x64) = rnd() % 4 ? AN_PART : 0;
+            U32(sh + 0x8C) = AN_DATA + 0x14; U8(sh + 0xAC) = U8(o + 0xAC);
+            U32(sh + 0x7C) = U32(o + 0x7C) ; U32(sh + 0x80) = U32(o + 0x80); U32(sh + 0x84) = U32(o + 0x84);
+            U32(sh + 0x78) = U32(o + 0x78);
+            for (u32 k = 0; k < 0x78; k += 2) U16(0x759D98 + l * 0x78 + k) = (u16)(rnd() % 0x1000);
+        }
+        u32 L[10] = {rnd() % 2};
+        check(0x48E9C0, Anim_SaveLayer, "Anim_SaveLayer", 1, L, 0);
+        check(0x48EBC0, Anim_LoadLayer, "Anim_LoadLayer", 1, L, 0);
+        U16(o + 0x92) = rnd() % 64; if (rnd() % 3) U32(o + 0xA4) = AN_EVT + 4 * (rnd() % 4); else U32(o + 0xA4) = 0;
+        a[0] = o;
+        check(0x48E970, Anim_FrameFlag, "Anim_FrameFlag", 1, a, 0xFFFFFFFF);
+        check(0x48E930, Player_AnimReset, "Player_AnimReset", 0, NULL, 0);
+        L[0] = rnd() % 3 ? rnd() % 0x1001 : 0x1000u >> (rnd() % 4);
+        sprintf(g_what, "layers parts %u fl %04X w %X", U32(o + 0x68), U16(o + 0x102), L[0]);
+        check(0x48EF50, Anim_StepLayers, "Anim_StepLayers", 1, L, 0xFFFFFFFF);
+        anim_setup(); U32(LOG_BASE) = 0; U32(G() + 0x940) = o;
+        L[0] = rnd() % 2; L[1] = AN_DATA + 0x1000 * (rnd() % 2); L[2] = rnd() % 6;
+        L[3] = rnd() & 0x37F; L[4] = rnd() % 3; L[5] = rnd() % 0x1001;
+        if (U16(o + 0x90) < 2) U16(o + 0x90) = 2;
+        U16(AN_DATA) |= 2; U16(AN_DATA + 0x1000) |= 2;
+        sprintf(g_what, "start layers %X %X frame %u fl %X blend %u w %X", L[0], L[1], L[2], L[3], L[4], L[5]);
+        check(0x48EDC0, Anim_StartLayers, "Anim_StartLayers", 6, L, 0);
     }
     stubs_install(0);
 }

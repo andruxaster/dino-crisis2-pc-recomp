@@ -317,7 +317,6 @@ address,kind,name,category,confidence,notes
 0x633000,data,g_enemy_model,data,high,E*.DAT type-5 model block
 0x662500,data,g_kof_model,data,high,KOF_P*.DAT type-5 model block
 0x87DC98,data,g_prim_ptr,data,high,current primitive buffer pointer
-0x48EF50,func,Object_UpdateSkeleton,anim,medium,"step, apply, blend (LoadAverageShort0), per-part matrices"
 0x665D00,data,g_player_anims,data,high,WEP_P* block + 0x3800
 0x403EE0,func,Item_LoadIcon,game,high,"(index): ITEM.DAT entry 0x2800 = 128x64 8bpp -> VRAM 768,192 + CLUT row 497"
 0x403FD0,func,Map_LoadPage,game,high,"(index): MAP.DAT entry 0x10800 = 2 x 256x256 4bpp -> VRAM 448/384,0 + CLUT row 500"
@@ -465,3 +464,9 @@ address,kind,name,category,confidence,notes
 0x48F1D0,func,Matrix_ToAngles,anim,high,YXZ angles of a rotation matrix (ratan2)
 0x48FEA0,func,Anim_BlendLinear,anim,high,wrap angles to the shorter way then LoadAverageShort0
 0x48FF90,func,Anim_BlendMatrix,anim,high,lerp of RotMatrixYXZ matrices -> Matrix_ToAngles
+0x48E930,func,Player_AnimReset,anim,high,"player +0x54 = 1, +0x1DC = 8"
+0x48E970,func,Anim_FrameFlag,anim,high,"bit U16(+0x92) of table +0xA4"
+0x48E9C0,func,Anim_SaveLayer,anim,high,"player anim state -> 0x7598D8 + l*0x260, part positions -> 0x759D98 + l*0x78"
+0x48EBC0,func,Anim_LoadLayer,anim,high,"inverse of Anim_SaveLayer"
+0x48EDC0,func,Anim_StartLayers,anim,high,"(anim0, anim1, frame, flags, blend, w): start both layers, mix with weight w"
+0x48EF50,func,Anim_StepLayers,anim,high,"(w): step both layers of the player and mix; was labelled Object_UpdateSkeleton"
