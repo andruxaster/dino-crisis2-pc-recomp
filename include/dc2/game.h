@@ -125,6 +125,16 @@ u32  DC2CALL ScrOp_Call4529C0(gptr thr);                                /* 0x48A
 u32  DC2CALL ScrOp_PartHide(gptr thr);                                  /* 0x48AB10  58 */
 u32  DC2CALL ScrOp_Texture(gptr thr);                                   /* 0x48AB90  59 */
 
+/* anim.c -- keyframe animation */
+void DC2CALL Anim_Set(gptr o, gptr anim, u32 frame, u32 fl, u32 blend);  /* 0x48DDE0 */
+void DC2CALL Anim_Events(gptr o, s32 m);                                /* 0x48DE80 */
+void DC2CALL Anim_Start(gptr o, gptr anim, u32 frame, u32 fl, u32 blend); /* 0x48DEF0 */
+u32  DC2CALL Anim_Step(gptr o);                                         /* 0x48E100 */
+u32  DC2CALL Anim_ApplyFrame(gptr o, u32 step);                         /* 0x48E3D0 */
+gptr DC2CALL Matrix_ToAngles(gptr m, gptr out);                         /* 0x48F1D0 */
+void DC2CALL Anim_BlendLinear(gptr a, gptr b, gptr out, s32 w);         /* 0x48FEA0 */
+void DC2CALL Anim_BlendMatrix(gptr a, gptr b, gptr out, s32 w);         /* 0x48FF90 */
+
 /* handler used for an opcode that is not reimplemented yet: in the hook
  * build it calls the original code, elsewhere it reports and stops the thread */
 typedef u32 (DC2CALL *ScrOpFn)(gptr thr);

@@ -414,6 +414,65 @@ static void test_objects(void)
 }
 
 
+/* ---- animation ------------------------------------------------------------- */
+#define AN_OBJ   0x6C8000u      /* object */
+#define AN_PART  0x6C8400u      /* parts, 0x80 apart */
+#define AN_DATA  0x6CA000u      /* two animations, 0x1000 apart */
+#define AN_TAB   0x6CE000u      /* obj+0x88 table */
+#define AN_EVT   0x6CF000u      /* event table */
+
+static void anim_data(gptr a, u32 nparts, u32 nfr)
+{
+    u32 stride = (u8)(((nparts * 6 + 0x13) >> 2) << 2);
+    U32(a) = nfr | (rnd() % 4 ? 0 : rnd() % 8) << 16;
+    U32(a + 4) = rnd() % 3 ? AN_EVT : 0;
+    U32(a + 8) = rnd() % 2 ? rnd() : 0; U32(a + 0xC) = rnd() % 2 ? rnd() : 0;
+    U32(a + 0x10) = rnd();
+    int wide = rnd() % 4 == 0;
+    for (u32 f = 0; f < 10; f++) {          /* also frames past the end (tests raise the count) */
+        gptr fr = a + 0x14 + f * stride;
+        for (u32 i = 0; i < stride; i += 2) U16(fr + i) = wide ? (u16)rnd() : (u16)(rnd() % 0x1400);
+        S16(fr + 2) = 1 + rnd() % 8;
+    }
+}
+
+static void anim_setup_at(gptr o)
+{
+    for (u32 a = o; a < o + 0x260; a += 4) U32(a) = rnd();
+    u32 n = 1 + rnd() % 16;
+    U32(o + 0x68) = n;
+    U32(o + 0x64) = AN_PART;
+    for (u32 i = 0; i < n; i++) {
+        gptr p = AN_PART + i * 0x80;
+        for (u32 a = p; a < p + 0x80; a += 4) U32(a) = rnd() % 2 ? rnd() % 0x1000 : rnd();
+        U32(p + 0x54) = i + 1 < n ? p + 0x80 : 0;
+    }
+    u32 nfr = 1 + rnd() % 8;
+    anim_data(AN_DATA, n, nfr);
+    anim_data(AN_DATA + 0x1000, n, 2 + rnd() % 7);
+    U32(AN_TAB) = AN_DATA; U32(AN_TAB + 4) = AN_DATA + 0x1000;
+    U32(o + 0x88) = AN_TAB;
+    U32(AN_EVT) = rnd() % 4;
+    for (int i = 0; i < 4; i++) { U16(AN_EVT + 4 + 4 * i) = rnd() % 16; U16(AN_EVT + 6 + 4 * i) = (u16)rnd(); }
+    u32 stride = (u8)(((n * 6 + 0x13) >> 2) << 2);
+    gptr fr = AN_DATA + 0x14;
+    U32(o + 0x8C) = fr; U8(o + 0xAC) = (u8)stride; U16(o + 0x90) = (u16)nfr;
+    U32(o + 0x78) = fr + (rnd() % nfr) * stride; U32(o + 0x7C) = fr + (rnd() % nfr) * stride;
+    U32(o + 0x80) = fr + (rnd() % nfr) * stride; U32(o + 0x84) = fr + (rnd() % nfr) * stride;
+    U16(o + 0x94) = rnd() % nfr;
+    U16(o + 0x98) = rnd() % 10;
+    U16(o + 0x92) = rnd() % 64;
+    U16(o + 0xAA) = rnd() % 2;
+    U16(o + 0x102) = (u16)((rnd() & 0x27F) | (rnd() % 4 ? 0 : 0x20));
+    U8(o + 0x103) = (u8)(U8(o + 0x103) & 0xFE) | (rnd() & 1);
+    U16(o + 0x9A) = rnd() % 3 ? 0 : 1 + rnd() % 3;
+    U32(o + 0x9C) = rnd() % 3 ? AN_EVT : 0;
+    U16(o + 0x5A) = rnd() % 8;
+    U8(G() + 0x1091) = rnd() % 3 ? 9 : 1; U8(G() + 0x1090) = rnd() % 3 ? 3 : 0;
+}
+
+static void anim_setup(void) { anim_setup_at(AN_OBJ); }
+
 /* ---- remaining built-ins: callees replaced by recorders --------------------- */
 /* While these tests run, each callee that is not rewritten yet starts with a
  * JMP to a recorder that logs its arguments into .psxseg (LOG_BASE), so the
@@ -431,7 +490,7 @@ static Stub g_stubs[] = {
     {0x473130, "d"}, {0x4731F0, ""}, {0x474B20, "d"}, {0x478B80, "dd"}, {0x47A8C0, "ddpp", {16, 8}},
     {0x481D20, "d"}, {0x481DC0, "d"}, {0x482070, "dd"}, {0x4822D0, "dd"}, {0x48C0B0, "pd", {0x60}},
     {0x48C600, "d"}, {0x48C640, "ddd"}, {0x48C9C0, "w"}, {0x48CD70, "dd"}, {0x48CE20, "bwww"},
-    {0x48CE60, "d"}, {0x48D070, "dd"}, {0x48D730, "d"}, {0x48DEF0, "ddddd"}, {0x48F880, "ddww"},
+    {0x48CE60, "d"}, {0x48D070, "dd"}, {0x48D730, "d"}, {0, ""}, {0x48F880, "ddww"},
     {0x495E90, "wwwww"}, {0x4B4D20, "pd", {8}}, {0x4B4DB0, "pd", {8}}, {0x4DDDA2, ""},
     {0, "d"},                   /* 34: object type handlers (*0x87DCA0) */
     {0, "d"},                   /* 35: AOT kind handlers (0x738B68) */
@@ -503,7 +562,6 @@ static void ops2_args(u8 op, gptr t)
                break;
     case 0x1B: U8(t + T_SEL0) = rnd() % 5; if (rnd() % 4 == 0) U32(O_OBJ + SEL(t) * 0x260 + 0x64) = 0; break;
     case 0x20: U8(0x87FC45) = rnd() % 3 ? (u8)rnd() : 0xFF; break;
-    case 0x21: A(4) = rnd() % 16; if (rnd() % 3 == 0) A(0) = 0; break;
     case 0x23: A(1) = rnd() % 2 ? 0x6DC000 + rnd() % 0x100 : rnd() % 64; break;
     case 0x24: U8(g + 0xB4A) = rnd() % 3 ? (u8)rnd() : 0xFF; break;
     case 0x28: A(2) = rnd() % 12; A(1) = rnd() % 64; A(0) = rnd() % 2; break;
@@ -533,7 +591,12 @@ static void ops2_args(u8 op, gptr t)
     case 0x41: case 0x42: if (rnd() % 2) A(0) = rnd() % 2 ? 0 : 0xFFFFFFFF;
                Flag_Set(2, 0, rnd() % 3 == 0); Flag_Set(2, 2, rnd() % 3 == 0); break;
     case 0x43: A(0) = (rnd() % 8) << 8 | (u8)rnd(); A(1) = rnd(); break;
-    case 0x46: break;
+    case 0x46: case 0x21: {     /* Anim_Start on a valid animated object */
+        gptr o = op == 0x21 ? O_OBJ + (A(4) = rnd() % 16) * 0x260 : O_OBJ + SEL(t) * 0x260;
+        anim_setup_at(o);
+        A(3) = rnd() % 2; A(1) = rnd() % 10; A(2) = rnd() & 0x27F; A(0) = rnd() % 3 ? 0 : rnd() % 4;
+        if (A(2) & 0x80) U16(o + 0x90) |= 2;
+        break; }
     case 0x47: U8(t + T_SEL0) = 1 + rnd() % 2; A(2) = rnd() % 3; A(1) = rnd() % 16; A(0) = rnd() % 2; break;
     case 0x48: g_stubs[33].ret = rnd(); break;
     case 0x4B: U8(g + 0x7C4) = rnd() % 4; U8(t + T_A0) = rnd() % 4; break;
@@ -837,6 +900,49 @@ static void test_script_run(void)
 }
 
 /* LZSS: every type 5/6 record of the game's .DAT files */
+static void test_anim(void)
+{
+    script_setup();
+    stubs_install(1);
+    for (int i = 0; i < iters; i++) {
+        gptr o = AN_OBJ;
+        u32 a[5];
+        anim_setup();
+        U32(LOG_BASE) = 0;
+        a[0] = o; a[1] = rnd() % 2 ? 1 + rnd() % 3 : 1 + rnd() % 8;
+        sprintf(g_what, "parts %u frames %u fl %04X blend %u", U32(o + 0x68), U16(o + 0x90), U16(o + 0x102), U16(o + 0x9A));
+        check(0x48E3D0, Anim_ApplyFrame, "Anim_ApplyFrame", 2, a, 0xFFFFFFFF);
+        anim_setup(); U32(LOG_BASE) = 0;
+        check(0x48E100, Anim_Step, "Anim_Step", 1, a, 0xFFFFFFFF);
+        anim_setup(); U32(LOG_BASE) = 0;
+        a[1] = rnd() % 2 ? rnd() % 2 : AN_DATA + 0x1000 * (rnd() % 2);
+        a[2] = rnd() % 10; a[3] = (rnd() & 0x2FF) | (rnd() % 2 ? 0x80000000u : 0); a[4] = rnd() % 4;
+        if (a[3] & 0x80) { if (U16(o + 0x90) < 2) U16(o + 0x90) = 2; U16(AN_DATA) |= 2; U16(AN_DATA + 0x1000) |= 2; }
+        sprintf(g_what, "anim %X frame %u fl %08X blend %u", a[1], a[2], a[3], a[4]);
+        check(0x48DEF0, Anim_Start, "Anim_Start", 5, a, 0);
+        anim_setup(); U32(LOG_BASE) = 0;
+        if (a[3] & 0x80) { if (U16(o + 0x90) < 2) U16(o + 0x90) = 2; U16(AN_DATA) |= 2; U16(AN_DATA + 0x1000) |= 2; }
+        check(0x48DDE0, Anim_Set, "Anim_Set", 5, a, 0);
+        anim_setup(); U32(LOG_BASE) = 0;
+        a[1] = 1 + rnd() % 4;
+        check(0x48DE80, Anim_Events, "Anim_Events", 2, a, 0);
+        /* rotations */
+        gptr va = G_SCR, vb = G_SCR + 8, vo = G_SCR + 16, m = G_SCR + 0x40;
+        for (int k = 0; k < 4; k++) { U16(va + 2 * k) = (u16)rnd(); U16(vb + 2 * k) = (u16)rnd(); U16(vo + 2 * k) = (u16)rnd(); }
+        if (rnd() % 3 == 0) for (int k = 0; k < 3; k++) U16(vb + 2 * k) = (U16(va + 2 * k) + rnd() % 64) & 0xFFF;
+        u32 w = rnd() % 3 ? rnd() % 0x1001 : 0x1000 / (1 + rnd() % 3);
+        u32 b[4] = {va, vb, rnd() % 4 ? vo : va, w};
+        sprintf(g_what, "a %04X %04X %04X b %04X %04X %04X w %X", U16(va), U16(va + 2), U16(va + 4), U16(vb), U16(vb + 2), U16(vb + 4), w);
+        check(0x48FEA0, Anim_BlendLinear, "Anim_BlendLinear", 4, b, 0);
+        check(0x48FF90, Anim_BlendMatrix, "Anim_BlendMatrix", 4, b, 0);
+        if (rnd() % 2) RotMatrixYXZ(va, m);
+        else for (int k = 0; k < 9; k++) S16(m + 2 * k) = (s16)(rnd() % 8193) - 4096;
+        u32 c[2] = {m, vo};
+        check(0x48F1D0, Matrix_ToAngles, "Matrix_ToAngles", 2, c, 0xFFFFFFFF);
+    }
+    stubs_install(0);
+}
+
 static void test_lzss(const char *dir)
 {
     char pat[MAX_PATH]; snprintf(pat, sizeof pat, "%s\\*.DAT", dir);
@@ -902,7 +1008,7 @@ __declspec(dllexport) void harness_main(int argc, char **argv)
     struct { const char *name; void (*fn)(void); } T[] = {
         {"flags", test_flags}, {"geometry", test_geom}, {"script values", test_script_values},
         {"script opcodes", test_script_ops}, {"script objects", test_objects},
-        {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte},
+        {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim},
     };
     for (unsigned i = 0; i < sizeof T / sizeof T[0]; i++) {
         int f0 = g_fail, t0 = g_tests;

@@ -37,7 +37,6 @@
     V(Fn_48CE60,          0x48CE60, (u32 a), (a)) \
     V(Fn_48D070,          0x48D070, (u32 a, u32 b), (a, b)) \
     V(Fn_48D730,          0x48D730, (gptr e), (e)) \
-    V(Anim_Start,         0x48DEF0, (gptr obj, u32 a, u32 b, u32 c, u32 d), (obj, a, b, c, d)) \
     V(Fn_48F880,          0x48F880, (gptr obj, u32 a, u32 b, u32 c), (obj, a, b, c)) \
     V(Menu_Open,          0x495E90, (u32 a, u32 b, u32 c, u32 d, u32 e), (a, b, c, d, e)) \
     V(Gpu_LoadImage,      0x4B4D20, (gptr rect, gptr p), (rect, p)) \

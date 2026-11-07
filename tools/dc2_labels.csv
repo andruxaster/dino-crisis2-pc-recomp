@@ -317,14 +317,7 @@ address,kind,name,category,confidence,notes
 0x633000,data,g_enemy_model,data,high,E*.DAT type-5 model block
 0x662500,data,g_kof_model,data,high,KOF_P*.DAT type-5 model block
 0x87DC98,data,g_prim_ptr,data,high,current primitive buffer pointer
-0x48DDE0,func,Anim_Set,anim,high,"(obj, index or ptr >= 0x500000, ...): index into obj+0x88 table"
-0x48DEF0,func,Anim_Start,anim,high,"header: u16 frames, 3 table ptrs -> obj+0x9C/0xA0/0xA4; frames at +0x14, stride align4(16+6*parts)"
-0x48E3D0,func,Anim_ApplyFrame,anim,high,"cubic over 4 keys (obj+0x78..0x84); ch0 root pos, ch1 obj rot (+0xC0), parts rot -> part+0x48"
-0x48E100,func,Anim_Step,anim,medium,advances obj+0x98 time
-0x48DE80,func,Anim_Unknown_DE80,anim,low,uses obj+0x9C table
 0x48EF50,func,Object_UpdateSkeleton,anim,medium,"step, apply, blend (LoadAverageShort0), per-part matrices"
-0x48FF90,func,Part_BuildMatrix,anim,medium,RotMatrixYXZ(part+0x48)
-0x48FEA0,func,Part_BlendPose,anim,medium,LoadAverageShort0 cross-fade
 0x665D00,data,g_player_anims,data,high,WEP_P* block + 0x3800
 0x403EE0,func,Item_LoadIcon,game,high,"(index): ITEM.DAT entry 0x2800 = 128x64 8bpp -> VRAM 768,192 + CLUT row 497"
 0x403FD0,func,Map_LoadPage,game,high,"(index): MAP.DAT entry 0x10800 = 2 x 256x256 4bpp -> VRAM 448/384,0 + CLUT row 500"
@@ -464,3 +457,11 @@ address,kind,name,category,confidence,notes
 0x474B10,func,DrawSync,game,medium,
 0x403A30,func,Cutscene_End,game,medium,
 0x4DDDA2,func,Crt_rand,game,medium,
+0x48DDE0,func,Anim_Set,anim,high,"(obj, anim, frame, flags, blend): root from part 0, then Anim_Start"
+0x48DE80,func,Anim_Events,anim,high,"events {u16 time, u16 arg} of table +0x9C at the current time -> 0x48C0B0"
+0x48DEF0,func,Anim_Start,anim,high,"(obj, anim index or ptr, frame, flags, blend frames); flag 0x80 keeps the play position"
+0x48E100,func,Anim_Step,anim,high,"advance one frame; returns 1 at the end of a non-looping animation; flag 0x40 root motion"
+0x48E3D0,func,Anim_ApplyFrame,anim,high,"Hermite over keys +0x78..+0x84; ch0 -> part0+0x64, ch1 -> obj+0xC0, ch2.. -> part+0x48; blend via 0x6F0000"
+0x48F1D0,func,Matrix_ToAngles,anim,high,YXZ angles of a rotation matrix (ratan2)
+0x48FEA0,func,Anim_BlendLinear,anim,high,wrap angles to the shorter way then LoadAverageShort0
+0x48FF90,func,Anim_BlendMatrix,anim,high,lerp of RotMatrixYXZ matrices -> Matrix_ToAngles

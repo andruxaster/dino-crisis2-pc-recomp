@@ -6,7 +6,7 @@ CC32   ?= i686-w64-mingw32-gcc
 CC     ?= cc
 CFLAGS  = -std=gnu11 -O2 -Wall -Wextra -Wno-unused-parameter -Iinclude -fexcess-precision=standard
 GAME    = src/game/lzss.c src/game/flag.c src/game/geom.c src/game/script_vm.c \
-          src/game/script_obj.c src/game/script_ops.c src/game/script_aot.c src/game/gte.c src/game/orig.c
+          src/game/script_obj.c src/game/script_ops.c src/game/script_aot.c src/game/anim.c src/game/gte.c src/game/orig.c
 DINO2  ?= game/Dino2.exe
 DATA   ?= game/Data
 OUT     = build

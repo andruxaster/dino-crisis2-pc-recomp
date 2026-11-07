@@ -9,6 +9,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <dirent.h>
+#include <setjmp.h>
+#include <signal.h>
 #include "dc2/game.h"
 #include "dc2/orig.h"
 
@@ -43,15 +45,27 @@ static int load_data_sections(const char *exe)
 
 static const char *g_exe;
 
+/* Game code reads data that loaders not rewritten yet would have put in
+   memory (models, animations of cutscene files, ...). A fault there ends
+   the room's run with a report instead of ending the program. */
+static sigjmp_buf g_fault_jmp;
+static volatile int g_fault_sig;
+static void on_fault(int sig) { g_fault_sig = sig; siglongjmp(g_fault_jmp, 1); }
+
 /* stand-in for the object type handlers (not rewritten yet): they build the
-   object's model parts; give each object a chain of 32 empty parts so that
-   code which walks the parts has something to work on */
+   object's model parts and set its animation table; give each object a
+   chain of 32 empty parts and a one-frame animation so that the code which
+   walks them has something to work on */
 #define TYPE_TABLE 0x6B8000u
 #define PARTS      0x6C0000u      /* 32 objects x 32 parts x 0x80 */
+#define ANIM_TAB   0x6B8800u      /* 256 x -> ANIM_STUB */
+#define ANIM_STUB  0x6B9000u      /* one-frame animation, all values 1 */
 static void type_handler(gptr fn, u32 obj)
 {
     (void)fn;
-    if (obj < 0x690000 || obj >= 0x690000 + 32 * 0x260 || U32(obj + 0x64)) return;
+    if (obj < 0x690000 || obj >= 0x690000 + 32 * 0x260) return;
+    if (!U32(obj + 0x88)) U32(obj + 0x88) = ANIM_TAB;
+    if (U32(obj + 0x64)) return;
     gptr p = PARTS + (obj - 0x690000) / 0x260 * 0x1000, parent = obj;
     memset(MEM(p), 0, 0x1000);
     U32(obj + 0x64) = p;
@@ -90,6 +104,9 @@ static int run_room(const char *data, const char *room, int frames)
        yet): empty object arrays in a free part of .psxseg, room sections
        from the block header as Room_SetPointers 0x481E10 does */
     memset(MEM(0x690000), 0, 0x50000);
+    for (int i = 0; i < 256; i++) U32(ANIM_TAB + 4 * i) = ANIM_STUB;
+    U32(ANIM_STUB) = 1;
+    for (u32 a = ANIM_STUB + 0x14; a < ANIM_STUB + 0x1000; a += 2) U16(a) = 1;
     for (int i = 0; i < 32; i++) type_handler(0, 0x690000 + i * 0x260);
     U32(G() + 0x940) = 0x690000;              /* objects, 0x260 bytes */
     U32(G() + 0x93C) = 0x6A0000;              /* effects, 0x70 bytes */
@@ -110,7 +127,15 @@ static int run_room(const char *data, const char *room, int frames)
     memset(MEM(0x6E0000), 0, SCR_NTHREADS * SCR_THREAD_SIZE);
     Script_StartThread(0, 0);
 
-    int f, maxalive = 0, alive = 0;
+    static int f, maxalive, alive;
+    f = maxalive = alive = 0;
+    if (sigsetjmp(g_fault_jmp, 1)) {
+        printf("%s: stopped at frame %d by %s (data of a loader not rewritten yet)\n",
+               room, f, g_fault_sig == SIGFPE ? "SIGFPE" : "SIGSEGV");
+        return 2;
+    }
+    signal(SIGSEGV, on_fault);
+    signal(SIGFPE, on_fault);
     for (f = 0; f < frames; f++) {
         Script_Run();
         alive = 0;
@@ -119,6 +144,8 @@ static int run_room(const char *data, const char *room, int frames)
         if (alive > maxalive) maxalive = alive;
         if (!alive) break;
     }
+    signal(SIGSEGV, SIG_DFL);
+    signal(SIGFPE, SIG_DFL);
     printf("%s: %d frames, up to %d threads, %d running at the end\n", room, f, maxalive, alive);
     return 0;
 }
@@ -141,7 +168,11 @@ int main(int argc, char **argv)
     }
     closedir(dir);
     qsort(names, n, sizeof *names, cmp);
-    int bad = 0;
-    for (int i = 0; i < n; i++) bad |= run_room(argv[2], names[i], frames);
+    int bad = 0, stopped = 0;
+    for (int i = 0; i < n; i++) {
+        int r = run_room(argv[2], names[i], frames);
+        if (r == 2) stopped++; else bad |= r;
+    }
+    printf("%d rooms, %d stopped on missing data\n", n, stopped);
     return bad;
 }
