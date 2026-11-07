@@ -73,7 +73,7 @@ done:
 void DC2CALL Stage_Load(u32 w, u32 s)                               /* 0x4822D0 */
 {
     gptr pl = U32(G() + 0x940);
-    Fn_448580(1); Fn_448580(2); Fn_448580(6);
+    Eff_KillKind(1); Eff_KillKind(2); Eff_KillKind(6);
     Eff_FreeAll();
     u8 st = U8(G() + 0x108F);
     Flag_Set(2, 0x20, st <= 2 ? 0 : st <= 4 ? 1 : st <= 6 ? 0 : 1);
@@ -103,7 +103,7 @@ void DC2CALL Stage_Load(u32 w, u32 s)                               /* 0x4822D0 
     }
     if (U32(pl + 0x64)) Obj_Free(pl);
     Model_Setup(pl, 0x662500);
-    Fn_47ADA0(pl);
+    Player_LoadWeapons(pl);
     Anim_Start(pl, 0x16, 0, 9, 0);
     U32(pl + 0x54) = 1;
     Obj_UpdateMatrix(pl);

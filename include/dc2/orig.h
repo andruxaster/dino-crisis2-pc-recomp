@@ -12,7 +12,6 @@
     V(Timer_Set,          0x405DE0, (u32 frames, u32 b), (frames, b)) \
     V(Cutscene_End,       0x403A30, (void), ()) \
     V(Fn_448080,          0x448080, (gptr e), (e)) \
-    V(Fn_448580,          0x448580, (u32 a), (a)) \
     V(Fn_448620,          0x448620, (u32 a), (a)) \
     V(Fn_4529C0,          0x4529C0, (u32 a), (a)) \
     V(Fade_Set,           0x450A70, (u32 a, u32 b, u32 c), (a, b, c)) \
@@ -39,8 +38,6 @@
     F(u32, Snd_CreateBuffer, 0x4BF720, (gptr wave, u32 a), (wave, a)) \
     F(u32, Strm_Open,     0x4BFC10, (gptr data, u32 size, u32 a), (data, size, a)) \
     V(Gpu_LoadImage,      0x4B4D20, (gptr rect, gptr p), (rect, p)) \
-    V(Fn_47ADA0,          0x47ADA0, (gptr obj), (obj)) \
-    V(Model_Setup,        0x48D8B0, (gptr obj, gptr data), (obj, data)) \
     V(Fn_471A30,          0x471A30, (void), ()) \
     V(Fn_471A50,          0x471A50, (void), ()) \
     V(Fn_48D470,          0x48D470, (gptr e), (e)) \

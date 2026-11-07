@@ -279,7 +279,7 @@ address,kind,name,category,confidence,notes
 0x864494,data,g_mask_vert_count,data,medium,
 0x87FBE0,data,g_sound_banks,data,high,"8 bytes per slot {data*, table*}"
 0x87FB84,data,g_sound_streams,data,medium,20 bytes per slot
-0x48D740,func,Part_Alloc,model,medium,
+0x48D740,func,Part_Alloc,model,high,free 0xCC-byte part of the pool G+0x938
 0x4834F0,func,MeshDrawGT3,model,high,"TRI 12 bytes: 3 u16 idx, uv2 uv0 uv1; rtpt, nclip cull, ncct, POLY_GT3 at ot[maxZ/16]"
 0x4832C0,func,MeshDrawGT4,model,high,"QUAD 16 bytes: 4 u16 idx, uv0..uv3; POLY_GT4"
 0x482940,func,EnvMapDraw,model,medium,object polys with UV from normals via ratan2 (reflection mapping)
@@ -469,7 +469,7 @@ address,kind,name,category,confidence,notes
 0x48BBF0,func,Script_Tick,game,high,"per frame: mode 0x87FC44 (0 run, 1 skip, 2 event)"
 0x48BCB0,func,Script_Skip,game,high,"script mode 1: end cutscene"
 0x48BD60,func,Script_Event,game,high,"script mode 2: start routine 0x87FC47 on thread 0"
-0x48D8B0,func,Model_Setup,game,high,"(obj, model data)"
+0x48D8B0,func,Model_Setup,game,high,"(obj, model data): part chain from the joint records"
 0x4C29A9,func,Task_Sleep,game,high,"(frames)"
 0x403920,func,Save_ScanTask,game,high,"SAVE00..99.DAT of 0x5F4 bytes, then Task_Chain(0x4A5730) title"
 0x46D740,func,Root_Boot,game,high,"mode 0: CORE.DAT"
@@ -604,3 +604,18 @@ address,kind,name,category,confidence,notes
 0x47EF90,func,Player_Climb,game,high,"substate 8: step up/down"
 0x47FC70,func,Player_Push,game,high,"substate 11: push / bump"
 0x48F8B0,func,Obj_ShadowOff,game,high,"+0x118 &= 0x7F"
+0x48D620,func,K2_Unlink,object,high,take an effect slot out of its chain (+0x86/+0x87)
+0x41C9B0,func,Lights_Off,light,high,
+0x41C970,func,Light_Reset,light,high,light slot i of G+0x948
+0x448580,func,Eff_KillKind,object,high,remove the effect slots of one kind
+0x47ADA0,func,Player_LoadWeapons,player,high,weapon set-up 0x737FA0 and sub-weapon set-up 0x737FF0
+0x4B2C20,func,Weapon_SetNone,weapon,high,
+0x4AC980,func,Weapon_SetGun,weapon,high,
+0x4AE2F0,func,Weapon_SetLight,weapon,high,
+0x4AEF10,func,Weapon_SetTwin,weapon,high,
+0x4B1C90,func,Weapon_SetHeavy,weapon,high,
+0x4B2C30,func,Sub_SetKnives,weapon,high,
+0x4B2FC0,func,Sub_SetKnife,weapon,high,
+0x4B33C0,func,Sub_SetGrenade,weapon,high,
+0x4B3A10,func,Sub_SetMine,weapon,high,
+0x4B3D00,func,Sub_SetKnives2,weapon,high,

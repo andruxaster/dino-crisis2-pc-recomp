@@ -283,7 +283,7 @@ u32 DC2CALL ScrOp_Effect2F(gptr t)                                 /* 2F */
 {
     s32 a = S32(SP_(t));
     if (a != -1) {
-        Fn_448580((u8)a);
+        Eff_KillKind((u8)a);
     } else {
         Fn_448620(0);
         for (u32 i = 0; i < U32(A_EFF_COUNT); i++) {

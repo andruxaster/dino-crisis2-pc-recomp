@@ -1070,3 +1070,10 @@ void DC2CALL Player_Back(gptr o)                                   /* 0x47EBB0 *
     }
     if (!(held & 0x4000)) { Flag_Set(2, 0xD, 0); U32(o + 0x1DC) = 5; U32(o + 0x54) = 1; }
 }
+
+/* set-up of the main weapon (G+0x10B4 low byte) and the sub-weapon */
+void DC2CALL Player_LoadWeapons(gptr o)                            /* 0x47ADA0 */
+{
+    Orig_Call1(U32(0x737FA0 + U8(G() + 0x10B4) * 4), o);
+    Orig_Call1(U32(0x737FF0 + (U16(G() + 0x10B4) >> 8) * 4), o);
+}

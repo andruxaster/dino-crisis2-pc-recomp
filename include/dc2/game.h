@@ -82,6 +82,11 @@ gptr DC2CALL K2_Reuse(void);                                            /* 0x48D
 gptr DC2CALL K2_AllocBack(void);                                        /* 0x48D580 */
 gptr DC2CALL Effect_Attach(gptr o, gptr d);                             /* 0x48DA00 */
 gptr DC2CALL Effect_Drops(gptr o, u32 a, u32 b);                        /* 0x48DC80 */
+gptr DC2CALL Part_Alloc(void);                                          /* 0x48D740 */
+void DC2CALL Model_Setup(gptr o, gptr d);                               /* 0x48D8B0 */
+void DC2CALL K2_Unlink(gptr k);                                         /* 0x48D620 */
+void DC2CALL Lights_Off(void);                                          /* 0x41C9B0 */
+void DC2CALL Eff_KillKind(u32 kind);                                    /* 0x448580 */
 
 /* player.c -- the player object */
 void DC2CALL Player_Setup(gptr o);                                      /* 0x47FE10 */
@@ -123,6 +128,20 @@ void DC2CALL Player_Climb(gptr o);                                      /* 0x47E
 void DC2CALL Player_Push(gptr o);                                       /* 0x47FC70 */
 void DC2CALL Player_Turn(gptr o);                                       /* 0x47E890 */
 void DC2CALL Player_Back(gptr o);                                       /* 0x47EBB0 */
+void DC2CALL Player_LoadWeapons(gptr o);                                /* 0x47ADA0 */
+
+/* weapon.c -- weapon and sub-weapon set-up */
+gptr DC2CALL Light_Reset(u32 i);                                        /* 0x41C970 */
+void DC2CALL Weapon_SetNone(gptr o);                                    /* 0x4B2C20 */
+void DC2CALL Weapon_SetGun(gptr o);                                     /* 0x4AC980 */
+void DC2CALL Weapon_SetLight(gptr o);                                   /* 0x4AE2F0 */
+void DC2CALL Weapon_SetTwin(gptr o);                                    /* 0x4AEF10 */
+void DC2CALL Weapon_SetHeavy(gptr o);                                   /* 0x4B1C90 */
+void DC2CALL Sub_SetKnives(gptr o);                                     /* 0x4B2C30 */
+void DC2CALL Sub_SetKnife(gptr o);                                      /* 0x4B2FC0 */
+void DC2CALL Sub_SetGrenade(gptr o);                                    /* 0x4B33C0 */
+void DC2CALL Sub_SetMine(gptr o);                                       /* 0x4B3A10 */
+void DC2CALL Sub_SetKnives2(gptr o);                                    /* 0x4B3D00 */
 
 /* crt.c -- C runtime functions */
 void DC2CALL Crt_qsort(gptr base, u32 num, u32 width, gptr cmp);        /* 0x4DDBD4 */

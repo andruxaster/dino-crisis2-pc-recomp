@@ -859,3 +859,85 @@ gptr DC2CALL Effect_Drops(gptr o, u32 a, u32 b)                    /* 0x48DC80 *
     }
     return k;
 }
+
+/* ---- models ------------------------------------------------------------------ */
+/* free part of the pool G+0x938 (*0x87DC0C parts of 0xCC bytes) */
+gptr DC2CALL Part_Alloc(void)                                      /* 0x48D740 */
+{
+    gptr p = U32(G() + 0x938);
+    for (u32 n = U32(0x87DC0C); n--; p += 0xCC)
+        if (!(U8(p + 0x50) & 1)) {
+            memset(MEM(p), 0, 0xCC);
+            U16(p + 0xB8) = 0x1000; U16(p + 0xB2) = 0x1000; U16(p + 0xAC) = 0x1000;
+            U32(p + 0x50) = 3;
+            return p;
+        }
+    return 0;
+}
+
+/* build the part chain of o from model data d: +0x14 part count, +0x18/+0x1A
+ * to o+0x104/+0x106, +0x1C 0x14-byte records (+0 joint offset, +6 parent
+ * index or -1 for o, +7 -> part +0x62) */
+void DC2CALL Model_Setup(gptr o, gptr d)                           /* 0x48D8B0 */
+{
+    u32 n = U32(d + 0x14);
+    gptr parts[31];
+    gptr r = d + 0x1C;
+    for (u32 i = 0; i < n; i++, r += 0x14) {
+        gptr p = Part_Alloc();
+        parts[i] = p;
+        U16(p + 0x64) = U16(r); U16(p + 0x66) = U16(r + 2); U16(p + 0x68) = U16(r + 4);
+        U32(p + 0x58) = S8(r + 6) < 0 ? o : parts[S8(r + 6)];
+        U8(p + 0x62) = U8(r + 7);
+    }
+    u32 last = 0;
+    if (n - 1) for (last = 0; last < n - 1; last++) U32(parts[last] + 0x54) = parts[last + 1];
+    U32(parts[last] + 0x54) = 0;
+    U32(o + 0x60) = d;
+    U32(o + 0x74) = 0x1000; U32(o + 0x70) = 0x1000; U32(o + 0x6C) = 0x1000;
+    U32(o + 0x68) = n;
+    U32(o + 0x64) = parts[0];
+    U8(o + 0xAC) = (u8)((u8)(((n * 36 + 0x1F) >> 5) + 3) << 2);
+    U8(o + 0xFA) = 0x80; U8(o + 0xF9) = 0x80; U8(o + 0xF8) = 0x80;
+    U8(o + 0xFC) = 5;
+    for (gptr p = parts[0]; p; p = U32(p + 0x54)) { U8(p + 0x8E) = 0x80; U8(p + 0x8D) = 0x80; U8(p + 0x8C) = 0x80; }
+    Obj_PickGroup(o);
+    U8(o + 0xFE) = 2;
+    U16(o + 0x104) = U16(d + 0x18);
+    U16(o + 0x106) = U16(d + 0x1A);
+}
+
+/* take effect slot k out of its chain (+0x86 next, +0x87 previous) */
+void DC2CALL K2_Unlink(gptr k)                                     /* 0x48D620 */
+{
+    u8 next = U8(k + 0x86);
+    U32(k + 0x50) = 0;
+    gptr n = k2_at(next), p = k2_at(U8(k + 0x87));
+    if (n == p) return;
+    if (p == k) { U8(n + 0x87) = next; U8(G() + 0x852) = next; return; }
+    if (next == 0xFF) { U8(p + 0x86) = 0xFF; return; }
+    U8(n + 0x87) = U8(k + 0x87);
+    U8(p + 0x86) = U8(k + 0x86);
+}
+
+void DC2CALL Lights_Off(void)                                      /* 0x41C9B0 */
+{
+    for (gptr a = 0x748160; a < 0x748A60; a += 0x48) U32(a + 0x34) = 0;
+    U8(U32(G() + 0x948) + 0xC + 0x15) = 0;
+}
+
+/* remove the effects of one kind (from the end down to G+0xA70) */
+void DC2CALL Eff_KillKind(u32 kind)                                /* 0x448580 */
+{
+    u32 total = U32(0x87DC88), n = total - U32(G() + 0xA70);
+    gptr p = k2_at(total) - K2_SIZE;
+    for (; n; n--, p -= K2_SIZE)
+        if ((U8(p + 0x50) & 1) && U8(p + 0x58) == (u8)kind) {
+            K2_Unlink(p);
+            if (U32(p + 0x8C)) U8(U32(p + 0x8C)) = 0;
+        }
+    if ((u8)kind == 1 || (u8)kind == 2) {
+        U8(G() + 0xF) = 0;
+        if ((U8(G() + 0x10B4) & 0xF) != 5) Lights_Off();
+    }
+}
