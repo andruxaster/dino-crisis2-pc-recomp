@@ -7,6 +7,7 @@
  * +0x158 head mode (table 0x737A64), +0x15D target object, +0x15E target part
  * (0xFF: the object itself), +0x15F head part, +0x161 "reached" bits,
  * +0x164/166 turn speeds, +0x168/16C wanted angles, +0x16A/16E limits. */
+#include <string.h>
 #include "dc2/game.h"
 #include "dc2/orig.h"
 #include "dc2/gte.h"
@@ -656,4 +657,205 @@ u32 DC2CALL Obj_CollideWalls(gptr o)                               /* 0x453430 *
 out_now:
     Tmp_Pop(0xC8);
     return ret;
+}
+
+/* ---- floors ---------------------------------------------------------------- */
+/* Count crossings of the vertical ray r (x, z, x, 0x7CFF) with the edges of
+ * polygon poly; a vertex exactly on the ray is passed over to the next
+ * vertex that is not (odd: inside). */
+u32 DC2CALL Poly_RayCount(gptr poly, gptr r)                       /* 0x454870 */
+{
+    u32 count = 0;
+    s32 n = U8(poly + 1), left = n, tries = 2;
+    gptr v = poly + n * 4 + 8, s = Tmp_Push(8);
+    for (;;) {
+        U16(s) = U16(v); v += 4; U16(s + 2) = U16(v - 2);
+        U16(s + 4) = U16(v); U16(s + 6) = U16(v + 2);
+        left--;
+        if (Seg_Intersect(r, s)) {
+            u16 x = U16(r);
+            if (U16(s) == x) goto next;
+            u16 x1 = U16(s + 4);
+            if (x1 == x) {
+                while (tries) {
+                    if (!left) { tries--; left = n; v = poly + n * 4 + 8; }
+                    x1 = U16(v + 4); v += 4; U16(s + 4) = x1;
+                    left--; U16(s + 6) = U16(v + 2);
+                    if (x1 != x) break;
+                }
+                if ((s16)U16(s) > (s16)x) { if ((s16)x1 >= (s16)x) goto checked; }
+                else if ((s16)x1 <= (s16)x) goto checked;
+            }
+            count++;
+        }
+    checked:
+        if (tries != 2) break;
+    next:
+        if (!left) break;
+    }
+    Tmp_Pop(8);
+    return count & 0xFFFF;
+}
+
+/* Height of the floor (probe below, a.y >= b.y) or ceiling above point b on
+ * the line a -> b: the nearest floor polygon of G+0xA4C whose layers the
+ * line passes; kind of the polygon (+3) into *kind. 0 / -32000 if none.
+ * Polygon +0: bit 7 slope (bits 4-5 its direction), bit 6 flat at its
+ * lowest layer; +4 layer bits (layer k: y -1000k .. -1000(k+1)); +6 low
+ * nibble: floor raised by 100 each. */
+u32 DC2CALL Floor_Height(gptr a, gptr b, u32 mask, gptr kind)      /* 0x454420 */
+{
+    int down = S16(a + 2) >= S16(b + 2);
+    if (kind) U32(kind) = 0;
+    u16 best = down ? 0x7D00 : 0x8300;
+    gptr t = Tmp_Push(0x10), L = t, M = t + 8;
+    gptr coll = U32(G() + 0xA4C);
+    for (s32 k = U8(coll) - 1; ; k--) {
+        coll = U32(G() + 0xA4C);
+        gptr poly = coll + U32(coll + 8 + 4 * k);
+        u8 ty = U8(poly);
+        if (ty && !(U8(poly + 3) & ((u8)mask | 1))) {
+            u16 layers = U16(poly + 4);
+            s32 hi = 15, lo = 0;
+            while (!(layers & (1u << hi)) && --hi > 0) ;
+            while (!(layers & (1u << lo)) && ++lo < 15) ;
+            hi++;
+            u16 top = (u16)(-1000 * hi), bot = (u16)(-1000 * lo), h;
+            if (ty & 0x80) {                         /* slope: height along x or z */
+                int along_x = (ty & 0x10) != 0;
+                s16 mx = (s16)0x8300, mn = 0x7CFF;
+                gptr c = poly + 8 + U8(poly + 1) * 4 + (along_x ? 0 : 2);
+                for (u32 i = 0; i < U8(poly + 1); i++, c += 4) {
+                    if (mx < S16(c)) mx = S16(c);
+                    if (mn > S16(c)) mn = S16(c);
+                }
+                int rising = along_x ? (ty & 0x30) == 0x10 : (ty & 0x30) == 0;
+                U16(L) = (u16)mx; U16(L + 2) = rising ? top : bot;
+                U16(L + 4) = (u16)mn; U16(L + 6) = rising ? bot : top;
+                u16 p = along_x ? U16(a) : U16(a + 4);
+                U16(M) = p; U16(M + 2) = 0x8300; U16(M + 4) = p; U16(M + 6) = 0x7CFF;
+                Seg_Cross(M, L, L);
+                h = U16(L + 4);
+                if (down) h += (u16)((U8(poly + 6) & 0xF) * 100);
+            } else if (ty & 0x40) {
+                h = bot;
+                if (down) h += (u16)((U8(poly + 6) & 0xF) * 100);
+            } else if (down) {
+                h = top + (u16)((U8(poly + 6) & 0xF) * 100);
+            } else h = bot;
+            /* ray through the line a -> b at height h */
+            if (U16(a + 2) == U16(b + 2)) {
+                U16(L) = U16(a); U16(L + 2) = U16(a + 4); U16(L + 4) = U16(a);
+            } else {
+                s32 dh = (s16)h - S16(b + 2), dy = S16(a + 2) - S16(b + 2);
+                u16 x = (u16)((s32)imul((u32)(S16(a) - S16(b)), (u32)dh) / dy + S16(b));
+                U16(L) = x; U16(L + 4) = x;
+                U16(L + 2) = (u16)((s32)imul((u32)(S16(a + 4) - S16(b + 4)), (u32)dh) / dy + S16(b + 4));
+            }
+            U16(L + 6) = 0x7CFF;
+            if (Poly_RayCount(poly, L) & 1) {
+                if (down ? ((s16)h >= S16(b + 2) && (s16)best > (s16)h)
+                         : ((s16)h < S16(b + 2) && (s16)best < (s16)h)) {
+                    best = h;
+                    if (kind) U32(kind) = U8(poly + 3);
+                }
+            }
+        }
+        if (!k) break;
+    }
+    Tmp_Pop(0x10);
+    return best == 0x7D00 ? 0 : best;
+}
+
+/* ---- effect slots G+0x944 (0xAC bytes; *0x87DC88 of them) ------------------ */
+#define K2_SIZE 0xACu
+static gptr k2_at(u32 i) { return U32(G() + 0x944) + i * K2_SIZE; }
+
+/* first free slot from G+0xA70 on */
+gptr DC2CALL K2_Alloc(void)                                        /* 0x48DA40 */
+{
+    u32 i = U32(G() + 0xA70), n = U32(0x87DC88) - i;
+    for (gptr p = k2_at(i); n--; p += K2_SIZE)
+        if (!(U8(p + 0x50) & 1)) {
+            memset(MEM(p), 0, K2_SIZE);
+            U32(p + 0x50) = 1;
+            return p;
+        }
+    return 0;
+}
+
+/* no free slot: reuse the end of the chain from G+0x852 (links +0x86/+0x87) */
+gptr DC2CALL K2_Reuse(void)                                        /* 0x48D480 */
+{
+    u8 c = U8(G() + 0x852);
+    if (c == 0xFF) return 0;
+    gptr p = k2_at(c);
+    u32 n = U32(0x87DC88);
+    for (u32 i = 0;; ) {
+        if (i >= n) return 0;
+        u8 next = U8(p + 0x86);
+        if (next == 0xFF) break;
+        p = k2_at(next);
+        i++;
+    }
+    u8 link = U8(p + 0x87);
+    gptr src = U32(p + 0x8C), q = k2_at(link);
+    if (p == q) U8(G() + 0x852) = 0xFF;
+    else { link = U8(q + 0x86); U8(q + 0x86) = 0xFF; }
+    if (src && U8(src + 1) == 1) U8(src + 0x18)--;
+    memset(MEM(p), 0, K2_SIZE);
+    U8(p + 0x87) = link; U8(p + 0x86) = link;
+    U8(p + 0x66) = 0x80; U8(p + 0x65) = 0x80; U8(p + 0x64) = 0x80;
+    U32(p + 0x50) = 1;
+    U8(p + 0x67) = 0x2C;
+    return p;
+}
+
+/* free slot from the end down to G+0xA70, else K2_Reuse */
+gptr DC2CALL K2_AllocBack(void)                                    /* 0x48D580 */
+{
+    u32 n = U32(0x87DC88), first = U32(G() + 0xA70);
+    gptr p = k2_at(n) - K2_SIZE;
+    for (u32 left = n - first; left; ) {
+        left--;
+        if (!(U8(p + 0x50) & 1)) {
+            memset(MEM(p), 0, K2_SIZE);
+            U32(p + 0x50) = 1;
+            U8(p + 0x66) = 0x80; U8(p + 0x65) = 0x80; U8(p + 0x64) = 0x80;
+            U8(p + 0x67) = 0x2C;
+            u8 idx = (u8)(U8(G() + 0xA70) + (u8)left);
+            U8(p + 0x87) = idx; U8(p + 0x86) = idx;
+            return p;
+        }
+        p -= K2_SIZE;
+    }
+    return K2_Reuse();
+}
+
+/* effect kind 6 following object o with data d (init: *0x87F948 [6]) */
+gptr DC2CALL Effect_Attach(gptr o, gptr d)                         /* 0x48DA00 */
+{
+    gptr k = K2_Alloc();
+    if (k) {
+        U32(k + 0xA0) = o;
+        U32(k + 0x98) = d;
+        U8(k + 0x58) = 6;
+        Orig_Call1(U32(U32(0x87F948) + 0x18), k);
+    }
+    return k;
+}
+
+/* effect kind 13 on object o (blood drops: count a, 0 = 3) */
+gptr DC2CALL Effect_Drops(gptr o, u32 a, u32 b)                    /* 0x48DC80 */
+{
+    gptr k = K2_AllocBack();
+    if (k) {
+        U8(k + 0x58) = 0xD;
+        U16(k + 0x6E) = (u16)a ? (u16)a : 3;
+        U8(k + 0x7A) = 5;
+        U32(k + 0xA4) = o;
+        U16(k + 0x9E) = (u16)b;
+        Orig_Call1(U32(U32(0x87F948) + 0x34), k);
+    }
+    return k;
 }

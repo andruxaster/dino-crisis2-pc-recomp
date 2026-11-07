@@ -75,6 +75,18 @@ u32  DC2CALL Seg_Side(gptr p, gptr b, gptr c);                          /* 0x453
 u32  DC2CALL Circle_Seg(gptr s, gptr p);                                /* 0x453F50 */
 u32  DC2CALL Seg_Cross(gptr a, gptr b, gptr out);                       /* 0x4540B0 */
 u32  DC2CALL Wall_Push(gptr s, gptr p, gptr v, gptr out);               /* 0x4541F0 */
+u32  DC2CALL Poly_RayCount(gptr poly, gptr r);                          /* 0x454870 */
+u32  DC2CALL Floor_Height(gptr a, gptr b, u32 mask, gptr kind);         /* 0x454420 */
+gptr DC2CALL K2_Alloc(void);                                            /* 0x48DA40 */
+gptr DC2CALL K2_Reuse(void);                                            /* 0x48D480 */
+gptr DC2CALL K2_AllocBack(void);                                        /* 0x48D580 */
+gptr DC2CALL Effect_Attach(gptr o, gptr d);                             /* 0x48DA00 */
+gptr DC2CALL Effect_Drops(gptr o, u32 a, u32 b);                        /* 0x48DC80 */
+
+/* player.c -- the player object */
+void DC2CALL Player_Setup(gptr o);                                      /* 0x47FE10 */
+void DC2CALL Player_Breath(gptr o);                                     /* 0x47A7E0 */
+void DC2CALL Player_Handler(gptr o);                                    /* 0x47CE40 */
 
 /* script_obj.c -- built-ins on objects */
 void DC2CALL Obj_SyncLinks(gptr obj);                                   /* 0x48FC70 */

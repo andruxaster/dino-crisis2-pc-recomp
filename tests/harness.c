@@ -521,10 +521,12 @@ static Stub g_stubs[] = {
     {0x494BA0, "ddddddd"}, {0x4C0600, "ddd"}, {0x4C0690, "d"}, {0x4C05D0, "dd"}, {0x4C06F0, "ddddd"},
     /* 71..: game task */
     {0x496410, ""}, {0x46FC50, "d"}, {0x403480, ""}, {0x470CB0, ""}, {0x452450, ""}, {0x48FB50, "d"},
-    {0x47FE10, "d"}, {0x4BF130, "d"}, {0x48CA10, ""}, {0x403520, ""}, {0x46B8C0, ""}, {0x407170, ""},
+    {0, ""}, {0x4BF130, "d"}, {0x48CA10, ""}, {0x403520, ""}, {0x46B8C0, ""}, {0x407170, ""},
     {0x491B10, "bb"}, {0x48CB40, ""}, {0x4A7250, ""}, {0x405E40, ""}, {0x472FD0, ""}, {0x452370, ""},
     /* 89..: object handlers (collision) */
     {0, ""}, {0, ""},
+    /* 91..: player */
+    {0x47AFA0, "d"}, {0x486870, "d"},
 };
 #define STUB_GAME 71
 #define STUB_LOAD 50
@@ -553,7 +555,10 @@ static u32 rec_common(int id, const u32 *a)
                 for (; k < 0x40; k++) U8(d + k) = 0;
                 d += 0x40; v = 0;
                 break; }
-            case 'p': if (v >= 0x401000) { memcpy(MEM(d), MEM(v), st->plen[np]); v = 0; }
+            case 'p': if (v >= 0x401000) {
+                          memcpy(MEM(d), MEM(v), st->plen[np]); v = 0;
+                          if (st->plen[np] == 0x60) U16(d + 0x32) = 0;    /* object: matrix pad is garbage */
+                      }
                       d += st->plen[np++]; break;
             }
             U32(r + 4 + 4 * i) = v;
@@ -570,14 +575,14 @@ REC(34) REC(35) REC(36) REC(37) REC(38) REC(39) REC(40) REC(41) REC(42) REC(43) 
 REC(46) REC(47) REC(48) REC(49) REC(50) REC(51) REC(52) REC(53) REC(54) REC(55) REC(56) REC(57)
 REC(58) REC(59) REC(60) REC(61) REC(62) REC(63) REC(64) REC(65) REC(66) REC(67) REC(68) REC(69)
 REC(70) REC(71) REC(72) REC(73) REC(74) REC(75) REC(76) REC(77) REC(78) REC(79) REC(80) REC(81)
-REC(82) REC(83) REC(84) REC(85) REC(86) REC(87) REC(88) REC(89) REC(90)
+REC(82) REC(83) REC(84) REC(85) REC(86) REC(87) REC(88) REC(89) REC(90) REC(91) REC(92)
 static void *const g_recs[] = {rec0, rec1, rec2, rec3, rec4, rec5, rec6, rec7, rec8, rec9, rec10,
     rec11, rec12, rec13, rec14, rec15, rec16, rec17, rec18, rec19, rec20, rec21, rec22, rec23,
     rec24, rec25, rec26, rec27, rec28, rec29, rec30, rec31, rec32, rec33, rec34, rec35, rec36, rec37,
     rec38, rec39, rec40, rec41, rec42, rec43, rec44, rec45, rec46, rec47, rec48, rec49, rec50, rec51,
     rec52, rec53, rec54, rec55, rec56, rec57, rec58, rec59, rec60, rec61, rec62, rec63,
     rec64, rec65, rec66, rec67, rec68, rec69, rec70, rec71, rec72, rec73, rec74, rec75, rec76, rec77,
-    rec78, rec79, rec80, rec81, rec82, rec83, rec84, rec85, rec86, rec87, rec88, rec89, rec90};
+    rec78, rec79, rec80, rec81, rec82, rec83, rec84, rec85, rec86, rec87, rec88, rec89, rec90, rec91, rec92};
 /* Task_Sleep: the file loader "runs" while the task sleeps */
 static u32 __cdecl ts_sleep(u32 n)
 { u32 v[5] = {n, U16(0x87FFE8)}; rec_common(STUB_LOAD, v); U16(0x87FFEA) = 0; return 0; }   /* + file asked for */
@@ -1291,6 +1296,123 @@ static void test_collision(void)
     stubs_install(0);
 }
 
+/* ---- the player ---------------------------------------------------------------- */
+#define A_PLAYER_EXT_H 0x87FD60u
+#define PL_K2   0x6D6000u       /* effect slots, 0xAC each */
+#define PL_EXT_SRC 0x6D5F00u    /* +0x8C source blocks of effect slots */
+
+static void k2_setup(void)
+{
+    u32 n = 1 + rnd() % 40;
+    U32(0x87DC88) = n; U32(G() + 0x944) = PL_K2;
+    U32(G() + 0xA70) = rnd() % 4 ? rnd() % n : n;
+    for (u32 i = 0; i < n; i++) {
+        gptr p = PL_K2 + i * 0xAC;
+        for (u32 k = 0; k < 0xAC; k += 4) U32(p + k) = rnd();
+        U32(p + 0x50) = rnd() % 2 ? 1 : (rnd() & ~1u);
+        U8(p + 0x86) = rnd() % 4 ? (u8)(rnd() % n) : 0xFF;
+        U8(p + 0x87) = (u8)(rnd() % n);
+        U32(p + 0x8C) = rnd() % 3 ? PL_EXT_SRC + 0x20 * (rnd() % 4) : 0;
+    }
+    for (u32 k = 0; k < 0x80; k++) U8(PL_EXT_SRC + k) = rnd() % 3 ? 1 : (u8)rnd();
+    U8(G() + 0x852) = rnd() % 4 ? (u8)(rnd() % n) : 0xFF;
+    U32(0x87F948) = TYPE_TAB;
+}
+
+/* objects, walls, and o as the player */
+static gptr player_setup_obj(void)
+{
+    coll_setup();
+    gptr o = O_OBJ + 0x260 * (rnd() % 16);
+    u32 np = U32(U32(o + 0x64) + 0x54) ? 2 : 1;
+    U8(o + 0x15F) = (u8)(rnd() % np); U8(o + 0x15E) = rnd() % 2 ? 0xFF : 0; U8(o + 0x161) = rnd() % 4;
+    U8(o + 0x11B) = rnd() % 3 ? 0 : (u8)(0x10 * (rnd() % 2) + 1);
+    U32(o + 0x120) = U32(o + 0x64); U32(o + 0x124) = U32(o + 0x64);
+    U8(o + 0x54) = rnd() % 4; U8(o + 0x55) = rnd() % 3 ? rnd() % 10 : 9;
+    U16(o + 0x17E) = rnd() % 3 ? 0 : rnd() % 2 ? rnd() % 200 : rnd() % 2 ? rnd() % 1000 : 12 * (rnd() % 90) + 2;
+    U8(o + 0x1C0 + 0x79) = rnd() % 2 ? (u8)rnd() : rnd() % 2 ? 0x4F : 0xBD;
+    U16(o + 0x108) = rnd() % 0x500;
+    for (u32 k = 0; k < 0x60; k += 2) U16(o + 0x1C0 + k) = (u16)rnd();
+    U16(o + 0x1C0 + 0x3A) = rnd() % 0x110;
+    U8(G() + 0x108F) = rnd() % 3 ? rnd() % 3 : rnd() % 10;
+    U8(0x87E747) = rnd() % 3;
+    for (u32 i = 0; i < 16; i++) U8(O_OBJ + i * 0x260 + 0x17B) = rnd() % 3 ? (u8)(rnd() % 3) : (u8)rnd();
+    Flag_Set(0, 0xB, rnd() % 4 == 0); Flag_Set(2, 0xF, rnd() % 4 == 0);
+    k2_setup();
+    return o;
+}
+
+static void test_player(void)
+{
+    script_setup();
+    stubs_install(1);
+    g_ign_objpads = 1;
+    u32 saved[16];
+    for (int k = 0; k < 16; k++) { saved[k] = U32(0x7380FC + 4 * k); U32(0x7380FC + 4 * k) = (u32)(uintptr_t)g_recs[STUB_TYPE]; }
+    for (int i = 0; i < iters; i++) {
+        u32 a[10] = {0};
+        /* effect slots */
+        k2_setup(); U32(LOG_BASE) = 0;
+        sprintf(g_what, "n %u first %u chain %02X", U32(0x87DC88), U32(G() + 0xA70), U8(G() + 0x852));
+        check(0x48DA40, K2_Alloc, "K2_Alloc", 0, a, 0xFFFFFFFF);
+        check(0x48D480, K2_Reuse, "K2_Reuse", 0, a, 0xFFFFFFFF);
+        check(0x48D580, K2_AllocBack, "K2_AllocBack", 0, a, 0xFFFFFFFF);
+        a[0] = O_OBJ + 0x260 * (rnd() % 16); a[1] = rnd();
+        check(0x48DA00, Effect_Attach, "Effect_Attach", 2, a, 0xFFFFFFFF);
+        a[1] = rnd() % 4 == 0 ? 0 : rnd() % 3 ? rnd() % 20 : (u32)rnd(); a[2] = rnd();
+        check(0x48DC80, Effect_Drops, "Effect_Drops", 3, a, 0xFFFFFFFF);
+        /* floors */
+        coll_setup(); U32(LOG_BASE) = 0;
+        for (u32 k = 0; k < U8(CL_ROOM); k++) {
+            gptr w = CL_ROOM + U32(CL_ROOM + 8 + 4 * k);
+            U8(w) = rnd() % 5 ? (u8)((rnd() % 3 == 0 ? 0x80 : rnd() % 3 == 0 ? 0x40 : 0) | (rnd() & 0x30) | 1) : 0;
+            U16(w + 4) = rnd() % 4 ? (u16)(1u << (rnd() % 3)) | (u16)(rnd() % 2 ? 1u << (rnd() % 3) : 0)
+                       : rnd() % 2 ? (u16)(rnd() % 2 ? 0x8000 : 0) : (u16)rnd();
+            U8(w + 6) = (u8)rnd();
+            U8(w + 3) = (u8)(2 * k + 2);                    /* tells which polygon was taken */
+            gptr w0 = CL_ROOM + U32(CL_ROOM + 8);
+            u32 n = U8(w + 1);
+            if (k && U8(w0 + 1) == n && rnd() % 4)          /* same place as polygon 0 */
+                memcpy(MEM(w + 8 + 4 * n), MEM(w0 + 8 + 4 * n), 4 * (n + 1));
+        }
+        gptr pa = G_SCR, pb = G_SCR + 8;
+        gptr w0 = CL_ROOM + U32(CL_ROOM + 8);
+        gptr v0 = w0 + 8 + 4 * U8(w0 + 1);
+        S16(pb) = cl_coord((S16(v0) + S16(v0 + 4)) / 2, 600); S16(pb + 4) = cl_coord((S16(v0 + 2) + S16(v0 + 6)) / 2, 600);
+        S16(pb + 2) = (s16)(-(s32)(rnd() % 6000) + 500);
+        S16(pa) = rnd() % 2 ? S16(pb) : cl_coord(S16(pb), 300); S16(pa + 4) = rnd() % 2 ? S16(pb + 4) : cl_coord(S16(pb + 4), 300);
+        S16(pa + 2) = rnd() % 3 ? (rnd() % 2 ? 10000 : -10000) : S16(pb + 2) + (s16)(rnd() % 3 - 1) * (s16)(rnd() % 2000);
+        if (rnd() % 8 == 0) S16(pa + 2) = S16(pb + 2);
+        if (rnd() % 3 == 0) { S16(pb) = S16(v0 + 4 * (rnd() % U8(w0 + 1))); S16(pa) = S16(pb); }   /* on a vertex */
+        U32(G_SCR + 0x20) = rnd();
+        a[0] = pa; a[1] = pb; a[2] = rnd() % 3 ? 0x80 : (u32)rnd(); a[3] = rnd() % 2 ? G_SCR + 0x20 : 0;
+        sprintf(g_what, "a %d %d %d b %d %d %d polys %u", S16(pa), S16(pa + 2), S16(pa + 4), S16(pb), S16(pb + 2), S16(pb + 4), U8(CL_ROOM));
+        check(0x454420, Floor_Height, "Floor_Height", 4, a, 0xFFFF);
+        U16(pa) = U16(pb); U16(pa + 4) = U16(pa); U16(pa + 2) = U16(pb + 4); U16(pa + 6) = 0x7CFF;
+        a[0] = w0; a[1] = pa;
+        check(0x454870, Poly_RayCount, "Poly_RayCount", 2, a, 0xFFFF);
+        /* the player */
+        gptr o = player_setup_obj(); U32(LOG_BASE) = 0;
+        U32(A_PLAYER_EXT_H) = o + 0x1C0;
+        a[0] = o;
+        sprintf(g_what, "char %u state %02X/%02X breath %X", U8(G() + 0x108F), U8(o + 0x54), U8(o + 0x55), U16(o + 0x1FA));
+        check(0x47A7E0, Player_Breath, "Player_Breath", 1, a, 0);
+        o = player_setup_obj(); U32(LOG_BASE) = 0;
+        U32(0x87DCA0) = TYPE_TAB; U8(o + 0x58) = (u8)rnd();
+        U8(G() + 0x927) = rnd() % 2; U16(G() + 0x674) = rnd() % 2 ? 0x211 : (u16)rnd(); U16(0x87FFEA) = rnd() % 2;
+        a[0] = o;
+        sprintf(g_what, "char %u type %02X", U8(G() + 0x108F), U8(o + 0x58));
+        check(0x47FE10, Player_Setup, "Player_Setup", 1, a, 0);
+        o = player_setup_obj(); U32(LOG_BASE) = 0;
+        a[0] = o;
+        sprintf(g_what, "char %u state %02X/%02X fl %08X bleed %u", U8(G() + 0x108F), U8(o + 0x54), U8(o + 0x55), U32(o + 0x50), U16(o + 0x17E));
+        check(0x47CE40, Player_Handler, "Player_Handler", 1, a, 0);
+    }
+    for (int k = 0; k < 16; k++) U32(0x7380FC + 4 * k) = saved[k];
+    g_ign_objpads = 0;
+    stubs_install(0);
+}
+
 /* ---- file loading: a fake file system behind the PC file functions --------- */
 #define FK_POS   0x6DD800u      /* read position (in compared memory, so both runs agree) */
 #define FK_HEAP  0x6DD804u      /* bump pointer of the fake malloc */
@@ -1593,9 +1715,24 @@ static void title_state(void)
     U16(0x87FFEA) = rnd() % 2;
 }
 
+/* the areas' object type tables (0x738DDC..): handlers -> recorder while the
+   title and game task tests run (their set-up calls the player's type set-up) */
+static u32 g_typetab_saved[0x340];
+static void type_tables_stub(int on)
+{
+    for (u32 k = 0; k < 0x340; k++) {
+        gptr a = 0x738DDC + 4 * k;
+        if (on) {
+            g_typetab_saved[k] = U32(a);
+            if (U32(a) >= 0x401000 && U32(a) < 0x4B4000) U32(a) = (u32)(uintptr_t)g_recs[STUB_TYPE];
+        } else U32(a) = g_typetab_saved[k];
+    }
+}
+
 static void test_title(void)
 {
     stubs_install(1);
+    type_tables_stub(1);
     for (u32 a = 0x625800; a < 0x625C00; a += 4) U32(a) = rnd();
     for (u32 a = 0x625800; a < 0x625C00; a += 8) {
         U8(a + 4) = (u8)((rnd() % 3 ? rnd() % 4 : rnd()) | (rnd() % 4 == 0 ? 0x20 : 0)) & 0xE7;
@@ -1626,12 +1763,14 @@ static void test_title(void)
         u32 c[4] = {(u32)(rnd() % 400) - 50, (u32)(rnd() % 300) - 50, rnd(), 0x625800 + 8 * (rnd() % 0x40)};
         check(0x4A6210, Title_Draw, "Title_Draw", 4, c, 0);
     }
+    type_tables_stub(0);
     stubs_install(0);
 }
 
 static void test_game(void)
 {
     stubs_install(1);
+    type_tables_stub(1);
     script_setup();
     static const struct { u32 addr; void *fn; const char *name; int nargs; } F[] = {
         {0x4826F0, Game_Start, "Game_Start", 1}, {0x4827F0, Pause_LoadScreen, "Pause_LoadScreen", 0},
@@ -1668,6 +1807,7 @@ static void test_game(void)
         U32(LOG_BASE) = 0;
         check(0x48D170 + 0x40 * a0, areas[a0], "AreaN_SetTables", 0, NULL, 0);
     }
+    type_tables_stub(0);
     stubs_install(0);
 }
 
@@ -1743,7 +1883,7 @@ __declspec(dllexport) void harness_main(int argc, char **argv)
     struct { const char *name; void (*fn)(void); } T[] = {
         {"flags", test_flags}, {"geometry", test_geom}, {"script values", test_script_values},
         {"script opcodes", test_script_ops}, {"script objects", test_objects},
-        {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"objects 2", test_object}, {"collision", test_collision}, {"loading", test_room}, {"title", test_title}, {"game task", test_game},
+        {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"objects 2", test_object}, {"collision", test_collision}, {"player", test_player}, {"loading", test_room}, {"title", test_title}, {"game task", test_game},
     };
     for (unsigned i = 0; i < sizeof T / sizeof T[0]; i++) {
         int f0 = g_fail, t0 = g_tests;

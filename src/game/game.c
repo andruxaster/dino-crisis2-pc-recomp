@@ -269,8 +269,8 @@ void DC2CALL Game_RoomEnter(void)                                    /* 0x451330
     Flag_Set(3, 8, 1);
     gptr pl = U32(G() + 0x940);
     switch (G8(0x927)) {
-    case 0: Fn_47FE10(pl); break;
-    case 1: if (G8(0x108F) == 3) Flag_Set(7, 0x11, 1); Fn_47FE10(pl); break;
+    case 0: Player_Setup(pl); break;
+    case 1: if (G8(0x108F) == 3) Flag_Set(7, 0x11, 1); Player_Setup(pl); break;
     case 2: Flag_Set(2, 0x21, 1); Fn_4BF130(1); break;
     default: break;
     }
