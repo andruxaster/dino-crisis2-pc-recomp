@@ -67,6 +67,14 @@ void DC2CALL Generic_Handler(gptr o);                                   /* 0x490
 void DC2CALL Generic_Init(gptr o);                                      /* 0x4901B0 */
 void DC2CALL Generic_Step(gptr o);                                      /* 0x4A56D0 */
 void DC2CALL Generic_StepCb(gptr o);                                    /* 0x490270 */
+u32  DC2CALL Obj_CollideObjs(gptr o);                                   /* 0x452BD0 */
+u32  DC2CALL Coll_Cylinders(gptr a, gptr b, gptr out, u32 heights);     /* 0x452EE0 */
+u32  DC2CALL Seg_Intersect(gptr a, gptr b);                             /* 0x453290 */
+u32  DC2CALL Obj_CollideWalls(gptr o);                                  /* 0x453430 */
+u32  DC2CALL Seg_Side(gptr p, gptr b, gptr c);                          /* 0x453EE0 */
+u32  DC2CALL Circle_Seg(gptr s, gptr p);                                /* 0x453F50 */
+u32  DC2CALL Seg_Cross(gptr a, gptr b, gptr out);                       /* 0x4540B0 */
+u32  DC2CALL Wall_Push(gptr s, gptr p, gptr v, gptr out);               /* 0x4541F0 */
 
 /* script_obj.c -- built-ins on objects */
 void DC2CALL Obj_SyncLinks(gptr obj);                                   /* 0x48FC70 */

@@ -66,8 +66,6 @@
     V(Fn_405E40,          0x405E40, (void), ()) \
     V(Fn_472FD0,          0x472FD0, (void), ()) \
     V(Fn_452370,          0x452370, (void), ()) \
-    V(Fn_452BD0,          0x452BD0, (gptr obj), (obj)) \
-    V(Fn_453430,          0x453430, (gptr obj), (obj)) \
     V(Text_Draw,          0x494BA0, (gptr s, u32 x, u32 y, u32 w, u32 col, u32 a, u32 b), (s, x, y, w, col, a, b)) \
     V(Gpu_DrawOT,         0x4C0600, (gptr ot, gptr a, gptr b), (ot, a, b)) \
     V(Gpu_SetSprt,        0x4C0690, (gptr p), (p)) \

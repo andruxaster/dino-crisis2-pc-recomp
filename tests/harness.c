@@ -10,6 +10,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <math.h>
 #include "dc2/game.h"
 #include "../src/hook/hooks.h"
 #include "dc2/orig.h"
@@ -523,7 +524,7 @@ static Stub g_stubs[] = {
     {0x47FE10, "d"}, {0x4BF130, "d"}, {0x48CA10, ""}, {0x403520, ""}, {0x46B8C0, ""}, {0x407170, ""},
     {0x491B10, "bb"}, {0x48CB40, ""}, {0x4A7250, ""}, {0x405E40, ""}, {0x472FD0, ""}, {0x452370, ""},
     /* 89..: object handlers (collision) */
-    {0x452BD0, "d"}, {0x453430, "d"},
+    {0, ""}, {0, ""},
 };
 #define STUB_GAME 71
 #define STUB_LOAD 50
@@ -1046,7 +1047,7 @@ static void obj_head_setup(gptr o, u32 n)
     if (rnd() % 4 == 0) U16(o + 0x16E) = 0;
     U8(G() + 0x108F) = (u8)(rnd() % 6); U8(0x87E747) = (u8)(rnd() % 3);
     for (u32 k = 0; k < 4; k++) U32(o + 0x120 + 4 * k) = AN_PART + 0x80 * (rnd() % n);
-    U8(o + 0x11B) = rnd() % 3 ? (u8)rnd() : 0;
+    U8(o + 0x11B) = rnd() % 3 ? (u8)((rnd() & 0xCF) | (rnd() % 2) << 4 | 1) : 0;   /* feet 0/1 (+0x128 is the wall cylinder) */
 }
 
 static void test_object(void)
@@ -1111,6 +1112,10 @@ static void test_object(void)
         obj_head_setup(o, n);
         U8(o + 0x54) = (u8)mode;
         U32(G() + 0x930) = (u32)(uintptr_t)g_recs[STUB_TYPE];
+        /* collision: no other objects, an empty wall block */
+        U32(o + 0x12C) = rnd() % 2 ? 0x6D0000 : 0; U32(0x87F940) = 0;
+        U32(0x6D0000) = 0; U32(0x6D0004) = (u32)rnd() << 16; U32(0x6D0008) = 0x00FF0100;
+        U32(o + 0x128) = rnd() % 4 ? 0x6D0000 : 0; U8(0x6D4000) = 0; U32(G() + 0xA4C) = 0x6D4000;
         sprintf(g_what, "mode %u parts %u fl %02X head %u foot %02X", mode, n, U8(o + 0x50), U8(o + 0x158), U8(o + 0x11B));
         check(0x490120, Generic_Handler, "Generic_Handler", 1, a, 0);
         do { anim_setup(); } while (U32(o + 0x68) != 16);
@@ -1122,6 +1127,167 @@ static void test_object(void)
         check(0x4A56D0, Generic_Step, "Generic_Step", 1, a, 0);
     }
     g_ign_objpads = 0;
+    stubs_install(0);
+}
+
+/* ---- collision: objects against objects and room walls ---------------------- */
+#define CL_CYL  0x6D0000u       /* cylinder lists, 0x40 per object */
+#define CL_ROOM 0x6D4000u       /* wall polygon block */
+
+static s16 cl_coord(s32 c, s32 r) { return (s16)(c + (s32)(rnd() % (2 * r + 1)) - r); }
+
+static void cl_cyl(gptr c, u32 nparts, int last)
+{
+    U16(c) = cl_coord(0, 150); U16(c + 2) = cl_coord(0, 300); U16(c + 4) = cl_coord(0, 150);
+    U16(c + 6) = 50 + rnd() % 500; U16(c + 8) = 50 + rnd() % 900;
+    U8(c + 0xA) = rnd() % 2 ? 0xFF : (u8)(rnd() % nparts);
+    U8(c + 0xB) = (u8)((last ? 0 : 1) | (rnd() % 4 == 0 ? 2 : 0) | (rnd() & 0xFC & -(rnd() % 4 == 0)));
+}
+
+static void coll_setup(void)
+{
+    objects_setup();
+    U32(0x87F940) = rnd() % 4 ? 16 : rnd() % 17;
+    for (u32 i = 0; i < 16; i++) {
+        gptr o = O_OBJ + i * 0x260, p = U32(o + 0x64);
+        u32 np = U32(p + 0x54) ? 2 : 1;
+        U32(o + 0x50) = (rnd() % 4 ? 1 : 0) | (rnd() & 0x3DFE & -(rnd() % 2));
+        S16(o + 0x40) = cl_coord(0, 1500); S16(o + 0x42) = cl_coord(0, 300); S16(o + 0x44) = cl_coord(0, 1500);
+        for (gptr q = p; q; q = U32(q + 0x54)) {
+            S16(q + 0x40) = cl_coord(S16(o + 0x40), 200); S16(q + 0x42) = cl_coord(S16(o + 0x42), 200);
+            S16(q + 0x44) = cl_coord(S16(o + 0x44), 200);
+            S16(q + 0x6C) = cl_coord(S16(q + 0x40), 150); S16(q + 0x6E) = cl_coord(S16(q + 0x42), 50);
+            S16(q + 0x70) = cl_coord(S16(q + 0x44), 150);
+            for (int k = 0; k < 9; k++) S16(q + 0x20 + 2 * k) = (s16)(rnd() % 8193) - 4096;
+        }
+        u32 n = 1 + rnd() % 3;
+        gptr c = CL_CYL + i * 0x40;
+        for (u32 k = 0; k < n; k++) cl_cyl(c + k * 0xC, np, k + 1 == n);
+        U32(o + 0x12C) = rnd() % 8 ? c : 0;
+        cl_cyl(c + 0x30, np, 1);
+        U32(o + 0x128) = rnd() % 8 ? c + 0x30 : 0;
+        S16(o + 0xE0) = cl_coord(S16(o + 0x40), 250); S16(o + 0xE4) = cl_coord(S16(o + 0x44), 250);
+        U16(o + 0x5A) = rnd() % 4 ? rnd() % 4 : (u16)rnd();
+        U8(o + 0x184) = rnd() % 6 ? 0 : (u8)rnd();
+    }
+    /* walls: polygons around the objects' area */
+    u32 np = 1 + rnd() % 4;
+    U8(CL_ROOM) = (u8)np;
+    gptr w = CL_ROOM + 0x40;
+    for (u32 k = 0; k < np; k++) {
+        U32(CL_ROOM + 8 + 4 * k) = w - CL_ROOM;
+        u32 n = 2 + rnd() % 6;
+        U8(w + 1) = (u8)n; U8(w + 3) = rnd() % 4 ? 0 : (u8)(rnd() & 0xE0);
+        U16(w + 4) = rnd() % 4 ? 0xFFFF : (u16)rnd();
+        for (u32 e = 0; e < n; e++) {
+            U8(w + 8 + 4 * e) = (u8)((rnd() % 6 ? 1 : 0) | (rnd() % 5 ? 0 : 0x80));
+            U8(w + 9 + 4 * e) = rnd() % 5 ? 0 : (u8)(rnd() & 0xE0);
+        }
+        gptr v = w + 8 + 4 * n;
+        s32 cx = cl_coord(0, 1200), cz = cl_coord(0, 1200), r = 300 + rnd() % (rnd() % 2 ? 500 : 1500);
+        u32 a0 = rnd() % 0x1000;
+        for (u32 e = 0; e < n; e++) {
+            u32 a = (a0 + e * 0x1000 / n + rnd() % (0x400 / n)) & 0xFFF;
+            S16(v + 4 * e) = (s16)(cx + rcos(a) * r / 4096); S16(v + 4 * e + 2) = (s16)(cz + rsin(a) * r / 4096);
+        }
+        U32(v + 4 * n) = U32(v);                        /* closed */
+        w = v + 4 * n + 4;
+    }
+    U32(G() + 0xA4C) = CL_ROOM;
+}
+
+/* put o's wall cylinder at (or across) an edge or corner of a wall polygon */
+static void cl_place(gptr o)
+{
+    gptr c = U32(o + 0x128);
+    if (!c || !U8(CL_ROOM)) return;
+    gptr w = CL_ROOM + U32(CL_ROOM + 8 + 4 * (rnd() % U8(CL_ROOM)));
+    u32 n = U8(w + 1), e = rnd() % n;
+    gptr v = w + 8 + 4 * n + 4 * e;
+    U8(w + 3) &= rnd() % 2 ? 0xFF : 0;
+    for (u32 k = 0; k < n; k++) if (rnd() % 2) U8(w + 8 + 4 * k) |= 1;
+    U16(w + 4) |= (u16)(1u << (U8(o + 0x5A) & 15));
+    double x0 = S16(v), z0 = S16(v + 2), x1 = S16(v + 4), z1 = S16(v + 6);
+    double len = sqrt((x1 - x0) * (x1 - x0) + (z1 - z0) * (z1 - z0)); if (len < 1) len = 1;
+    double nx = (z1 - z0) / len, nz = -(x1 - x0) / len, tx = -nz, tz = nx;
+    u32 tk = rnd() % 4;
+    double t = tk == 0 ? 0 : tk == 1 ? 1 : tk == 2 ? (rnd() % 2 ? 0.05 : 0.95) : (rnd() % 1001) / 1000.0;
+    double r = S16(c + 6);
+    double d = (double)(s32)(rnd() % (u32)(2 * r + 201)) - r - 100;
+    double px = x0 + (x1 - x0) * t + nx * d + tx * (s32)(rnd() % 61 - 30);
+    double pz = z0 + (z1 - z0) * t + nz * d + tz * (s32)(rnd() % 61 - 30);
+    double step = (s32)(rnd() % 401) - 200, side = (s32)(rnd() % 301) - 150;
+    double qx = px + nx * step + tx * side, qz = pz + nz * step + tz * side;     /* previous position */
+    if (U8(c + 0xA) == 0xFF && !(U32(o + 0x50) & 0x100)) {
+        S16(o + 0x40) = (s16)px; S16(o + 0x44) = (s16)pz;
+        S16(o + 0xE0) = (s16)qx; S16(o + 0xE4) = (s16)qz;
+        return;
+    }
+    gptr part = Obj_Part(U32(o + 0x64), U8(c + 0xA) != 0xFF ? U8(c + 0xA) : 0);
+    for (int k = 0; k < 9; k++) S16(part + 0x20 + 2 * k) = k % 4 ? 0 : 0x1000;
+    S16(part + 0x40) = (s16)(px - S16(c)); S16(part + 0x44) = (s16)(pz - S16(c + 4));
+    S16(part + 0x6C) = (s16)qx; S16(part + 0x70) = (s16)qz;
+}
+
+static void rnd_seg(gptr s, int big)
+{
+    for (int k = 0; k < 4; k++) S16(s + 2 * k) = big ? (s16)rnd() : cl_coord(0, 2000);
+    if (rnd() % 6 == 0) { S16(s + 4) = S16(s); }
+    if (rnd() % 6 == 0) { S16(s + 6) = S16(s + 2); }
+}
+
+static void test_collision(void)
+{
+    script_setup();
+    stubs_install(1);
+    for (int i = 0; i < iters; i++) {
+        u32 a[10] = {0};
+        /* geometry helpers */
+        int big = rnd() % 8 == 0;
+        gptr s0 = G_SCR, s1 = G_SCR + 8, out = G_SCR + 0x10, p = G_SCR + 0x20, v = G_SCR + 0x30;
+        rnd_seg(s0, big); rnd_seg(s1, big);
+        if (rnd() % 4 == 0) { S16(s1) = S16(s0 + 4); S16(s1 + 2) = S16(s0 + 6); }    /* shared end */
+        for (int k = 0; k < 8; k++) U16(out + 2 * k) = (u16)rnd();
+        a[0] = s0; a[1] = s1; a[2] = out;
+        sprintf(g_what, "seg %d %d %d %d / %d %d %d %d", S16(s0), S16(s0 + 2), S16(s0 + 4), S16(s0 + 6),
+                S16(s1), S16(s1 + 2), S16(s1 + 4), S16(s1 + 6));
+        check(0x453290, Seg_Intersect, "Seg_Intersect", 2, a, 0xFFFFFFFF);
+        check(0x4540B0, Seg_Cross, "Seg_Cross", 3, a, 0xFFFFFFFF);
+        a[2] = s1 + 4;
+        check(0x453EE0, Seg_Side, "Seg_Side", 3, a, 0xFFFFFFFF);
+        S16(p) = cl_coord(S16(s0 + 4 * (rnd() % 2)), 600); S16(p + 2) = (s16)rnd(); S16(p + 4) = cl_coord(S16(s0 + 2), 600);
+        S16(p + 6) = (s16)(rnd() % 8 ? 50 + rnd() % 700 : rnd());
+        if (rnd() % 3 == 0) { S16(p) = (S16(s0) + S16(s0 + 4)) / 2 + cl_coord(0, 300); S16(p + 4) = (S16(s0 + 2) + S16(s0 + 6)) / 2 + cl_coord(0, 300); }
+        a[0] = s0; a[1] = p;
+        sprintf(g_what, "seg %d %d %d %d p %d %d r %d", S16(s0), S16(s0 + 2), S16(s0 + 4), S16(s0 + 6), S16(p), S16(p + 4), S16(p + 6));
+        check(0x453F50, Circle_Seg, "Circle_Seg", 2, a, 0xFFFFFFFF);
+        if (!big && !(S16(s0 + 6) - S16(s0 + 2) + 1 == 0 && S16(s0) - S16(s0 + 4) + 1 == 0)) {
+            a[2] = v; a[3] = out;
+            check(0x4541F0, Wall_Push, "Wall_Push", 4, a, 0xFFFFFFFF);
+        }
+        for (int k = 0; k < 4; k++) S16(p + 2 * k) = cl_coord(0, 800);
+        for (int k = 0; k < 4; k++) S16(v + 2 * k) = cl_coord(0, 800);
+        S16(p + 6) = rnd() % 400; S16(v + 6) = rnd() % 400;
+        if (rnd() % 4 == 0) { S16(v) = S16(p); S16(v + 4) = S16(p + 4); }
+        a[0] = p; a[1] = v; a[2] = out; a[3] = rnd() % 4 ? (rnd() % 600) << 16 | rnd() % 600 : rnd();
+        sprintf(g_what, "cyl %d %d %d r %d / %d %d %d r %d h %08X", S16(p), S16(p + 2), S16(p + 4), S16(p + 6),
+                S16(v), S16(v + 2), S16(v + 4), S16(v + 6), a[3]);
+        check(0x452EE0, Coll_Cylinders, "Coll_Cylinders", 4, a, 0xFFFFFFFF);
+        /* objects */
+        coll_setup(); U32(LOG_BASE) = 0;
+        a[0] = O_OBJ + 0x260 * (rnd() % 16);
+        sprintf(g_what, "obj %u fl %08X cyl %X n %u", (a[0] - O_OBJ) / 0x260, U32(a[0] + 0x50), U32(a[0] + 0x12C), U32(0x87F940));
+        check(0x452BD0, Obj_CollideObjs, "Obj_CollideObjs", 1, a, 0xFFFFFFFF);
+        for (int rep = 0; rep < 8; rep++) {
+        coll_setup(); U32(LOG_BASE) = 0;
+        a[0] = O_OBJ + 0x260 * (rnd() % 16);
+        if (rnd() % 2) U32(G() + 0x940) = a[0];
+        if (rnd() % 8) cl_place(a[0]);
+        sprintf(g_what, "obj %u fl %08X cyl %X polys %u 184 %02X", (a[0] - O_OBJ) / 0x260, U32(a[0] + 0x50), U32(a[0] + 0x128),
+                U8(CL_ROOM), U8(a[0] + 0x184));
+        check(0x453430, Obj_CollideWalls, "Obj_CollideWalls", 1, a, 0xFFFFFFFF);
+        }
+    }
     stubs_install(0);
 }
 
@@ -1577,7 +1743,7 @@ __declspec(dllexport) void harness_main(int argc, char **argv)
     struct { const char *name; void (*fn)(void); } T[] = {
         {"flags", test_flags}, {"geometry", test_geom}, {"script values", test_script_values},
         {"script opcodes", test_script_ops}, {"script objects", test_objects},
-        {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"objects 2", test_object}, {"loading", test_room}, {"title", test_title}, {"game task", test_game},
+        {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"objects 2", test_object}, {"collision", test_collision}, {"loading", test_room}, {"title", test_title}, {"game task", test_game},
     };
     for (unsigned i = 0; i < sizeof T / sizeof T[0]; i++) {
         int f0 = g_fail, t0 = g_tests;

@@ -237,8 +237,8 @@ void DC2CALL Generic_Handler(gptr o)                               /* 0x490120 *
     Obj_UpdateMatrix(o);
     Head_Update(o);
     Obj_AnchorFoot(o);
-    if (!(U8(o + 0x50) & 0x20)) Fn_452BD0(o);
-    if (!(U8(o + 0x50) & 0x10)) Fn_453430(o);
+    if (!(U8(o + 0x50) & 0x20)) Obj_CollideObjs(o);
+    if (!(U8(o + 0x50) & 0x10)) Obj_CollideWalls(o);
 }
 
 /* mode 0 */
@@ -269,4 +269,391 @@ void DC2CALL Generic_StepCb(gptr o)                                /* 0x490270 *
 {
     Orig_Call1(U32(G() + 0x930), o);
     Anim_Step(o);
+}
+
+/* ---- collision ------------------------------------------------------------- */
+/* Collision shapes: o+0x12C list of 12-byte cylinders against other objects,
+ * o+0x128 one cylinder against the room's wall polygons (G+0xA4C).
+ * Cylinder: +0 offset (SVECTOR x,y,z), +6 radius, +8 half height, +0xA part
+ * (0xFF: the object itself), +0xB flags (bit 0 another entry follows, bit 1
+ * soft: push 1/16). Points of 2D segments are (x, z) halfword pairs. */
+
+static u32 imul(u32 a, u32 b) { return a * b; }
+
+/* cylinder centre in world space (and its radius in +6) */
+static void cyl_pos(gptr obj, gptr m, gptr c, gptr p)
+{
+    gptr src = obj;
+    if (U8(c + 0xA) != 0xFF) { src = Obj_Part(U32(obj + 0x64), U8(c + 0xA)); m = src + 0x20; }
+    ApplyMatrixSV(m, c, p);
+    U16(p) += U16(src + 0x40); U16(p + 2) += U16(src + 0x42); U16(p + 4) += U16(src + 0x44);
+    U16(p + 6) = U16(c + 6);
+}
+
+/* two cylinders (+6 radius); heights = (a << 16 | b) half heights; out: push
+ * of a away from b in x/z */
+u32 DC2CALL Coll_Cylinders(gptr a, gptr b, gptr out, u32 heights)  /* 0x452EE0 */
+{
+    s32 dy = S16(a + 2) - S16(b + 2); if (dy < 0) dy = -dy;
+    if ((s32)(s16)(heights >> 16) + (s32)(s16)heights < dy) return 0;
+    s32 rs = S16(a + 6) + S16(b + 6);
+    u32 dx = (u32)(S16(a) - S16(b)), dz = (u32)(S16(a + 4) - S16(b + 4));
+    u32 d2 = imul(dz, dz) + imul(dx, dx);
+    if ((s32)imul((u32)rs, (u32)rs) <= (s32)d2) { U16(out) = 0; U16(out + 4) = 0; return 0; }
+    s32 d = SquareRoot0((s32)d2);
+    gptr t = Tmp_Push(0x30), q = t, r = t + 8, m = t + 0x10;
+    U16(q) = U16(b); U16(q + 2) = U16(b + 4); U16(q + 4) = U16(a); U16(q + 6) = U16(a + 4);
+    u32 ang = Angle_Seg(q);
+    U16(r) = 0; U16(r + 2) = (u16)ang; U16(r + 4) = 0;
+    RotMatrix(r, m);
+    U16(r) = 0; U16(r + 2) = 0; U16(r + 4) = (u16)(rs - d + 4);
+    ApplyMatrixSV(m, r, out);
+    Tmp_Pop(0x30);
+    return 1;
+}
+
+/* push o out of every other active object's cylinders; o+0x130 = bit mask
+ * of the objects touched; returns the number of contacts */
+u32 DC2CALL Obj_CollideObjs(gptr o)                                /* 0x452BD0 */
+{
+    if (!U32(o + 0x12C)) return 0;
+    if (U32(o + 0x50) & 0x800) return 0;
+    U32(o + 0x130) = 0;
+    u32 count = 0;
+    gptr t = Tmp_Push(0x58), mo = t, mb = t + 0x20, pa = t + 0x40, pb = t + 0x48, out = t + 0x50;
+    RotMatrix(o + 0x48, mo);
+    for (u32 i = 0; i < U32(0x87F940); i++) {
+        gptr b = U32(G() + 0x940) + i * 0x260;
+        u32 bf = U32(b + 0x50);
+        if (!(bf & 1) || !U32(b + 0x12C) || (bf & 0x20) || b == o) continue;
+        if ((U32(o + 0x50) & 0x800) && (bf & 0x800)) continue;
+        s32 dx = S16(o + 0x40) - S16(b + 0x40), dz = S16(o + 0x44) - S16(b + 0x44);
+        if ((dx < 0 ? -dx : dx) > 10000 || (dz < 0 ? -dz : dz) > 10000) continue;
+        RotMatrix(b + 0x48, mb);
+        for (gptr sa = U32(o + 0x12C);; sa += 0xC) {
+            cyl_pos(o, mo, sa, pa);
+            for (gptr sb = U32(b + 0x12C);; sb += 0xC) {
+                cyl_pos(b, mb, sb, pb);
+                if (Coll_Cylinders(pa, pb, out, (u32)U16(sa + 8) << 16 | U16(sb + 8))) {
+                    if (!(U32(o + 0x50) & 0x400)) {
+                        if ((U8(sb + 0xB) & 2) || (U8(sa + 0xB) & 2) || (U32(b + 0x50) & 0x2000)) {
+                            S16(out) = (s16)(S16(out) >> 4); S16(out + 4) = (s16)(S16(out + 4) >> 4);
+                        }
+                        U16(o + 0x40) += U16(out); U16(o + 0x44) += U16(out + 4);
+                        for (gptr p = U32(o + 0x64); p; p = U32(p + 0x54)) {
+                            U16(p + 0x40) += U16(out); U16(p + 0x44) += U16(out + 4);
+                        }
+                    }
+                    U32(o + 0x130) |= 1u << (i & 31);
+                    count++;
+                }
+                if (!(U8(sb + 0xB) & 1)) break;
+            }
+            if (!(U8(sa + 0xB) & 1)) break;
+        }
+    }
+    Tmp_Pop(0x58);
+    return count;
+}
+
+/* bounding boxes of the two segments overlap on one axis */
+static int span_overlap(s16 a0, s16 a1, s16 b0, s16 b1)
+{
+    if (a0 > a1) {
+        if (b1 > b0) return b0 <= a0 && b1 >= a1;
+        return b1 <= a0 && b0 >= a1;
+    }
+    if (b1 > b0) return b0 <= a1 && b1 >= a0;
+    return b1 <= a1 && b0 >= a0;
+}
+
+static int in_range(s32 t, s32 den) { return den > 0 ? t >= 0 && t <= den : t >= den && t <= 0; }
+
+/* segments a (x0,z0,x1,z1) and b intersect */
+u32 DC2CALL Seg_Intersect(gptr a, gptr b)                          /* 0x453290 */
+{
+    if (!span_overlap(S16(a), S16(a + 4), S16(b), S16(b + 4))) return 0;
+    if (!span_overlap(S16(a + 2), S16(a + 6), S16(b + 2), S16(b + 6))) return 0;
+    u32 dbx = (u32)(S16(b + 4) - S16(b)), dbz = (u32)(S16(b + 6) - S16(b + 2));
+    u32 dax = (u32)(S16(a + 4) - S16(a)), daz = (u32)(S16(a + 6) - S16(a + 2));
+    s32 den = (s32)(imul(dbz, dax) - imul(dbx, daz));
+    if (!den) return 0;
+    u32 dz0 = (u32)(S16(a + 2) - S16(b + 2)), dx0 = (u32)(S16(a) - S16(b));
+    s32 t1 = (s32)(imul(dz0, dbx) - imul(dx0, dbz)), t2 = (s32)(imul(dz0, dax) - imul(dx0, daz));
+    return in_range(t1, den) && in_range(t2, den);
+}
+
+/* side of point p relative to the line c -> b: (p-c) x (b-c) >= 0 (y of the
+ * cross product; the original computes it with OuterProduct12) */
+u32 DC2CALL Seg_Side(gptr p, gptr b, gptr c)                       /* 0x453EE0 */
+{
+    u32 ux = (u32)(S16(p) - S16(c)), uz = (u32)(S16(p + 2) - S16(c + 2));
+    u32 vx = (u32)(S16(b) - S16(c)), vz = (u32)(S16(b + 2) - S16(c + 2));
+    return (s32)(imul(vx, uz) - imul(ux, vz)) >= 0;
+}
+
+/* circle p (x, -, z, radius) against segment s: 3 touches the first end,
+ * 2 the second, 1 the segment between them, 0 no contact */
+u32 DC2CALL Circle_Seg(gptr s, gptr p)                             /* 0x453F50 */
+{
+    s32 px = S16(p), pz = S16(p + 4), r = S16(p + 6);
+    s32 x0 = S16(s), z0 = S16(s + 2), x1 = S16(s + 4), z1 = S16(s + 6);
+    u32 r2 = imul((u32)r, (u32)r);
+    u32 dx0 = (u32)(px - x0), dz0 = (u32)(pz - z0);
+    if (imul(dz0, dz0) + imul(dx0, dx0) <= r2) return 3;
+    u32 dx1 = (u32)(px - x1), dz1 = (u32)(pz - z1);
+    if (imul(dz1, dz1) + imul(dx1, dx1) <= r2) return 2;
+    s32 hx = (s32)dx0 >> 1, hz = (s32)dz0 >> 1, sx = (x1 - x0) >> 1, sz = (z1 - z0) >> 1;
+    u32 dot0 = imul((u32)hz, (u32)sz) + imul((u32)hx, (u32)sx);
+    u32 dot1 = imul((u32)sz, dz1) + imul((u32)sx, dx1);
+    if (!((dot0 ^ dot1) & 0x80000000u)) return 0;
+    u32 ax = (u32)(sx < 0 ? -sx : sx), az = (u32)(sz < 0 ? -sz : sz);
+    u32 len = (u32)SquareRoot0((s32)(imul(az, az) + imul(ax, ax)));
+    u32 lim = imul(len, (u32)r) >> 1;
+    s32 c = (s32)(imul((u32)sx, (u32)hz) - imul((u32)hx, (u32)sz));
+    return (c < 0 ? 0u - (u32)c : (u32)c) <= lim;
+}
+
+/* intersection point of segments a and b into out (x, 0, z, 0) */
+u32 DC2CALL Seg_Cross(gptr a, gptr b, gptr out)                    /* 0x4540B0 */
+{
+    s32 a0 = S16(a), a1 = S16(a + 2), a2 = S16(a + 4), a3 = S16(a + 6);
+    s32 b0 = S16(b), b1 = S16(b + 2), b2 = S16(b + 4), b3 = S16(b + 6);
+    U32(out) = 0; U32(out + 4) = 0;
+    u32 dax = (u32)(a2 - a0), daz = (u32)(a3 - a1), dbx = (u32)(b2 - b0), dbz = (u32)(b3 - b1);
+    s32 den = (s32)(imul(dax, dbz) - imul(dbx, daz));
+    if (!den) return 0;
+    u32 e1 = (u32)(a1 - b1), e0 = (u32)(a0 - b0);
+    s32 t = (s32)(imul(e1, dbx) - imul(e0, dbz)), u = (s32)(imul(e1, dax) - imul(e0, daz));
+    if (!in_range(t, den) || !in_range(u, den)) return 0;
+    t >>= 10; den >>= 10;
+    if (!den) den = 1;
+    s32 f = (s32)((u32)t << 10) / den;
+    U16(out) = (u16)(((s32)imul(dax, (u32)f) >> 10) + a0);
+    U16(out + 4) = (u16)(((s32)imul(daz, (u32)f) >> 10) + a1);
+    return 1;
+}
+
+/* wall segment s, circle p (+6 radius): v = how far to push p out (x, 0, z),
+ * out = the radius vector toward the wall's outside */
+u32 DC2CALL Wall_Push(gptr s, gptr p, gptr v, gptr out)            /* 0x4541F0 */
+{
+    s32 s0 = S16(s), s1 = S16(s + 2), s2 = S16(s + 4), s3 = S16(s + 6);
+    s32 r4 = S16(p + 6) + 4;
+    u32 a = (u32)(s3 - s1 + 1), b = (u32)(s0 - s2 + 1);
+    u32 c = imul((u32)S16(p + 4), b) - imul((u32)s0, (u32)s3) + imul((u32)S16(p), a) + imul((u32)s2, (u32)s1);
+    s32 n = SquareRoot0((s32)(imul(b, b) + imul(a, a)));
+    s32 ac = (s32)((s32)c < 0 ? 0u - c : c);
+    s32 d = ac / n;
+    s32 push = (s32)c >= 0 ? d + r4 : r4 - d;
+    U16(v + 4) = 0; U16(v) = 0;
+    U16(v + 2) = (u16)((Angle_Seg(s) - 0x400) & 0xFFF);
+    gptr m = Tmp_Push(0x20);
+    RotMatrix(v, m);
+    U16(v + 2) = 0; U16(v + 4) = (u16)r4;
+    ApplyMatrixSV(m, v, out);
+    U16(v + 4) = (u16)push;
+    ApplyMatrixSV(m, v, v);
+    Tmp_Pop(0x20);
+    return 1;
+}
+
+/* Room walls: cylinder o+0x128 against the wall polygons of G+0xA4C.
+ * Collision block: +0 polygon count, +8 offsets of the polygons.
+ * Polygon: +1 edge count n, +3 kind mask, +4 layer bits (tested against bit
+ * o+0x5A), +8 n edge entries (+0 flags: bit 0 solid, bit 7 not for objects
+ * with flag 0x40; +1 kind mask), then n+1 vertices (x, z).
+ * Objects are pushed out of every edge they touch; two touched edges are
+ * resolved as a corner. Edge contacts of the first pass are recorded at
+ * 0x6F0000 (0x20 bytes each: +0 edge, +2 crossed, +4 edge, +0xC edge moved
+ * out by the radius, +0x14 moved in, +0x1C push).
+ * The original keeps its state in a stack frame; F() mirrors that frame. */
+#define FR8(x)   U8(fr + (x))
+#define FR16(x)  U16(fr + (x))
+#define FRS16(x) S16(fr + (x))
+#define FR32(x)  U32(fr + (x))
+#define REC0 0x6F0000u
+#define REC1 0x6F0020u
+
+/* 2D cross product y of (p - c) and (w - c) as the corner tests compute it */
+static s32 corner_y(gptr pos, gptr c, gptr w)
+{
+    u32 ux = (u32)(S16(pos) - S16(c)), uz = (u32)(S16(pos + 4) - S16(c + 2));
+    u32 wx = (u32)(S16(w) - S16(c)), wz = (u32)(S16(w + 2) - S16(c + 2));
+    return (s32)(imul(wx, uz) - imul(ux, wz));
+}
+
+u32 DC2CALL Obj_CollideWalls(gptr o)                               /* 0x453430 */
+{
+    gptr c = U32(o + 0x128);
+    if (!c) return 0;
+    gptr fr = Tmp_Push(0xC8), pos = o + 0x40;
+    u32 ret = 0;
+    u8 mask = o != U32(G() + 0x940) ? 0x40 : 0x80;
+    if (U32(o + 0x50) & 0x1000) mask = 0x20;
+    int moved = U8(c + 0xA) != 0xFF || (U32(o + 0x50) & 0x100);
+    if (moved) {                                    /* test at the part's point */
+        gptr part = Obj_Part(U32(o + 0x64), U8(c + 0xA) != 0xFF ? U8(c + 0xA) : 0);
+        FR32(0x78) = U32(o + 0x40); FR32(0x7C) = U32(o + 0x44);
+        FR32(0x80) = U32(o + 0xE0); FR32(0x84) = U32(o + 0xE4);
+        U16(o + 0xE0) = U16(part + 0x6C); U16(o + 0xE2) = U16(part + 0x6E); U16(o + 0xE4) = U16(part + 0x70);
+        RotMatrix(o + 0x48, fr + 0xA8);
+        ApplyMatrixSV(part + 0x20, U32(o + 0x128), pos);
+        U16(o + 0x40) += U16(part + 0x40); U16(o + 0x42) += U16(part + 0x42); U16(o + 0x44) += U16(part + 0x44);
+    }
+    c = U32(o + 0x128);
+    U16(o + 0x46) = U16(c + 6);
+    U32(o + 0xE8) = U32(pos); U16(o + 0xEC) = U16(o + 0x44);
+    for (u32 k = 0; k < U8(U32(G() + 0xA4C)); k++) {
+        gptr coll = U32(G() + 0xA4C);
+        gptr poly = coll + U32(coll + 8 + 4 * k);
+        if (!(((u32)U16(poly + 4) >> (U8(o + 0x5A) & 31)) & 1)) continue;
+        if (mask & U8(poly + 3)) continue;
+        FR8(0x1F) = 0; FR8(0x38) = 0; FR8(0x13) = 0; FR8(0x1D) = 0xFF;
+        gptr rec = REC0;
+    restart:;
+        u32 n = U8(poly + 1);
+        gptr vtx = poly + 8 + n * 4, ef = poly + 8;
+        FR16(0x44) = U16(o + 0xE0); FR16(0x46) = U16(o + 0xE4);
+        FR16(0x48) = U16(pos); FR16(0x4A) = U16(o + 0x44);
+        for (u32 j = 0; j < U8(poly + 1); j++, ef += 4, vtx += 4) {
+            FR32(0x28) = U32(vtx); FR32(0x2C) = U32(vtx + 4);
+            u8 fl = U8(ef);
+            if (!(fl & 1)) continue;
+            if ((fl & 0x80) && (U8(o + 0x50) & 0x40)) continue;
+            if (U8(ef + 1) & mask) continue;
+            if ((s32)(s8)FR8(0x1D) == (s32)j) continue;
+            if (Seg_Intersect(fr + 0x28, fr + 0x44) && Seg_Side(fr + 0x44, fr + 0x2C, fr + 0x28)) {
+                if (U8(o + 0x184) & 2) { ret = 1; goto out_now; }
+                Seg_Cross(fr + 0x28, fr + 0x44, fr + 0x14);
+            } else {
+                if (!Circle_Seg(fr + 0x28, pos)) continue;
+                if (!FR8(0x13)) {                    /* first pass: record the contact */
+                    U16(rec + 2) = Seg_Side(fr + 0x44, fr + 0x2C, fr + 0x28) != 0;
+                    Wall_Push(fr + 0x28, pos, fr + 0x14, fr + 0x20);
+                    U16(rec + 0x1C) = FR16(0x14); U16(rec + 0x1E) = FR16(0x18);
+                    U16(rec) = (u16)j;
+                    U32(rec + 4) = FR32(0x28); U32(rec + 8) = FR32(0x2C);
+                    U16(rec + 0xC) = FR16(0x20) + FR16(0x28); U16(rec + 0xE) = FR16(0x24) + FR16(0x2A);
+                    U16(rec + 0x10) = FR16(0x20) + FR16(0x2C); U16(rec + 0x12) = FR16(0x24) + FR16(0x2E);
+                    U16(rec + 0x14) = FR16(0x28) - FR16(0x20); U16(rec + 0x16) = FR16(0x2A) - FR16(0x24);
+                    U16(rec + 0x18) = FR16(0x2C) - FR16(0x20); U16(rec + 0x1A) = FR16(0x2E) - FR16(0x24);
+                    rec += 0x20;
+                    FR8(0x38)++;
+                    continue;
+                }
+                if (!Seg_Side(fr + 0x44, fr + 0x2C, fr + 0x28)) continue;
+                FR8(0x38)++;
+            }
+            FR8(0x13) = 1;
+            if (FR8(0x1F)) {                         /* second wall: stop at the corner */
+                Wall_Push(fr + 0x28, pos, fr + 0x14, fr + 0x20);
+                FR16(0x14) = FR16(0x20) + FR16(0x28); FR16(0x16) = FR16(0x24) + FR16(0x2A);
+                FR16(0x18) = FR16(0x20) + FR16(0x2C); FR16(0x1A) = FR16(0x24) + FR16(0x2E);
+                if (Seg_Cross(fr + 0x14, rec + 0xC, fr + 0x14)) { U16(pos) = FR16(0x14); U16(o + 0x44) = FR16(0x18); }
+                continue;
+            }
+            Wall_Push(fr + 0x28, pos, fr + 0x14, fr + 0x20);
+            U16(o + 0x44) += FR16(0x18); U16(pos) += FR16(0x14);
+            FR8(0x1F) = 1;
+            U16(rec + 0xC) = FR16(0x20) + FR16(0x28); U16(rec + 0xE) = FR16(0x24) + FR16(0x2A);
+            FR8(0x1D) = (u8)j;
+            U16(rec + 0x10) = FR16(0x20) + FR16(0x2C); U16(rec + 0x12) = FR16(0x24) + FR16(0x2E);
+            goto restart;
+        }
+        if (U8(o + 0x184) & 2) {
+            if (FR8(0x38)) { ret = FR8(0x38); goto out_now; }
+            continue;
+        }
+        if (!FR8(0x38) || FR8(0x13)) continue;
+        if (FR8(0x38) < 2) {                         /* one wall touched */
+            if (!U16(REC0 + 2)) continue;
+            FR8(0x1D) = U8(REC0);
+            U16(pos) += U16(REC0 + 0x1C);
+            FR8(0x1F) = 1;
+            U16(o + 0x44) += U16(REC0 + 0x1E);
+            rec = REC0;
+            FR8(0x13) = 1;
+            goto restart;
+        }
+        /* two or more: a corner of the first two (in edge order) */
+        gptr re, rb, seg;
+        if (U16(REC1) == U8(poly + 1) - 1u && !U16(REC0)) { re = REC1; rb = REC0; }
+        else { re = REC0; rb = REC1; }
+        if (Seg_Cross(re + 0xC, rb + 0xC, fr + 0x14)) {
+            FR16(0x16) = FR16(0x18);
+            if (Seg_Side(fr + 0x44, fr + 0x14, re + 8)) {
+                FR32(0x34) = Angle_Seg(re + 4);
+                FR32(0x40) = rb + 4;
+                FR32(0x3C) = Angle_Seg(rb + 4);
+                u16 d = (u16)((FR32(0x3C) - ((FR32(0x34) - 0x800) & 0xFFF)) & 0xFFF);
+                if ((s16)d <= 0x400) { seg = rb + 4; goto push_e; }
+                FR16(0x22) = U16(o + 0xE4); FR16(0x20) = U16(o + 0xE0);
+                FR16(0x24) = U16(pos); FR16(0x26) = U16(o + 0x44);
+                d = (u16)((FR32(0x3C) - Angle_Seg(fr + 0x20)) & 0xFFF);
+                if ((s16)d >= 0xC00) goto push_b;
+                seg = FR32(0x40);
+            push_e:
+                U16(pos) += U16(re + 0x1C); U16(o + 0x44) += U16(re + 0x1E);
+            check_seg:
+                if (Circle_Seg(seg, pos)) { U16(pos) = FR16(0x14); U16(o + 0x44) = FR16(0x18); }
+                continue;
+            }
+            U16(pos) += U16(rb + 0x1C); U16(o + 0x44) += U16(rb + 0x1E);
+            seg = re + 4;
+            goto check_seg;
+        }
+        if (U16(re + 2)) {
+            if (U16(rb + 2)) {
+                s32 y1 = corner_y(pos, re + 8, rb + 0xC), y2 = corner_y(pos, re + 8, re + 0x10);
+                if (y1 >= 0 && y2 < 0) goto round;
+                Seg_Cross(re + 0x14, rb + 0x14, fr + 0x14);
+                FR16(0x16) = FR16(0x18);
+                if (Seg_Side(fr + 0x44, fr + 0x14, re + 8)) goto push_b;
+                goto push_e2;
+            }
+            if (corner_y(pos, re + 8, re + 0x10) >= 0) goto push_e2;
+        }
+        if (!U16(rb + 2)) goto round;
+        if (corner_y(pos, re + 8, rb + 0xC) >= 0) goto round;
+    push_b:
+        U16(pos) += U16(rb + 0x1C); U16(o + 0x44) += U16(rb + 0x1E);
+        continue;
+    push_e2:
+        U16(pos) += U16(re + 0x1C); U16(o + 0x44) += U16(re + 0x1E);
+        continue;
+    round: {                                        /* round the corner vertex */
+            u16 vx = U16(re + 8), vz = U16(re + 0xA);
+            u32 dx = (u32)(S16(pos) - (s16)vx), dz = (u32)(S16(o + 0x44) - (s16)vz);
+            FR32(0x34) = (u32)SquareRoot0((s32)(imul(dz, dz) + imul(dx, dx)));
+            FR16(0x16) = vz; FR16(0x14) = vx; FR16(0x18) = U16(pos); FR16(0x1A) = U16(o + 0x44);
+            FR16(0x24) = 0; FR16(0x20) = 0;
+            FR16(0x22) = (u16)Angle_Seg(fr + 0x14);
+            RotMatrix(fr + 0x20, fr + 0xA8);
+            FR32(0x20) = 0;
+            FR16(0x24) = (u16)(U16(U32(o + 0x128) + 6) - FR16(0x34) + 4);
+            ApplyMatrixSV(fr + 0xA8, fr + 0x20, fr + 0x20);
+            U16(pos) += FR16(0x20);
+            U16(o + 0x44) += FR16(0x24);
+        }
+    }
+    {
+        u16 dx = (u16)(U16(pos) - U16(o + 0xE8)), dy = (u16)(U16(o + 0x42) - U16(o + 0xEA));
+        u16 dz = (u16)(U16(o + 0x44) - U16(o + 0xEC));
+        U16(o + 0xE8) = dx; U16(o + 0xEA) = dy; U16(o + 0xEC) = dz;
+        c = U32(o + 0x128);
+        if (U8(c + 0xA) != 0xFF || (U32(o + 0x50) & 0x100)) {
+            U16(o + 0x42) = FR16(0x7A) + dy; U16(o + 0x44) = FR16(0x7C) + dz; U16(pos) = FR16(0x78) + dx;
+            U16(o + 0xE0) = FR16(0x80); U16(o + 0xE2) = FR16(0x82); U16(o + 0xE4) = FR16(0x84);
+        }
+        gptr p = U32(o + 0x64);
+        do {
+            U16(p + 0x40) += U16(o + 0xE8);
+            U16(p + 0x44) += U16(o + 0xEC);
+            p = U32(p + 0x54);
+        } while (p);
+    }
+out_now:
+    Tmp_Pop(0xC8);
+    return ret;
 }

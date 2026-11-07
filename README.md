@@ -25,7 +25,7 @@ One source tree, three builds:
 | build | what | status |
 |---|---|---|
 | `build/dinput.dll` | hook DLL: put next to `Dino2.exe`, redirects the original functions to the C ones | runs inside the game |
-| `build/harness_stub.exe` + `harness.dll` | checks every C function against the original code | 299 functions, ~443 000 checks, 0 differences |
+| `build/harness_stub.exe` + `harness.dll` | checks every C function against the original code | 307 functions, ~473 000 checks, 0 differences |
 | `build/dc2` (Linux) | the game started like WinMain: task system, root task, per-frame work; headless, prints a trace | boots: CORE.DAT, warning and Capcom screens, save scan, title (menu, opening movie / attract demo in turn); buttons can be given on the command line; New Game runs the opening and the game task into room ST101 (file loads, room set-up, room script start); stops where the player's model would be built (0x47FE10) |
 | `build/smoke` (Linux) | the C game code without any exe code, on an emulated memory image | rooms loaded and set up by the game's own code (File_Process, Room_SetPointers, Script_Init), script VM, animation: 80 of 89 room scripts run 600 frames; 9 stop on cutscene data (SCxx.DAT) that is not loaded yet |
 
@@ -78,7 +78,7 @@ Checked under wine 9 (32-bit prefix): all 26 hooks installed; after one
 minute Lzss_Decode 23 calls, Flag_Check 62 000, Script_Run every frame,
 PointInQuad 5 000.
 
-## Reimplemented (299)
+## Reimplemented (307)
 
 The authoritative list is `src/hook/hooks.c`. By area:
 
@@ -92,7 +92,7 @@ The authoritative list is `src/hook/hooks.c`. By area:
 | script built-ins | all remaining opcodes: 11 message, 1A obj_spawn, 1B, 20 wait_event, 21/46 animation, 22-28 (models, timer, fade, wait flag), 29 character switch, 2B-2F, 40-43 (camera move, cutscenes, sound), 47-59 (part links, random, sound slots, enemy_set, texture upload, ...); Obj_Init, Obj_Part, Script_SelObj, Room_SoundSlot | src/game/script_ops.c |
 | AOT (trigger areas) | opcodes 30-33, 35-3B define entries of G+0xA5C (doors, items, ...), 3E runs an entry's kind handler | src/game/script_aot.c |
 | animation | Anim_Set, Anim_Start, Anim_Step, Anim_ApplyFrame (cubic over four keys, blending into a new animation), Anim_Events, Anim_BlendLinear/BlendMatrix, Matrix_ToAngles; the player's two animation layers (Anim_Save/LoadLayer, Anim_StartLayers, Anim_StepLayers), Anim_FrameFlag | src/game/anim.c |
-| objects | generic object handler (type 1: Generic_Handler, its modes), head tracking (Head_Update and modes 1-4, Angle_Approach/ApproachLim), foot anchoring (Obj_SetFeet, Obj_AnchorFoot), Obj_MoveLocal, distances and angles (Dist2_XZ, Camera_Distance, Angles_LookAt, Angle_XZ, Angle_Seg) | src/game/object.c |
+| objects | generic object handler (type 1: Generic_Handler, its modes), head tracking (Head_Update and modes 1-4, Angle_Approach/ApproachLim), foot anchoring (Obj_SetFeet, Obj_AnchorFoot), Obj_MoveLocal, distances and angles (Dist2_XZ, Camera_Distance, Angles_LookAt, Angle_XZ, Angle_Seg); collision: objects against each other (cylinders) and against the room's wall polygons (sliding along walls, corners), 2D segment tests | src/game/object.c |
 | files | File_RequestLoad/Raw, File_Tick, File_Process and the record handlers (copy, VRAM image, CLUT, sound bank, stream, LZSS, texture tiles, PC buffer), Rand8 | src/game/file.c; host files and heap: src/game/pcio.c |
 | loading and room set-up | Enemy_LoadModel, Stage_Load, File_IsBusy; Room_SetPointers, Room_AllocObjects, Room_Reset, CamZones_Init, Aot_Reset; Script_Init, Script_Tick and its skip/event modes | src/game/room.c |
 | root task and tasks | RootTask and its boot modes (boot, logo, warning, to title), Screen_LoadImage, Save_ScanTask; Task_Kill; host coroutines for the task system in standalone builds | src/game/root.c, src/game/task.c |
@@ -138,7 +138,7 @@ alone and the harness ignores them.
 
 ## Next
 
-The script VM, the keyframe animation and the generic object handler (type 1) are complete. Next: object collision (0x452BD0, 0x453430), the player (set-up 0x47FE10 and its type handler), then the room
+The script VM, the keyframe animation, the generic object handler (type 1) and object collision are complete. Next: the player (set-up 0x47FE10 and its type handler), then the room
 change (game mode 4, 0x451990) and the enemies' type handlers (Enemy_LoadModel 0x482070), the object
 type handlers (*0x87DCA0), sound/BGM (0x48C9C0..0x48CE60), messages
 (0x4718F0), fades and menus. Then the libgpu side
