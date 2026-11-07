@@ -74,7 +74,7 @@ void DC2CALL Stage_Load(u32 w, u32 s)                               /* 0x4822D0 
 {
     gptr pl = U32(G() + 0x940);
     Fn_448580(1); Fn_448580(2); Fn_448580(6);
-    Fn_47AF60();
+    Eff_FreeAll();
     u8 st = U8(G() + 0x108F);
     Flag_Set(2, 0x20, st <= 2 ? 0 : st <= 4 ? 1 : st <= 6 ? 0 : 1);
     u32 core = 0x16 + U8(G() + 0x108F);

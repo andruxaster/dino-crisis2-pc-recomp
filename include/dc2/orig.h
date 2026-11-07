@@ -31,7 +31,6 @@
     V(Fn_48CE20,          0x48CE20, (u32 a, u32 b, u32 c, u32 d), (a, b, c, d)) \
     V(Fn_48CE60,          0x48CE60, (u32 a), (a)) \
     V(Fn_48D070,          0x48D070, (u32 a, u32 b), (a, b)) \
-    V(Fn_48D730,          0x48D730, (gptr e), (e)) \
     V(Menu_Open,          0x495E90, (u32 a, u32 b, u32 c, u32 d, u32 e), (a, b, c, d, e)) \
     V(Snd_FreeBank,       0x48CEB0, (u32 slot), (slot)) \
     V(Snd_FreeStream,     0x48CF10, (u32 slot), (slot)) \
@@ -40,7 +39,6 @@
     F(u32, Snd_CreateBuffer, 0x4BF720, (gptr wave, u32 a), (wave, a)) \
     F(u32, Strm_Open,     0x4BFC10, (gptr data, u32 size, u32 a), (data, size, a)) \
     V(Gpu_LoadImage,      0x4B4D20, (gptr rect, gptr p), (rect, p)) \
-    V(Fn_47AF60,          0x47AF60, (void), ()) \
     V(Fn_47ADA0,          0x47ADA0, (gptr obj), (obj)) \
     V(Model_Setup,        0x48D8B0, (gptr obj, gptr data), (obj, data)) \
     V(Fn_471A30,          0x471A30, (void), ()) \
@@ -66,6 +64,7 @@
     V(Fn_472FD0,          0x472FD0, (void), ()) \
     V(Fn_452370,          0x452370, (void), ()) \
     V(Fn_47AFA0,          0x47AFA0, (gptr obj), (obj)) \
+    F(u32, Fn_4BF330,     0x4BF330, (void), ()) \
     V(Fn_486870,          0x486870, (gptr obj), (obj)) \
     V(Text_Draw,          0x494BA0, (gptr s, u32 x, u32 y, u32 w, u32 col, u32 a, u32 b), (s, x, y, w, col, a, b)) \
     V(Gpu_DrawOT,         0x4C0600, (gptr ot, gptr a, gptr b), (ot, a, b)) \

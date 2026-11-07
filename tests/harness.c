@@ -462,7 +462,7 @@ static void anim_setup_at(gptr o)
     u32 nfr = 1 + rnd() % 8;
     anim_data(AN_DATA, n, nfr);
     anim_data(AN_DATA + 0x1000, n, 2 + rnd() % 7);
-    for (int k = 0; k < 0x20; k++) U32(AN_TAB + 4 * k) = AN_DATA + 0x1000 * (k & 1);
+    for (int k = 0; k < 0x40; k++) U32(AN_TAB + 4 * k) = AN_DATA + 0x1000 * (k & 1);   /* the player uses up to 0x3C */
     U32(o + 0x88) = AN_TAB;
     U32(AN_EVT) = rnd() % 4;
     for (int i = 0; i < 4; i++) { U16(AN_EVT + 4 + 4 * i) = rnd() % 16; U16(AN_EVT + 6 + 4 * i) = (u16)rnd(); }
@@ -502,7 +502,7 @@ static Stub g_stubs[] = {
     {0x473130, "d"}, {0x4731F0, ""}, {0x474B20, "d"}, {0x478B80, "dd"}, {0x47A8C0, "ddpp", {16, 8}},
     {0, ""}, {0, ""}, {0, ""}, {0, ""}, {0x48C0B0, "pd", {0x60}},
     {0x48C600, "d"}, {0x48C640, "ddd"}, {0x48C9C0, "w"}, {0x48CD70, "dd"}, {0x48CE20, "bwww"},
-    {0x48CE60, "d"}, {0x48D070, "dd"}, {0x48D730, "d"}, {0, ""}, {0, ""},
+    {0x48CE60, "d"}, {0x48D070, "dd"}, {0, ""}, {0, ""}, {0, ""},
     {0x495E90, "wwwww"}, {0x4B4D20, "pd", {8}}, {0x4B4DB0, "pd", {8}}, {0x4DDDA2, ""},
     {0, "d"},                   /* 34: object type handlers (*0x87DCA0) */
     {0, "d"},                   /* 35: AOT kind handlers (0x738B68) */
@@ -512,7 +512,7 @@ static Stub g_stubs[] = {
     {0x48CEB0, "d"}, {0x48CF10, "d"}, {0x4B49F0, "pd", {8}}, {0x4BD480, "d"}, {0x4BF720, "dd"},
     {0x4BFC10, "ddd"},
     /* 50..: loading and room set-up */
-    {0x4C29A9, "dd"}, {0x47AF60, ""}, {0x47ADA0, "d"}, {0x48D8B0, "dd"}, {0x471A30, ""}, {0x471A50, ""},
+    {0x4C29A9, "dd"}, {0, ""}, {0x47ADA0, "d"}, {0x48D8B0, "dd"}, {0x471A30, ""}, {0x471A50, ""},
     {0x48D470, "d"}, {0x478790, ""},
     {0x4C0560, "dd"},        /* 58: Pc_SeekSet */
     {0x4C29D6, "d"},         /* 59: Task_Chain */
@@ -526,7 +526,7 @@ static Stub g_stubs[] = {
     /* 89..: object handlers (collision) */
     {0, ""}, {0, ""},
     /* 91..: player */
-    {0x47AFA0, "d"}, {0x486870, "d"},
+    {0x47AFA0, "d"}, {0x486870, "d"}, {0x4BF330, ""},
 };
 #define STUB_GAME 71
 #define STUB_LOAD 50
@@ -575,14 +575,14 @@ REC(34) REC(35) REC(36) REC(37) REC(38) REC(39) REC(40) REC(41) REC(42) REC(43) 
 REC(46) REC(47) REC(48) REC(49) REC(50) REC(51) REC(52) REC(53) REC(54) REC(55) REC(56) REC(57)
 REC(58) REC(59) REC(60) REC(61) REC(62) REC(63) REC(64) REC(65) REC(66) REC(67) REC(68) REC(69)
 REC(70) REC(71) REC(72) REC(73) REC(74) REC(75) REC(76) REC(77) REC(78) REC(79) REC(80) REC(81)
-REC(82) REC(83) REC(84) REC(85) REC(86) REC(87) REC(88) REC(89) REC(90) REC(91) REC(92)
+REC(82) REC(83) REC(84) REC(85) REC(86) REC(87) REC(88) REC(89) REC(90) REC(91) REC(92) REC(93)
 static void *const g_recs[] = {rec0, rec1, rec2, rec3, rec4, rec5, rec6, rec7, rec8, rec9, rec10,
     rec11, rec12, rec13, rec14, rec15, rec16, rec17, rec18, rec19, rec20, rec21, rec22, rec23,
     rec24, rec25, rec26, rec27, rec28, rec29, rec30, rec31, rec32, rec33, rec34, rec35, rec36, rec37,
     rec38, rec39, rec40, rec41, rec42, rec43, rec44, rec45, rec46, rec47, rec48, rec49, rec50, rec51,
     rec52, rec53, rec54, rec55, rec56, rec57, rec58, rec59, rec60, rec61, rec62, rec63,
     rec64, rec65, rec66, rec67, rec68, rec69, rec70, rec71, rec72, rec73, rec74, rec75, rec76, rec77,
-    rec78, rec79, rec80, rec81, rec82, rec83, rec84, rec85, rec86, rec87, rec88, rec89, rec90, rec91, rec92};
+    rec78, rec79, rec80, rec81, rec82, rec83, rec84, rec85, rec86, rec87, rec88, rec89, rec90, rec91, rec92, rec93};
 /* Task_Sleep: the file loader "runs" while the task sleeps */
 static u32 __cdecl ts_sleep(u32 n)
 { u32 v[5] = {n, U16(0x87FFE8)}; rec_common(STUB_LOAD, v); U16(0x87FFEA) = 0; return 0; }   /* + file asked for */
@@ -1413,6 +1413,221 @@ static void test_player(void)
     stubs_install(0);
 }
 
+/* ---- player states, aiming ------------------------------------------------------ */
+static const u32 g_pl_tabs[][2] = {{0x7380FC, 7}, {0x738118, 12}, {0x738148, 12}, {0x738178, 4}, {0x7380A0, 8}, {0x737A5C, 8}};
+#define PL_NTABS 6
+static u32 g_pl_saved[PL_NTABS][16];
+static void player_tables_stub(int on)
+{
+    for (int t = 0; t < PL_NTABS; t++)
+        for (u32 k = 0; k < g_pl_tabs[t][1]; k++) {
+            gptr a = g_pl_tabs[t][0] + 4 * k;
+            if (on) { g_pl_saved[t][k] = U32(a); if (U32(a) >= 0x401000 && U32(a) < 0x4C0000) U32(a) = (u32)(uintptr_t)g_recs[STUB_TYPE]; }
+            else U32(a) = g_pl_saved[t][k];
+        }
+}
+
+/* targets in the object array: aim descriptors +0x134 */
+static void targets_setup(void)
+{
+    for (u32 i = 0; i < 16; i++) {
+        gptr ob = O_OBJ + i * 0x260, c = CL_CYL + i * 0x40 + 0x3C;
+        U8(c + 0xA) = rnd() % 2 ? 0 : (U32(U32(ob + 0x64) + 0x54) ? 1 : 0);
+        U32(ob + 0x134) = c;
+        U32(ob + 0x50) = (U32(ob + 0x50) & ~0x10008u) | (rnd() % 3 ? 8 : 0) | (rnd() % 6 ? 0 : 0x10000);
+        U8(ob + 0xFF) = (u8)rnd();
+        U8(ob + 0x184) = rnd() % 4 ? 0 : (u8)rnd();
+        if (rnd() % 4 == 0 && i) { S16(ob + 0x40) = S16(O_OBJ + 0x260 + 0x40); S16(ob + 0x44) = S16(O_OBJ + 0x260 + 0x44); }
+        if (rnd() % 3 == 0) for (gptr q = U32(ob + 0x64); q; q = U32(q + 0x54)) S16(q + 0x42) = cl_coord(0, 4000);
+    }
+}
+
+static void test_player2(void)
+{
+    script_setup();
+    stubs_install(1);
+    player_tables_stub(1);
+    g_ign_objpads = 1;
+    for (int i = 0; i < iters; i++) {
+        u32 a[10] = {0};
+        /* qsort with the target comparator */
+        u32 n = rnd() % 4 ? rnd() % 12 : rnd() % 60;
+        for (u32 k = 0; k < n; k++) {
+            U32(0x6F0000 + 8 * k) = rnd() % 3 ? rnd() % 8 : rnd();
+            U16(0x6F0004 + 8 * k) = (u16)k; U16(0x6F0006 + 8 * k) = rnd() % 4 == 0;
+        }
+        a[0] = 0x6F0000; a[1] = n; a[2] = 8; a[3] = 0x47BF30;
+        sprintf(g_what, "qsort n %u", n);
+        check(0x4DDBD4, Crt_qsort, "Crt_qsort", 4, a, 0);
+        a[0] = 0x6F0000; a[1] = 0x6F0008;
+        check(0x47BF30, Target_Compare, "Target_Compare", 2, a, 0xFFFFFFFF);
+        /* cones */
+        { u32 lo = rnd() % 400, blo = rnd() % 200;                    /* hi >= lo (the game's tables) */
+          a[0] = lo | (lo + rnd() % 3000) << 16; a[1] = blo | (blo + rnd() % 2000) << 16; }
+        a[2] = G_SCR; a[3] = G_SCR + 8;
+        for (int k = 0; k < 8; k++) S16(G_SCR + 2 * k) = cl_coord(0, 1500);
+        sprintf(g_what, "cone %08X %08X", a[0], a[1]);
+        check(0x47C1A0, Cone_HitX, "Cone_HitX", 4, a, 0xFFFFFFFF);
+        check(0x47C250, Cone_HitZ, "Cone_HitZ", 4, a, 0xFFFFFFFF);
+        /* object effects */
+        U32(G() + 0x93C) = O_EFF;
+        for (u32 k = 0; k < 12; k++) U32(O_EFF + k * 0x70 + 0x50) = rnd() % 3 ? 1 : 0;
+        check(0x47C150, Eff_Alloc, "Eff_Alloc", 0, a, 0xFFFFFFFF);
+        check(0x47AF60, Eff_FreeAll, "Eff_FreeAll", 0, a, 0);
+        /* targets */
+        gptr o = player_setup_obj(); targets_setup(); U32(LOG_BASE) = 0;
+        U32(0x87FD60) = o + 0x1C0;
+        a[0] = o; a[1] = rnd() % 3 ? (rnd() % 2 ? 0x400 : 0x180) : rnd() % 0x800;
+        sprintf(g_what, "objs %u range %X", U32(0x87F940), a[1]);
+        check(0x47BDE0, Target_Find, "Target_Find", 2, a, 0);
+        check(0x48FCE0, Obj_SaveFeet, "Obj_SaveFeet", 1, a, 0);
+        /* arms: the player is the animated object (enough parts) */
+        do { anim_setup(); } while (U32(AN_OBJ + 0x68) < 5);
+        U32(0x87FD60) = AN_OBJ + 0x1C0; U32(LOG_BASE) = 0;
+        for (u32 k = 0x58; k < 0x78; k += 2) U16(AN_OBJ + 0x1C0 + k) = (u16)rnd();
+        S16(AN_OBJ + 0x40) = cl_coord(0, 1500); S16(AN_OBJ + 0x44) = cl_coord(0, 1500);
+        a[0] = AN_OBJ; a[1] = rnd() % 2 ? 1 : 4; a[2] = rnd() % 0x1000;
+        sprintf(g_what, "arm %u yaw %X objs %u", a[1], a[2], U32(0x87F940));
+        check(0x47C4C0, Arm_Relax, "Arm_Relax", 2, a, 0);
+        check(0x47C2C0, Arm_Aim, "Arm_Aim", 3, a, 0);
+        /* states */
+        player_setup_obj(); targets_setup();
+        do { anim_setup(); } while (U32(AN_OBJ + 0x68) < 5);       /* arms are parts 1 and 4 */
+        o = AN_OBJ; U32(o + 0x120) = AN_PART; U32(o + 0x124) = AN_PART + 0x80;
+        S16(o + 0x40) = cl_coord(0, 1500); S16(o + 0x44) = cl_coord(0, 1500);
+        U32(LOG_BASE) = 0;
+        U32(0x87FD60) = o + 0x1C0;
+        U32(G() + 0x92C) = (u32)(uintptr_t)g_recs[STUB_TYPE]; U32(G() + 0x930) = (u32)(uintptr_t)g_recs[STUB_TYPE];
+        U16(G() + 0x10B4) = (u16)((rnd() % 8) << 8 | (rnd() % 2 ? 6 : rnd() % 13));
+        U8(o + 0x55) = rnd() % 12; U8(o + 0x56) = rnd() % 3;
+        U32(o + 0x1C0) = rnd() % 3 ? rnd() % 0x1000000 : rnd();
+        a[0] = o;
+        sprintf(g_what, "char %u set %04X sub %u/%u", U8(G() + 0x108F), U16(G() + 0x10B4), U8(o + 0x55), U8(o + 0x56));
+        check(0x47D500, Player_Normal, "Player_Normal", 1, a, 0);
+        U8(o + 0x55) = rnd() % 4;
+        check(0x47DA60, Player_State2, "Player_State2", 1, a, 0);
+        check(0x47DBD0, Player_State5, "Player_State5", 1, a, 0);
+        check(0x47DC50, Player_State6, "Player_State6", 1, a, 0);
+        check(0x47AF40, Player_Weapon, "Player_Weapon", 1, a, 0);
+        /* damage */
+        U8(G() + 0x108E) = rnd() % 3; U8(G() + 0x927) = rnd() % 3 == 0; U8(G() + 0x108F) = rnd() % 10;
+        Flag_Set(2, 0x26, rnd() % 3 == 0); Flag_Set(2, 0x27, rnd() % 3 == 0); Flag_Set(9, 0x33, rnd() % 3 == 0);
+        a[0] = rnd() % 3 ? rnd() % 200 : rnd();
+        sprintf(g_what, "dmg %X diff %u", a[0], U8(G() + 0x108E));
+        check(0x479700, Damage_Scale, "Damage_Scale", 1, a, 0xFFFF);
+        U16(0x87DC12) = (u16)rnd();
+        check(0x479D70, Pad_Shake, "Pad_Shake", 0, a, 0xFFFFFFFF);
+        o = AN_OBJ; anim_setup(); U32(LOG_BASE) = 0;
+        U32(0x87FD60) = o + 0x1C0;
+        U8(o + 0x55) = rnd() % 2; U8(o + 0x56) = rnd() % 3; U16(o + 0x178) = rnd() % 4; U16(o + 0x176) = rnd() % 300;
+        U16(o + 0x108) = rnd() % 400; U16(o + 0x92) = rnd() % 12; U8(o + 0x57) = (u8)rnd();
+        a[0] = o;
+        sprintf(g_what, "hit %u/%u dir %u dmg %u hp %d", U8(o + 0x55), U8(o + 0x56), U16(o + 0x178), U16(o + 0x176), S16(o + 0x108));
+        check(0x47D6A0, Player_HitLight, "Player_HitLight", 1, a, 0);
+        anim_setup(); U32(LOG_BASE) = 0;
+        U8(o + 0x55) = 2 + rnd() % 2; U8(o + 0x56) = rnd() % 5; U16(o + 0x176) = rnd() % 300; U16(o + 0x108) = rnd() % 400;
+        U8(o + 0x57) = (u8)rnd(); U16(o + 0x1C0 + 0x28) = rnd() % 3 ? rnd() % 40 : (u16)rnd(); U16(0x87DC12) = (u16)rnd();
+        U16(o + 0x5A) = rnd() % 4; S16(o + 0x42) = rnd() % 2 ? -1000 * S16(o + 0x5A) : cl_coord(0, 3000);
+        if (rnd() % 2) U8(G() + 0x108F) = 2;
+        sprintf(g_what, "down %u/%u shake %u char %u", U8(o + 0x55), U8(o + 0x56), U16(o + 0x1E8), U8(G() + 0x108F));
+        check(0x47D820, Player_HitDown, "Player_HitDown", 1, a, 0);
+        o = player_setup_obj(); U32(LOG_BASE) = 0; U32(0x87FD60) = o + 0x1C0;
+        do anim_setup_at(o); while (0);
+        U32(o + 0x64) = AN_PART; U8(o + 0x55) = rnd() % 3; U8(G() + 0x108F) = rnd() % 2 ? 2 : rnd() % 10;
+        a[0] = o;
+        sprintf(g_what, "die %u char %u", U8(o + 0x55), U8(G() + 0x108F));
+        check(0x47DAB0, Player_Die, "Player_Die", 1, a, 0);
+        U8(o + 0x55) = rnd() % 8;
+        check(0x4796C0, Player_Scripted, "Player_Scripted", 1, a, 0);
+        check(0x4796E0, Obj_Stop, "Obj_Stop", 1, a, 0);
+        /* inventory */
+        for (u32 k = 0; k < 0x14 * 12; k += 2) U16(G() + 0x10BC + k) = rnd() % 3 ? rnd() % 0x20 : (u16)rnd();
+        U8(G() + 0x10B5) = rnd() % 8; U8(G() + 0x1094) = rnd() % 4 == 0;
+        if (rnd() % 2) { u32 k = rnd() % 0x14; U8(G() + 0x10BC + 12 * k) = 1; U8(G() + 0x10BD + 12 * k) = U8(G() + 0x10B5) | 0x10; }
+        if (rnd() % 2) { u32 k = rnd() % 0x14; U8(G() + 0x10BC + 12 * k) = 0; U8(G() + 0x10BD + 12 * k) = U8(G() + 0x10B5) | 0x10; }
+        a[0] = G() + 0x10BC; a[1] = rnd() % 0x18; a[2] = U8(G() + 0x10B5) | (rnd() % 2 ? 0x10 : 0);
+        check(0x495CB0, Item_Find, "Item_Find", 3, a, 0xFF);
+        a[0] = rnd() % 4 ? rnd() % 4 : rnd();
+        check(0x496240, Ammo_Have, "Ammo_Have", 1, a, 0xFFFFFFFF);
+        U32(G() + 0x93C) = O_EFF; U8(o + 0x1C0 + 0x78) = rnd() % 2;
+        for (u32 k = 0; k < 12; k++) U8(O_EFF + k * 0x70 + 0x4F) = rnd() % 5;
+        U32(0x87FD60) = o + 0x1C0;
+        check(0x47C860, Player_SubDone, "Player_SubDone", 0, a, 0xFFFFFFFF);
+        /* walls ahead */
+        for (int rep = 0; rep < 4; rep++) {
+            o = player_setup_obj(); U32(LOG_BASE) = 0;
+            for (u32 k = 0; k < U8(CL_ROOM); k++) {
+                gptr w = CL_ROOM + U32(CL_ROOM + 8 + 4 * k);
+                U8(w) |= rnd() % 4 ? 1 : 0;
+                for (u32 e = 0; e < U8(w + 1); e++) U8(w + 8 + 4 * e) = (u8)((rnd() % 3 ? 0x81 : rnd()) | (rnd() % 3 ? 0 : 0x44) | (rnd() % 4 ? 0 : 8));
+            }
+            cl_place(o);
+            if (rnd() % 2) U32(G() + 0x940) = o;
+            a[0] = o; a[1] = rnd() % 3 ? 300 + rnd() % 1200 : (u32)rnd();
+            U16(o + 0x48) = (u16)rnd(); U16(o + 0x4A) = (u16)rnd(); U16(o + 0x4C) = rnd() % 4 ? 0 : (u16)rnd();
+            sprintf(g_what, "dist %X yaw %X fl %08X", a[1], U16(o + 0x4A), U32(o + 0x50));
+            check(0x479DA0, Wall_Ahead, "Wall_Ahead", 2, a, 0xFFFFFFFF);
+            /* steps: some polygons one layer pair up/down, ledges */
+            for (u32 k = 0; k < U8(CL_ROOM); k++) {
+                gptr w = CL_ROOM + U32(CL_ROOM + 8 + 4 * k);
+                u32 l = U8(o + 0x5A) & 15;
+                U16(w + 4) = (u16)(rnd() % 3 ? 1u << ((l + (rnd() % 2 ? 2 : 14)) & 15) | (rnd() % 2 ? 1u << l : 0) : (u16)rnd());
+                U8(w) = (u8)((rnd() % 4 ? 1 : 0) | (rnd() % 3 ? 0 : 0x40));
+                U8(w + 6) = rnd() % 2 ? 0 : (u8)rnd();
+                for (u32 e = 0; e < U8(w + 1); e++) U8(w + 8 + 4 * e) = (u8)((rnd() % 4 ? 1 : 0) | (rnd() % 2 ? 0x80 : 0) | (rnd() % 2 ? 0x40 : 0) | (rnd() % 3 ? 0 : 4));
+            }
+            cl_place(o);
+            if (rnd() % 3 == 0) U16(o + 0x42) = (u16)(-1000 * S16(o + 0x5A));
+            a[0] = o; a[1] = rnd() % 3 ? 0x3E8 : rnd() % 2000; a[2] = rnd() % 3 ? 0xC8 : rnd() % 400; a[3] = rnd() % 3 ? (rnd() & 0x30) << 6 : rnd() % 0x1000;
+            sprintf(g_what, "step len %u w %u yaw %X layer %d", a[1], a[2], a[3], S16(o + 0x5A));
+            check(0x479FC0, Step_Ahead, "Step_Ahead", 4, a, 0xFFFFFFFF);
+        }
+        /* standing */
+        for (int rep = 0; rep < 2; rep++) {
+            player_setup_obj(); do anim_setup(); while (U32(AN_OBJ + 0x68) < 5); o = AN_OBJ; U32(LOG_BASE) = 0;
+            U32(0x87FD60) = o + 0x1C0; U32(o + 0x128) = CL_CYL + 0x30; U8(o + 0x5A) = 0;
+            U8(CL_CYL + 0x30 + 0xA) = rnd() % 2 ? 0xFF : 0;     /* a part the animated object has */
+            for (u32 k = 0; k < U8(CL_ROOM); k++) {
+                gptr w = CL_ROOM + U32(CL_ROOM + 8 + 4 * k);
+                for (u32 e = 0; e < U8(w + 1); e++) U8(w + 8 + 4 * e) |= rnd() % 2 ? 0x81 : 0;
+            }
+            if (rnd() % 2) cl_place(o);
+            U8(o + 0x56) = rnd() % 4 ? rnd() % 7 : 0xFF;
+            U16(o + 0x1C0 + 0x38) = rnd() % 3 ? rnd() % 3 : (u16)rnd(); U16(o + 0x1C0 + 0x1C) = rnd() % 4; U16(o + 0x1C0 + 0x1E) = rnd() % 4;
+            U32(0x87DC08) = rnd() % 3 ? (rnd() & 0xF07E) : rnd(); U32(0x87DC94) = rnd() % 2 ? 0 : (u8)rnd();
+            U16(G() + 0x10B4) = (u16)(rnd() % 2 ? 0 : (rnd() % 8) << 8) | (u16)(rnd() % 2 ? 8 : rnd() % 16);
+            Flag_Set(2, 0x1C, rnd() % 2); Flag_Set(2, 0xF, rnd() % 4 == 0);
+            a[0] = o;
+            sprintf(g_what, "stand %02X held %08X press %02X set %04X", U8(o + 0x56), U32(0x87DC08), U8(0x87DC94), U16(G() + 0x10B4));
+            check(0x47DC70, Player_Stand, "Player_Stand", 1, a, 0);
+            U8(o + 0x56) = rnd() % 4 ? rnd() % 3 : 0xFF; U16(o + 0x92) = rnd() % 64;
+            U32(0x87DC08) = rnd() % 3 ? (rnd() & 0xF0FE) : rnd();
+            check(0x47E290, Player_Walk, "Player_Walk", 1, a, 0);
+            U8(o + 0x56) = rnd() % 3; U32(0x87DC08) = rnd() % 3 ? (rnd() & 0xF0FE) : rnd(); U32(0x87DC94) = rnd() % 2 ? 0 : (u8)rnd();
+            check(0x47E890, Player_Turn, "Player_Turn", 1, a, 0);
+            U8(o + 0x56) = rnd() % 3; U32(0x87DC08) = rnd() % 3 ? (rnd() & 0xF0FE) : rnd(); U32(0x87DC94) = rnd() % 2 ? 0 : (u8)rnd();
+            check(0x47EBB0, Player_Back, "Player_Back", 1, a, 0);
+            U8(o + 0x56) = rnd() % 3; U16(o + 0x1C0 + 0x22) = (u16)rnd(); U16(o + 0x1C0 + 0x20) = U16(o + 0x1C0 + 0x22) + rnd() % 0x400;
+            check(0x47EED0, Player_TurnBack, "Player_TurnBack", 1, a, 0);
+            check(0x48F8B0, Obj_ShadowOff, "Obj_ShadowOff", 1, a, 0);
+            U8(o + 0x56) = rnd() % 4; U8(o + 0x11A) = (u8)rnd(); U16(o + 0x1C0 + 0x20) = (u16)((U16(o + 0x4A) + rnd() % 0x80) & 0xFFF);
+            if (rnd() % 2) U16(o + 0x1C0 + 0x20) = U16(o + 0x4A);
+            check(0x47EF90, Player_Climb, "Player_Climb", 1, a, 0);
+            U8(o + 0x56) = rnd() % 9; U16(o + 0x92) = rnd() % 20;
+            check(0x47FC70, Player_Push, "Player_Push", 1, a, 0);
+        }
+        player_setup_obj(); o = O_OBJ; do anim_setup_at(o); while (U32(o + 0x68) < 15);   /* Stage_Load restarts the animation; feet are parts 11/14 */
+        U32(LOG_BASE) = 0; U32(0x87FD60) = o + 0x1C0;
+        U16(G() + 0x10B4) = (u16)((rnd() % 8) << 8 | rnd() % 13);
+        for (u32 k = 0x840; k < 0x848; k += 2) U16(G() + k) = (u16)cl_coord(0, 3000);
+        a[0] = o;
+        check(0x47D2F0, Player_Init, "Player_Init", 1, a, 0);
+    }
+    g_ign_objpads = 0;
+    player_tables_stub(0);
+    stubs_install(0);
+}
+
 /* ---- file loading: a fake file system behind the PC file functions --------- */
 #define FK_POS   0x6DD800u      /* read position (in compared memory, so both runs agree) */
 #define FK_HEAP  0x6DD804u      /* bump pointer of the fake malloc */
@@ -1677,6 +1892,8 @@ static void fake_room_block(void)
 static void game_state(void)
 {
     gptr g = G();
+    U32(g + 0x93C) = O_EFF;
+    U8(O_OBJ + 0x58) = 0;
     for (u32 k = 0x660; k < 0x680; k += 2) U16(g + k) = rnd() % 3 ? rnd() % 6 : (u16)rnd();
     U16(g + 0x664) = rnd() % 4;
     for (u32 k = 0x674; k < 0x684; k += 2) U16(g + k) = rnd() % 2 ? 0xFFFF : rnd() % 0x200;
@@ -1698,6 +1915,8 @@ static void game_state(void)
 static void title_state(void)
 {
     gptr g = G(), t = 0x759EF0;
+    U32(g + 0x93C) = O_EFF;                         /* object effects (Stage_Load frees them) */
+    U32(g + 0x940) = O_OBJ; U8(O_OBJ + 0x58) = 0;  /* the player: Player_Setup calls its type handler */
     for (u32 k = 0; k < 0x40; k += 4) U32(t + k) = rnd();
     U8(t + 2) = rnd() % 3; U8(t + 0x2A) = 1 + rnd() % 2; U8(t + 0x28) = rnd() % 2; U8(t + 0x2B) = rnd() % 2;
     U8(t + 3) = rnd() % 4;
@@ -1883,7 +2102,7 @@ __declspec(dllexport) void harness_main(int argc, char **argv)
     struct { const char *name; void (*fn)(void); } T[] = {
         {"flags", test_flags}, {"geometry", test_geom}, {"script values", test_script_values},
         {"script opcodes", test_script_ops}, {"script objects", test_objects},
-        {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"objects 2", test_object}, {"collision", test_collision}, {"player", test_player}, {"loading", test_room}, {"title", test_title}, {"game task", test_game},
+        {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"objects 2", test_object}, {"collision", test_collision}, {"player", test_player}, {"player states", test_player2}, {"loading", test_room}, {"title", test_title}, {"game task", test_game},
     };
     for (unsigned i = 0; i < sizeof T / sizeof T[0]; i++) {
         int f0 = g_fail, t0 = g_tests;

@@ -289,7 +289,7 @@ u32 DC2CALL ScrOp_Effect2F(gptr t)                                 /* 2F */
         for (u32 i = 0; i < U32(A_EFF_COUNT); i++) {
             gptr e = U32(G() + 0x93C) + i * 0x70;
             s8 k = S8(e + 0x4F);
-            if ((U8(e + 0x50) & 1) && U8(e + 0x4E) == 3 && k >= 3 && k != 0x10) Fn_48D730(e);
+            if ((U8(e + 0x50) & 1) && U8(e + 0x4E) == 3 && k >= 3 && k != 0x10) Eff_Free(e);
         }
     }
     ADV(t);

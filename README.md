@@ -25,8 +25,8 @@ One source tree, three builds:
 | build | what | status |
 |---|---|---|
 | `build/dinput.dll` | hook DLL: put next to `Dino2.exe`, redirects the original functions to the C ones | runs inside the game |
-| `build/harness_stub.exe` + `harness.dll` | checks every C function against the original code | 317 functions, ~493 000 checks, 0 differences |
-| `build/dc2` (Linux) | the game started like WinMain: task system, root task, per-frame work; headless, prints a trace | boots: CORE.DAT, warning and Capcom screens, save scan, title (menu, opening movie / attract demo in turn); buttons can be given on the command line; New Game runs the opening and the game task into room ST101 (file loads, room set-up, room script start); sets up the player and stops in the player's first state (0x47D2F0, not rewritten yet) |
+| `build/harness_stub.exe` + `harness.dll` | checks every C function against the original code | 354 functions, ~593 000 checks, 0 differences |
+| `build/dc2` (Linux) | the game started like WinMain: task system, root task, per-frame work; headless, prints a trace | boots: CORE.DAT, warning and Capcom screens, save scan, title (menu, opening movie / attract demo in turn); buttons can be given on the command line; New Game runs the opening and the game task into room ST101 (file loads, room set-up, room script start); sets up the player; its first state loads the weapon set and stops at the model set-up (Model_Setup 0x48D8B0, not rewritten yet) |
 | `build/smoke` (Linux) | the C game code without any exe code, on an emulated memory image | rooms loaded and set up by the game's own code (File_Process, Room_SetPointers, Script_Init), script VM, animation: 80 of 89 room scripts run 600 frames; 9 stop on cutscene data (SCxx.DAT) that is not loaded yet |
 
 The Dreamcast (KallistiOS) build will reuse the standalone path once the
@@ -78,7 +78,7 @@ Checked under wine 9 (32-bit prefix): all 26 hooks installed; after one
 minute Lzss_Decode 23 calls, Flag_Check 62 000, Script_Run every frame,
 PointInQuad 5 000.
 
-## Reimplemented (317)
+## Reimplemented (354)
 
 The authoritative list is `src/hook/hooks.c`. By area:
 
@@ -93,7 +93,7 @@ The authoritative list is `src/hook/hooks.c`. By area:
 | AOT (trigger areas) | opcodes 30-33, 35-3B define entries of G+0xA5C (doors, items, ...), 3E runs an entry's kind handler | src/game/script_aot.c |
 | animation | Anim_Set, Anim_Start, Anim_Step, Anim_ApplyFrame (cubic over four keys, blending into a new animation), Anim_Events, Anim_BlendLinear/BlendMatrix, Matrix_ToAngles; the player's two animation layers (Anim_Save/LoadLayer, Anim_StartLayers, Anim_StepLayers), Anim_FrameFlag | src/game/anim.c |
 | objects | generic object handler (type 1: Generic_Handler, its modes), head tracking (Head_Update and modes 1-4, Angle_Approach/ApproachLim), foot anchoring (Obj_SetFeet, Obj_AnchorFoot), Obj_MoveLocal, distances and angles (Dist2_XZ, Camera_Distance, Angles_LookAt, Angle_XZ, Angle_Seg); collision: objects against each other (cylinders) and against the room's wall polygons (sliding along walls, corners), 2D segment tests | src/game/object.c |
-| player | Player_Setup (type and model file by character), Player_Handler (per frame: state table, water, bleeding, collision, floor layers), Player_Breath; floor heights (Floor_Height, Poly_RayCount); effect slots (K2_Alloc/AllocBack/Reuse, Effect_Attach, Effect_Drops). The player's states (0x7380FC) are next | src/game/player.c, src/game/object.c |
+| player | Player_Setup, Player_Handler, Player_Breath; states: init, normal (target search with MSVC-order qsort, two-gun arm aiming), hits (light, knocked down), dying, scripted; normal substates: standing, walking, turning, walking backwards, quick turn, climbing steps (ledge and step probes Wall_Ahead/Step_Ahead), pushing; damage scaling, inventory search, ammo; floor heights; effect slots. Still original: running/aiming/weapon handlers (0x47AE00, 0x47F0F0, 0x4AA7A0..0x4B4600), 0x47AFA0, 0x486870 | src/game/player.c, src/game/object.c, src/game/crt.c |
 | files | File_RequestLoad/Raw, File_Tick, File_Process and the record handlers (copy, VRAM image, CLUT, sound bank, stream, LZSS, texture tiles, PC buffer), Rand8 | src/game/file.c; host files and heap: src/game/pcio.c |
 | loading and room set-up | Enemy_LoadModel, Stage_Load, File_IsBusy; Room_SetPointers, Room_AllocObjects, Room_Reset, CamZones_Init, Aot_Reset; Script_Init, Script_Tick and its skip/event modes | src/game/room.c |
 | root task and tasks | RootTask and its boot modes (boot, logo, warning, to title), Screen_LoadImage, Save_ScanTask; Task_Kill; host coroutines for the task system in standalone builds | src/game/root.c, src/game/task.c |
@@ -139,7 +139,7 @@ alone and the harness ignores them.
 
 ## Next
 
-The script VM, the keyframe animation, the generic object handler (type 1) and object collision are complete. Next: the player's states (table 0x7380FC, 0x47D2F0..), then the room
+The script VM, the keyframe animation, the generic object handler (type 1) and object collision are complete. Next: the rest of the player (aiming and weapons 0x47AE00/0x47F0F0 and the weapon handlers, 0x47AFA0, 0x486870), then the room
 change (game mode 4, 0x451990) and the enemies' type handlers (Enemy_LoadModel 0x482070), the object
 type handlers (*0x87DCA0), sound/BGM (0x48C9C0..0x48CE60), messages
 (0x4718F0), fades and menus. Then the libgpu side

@@ -87,6 +87,45 @@ gptr DC2CALL Effect_Drops(gptr o, u32 a, u32 b);                        /* 0x48D
 void DC2CALL Player_Setup(gptr o);                                      /* 0x47FE10 */
 void DC2CALL Player_Breath(gptr o);                                     /* 0x47A7E0 */
 void DC2CALL Player_Handler(gptr o);                                    /* 0x47CE40 */
+void DC2CALL Obj_SaveFeet(gptr o);                                      /* 0x48FCE0 */
+void DC2CALL Player_Weapon(gptr o);                                     /* 0x47AF40 */
+void DC2CALL Eff_FreeAll(void);                                         /* 0x47AF60 */
+void DC2CALL Eff_Free(gptr e);                                          /* 0x48D730 */
+gptr DC2CALL Eff_Alloc(void);                                           /* 0x47C150 */
+u32  DC2CALL Cone_HitX(u32 a, u32 b, gptr p, gptr q);                   /* 0x47C1A0 */
+u32  DC2CALL Cone_HitZ(u32 a, u32 b, gptr p, gptr q);                   /* 0x47C250 */
+s32  DC2CALL Target_Compare(gptr a, gptr b);                            /* 0x47BF30 */
+void DC2CALL Target_Find(gptr o, u32 range);                            /* 0x47BDE0 */
+void DC2CALL Arm_Relax(gptr o, u32 arm);                                /* 0x47C4C0 */
+void DC2CALL Arm_Aim(gptr o, u32 arm, u32 yaw);                         /* 0x47C2C0 */
+void DC2CALL Player_Init(gptr o);                                       /* 0x47D2F0 */
+void DC2CALL Player_Normal(gptr o);                                     /* 0x47D500 */
+void DC2CALL Player_State2(gptr o);                                     /* 0x47DA60 */
+void DC2CALL Player_State5(gptr o);                                     /* 0x47DBD0 */
+void DC2CALL Player_State6(gptr o);                                     /* 0x47DC50 */
+u32  DC2CALL Damage_Scale(u32 d);                                       /* 0x479700 */
+u32  DC2CALL Pad_Shake(void);                                           /* 0x479D70 */
+void DC2CALL Player_HitLight(gptr o);                                   /* 0x47D6A0 */
+void DC2CALL Player_HitDown(gptr o);                                    /* 0x47D820 */
+void DC2CALL Player_Die(gptr o);                                        /* 0x47DAB0 */
+void DC2CALL Player_Scripted(gptr o);                                   /* 0x4796C0 */
+void DC2CALL Obj_Stop(gptr o);                                          /* 0x4796E0 */
+u32  DC2CALL Item_Find(gptr list, u32 count, u32 id);                   /* 0x495CB0 */
+u32  DC2CALL Ammo_Have(u32 n);                                          /* 0x496240 */
+u32  DC2CALL Player_SubDone(void);                                      /* 0x47C860 */
+u32  DC2CALL Wall_Ahead(gptr o, u32 dist);                              /* 0x479DA0 */
+u32  DC2CALL Step_Ahead(gptr o, u32 len, u32 w, u32 yaw);              /* 0x479FC0 */
+void DC2CALL Player_Stand(gptr o);                                      /* 0x47DC70 */
+void DC2CALL Player_Walk(gptr o);                                       /* 0x47E290 */
+void DC2CALL Player_TurnBack(gptr o);                                   /* 0x47EED0 */
+void DC2CALL Obj_ShadowOff(gptr o);                                     /* 0x48F8B0 */
+void DC2CALL Player_Climb(gptr o);                                      /* 0x47EF90 */
+void DC2CALL Player_Push(gptr o);                                       /* 0x47FC70 */
+void DC2CALL Player_Turn(gptr o);                                       /* 0x47E890 */
+void DC2CALL Player_Back(gptr o);                                       /* 0x47EBB0 */
+
+/* crt.c -- C runtime functions */
+void DC2CALL Crt_qsort(gptr base, u32 num, u32 width, gptr cmp);        /* 0x4DDBD4 */
 
 /* script_obj.c -- built-ins on objects */
 void DC2CALL Obj_SyncLinks(gptr obj);                                   /* 0x48FC70 */
