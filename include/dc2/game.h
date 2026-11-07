@@ -179,6 +179,21 @@ void DC2CALL Root_ToTitle(gptr r);                                      /* 0x46D
 void DC2CALL RootTask(void);                                            /* 0x46D710 */
 void DC2CALL Save_ScanTask(void);                                       /* 0x403920 */
 
+/* title.c -- title screen */
+void DC2CALL Title_SetAnim(gptr t, u32 i, gptr a);                      /* 0x4A6370 */
+u32  DC2CALL Title_AnimStep(gptr t, u32 i);                             /* 0x4A63A0 */
+void DC2CALL Title_Draw(s32 x, s32 y, u32 color, gptr f);               /* 0x4A6210 */
+void DC2CALL Title_NewGame(gptr t);                                     /* 0x4A5EC0 */
+void DC2CALL Title_Load(gptr t);                                        /* 0x4A60F0 */
+void DC2CALL Title_Option(gptr t);                                      /* 0x4A6180 */
+void DC2CALL Title_Menu(gptr t);                                        /* 0x4A57B0 */
+void DC2CALL Title_Movie(gptr t);                                       /* 0x4A5B50 */
+void DC2CALL Title_Demo(gptr t);                                        /* 0x4A5BF0 */
+void DC2CALL Title_Attract(gptr t);                                     /* 0x4A5B30 */
+void DC2CALL Title_Init(gptr t);                                        /* 0x4A5760 */
+void DC2CALL Title_Run(gptr t);                                         /* 0x4A5790 */
+void DC2CALL TitleTask(void);                                           /* 0x4A5730 */
+
 /* handler used for an opcode that is not reimplemented yet: in the hook
  * build it calls the original code, elsewhere it reports and stops the thread */
 typedef u32 (DC2CALL *ScrOpFn)(gptr thr);

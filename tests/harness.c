@@ -511,6 +511,9 @@ static Stub g_stubs[] = {
     {0x48D470, "d"}, {0x478790, ""},
     {0x4C0560, "dd"},        /* 58: Pc_SeekSet */
     {0x4C29D6, "d"},         /* 59: Task_Chain */
+    /* 60..: title */
+    {0x4510D0, ""}, {0x451120, ""}, {0x4512F0, ""}, {0x451330, ""}, {0x451790, ""}, {0x4826F0, "d"},
+    {0x494BA0, "ddddddd"}, {0x4C0600, "ddd"}, {0x4C0690, "d"}, {0x4C05D0, "dd"}, {0x4C06F0, "ddddd"},
 };
 #define STUB_LOAD 50
 #define STUB_FILE 36
@@ -524,7 +527,7 @@ static u32 rec_common(int id, const u32 *a)
     u32 n = U32(LOG_BASE);
     U32(LOG_BASE) = n + 1;
     if (n < 64) {
-        gptr r = LOG_BASE + 4 + n * LOG_REC, d = r + 0x18;
+        gptr r = LOG_BASE + 4 + n * LOG_REC, d = r + 0x20;
         U32(r) = st->addr ? st->addr : 0xF0000000u + id;
         int np = 0;
         for (int i = 0; st->spec[i]; i++) {
@@ -546,19 +549,21 @@ static u32 rec_common(int id, const u32 *a)
     }
     return st->ret;
 }
-#define REC(n) static u32 __cdecl rec##n(u32 a0, u32 a1, u32 a2, u32 a3, u32 a4) \
-    { u32 a[5] = {a0, a1, a2, a3, a4}; return rec_common(n, a); }
+#define REC(n) static u32 __cdecl rec##n(u32 a0, u32 a1, u32 a2, u32 a3, u32 a4, u32 a5, u32 a6) \
+    { u32 a[7] = {a0, a1, a2, a3, a4, a5, a6}; return rec_common(n, a); }
 REC(0) REC(1) REC(2) REC(3) REC(4) REC(5) REC(6) REC(7) REC(8) REC(9) REC(10) REC(11)
 REC(12) REC(13) REC(14) REC(15) REC(16) REC(17) REC(18) REC(19) REC(20) REC(21) REC(22)
 REC(23) REC(24) REC(25) REC(26) REC(27) REC(28) REC(29) REC(30) REC(31) REC(32) REC(33)
 REC(34) REC(35) REC(36) REC(37) REC(38) REC(39) REC(40) REC(41) REC(42) REC(43) REC(44) REC(45)
 REC(46) REC(47) REC(48) REC(49) REC(50) REC(51) REC(52) REC(53) REC(54) REC(55) REC(56) REC(57)
-REC(58) REC(59)
+REC(58) REC(59) REC(60) REC(61) REC(62) REC(63) REC(64) REC(65) REC(66) REC(67) REC(68) REC(69)
+REC(70)
 static void *const g_recs[] = {rec0, rec1, rec2, rec3, rec4, rec5, rec6, rec7, rec8, rec9, rec10,
     rec11, rec12, rec13, rec14, rec15, rec16, rec17, rec18, rec19, rec20, rec21, rec22, rec23,
     rec24, rec25, rec26, rec27, rec28, rec29, rec30, rec31, rec32, rec33, rec34, rec35, rec36, rec37,
     rec38, rec39, rec40, rec41, rec42, rec43, rec44, rec45, rec46, rec47, rec48, rec49, rec50, rec51,
-    rec52, rec53, rec54, rec55, rec56, rec57, rec58, rec59};
+    rec52, rec53, rec54, rec55, rec56, rec57, rec58, rec59, rec60, rec61, rec62, rec63,
+    rec64, rec65, rec66, rec67, rec68, rec69, rec70};
 /* Task_Sleep: the file loader "runs" while the task sleeps */
 static u32 __cdecl ts_sleep(u32 n)
 { u32 v[5] = {n, U16(0x87FFE8)}; rec_common(STUB_LOAD, v); U16(0x87FFEA) = 0; return 0; }   /* + file asked for */
@@ -1259,6 +1264,60 @@ static void test_root(void)
     stubs_install(0);
 }
 
+/* ---- title screen ---------------------------------------------------------------- */
+static void title_state(void)
+{
+    gptr g = G(), t = 0x759EF0;
+    for (u32 k = 0; k < 0x40; k += 4) U32(t + k) = rnd();
+    U8(t + 2) = rnd() % 3; U8(t + 0x2A) = 1 + rnd() % 2; U8(t + 0x28) = rnd() % 2; U8(t + 0x2B) = rnd() % 2;
+    U8(t + 3) = rnd() % 4;
+    U16(t) = rnd() % 3 ? 1 + rnd() % 3 : rnd() % 2 ? 0x13 + rnd() % 3 : (u16)rnd();
+    for (int i = 0; i < 3; i++) U32(t + 8 + 12 * i) = 0x625800 + 8 * (rnd() % 0x30);
+    U32(t + 0x2C) = 0x65F600 + 0x10 * (rnd() % 16);
+    U16(g + 0x76C) = rnd() % 6; U16(g + 0x76E) = rnd() % 4; U16(g + 0x770) = rnd() % 8; U16(g + 0x772) = rnd() % 3;
+    u32 btns[] = {0, 0x40, 0x1000, 0x4000, 0x20, 0x800, 0x820, 0x5040};
+    U32(0x87DC00) = btns[rnd() % 8]; U32(0x87DC12) = rnd() % 3 ? 0 : rnd() % 2 ? 0x100 : rnd();
+    Flag_Set(2, 6, rnd() % 3 == 0); Flag_Set(2, 0x17, rnd() % 3 == 0);
+    U8(0x87DC90) = rnd() % 3; U8(g + 0x814) = rnd() % 2;
+    U32(0x87DC98) = 0x6D0000; U32(0x87F94C) = 0x6CF800; U32(0x87DE0C) = rnd() & 1;
+    U16(0x87FFEA) = rnd() % 2;
+}
+
+static void test_title(void)
+{
+    stubs_install(1);
+    for (u32 a = 0x625800; a < 0x625C00; a += 4) U32(a) = rnd();
+    for (u32 a = 0x625800; a < 0x625C00; a += 8) {
+        U8(a + 4) = (u8)((rnd() % 3 ? rnd() % 4 : rnd()) | (rnd() % 4 == 0 ? 0x20 : 0)) & 0xE7;
+        U8(a + 5) = rnd() % 4;                      /* frame time, 0 and 1 are special */
+    }
+    for (u32 a = 0x65F500; a < 0x65F800; a += 4) U32(a) = rnd();
+    static const struct { u32 addr; void *fn; const char *name; } F[] = {
+        {0x4A5760, Title_Init, "Title_Init"}, {0x4A5790, Title_Run, "Title_Run"},
+        {0x4A57B0, Title_Menu, "Title_Menu"}, {0x4A5B30, Title_Attract, "Title_Attract"},
+        {0x4A5B50, Title_Movie, "Title_Movie"}, {0x4A5BF0, Title_Demo, "Title_Demo"},
+        {0x4A5EC0, Title_NewGame, "Title_NewGame"}, {0x4A60F0, Title_Load, "Title_Load"},
+        {0x4A6180, Title_Option, "Title_Option"},
+    };
+    for (int i = 0; i < iters; i++) {
+        for (unsigned k = 0; k < sizeof F / sizeof F[0]; k++) {
+            title_state(); U32(LOG_BASE) = 0;
+            u32 a[1] = {0x759EF0};
+            sprintf(g_what, "screen %u step %u/%u cursor %d btn %X", U16(G() + 0x76E), U16(G() + 0x770),
+                    U16(G() + 0x772), S8(0x759EF2), U32(0x87DC00));
+            check(F[k].addr, F[k].fn, F[k].name, 1, a, 0);
+        }
+        title_state(); U32(LOG_BASE) = 0;
+        u32 b[4] = {0x759EF0, rnd() % 3, 0x625800 + 8 * (rnd() % 0x40)};
+        check(0x4A6370, Title_SetAnim, "Title_SetAnim", 3, b, 0);
+        U8(0x759EF0 + 4 + b[1] * 12 + 8) = rnd() % 3;
+        check(0x4A63A0, Title_AnimStep, "Title_AnimStep", 2, b, 0xFFFFFFFF);
+        u32 c[4] = {(u32)(rnd() % 400) - 50, (u32)(rnd() % 300) - 50, rnd(), 0x625800 + 8 * (rnd() % 0x40)};
+        check(0x4A6210, Title_Draw, "Title_Draw", 4, c, 0);
+    }
+    stubs_install(0);
+}
+
 static void test_lzss(const char *dir)
 {
     char pat[MAX_PATH]; snprintf(pat, sizeof pat, "%s\\*.DAT", dir);
@@ -1324,7 +1383,7 @@ __declspec(dllexport) void harness_main(int argc, char **argv)
     struct { const char *name; void (*fn)(void); } T[] = {
         {"flags", test_flags}, {"geometry", test_geom}, {"script values", test_script_values},
         {"script opcodes", test_script_ops}, {"script objects", test_objects},
-        {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"loading", test_room},
+        {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"loading", test_room}, {"title", test_title},
     };
     for (unsigned i = 0; i < sizeof T / sizeof T[0]; i++) {
         int f0 = g_fail, t0 = g_tests;

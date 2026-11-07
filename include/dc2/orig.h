@@ -51,6 +51,17 @@
     V(Fn_48D470,          0x48D470, (gptr e), (e)) \
     V(Fn_478790,          0x478790, (void), ()) \
     V(Snd_ReleaseAll,     0x48C080, (void), ()) \
+    V(Demo_Init,          0x4510D0, (void), ()) \
+    V(Fn_451120,          0x451120, (void), ()) \
+    V(Fn_4512F0,          0x4512F0, (void), ()) \
+    V(Fn_451330,          0x451330, (void), ()) \
+    V(Demo_Input,         0x451790, (void), ()) \
+    V(Game_Start,         0x4826F0, (u32 mode), (mode)) \
+    V(Text_Draw,          0x494BA0, (gptr s, u32 x, u32 y, u32 w, u32 col, u32 a, u32 b), (s, x, y, w, col, a, b)) \
+    V(Gpu_DrawOT,         0x4C0600, (gptr ot, gptr a, gptr b), (ot, a, b)) \
+    V(Gpu_SetSprt,        0x4C0690, (gptr p), (p)) \
+    V(Gpu_AddPrim,        0x4C05D0, (gptr ot, gptr p), (ot, p)) \
+    V(Gpu_SetDrawMode,    0x4C06F0, (gptr p, u32 dfe, u32 dtd, u32 tpage, u32 tw), (p, dfe, dtd, tpage, tw)) \
     V(Fn_48C700,          0x48C700, (void), ()) \
     V(Fn_478BF0,          0x478BF0, (void), ()) \
     V(Fn_450AF0,          0x450AF0, (void), ()) \

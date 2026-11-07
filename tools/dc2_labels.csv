@@ -79,10 +79,8 @@ address,kind,name,category,confidence,notes
 0x4C0650,func,SetPolyG4,libgpu,high,code 0x38
 0x4C0670,func,SetLineF2,libgpu,high,code 0x40
 0x4C06A0,func,SetTile,libgpu,high,code 0x60
-0x4C0690,func,SetSprt,libgpu,high,code 0x64
 0x4C06C0,func,SetSemiTrans,libgpu,high,
 0x4C08A0,func,GetTPage,libgpu,high,"(tp, abr, x, y), standard bit layout"
-0x4C06F0,func,SetDrawMode,libgpu,high,"code 0xE8: tpage +4, flags +6 (bit0 dtd, bit1 dfe), RECT* tw +8"
 0x4C06E0,func,PC_SetPacketE4,libgpu,low,code 0xE4 has no DrawOTag case (default = skipped)
 0x4C06B0,func,SetMaskMarker,libgpu,high,"code 0x88: one mask group, inserted at ot[z]"
 0x4C0740,func,SetDrawVramOp,libgpu,medium,"code 0xEC + RECT + a,b -> DrawOTag calls 0x4B4A60(&rect,a,b)"
@@ -480,5 +478,21 @@ address,kind,name,category,confidence,notes
 0x46D880,func,Root_Warning,game,high,"mode 2: picture 7, skippable"
 0x46D970,func,Root_ToTitle,game,high,"mode 3: Task_Chain(0x403920)"
 0x4828D0,func,Screen_LoadImage,game,high,"(n): file U16(0x703FD8+4n) raw to 0x6C1500"
-0x4A5730,func,TitleTask,game,high,""
 0x4C0560,func,Pc_SeekSet,game,high,""
+0x4826F0,func,Game_Start,title,high,"(mode)"
+0x494BA0,func,Text_Draw,title,high,""
+0x4A5730,func,TitleTask,title,high,"modes G+0x76C via 0x73B278; T = 0x759EF0"
+0x4A5760,func,Title_Init,title,high,""
+0x4A5790,func,Title_Run,title,high,"screen G+0x76E via 0x73B280"
+0x4A57B0,func,Title_Menu,title,high,"step G+0x770"
+0x4A5B30,func,Title_Attract,title,high,"T+0x28: 0 movie, 1 demo"
+0x4A5B50,func,Title_Movie,title,high,""
+0x4A5BF0,func,Title_Demo,title,high,"DEMO0x.TRG to 0x65F500, pad words from 0x65F964"
+0x4A5EC0,func,Title_NewGame,title,high,"difficulty, then Game_Start(0x10)"
+0x4A60F0,func,Title_Load,title,high,"Game_Start(2)"
+0x4A6180,func,Title_Option,title,high,"Game_Start(0)"
+0x4A6210,func,Title_Draw,title,high,"(x, y, color, frame): sprites + draw mode"
+0x4A6370,func,Title_SetAnim,title,high,""
+0x4A63A0,func,Title_AnimStep,title,high,""
+0x4C0690,func,Gpu_SetSprt,title,high,""
+0x4C06F0,func,Gpu_SetDrawMode,title,high,""

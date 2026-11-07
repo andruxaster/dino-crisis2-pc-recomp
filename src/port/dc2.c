@@ -3,7 +3,10 @@
  * files from DATA_DIR, the root task on the task system, and the per-frame
  * game work of the main loop. Nothing is drawn or played yet; the run is
  * reported as a trace (root mode changes, files, tasks).
- *   usage: dc2 Dino2.exe DATA_DIR [FRAMES] */
+ * Buttons can be pressed from the command line (the pad is not read yet):
+ * FRAME:MASK sets the "pressed this frame" word 0x87DC00 for that frame
+ * (0x820 confirm, 0x40 back, 0x1000 up, 0x4000 down).
+ *   usage: dc2 Dino2.exe DATA_DIR [FRAMES] [FRAME:MASK ...] */
 #include <stdio.h>
 #include <stdlib.h>
 #include <libgen.h>
@@ -65,6 +68,9 @@ int main(int argc, char **argv)
     static char root[1024]; snprintf(root, sizeof root, "%s", argv[2]);
     g_pc_root = dirname(root);
     int frames = argc > 3 ? atoi(argv[3]) : 600;
+    int npress = 0, press_at[32]; u32 press_mask[32];
+    for (int i = 4; i < argc && npress < 32; i++)
+        if (sscanf(argv[i], "%d:%x", &press_at[npress], &press_mask[npress]) == 2) npress++;
 
     U32(A_G_PTR) = A_G_STATIC;
     Task_InitStackBase();
@@ -79,9 +85,17 @@ int main(int argc, char **argv)
             gptr nm = U32(0x71B230 + last_file * 4);
             printf("frame %4d: load file %u %s\n", f, last_file, nm ? (const char *)MEM(nm) : "?");
         }
+        U32(0x87DC00) = 0;
+        for (int k = 0; k < npress; k++) if (press_at[k] == f) { U32(0x87DC00) = press_mask[k]; printf("frame %4d: press %X\n", f, press_mask[k]); }
         game_frame();
         u32 mode = U8(0x74D608) | U8(0x74D60A) << 8;
         if (mode != last_mode) { printf("frame %4d: root mode %u step %u\n", f, mode & 0xFF, mode >> 8); last_mode = mode; }
+        static u32 last_title = 0xFFFFFFFF;
+        u32 title = U16(G() + 0x76E) | U16(G() + 0x770) << 8 | U16(G() + 0x772) << 16;
+        if (U16(G() + 0x76C) && title != last_title) {        /* once the title runs */
+            printf("frame %4d: title screen %u step %u/%u cursor %d\n", f, title & 0xFF, (title >> 8) & 0xFF, title >> 16, S8(0x759EF2));
+            last_title = title;
+        }
         u32 tasks = 0;
         for (int i = 0; i < 4; i++) tasks |= (u32)(U16(A_TASK_SLOTS + i * 0x20) != 0) << i;
         if (tasks != last_tasks) { printf("frame %4d: tasks running %X\n", f, tasks); last_tasks = tasks; }
