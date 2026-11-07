@@ -39,6 +39,12 @@
     V(Fn_48D730,          0x48D730, (gptr e), (e)) \
     V(Fn_48F880,          0x48F880, (gptr obj, u32 a, u32 b, u32 c), (obj, a, b, c)) \
     V(Menu_Open,          0x495E90, (u32 a, u32 b, u32 c, u32 d, u32 e), (a, b, c, d, e)) \
+    V(Snd_FreeBank,       0x48CEB0, (u32 slot), (slot)) \
+    V(Snd_FreeStream,     0x48CF10, (u32 slot), (slot)) \
+    V(Gpu_StoreImage,     0x4B49F0, (gptr rect, gptr p), (rect, p)) \
+    V(Pc_SetBuffer,       0x4BD480, (gptr p), (p)) \
+    F(u32, Snd_CreateBuffer, 0x4BF720, (gptr wave, u32 a), (wave, a)) \
+    F(u32, Strm_Open,     0x4BFC10, (gptr data, u32 size, u32 a), (data, size, a)) \
     V(Gpu_LoadImage,      0x4B4D20, (gptr rect, gptr p), (rect, p)) \
     V(Gpu_LoadImageIfChanged, 0x4B4DB0, (gptr rect, gptr p), (rect, p))
 

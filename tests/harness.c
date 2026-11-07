@@ -482,7 +482,7 @@ static void anim_setup(void) { anim_setup_at(AN_OBJ); }
 #define LOG_BASE 0x6DE000u
 #define SEL(t)   ((s32)S8((t) + T_SEL1))
 #define LOG_REC  0x80
-typedef struct { u32 addr; const char *spec; u8 plen[2]; u32 ret; u8 saved[5]; } Stub;
+typedef struct { u32 addr; const char *spec; u8 plen[2]; u32 ret; u8 saved[5]; void *impl; } Stub;
 #pragma GCC diagnostic ignored "-Wmissing-field-initializers"
 static Stub g_stubs[] = {
     {0x405DE0, "dd"}, {0x403A20, ""}, {0x403A30, ""}, {0x448080, "d"}, {0x448580, "b"},
@@ -494,7 +494,13 @@ static Stub g_stubs[] = {
     {0x495E90, "wwwww"}, {0x4B4D20, "pd", {8}}, {0x4B4DB0, "pd", {8}}, {0x4DDDA2, ""},
     {0, "d"},                   /* 34: object type handlers (*0x87DCA0) */
     {0, "d"},                   /* 35: AOT kind handlers (0x738B68) */
+    /* file loading: 36.. (impl set below: a fake file system) */
+    {0x4C03F0, "sdd"}, {0x4C04E0, "ddd"}, {0x4C0540, "d"}, {0x4C0580, "ddd"}, {0x4C05A0, "d"},
+    {0x4DD711, "d"}, {0x4DD628, "d"}, {0x4DD5D6, ""},
+    {0x48CEB0, "d"}, {0x48CF10, "d"}, {0x4B49F0, "pd", {8}}, {0x4BD480, "d"}, {0x4BF720, "dd"},
+    {0x4BFC10, "ddd"},
 };
+#define STUB_FILE 36
 #define NSTUBS (int)(sizeof g_stubs / sizeof g_stubs[0])
 #define STUB_TYPE 34
 #define STUB_AOT  35
@@ -513,6 +519,12 @@ static u32 rec_common(int id, const u32 *a)
             switch (st->spec[i]) {
             case 'w': v &= 0xFFFF; break;
             case 'b': v &= 0xFF; break;
+            case 's': {
+                u32 k = 0;
+                for (; k < 0x3F && U8(v + k); k++) U8(d + k) = U8(v + k);
+                for (; k < 0x40; k++) U8(d + k) = 0;
+                d += 0x40; v = 0;
+                break; }
             case 'p': if (v >= 0x401000) { memcpy(MEM(d), MEM(v), st->plen[np]); v = 0; }
                       d += st->plen[np++]; break;
             }
@@ -526,10 +538,12 @@ static u32 rec_common(int id, const u32 *a)
 REC(0) REC(1) REC(2) REC(3) REC(4) REC(5) REC(6) REC(7) REC(8) REC(9) REC(10) REC(11)
 REC(12) REC(13) REC(14) REC(15) REC(16) REC(17) REC(18) REC(19) REC(20) REC(21) REC(22)
 REC(23) REC(24) REC(25) REC(26) REC(27) REC(28) REC(29) REC(30) REC(31) REC(32) REC(33)
-REC(34) REC(35)
+REC(34) REC(35) REC(36) REC(37) REC(38) REC(39) REC(40) REC(41) REC(42) REC(43) REC(44) REC(45)
+REC(46) REC(47) REC(48) REC(49)
 static void *const g_recs[] = {rec0, rec1, rec2, rec3, rec4, rec5, rec6, rec7, rec8, rec9, rec10,
     rec11, rec12, rec13, rec14, rec15, rec16, rec17, rec18, rec19, rec20, rec21, rec22, rec23,
-    rec24, rec25, rec26, rec27, rec28, rec29, rec30, rec31, rec32, rec33, rec34, rec35};
+    rec24, rec25, rec26, rec27, rec28, rec29, rec30, rec31, rec32, rec33, rec34, rec35, rec36, rec37,
+    rec38, rec39, rec40, rec41, rec42, rec43, rec44, rec45, rec46, rec47, rec48, rec49};
 #define TYPE_TAB 0x6DD000u      /* fake *0x87DCA0: 256 entries */
 static u32 g_aot_saved[12];
 
@@ -541,7 +555,7 @@ static void stubs_install(int on)
         u8 *c = MEM(st->addr);
         if (on) {
             memcpy(st->saved, c, 5);
-            c[0] = 0xE9; *(u32 *)(c + 1) = (u32)(uintptr_t)g_recs[i] - (st->addr + 5);
+            c[0] = 0xE9; *(u32 *)(c + 1) = (u32)(uintptr_t)(st->impl ? st->impl : g_recs[i]) - (st->addr + 5);
         } else memcpy(c, st->saved, 5);
     }
     for (int k = 0; k < 12; k++) {
@@ -972,6 +986,136 @@ static void test_anim(void)
     stubs_install(0);
 }
 
+/* ---- file loading: a fake file system behind the PC file functions --------- */
+#define FK_POS   0x6DD800u      /* read position (in compared memory, so both runs agree) */
+#define FK_HEAP  0x6DD804u      /* bump pointer of the fake malloc */
+#define FK_BASE  0x4F0000u      /* fake heap 0x4F0000..0x5A0000 */
+static u8 *g_fake; static u32 g_fake_len; static s32 g_fake_fd; static u32 g_synth_types;
+
+static u32 __cdecl fk_open(u32 path, u32 a, u32 b)
+{ u32 v[5] = {path, a, b}; rec_common(STUB_FILE + 0, v); U32(FK_POS) = 0; return (u32)g_fake_fd; }
+static u32 __cdecl fk_read(u32 fd, u32 buf, u32 n)
+{
+    u32 v[5] = {fd, buf, n}; rec_common(STUB_FILE + 1, v);
+    u32 pos = U32(FK_POS), k = pos < g_fake_len ? g_fake_len - pos : 0;
+    if (k > n) k = n;
+    memcpy(MEM(buf), g_fake + pos, k);
+    U32(FK_POS) = pos + k;
+    return k;
+}
+static u32 __cdecl fk_size(u32 fd) { u32 v[5] = {fd}; rec_common(STUB_FILE + 2, v); return g_fake_len; }
+static u32 __cdecl fk_seek(u32 fd, u32 off, u32 w)
+{ u32 v[5] = {fd, off, w}; rec_common(STUB_FILE + 3, v); U32(FK_POS) = (w == 1 ? U32(FK_POS) : 0) + off; return 0; }
+static u32 __cdecl fk_close(u32 fd) { u32 v[5] = {fd}; rec_common(STUB_FILE + 4, v); return 0; }
+static u32 __cdecl fk_malloc(u32 n)
+{
+    u32 v[5] = {n}; rec_common(STUB_FILE + 5, v);
+    u32 p = U32(FK_HEAP); U32(FK_HEAP) = (p + n + 15) & ~15u;
+    return p;
+}
+static u32 __cdecl fk_free(u32 p) { u32 v[5] = {p}; rec_common(STUB_FILE + 6, v); return 0; }
+static u32 __cdecl fk_sprintf(u32 buf, u32 fmt, u32 name)
+{
+    (void)fmt;
+    char t[64]; snprintf(t, sizeof t, "data\\%s", (char *)MEM(name));
+    memcpy(MEM(buf), t, strlen(t) + 1);
+    return 0;
+}
+
+static int load_host(const char *path)
+{
+    FILE *f = fopen(path, "rb");
+    if (!f) return 0;
+    fseek(f, 0, SEEK_END); long n = ftell(f); fseek(f, 0, SEEK_SET);
+    free(g_fake); g_fake = malloc(n + 1); g_fake_len = (u32)n;
+    int ok = fread(g_fake, 1, n, f) == (size_t)n;
+    fclose(f);
+    return ok;
+}
+
+static void test_files(const char *dir)
+{
+    void *impl[8] = {fk_open, fk_read, fk_size, fk_seek, fk_close, fk_malloc, fk_free, fk_sprintf};
+    for (int i = 0; i < 8; i++) g_stubs[STUB_FILE + i].impl = impl[i];
+    stubs_install(1);
+    static char names[400][MAX_PATH]; int n = 0;
+    char pat[MAX_PATH]; snprintf(pat, sizeof pat, "%s\\*.DAT", dir);
+    WIN32_FIND_DATAA fd; HANDLE h = FindFirstFileA(pat, &fd);
+    if (h != INVALID_HANDLE_VALUE) {
+        do {        /* containers whose records stay inside .psxseg */
+            char path[MAX_PATH]; snprintf(path, sizeof path, "%s\\%s", dir, fd.cFileName);
+            FILE *f = fopen(path, "rb"); u8 hdr[0x800]; int ok = 0;
+            if (f) { ok = fread(hdr, 1, 0x800, f) == 0x800; fclose(f); }
+            for (int r = 0; ok && r < 64; r++) {
+                u32 t = *(u32 *)(hdr + 32 * r), sz = *(u32 *)(hdr + 32 * r + 4), dst = *(u32 *)(hdr + 32 * r + 8);
+                if (!memcmp(hdr + 32 * r, "dummy", 5) || (!t && !sz)) continue;
+                if (t > 7 || sz > 0x80000 || ((t == 0 || t == 5) && (dst < 0x4E8000 || dst + (t ? 0 : sz) > 0x703000)) ||
+                    (t == 3 && dst > 7) || (t == 4 && dst > 3)) ok = 0;
+            }
+            if (ok && n < 400) strcpy(names[n++], path);
+        } while (FindNextFileA(h, &fd));
+        FindClose(h);
+    }
+    for (int i = 0; i < iters; i++) {
+        /* requests, the idle tick and its random numbers */
+        U16(0x87FFEA) = rnd() % 3 == 0; U16(0x87FFEE) = (u16)rnd(); U16(0x87DE10) = (u16)rnd();
+        if (rnd() % 8 == 0) U16(0x87DE10) = 0;
+        u32 a[2] = {rnd() % 676, 0x6D8000};
+        check(0x403E50, File_RequestLoad, "File_RequestLoad", 1, a, 0xFF);
+        U16(0x87FFEA) = rnd() % 3 == 0;
+        check(0x403E90, File_RequestRaw, "File_RequestRaw", 2, a, 0xFF);
+        check(0x48F750, Rand8, "Rand8", 0, NULL, 0xFF);
+        U16(0x87FFEA) = 0;
+        check(0x403E40, File_Tick, "File_Tick", 0, NULL, 0);
+        if (!n || i % 4) continue;
+        /* whole files: a container (flag 1) or one raw record */
+        int raw = rnd() % 4 == 0, synth = !raw && rnd() % 3 == 0;
+        if (synth) {        /* every record type, small sizes */
+            u32 nrec = 1 + rnd() % 8, len = 0x800;
+            u32 sizes[8], types[8];
+            for (u32 r = 0; r < nrec; r++) {
+                types[r] = rnd() % 9;
+                sizes[r] = types[r] == 5 ? 0x20 + rnd() % 0x3E0 : 0x20 + rnd() % 0x1800;  /* LZSS unpacks to ~9x */
+                len += (sizes[r] + 0x7FF) & ~0x7FFu;
+            }
+            free(g_fake); g_fake = calloc(1, len); g_fake_len = len;
+            for (u32 k = 0x800; k < len; k++) g_fake[k] = (u8)rnd();
+            for (u32 r = 0; r < nrec; r++) {
+                u32 *h = (u32 *)(g_fake + 32 * r), t = types[r];
+                h[0] = t == 8 ? 0x6D6D7564 : t; h[1] = sizes[r];
+                h[2] = t == 0 ? 0x6D8000 : t == 5 ? 0x6C0000 : t == 3 ? rnd() % 5 : t == 4 ? rnd() % 4 : rnd();
+                h[3] = rnd();
+                if (t == 1 || t == 6) {
+                    u16 *q = (u16 *)(h + 2);
+                    q[0] = rnd() % 0x400; q[1] = rnd() % 4 == 0 ? 0x280 : rnd() % 0x200;
+                    q[2] = 0x20 << (rnd() % 3); q[3] = 0x20 << (rnd() % 3);
+                    if (t == 1 && rnd() % 4 == 0) { q[0] = 0x300; q[1] = 0; q[2] = 0x80; q[3] = 0x100; }
+                }
+            }
+            U16(0x87FFEA) = 0; U16(0x87FFEE) = 0; File_RequestLoad(rnd() % 676);
+            sprintf(g_what, "synthetic %u records", nrec);
+            for (u32 r = 0; r < nrec; r++) g_synth_types |= 1u << types[r];
+        } else if (raw) {
+            g_fake_len = 0x100 + rnd() % 0x3000; free(g_fake); g_fake = malloc(g_fake_len);
+            for (u32 k = 0; k < g_fake_len; k++) g_fake[k] = (u8)rnd();
+            U16(0x87FFEA) = 0; File_RequestRaw(rnd() % 676, 0x6D8000);
+        } else {
+            const char *f = names[rnd() % n];
+            if (!load_host(f)) continue;
+            U16(0x87FFEA) = 0; U16(0x87FFEE) = 0; File_RequestLoad(rnd() % 676);
+            strcpy(g_what, f);
+        }
+        g_fake_fd = rnd() % 16 ? 3 : -1;
+        U32(FK_POS) = 0; U32(FK_HEAP) = FK_BASE; U32(LOG_BASE) = 0;
+        U32(0x746CA0) = rnd() % 2 ? 0x6D9000 : 0; U32(0x87F944) = rnd() % 2 ? 0x6D9000 : 0;
+        g_stubs[STUB_FILE + 12].ret = rnd(); g_stubs[STUB_FILE + 13].ret = rnd();
+        if (raw) sprintf(g_what, "raw %u bytes", g_fake_len);
+        check(0x404290, File_Process, "File_Process", 0, NULL, 0);
+    }
+    stubs_install(0);
+    printf("synthetic record types seen: %03X\n", g_synth_types);
+}
+
 static void test_lzss(const char *dir)
 {
     char pat[MAX_PATH]; snprintf(pat, sizeof pat, "%s\\*.DAT", dir);
@@ -1045,7 +1189,9 @@ __declspec(dllexport) void harness_main(int argc, char **argv)
         printf("%-16s %6d checks, %d failed\n", T[i].name, g_tests - t0, g_fail - f0);
     }
     if (data) { int f0 = g_fail, t0 = g_tests; test_lzss(data);
-                printf("%-16s %6d checks, %d failed\n", "lzss", g_tests - t0, g_fail - f0); }
+                printf("%-16s %6d checks, %d failed\n", "lzss", g_tests - t0, g_fail - f0);
+                f0 = g_fail; t0 = g_tests; test_files(data);
+                printf("%-16s %6d checks, %d failed\n", "files", g_tests - t0, g_fail - f0); }
     printf("hook table: %d functions; total %d checks, %d failed\n", g_nhooks, g_tests, g_fail);
     fflush(stdout);
     TerminateProcess(GetCurrentProcess(), g_fail != 0);

@@ -25,8 +25,8 @@ One source tree, three builds:
 | build | what | status |
 |---|---|---|
 | `build/dinput.dll` | hook DLL: put next to `Dino2.exe`, redirects the original functions to the C ones | runs inside the game |
-| `build/harness_stub.exe` + `harness.dll` | checks every C function against the original code | 197 functions, ~287 000 checks, 0 differences |
-| `build/smoke` (Linux) | the C game code without any exe code, on an emulated memory image | room load + script VM + animation: 80 of 89 room scripts run 600 frames; 9 stop on data that loaders not rewritten yet provide (cutscene files) |
+| `build/harness_stub.exe` + `harness.dll` | checks every C function against the original code | 210 functions, ~295 000 checks, 0 differences |
+| `build/smoke` (Linux) | the C game code without any exe code, on an emulated memory image | rooms loaded by the game's file loader, script VM, animation: 80 of 89 room scripts run 600 frames; 9 stop on cutscene data (SCxx.DAT) that is not loaded yet |
 
 The Dreamcast (KallistiOS) build will reuse the standalone path once the
 whole game logic is in C.
@@ -77,7 +77,7 @@ Checked under wine 9 (32-bit prefix): all 26 hooks installed; after one
 minute Lzss_Decode 23 calls, Flag_Check 62 000, Script_Run every frame,
 PointInQuad 5 000.
 
-## Reimplemented (197)
+## Reimplemented (210)
 
 The authoritative list is `src/hook/hooks.c`. By area:
 
@@ -91,7 +91,12 @@ The authoritative list is `src/hook/hooks.c`. By area:
 | script built-ins | all remaining opcodes: 11 message, 1A obj_spawn, 1B, 20 wait_event, 21/46 animation, 22-28 (models, timer, fade, wait flag), 29 character switch, 2B-2F, 40-43 (camera move, cutscenes, sound), 47-59 (part links, random, sound slots, enemy_set, texture upload, ...); Obj_Init, Obj_Part, Script_SelObj, Room_SoundSlot | src/game/script_ops.c |
 | AOT (trigger areas) | opcodes 30-33, 35-3B define entries of G+0xA5C (doors, items, ...), 3E runs an entry's kind handler | src/game/script_aot.c |
 | animation | Anim_Set, Anim_Start, Anim_Step, Anim_ApplyFrame (cubic over four keys, blending into a new animation), Anim_Events, Anim_BlendLinear/BlendMatrix, Matrix_ToAngles; the player's two animation layers (Anim_Save/LoadLayer, Anim_StartLayers, Anim_StepLayers), Anim_FrameFlag | src/game/anim.c |
+| files | File_RequestLoad/Raw, File_Tick, File_Process and the record handlers (copy, VRAM image, CLUT, sound bank, stream, LZSS, texture tiles, PC buffer), Rand8 | src/game/file.c; host files and heap: src/game/pcio.c |
 | PC layer: GTE | all 80 libgte functions of the port (0x4C08E0..0x4C24C0): rsin/rcos/ratan2, roots, geometry state, Apply/Mul/Rot/Scale/Transpose matrix, RotTransPers 1/3/4 and the float projection, depth cue, normal colour, register loads/stores, rtps/rtpt/nclip/ncct, PC depth stores | src/game/gte.c, include/dc2/gte.h |
+
+The standalone builds read files from the host (`g_pc_root`, names matched
+without case) and allocate from a heap inside the emulated image, so data
+the game keeps 32-bit pointers to stays addressable (`include/dc2/pcio.h`).
 
 Functions still called in the original (from C) are listed once in
 `include/dc2/orig.h` (`ORIG_LIST`): in the DLL and the harness they run the
@@ -120,8 +125,8 @@ alone and the harness ignores them.
 
 ## Next
 
-The script VM and the keyframe animation are complete. Next: the file loader
-(File_Process 0x404290 and its record handlers), model loading (Enemy_LoadModel 0x482070), the object
+The script VM and the keyframe animation are complete. Next: model and stage loading
+(Enemy_LoadModel 0x482070, Stage_Load 0x4822D0), the object type handlers (Enemy_LoadModel 0x482070), the object
 type handlers (*0x87DCA0), sound/BGM (0x48C9C0..0x48CE60), messages
 (0x4718F0), fades and menus. Then the libgpu side
 of the PC layer (primitives, DrawOTag, texture cache) — rewritten for

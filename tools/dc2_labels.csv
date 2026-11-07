@@ -97,14 +97,9 @@ address,kind,name,category,confidence,notes
 0x4BEAC0,func,Masks_Upload,masks,low,called after build / depth shift
 0x4BB8D0,func,PC_TexSlot,d3d,low,"slot table 0x75DEFC, stride 0x164"
 0x4C24C0,func,PC_DrawSpecial,d3d,low,768 bytes x87; called once from 0x410710
-0x4C03F0,func,PCopen,libsn,high,"""%s%s"" path, 16 handles @0x87B330"
 0x4C0490,func,PCcreat,libsn,medium,
-0x4C04E0,func,PCread,libsn,high,"fread(buf,1,n,fp)"
 0x4C0510,func,PCwrite,libsn,high,
-0x4C05A0,func,PCclose,libsn,high,
-0x4C0580,func,PClseek,libsn,high,"fseek(fp, off, mode)"
 0x4C0560,func,PClseek_set,libsn,medium,"fseek(fp, off, SEEK_SET)"
-0x4C0540,func,PC_FileLength,libsn,medium,_filelength(_fileno(fp))
 0x4BF970,func,Snd_Play,sound,medium,DSound slot table 0x878328 (stride 12)
 0x4BFAA0,func,Snd_IsPlaying,sound,high,IDirectSoundBuffer::GetStatus
 0x4BFAE0,func,Snd_Stop,sound,high,::Stop
@@ -250,19 +245,8 @@ address,kind,name,category,confidence,notes
 0x46D970,func,Root_Mode3,game,low,
 0x471EC0,func,RootTask_Alt,game,low,used when 0x87DE08 set
 0x48C080,func,Game_Init,game,low,
-0x403E40,func,File_Tick,game,high,called once per frame from WinMain
-0x403E50,func,File_RequestLoad,game,high,(file_id)
 0x403A20,func,File_IsBusy,game,high,
-0x404290,func,File_Process,game,high,"open, header -> 0x6E6D00, read all, dispatch records"
 0x404280,func,File_Idle,game,high,
-0x4044C0,func,FileRec_Copy,game,high,type 0
-0x4044F0,func,FileRec_VramImage,game,high,type 1
-0x404680,func,FileRec_Clut,game,high,type 2
-0x4046C0,func,FileRec_SoundBank,game,high,"type 3: bank slot arg -> 0x87FBE0[slot] {data, data+0x100}; WAVs -> DirectSound buffers"
-0x404770,func,FileRec_SoundStream,game,high,"type 4: slot -> 0x87FB84 (stride 20), Strm_Open"
-0x4047F0,func,FileRec_Packed5,game,medium,type 5
-0x404810,func,FileRec_Packed6,game,medium,type 6
-0x4048F0,func,FileRec_Buffer,game,medium,type 7
 0x4041F0,func,Unpack,game,low,used by types 5/6 and LoadImage paths
 0x41EBB0,func,Room_LoadTask,game,high,rooms[room].dat_file_id
 0x4822D0,func,Stage_Load,game,high,"CORE00+stage, weapon files"
@@ -470,3 +454,23 @@ address,kind,name,category,confidence,notes
 0x48EBC0,func,Anim_LoadLayer,anim,high,"inverse of Anim_SaveLayer"
 0x48EDC0,func,Anim_StartLayers,anim,high,"(anim0, anim1, frame, flags, blend, w): start both layers, mix with weight w"
 0x48EF50,func,Anim_StepLayers,anim,high,"(w): step both layers of the player and mix; was labelled Object_UpdateSkeleton"
+0x403E40,func,File_Tick,file,high,"state 0x87FFEA: 0 Rand8, 1 File_Process"
+0x403E50,func,File_RequestLoad,file,high,""
+0x403E90,func,File_RequestRaw,file,high,"(id, dest): headerless file copied whole to dest"
+0x404290,func,File_Process,file,high,""
+0x4044C0,func,File_Copy,file,high,"type 0"
+0x4044F0,func,File_Image,file,high,"type 1; 0x280 rows keep VRAM 0x340,0x80 64x128 in 0x746CA0"
+0x404680,func,File_Clut,file,high,"type 2"
+0x4046C0,func,File_SoundBank,file,high,"type 3"
+0x404770,func,File_Stream,file,high,"type 4"
+0x4047F0,func,File_Unpack,file,high,"type 5"
+0x404810,func,File_Texture,file,high,"type 6"
+0x4048F0,func,File_PcBuffer,file,high,"type 7"
+0x48F750,func,Rand8,file,high,"byte RNG on 0x87DE10; called by File_Tick when idle"
+0x4C03F0,func,Pc_Open,file,high,"(path, 0, 0) fopen rb, then CD path"
+0x4C04E0,func,Pc_Read,file,high,""
+0x4C0540,func,Pc_Size,file,high,""
+0x4C0580,func,Pc_Seek,file,high,""
+0x4C05A0,func,Pc_Close,file,high,""
+0x4DD628,func,Crt_free,file,high,""
+0x4DD711,func,Crt_malloc,file,high,""

@@ -141,6 +141,21 @@ void DC2CALL Anim_StartLayers(gptr anim0, gptr anim1, u32 frame, u32 fl, u32 ble
 u32  DC2CALL Anim_StepLayers(s32 w);                                    /* 0x48EF50 */
 void DC2CALL Player_AnimReset(void);                                    /* 0x48E930 */
 
+/* file.c -- file loading */
+u8   DC2CALL Rand8(void);                                               /* 0x48F750 */
+u8   DC2CALL File_RequestLoad(u32 id);                                  /* 0x403E50 */
+u8   DC2CALL File_RequestRaw(u32 id, gptr dest);                        /* 0x403E90 */
+void DC2CALL File_Tick(void);                                           /* 0x403E40 */
+void DC2CALL File_Process(void);                                        /* 0x404290 */
+void DC2CALL File_Copy(gptr rec, gptr src);                             /* 0x4044C0 */
+void DC2CALL File_Image(gptr rec, gptr src);                            /* 0x4044F0 */
+void DC2CALL File_Clut(gptr rec, gptr src);                             /* 0x404680 */
+void DC2CALL File_SoundBank(gptr rec, gptr src);                        /* 0x4046C0 */
+void DC2CALL File_Stream(gptr rec, gptr src);                           /* 0x404770 */
+void DC2CALL File_Unpack(gptr rec, gptr src);                           /* 0x4047F0 */
+void DC2CALL File_Texture(gptr rec, gptr src);                          /* 0x404810 */
+void DC2CALL File_PcBuffer(gptr rec, gptr src);                         /* 0x4048F0 */
+
 /* handler used for an opcode that is not reimplemented yet: in the hook
  * build it calls the original code, elsewhere it reports and stops the thread */
 typedef u32 (DC2CALL *ScrOpFn)(gptr thr);
