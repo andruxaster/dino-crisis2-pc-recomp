@@ -93,6 +93,11 @@ static int compare(const char *name, u32 r_orig, u32 r_new, u32 rmask)
                 snap1[0][pads[j] + 1 - RW[0].lo] = U8(pads[j] + 1);
             }
         }
+    if (g_ign_objpads)          /* animation test object and its parts */
+        for (int i = 0; i <= 16; i++) {
+            u32 a = i == 16 ? 0x6C8000 + 0x32 : 0x6C8400 + i * 0x80 + 0x32;
+            snap1[0][a - RW[0].lo] = U8(a); snap1[0][a + 1 - RW[0].lo] = U8(a + 1);
+        }
     for (u32 k = 0; k < g_ign_len; k++)
         for (int i = 0; i < 2; i++)
             if (g_ign_addr + k >= RW[i].lo && g_ign_addr + k < RW[i].hi)
@@ -446,11 +451,12 @@ static void anim_setup_at(gptr o)
         gptr p = AN_PART + i * 0x80;
         for (u32 a = p; a < p + 0x80; a += 4) U32(a) = rnd() % 2 ? rnd() % 0x1000 : rnd();
         U32(p + 0x54) = i + 1 < n ? p + 0x80 : 0;
+        U32(p + 0x58) = i ? p - 0x80 : o;                  /* parent */
     }
     u32 nfr = 1 + rnd() % 8;
     anim_data(AN_DATA, n, nfr);
     anim_data(AN_DATA + 0x1000, n, 2 + rnd() % 7);
-    U32(AN_TAB) = AN_DATA; U32(AN_TAB + 4) = AN_DATA + 0x1000;
+    for (int k = 0; k < 0x20; k++) U32(AN_TAB + 4 * k) = AN_DATA + 0x1000 * (k & 1);
     U32(o + 0x88) = AN_TAB;
     U32(AN_EVT) = rnd() % 4;
     for (int i = 0; i < 4; i++) { U16(AN_EVT + 4 + 4 * i) = rnd() % 16; U16(AN_EVT + 6 + 4 * i) = (u16)rnd(); }
@@ -485,10 +491,10 @@ static void anim_setup(void) { anim_setup_at(AN_OBJ); }
 typedef struct { u32 addr; const char *spec; u8 plen[2]; u32 ret; u8 saved[5]; void *impl; } Stub;
 #pragma GCC diagnostic ignored "-Wmissing-field-initializers"
 static Stub g_stubs[] = {
-    {0x405DE0, "dd"}, {0x403A20, ""}, {0x403A30, ""}, {0x448080, "d"}, {0x448580, "b"},
+    {0x405DE0, "dd"}, {0, ""}, {0x403A30, ""}, {0x448080, "d"}, {0x448580, "b"},
     {0x448620, "d"}, {0x4529C0, "d"}, {0x450A70, "ddd"}, {0x46FBC0, "ddd"}, {0x4718F0, "dddd"},
     {0x473130, "d"}, {0x4731F0, ""}, {0x474B20, "d"}, {0x478B80, "dd"}, {0x47A8C0, "ddpp", {16, 8}},
-    {0x481D20, "d"}, {0x481DC0, "d"}, {0x482070, "dd"}, {0x4822D0, "dd"}, {0x48C0B0, "pd", {0x60}},
+    {0x481D20, "d"}, {0x481DC0, "d"}, {0, ""}, {0, ""}, {0x48C0B0, "pd", {0x60}},
     {0x48C600, "d"}, {0x48C640, "ddd"}, {0x48C9C0, "w"}, {0x48CD70, "dd"}, {0x48CE20, "bwww"},
     {0x48CE60, "d"}, {0x48D070, "dd"}, {0x48D730, "d"}, {0, ""}, {0x48F880, "ddww"},
     {0x495E90, "wwwww"}, {0x4B4D20, "pd", {8}}, {0x4B4DB0, "pd", {8}}, {0x4DDDA2, ""},
@@ -499,7 +505,11 @@ static Stub g_stubs[] = {
     {0x4DD711, "d"}, {0x4DD628, "d"}, {0x4DD5D6, ""},
     {0x48CEB0, "d"}, {0x48CF10, "d"}, {0x4B49F0, "pd", {8}}, {0x4BD480, "d"}, {0x4BF720, "dd"},
     {0x4BFC10, "ddd"},
+    /* 50..: loading and room set-up */
+    {0x4C29A9, "dd"}, {0x47AF60, ""}, {0x47ADA0, "d"}, {0x48D8B0, "dd"}, {0x471A30, ""}, {0x471A50, ""},
+    {0x48D470, "d"}, {0x478790, ""},
 };
+#define STUB_LOAD 50
 #define STUB_FILE 36
 #define NSTUBS (int)(sizeof g_stubs / sizeof g_stubs[0])
 #define STUB_TYPE 34
@@ -539,16 +549,24 @@ REC(0) REC(1) REC(2) REC(3) REC(4) REC(5) REC(6) REC(7) REC(8) REC(9) REC(10) RE
 REC(12) REC(13) REC(14) REC(15) REC(16) REC(17) REC(18) REC(19) REC(20) REC(21) REC(22)
 REC(23) REC(24) REC(25) REC(26) REC(27) REC(28) REC(29) REC(30) REC(31) REC(32) REC(33)
 REC(34) REC(35) REC(36) REC(37) REC(38) REC(39) REC(40) REC(41) REC(42) REC(43) REC(44) REC(45)
-REC(46) REC(47) REC(48) REC(49)
+REC(46) REC(47) REC(48) REC(49) REC(50) REC(51) REC(52) REC(53) REC(54) REC(55) REC(56) REC(57)
 static void *const g_recs[] = {rec0, rec1, rec2, rec3, rec4, rec5, rec6, rec7, rec8, rec9, rec10,
     rec11, rec12, rec13, rec14, rec15, rec16, rec17, rec18, rec19, rec20, rec21, rec22, rec23,
     rec24, rec25, rec26, rec27, rec28, rec29, rec30, rec31, rec32, rec33, rec34, rec35, rec36, rec37,
-    rec38, rec39, rec40, rec41, rec42, rec43, rec44, rec45, rec46, rec47, rec48, rec49};
+    rec38, rec39, rec40, rec41, rec42, rec43, rec44, rec45, rec46, rec47, rec48, rec49, rec50, rec51,
+    rec52, rec53, rec54, rec55, rec56, rec57};
+/* Task_Sleep: the file loader "runs" while the task sleeps */
+static u32 __cdecl ts_sleep(u32 n)
+{ u32 v[5] = {n, U16(0x87FFE8)}; rec_common(STUB_LOAD, v); U16(0x87FFEA) = 0; return 0; }   /* + file asked for */
+/* Model_Setup: the model's parts come back (they are freed before) */
+static u32 __cdecl ms_setup(u32 o, u32 d)
+{ u32 v[5] = {o, d}; rec_common(STUB_LOAD + 3, v); U32(o + 0x64) = 0x6C8400; return 0; }
 #define TYPE_TAB 0x6DD000u      /* fake *0x87DCA0: 256 entries */
 static u32 g_aot_saved[12];
 
 static void stubs_install(int on)
 {
+    g_stubs[STUB_LOAD].impl = ts_sleep; g_stubs[STUB_LOAD + 3].impl = ms_setup;
     for (int i = 0; i < NSTUBS; i++) {
         Stub *st = &g_stubs[i];
         if (!st->addr) continue;
@@ -576,13 +594,18 @@ static void ops2_args(u8 op, gptr t)
                break;
     case 0x1B: U8(t + T_SEL0) = rnd() % 5; if (rnd() % 4 == 0) U32(O_OBJ + SEL(t) * 0x260 + 0x64) = 0; break;
     case 0x20: U8(0x87FC45) = rnd() % 3 ? (u8)rnd() : 0xFF; break;
-    case 0x23: A(1) = rnd() % 2 ? 0x6DC000 + rnd() % 0x100 : rnd() % 64; break;
+    case 0x23: A(1) = rnd() % 2 ? 0x6DC000 + rnd() % 0x100 : rnd() % 64;
+               U16(g + 0x680) = rnd() % 16; U16(g + 0x682) = rnd() % 12; U16(0x87FFEA) = rnd() % 2; break;
     case 0x24: U8(g + 0xB4A) = rnd() % 3 ? (u8)rnd() : 0xFF; break;
     case 0x28: A(2) = rnd() % 12; A(1) = rnd() % 64; A(0) = rnd() % 2; break;
     case 0x29: { s32 v[4] = {-1, -2, -3, (s32)rnd()}; A(0) = (u32)v[rnd() % 4];
                U8(g + 0x108F) = rnd() % 4; U16(g + 0x10B4) = (u16)rnd();
+               if (A(0) == 0xFFFFFFFF) U8(g + 0x108F) = rnd() % 2;   /* else stage 0xFE: outside the CORE table */
                for (int i = 0; i < 4; i++) U16(g + 0x10B6 + 2 * i) = (u16)rnd();
-               U32(O_OBJ + 0x50) = rnd(); U8(O_OBJ + 0x58) = (u8)rnd(); break; }
+               anim_setup_at(O_OBJ);                 /* Stage_Load restarts the player's animation */
+               U32(O_OBJ + 0x50) = rnd(); U8(O_OBJ + 0x58) = (u8)rnd();
+               U16(g + 0x67A) = rnd() % 2 ? 0x16 + rnd() % 4 : 0; U16(g + 0x674) = (u16)rnd(); U16(g + 0x676) = (u16)rnd();
+               U16(0x87FFEA) = rnd() % 2; Flag_Set(9, 0x33, rnd() & 1); break; }
     case 0x2B: A(3) = rnd() % 16; break;
     case 0x2C: A(4) = rnd() % 3; Flag_Set(2, 6, rnd() % 4 == 0); break;
     case 0x2D: A(0) = rnd() % 4 ? (rnd() % 10) << 8 | rnd() % 32 : 0xFFFF; break;
@@ -614,7 +637,7 @@ static void ops2_args(u8 op, gptr t)
     case 0x47: U8(t + T_SEL0) = 1 + rnd() % 2; A(2) = rnd() % 3; A(1) = rnd() % 16; A(0) = rnd() % 2; break;
     case 0x48: g_stubs[33].ret = rnd(); break;
     case 0x4B: U8(g + 0x7C4) = rnd() % 4; U8(t + T_A0) = rnd() % 4; break;
-    case 0x4E: g_stubs[1].ret = rnd() % 3 == 0; break;
+    case 0x4E: U16(0x87FFEA) = rnd() % 3 == 0; break;
     case 0x4F: A(0) = rnd() % 4 ? 0x6DC000 + 0x10 * (rnd() % 4) : 0; U32(g + 0xA68) = rnd() % 4 ? 0 : A(0);
                U8(g + 0x1091) = rnd() % 10; U8(g + 0x1090) = rnd() % 32; break;
     case 0x50: case 0x51: Flag_Set(2, 0x17, rnd() & 1); break;
@@ -1116,6 +1139,68 @@ static void test_files(const char *dir)
     printf("synthetic record types seen: %03X\n", g_synth_types);
 }
 
+/* ---- loading and room set-up ------------------------------------------------ */
+static void test_room(void)
+{
+    script_setup();
+    stubs_install(1);
+    g_ign_objpads = 1;
+    for (int i = 0; i < iters; i++) {
+        gptr g = G();
+        U32(LOG_BASE) = 0;
+        for (u32 k = 0x740; k < 0x7D0; k += 4) U32(g + k) = rnd();          /* fields the set-up clears */
+        for (u32 k = 0x87FC40; k < 0x87FCD0; k += 4) U32(k) = rnd();
+        U16(0x87FFEA) = rnd() % 3 == 0; U16(0x87FFEE) = (u16)rnd();
+        check(0x403A20, File_IsBusy, "File_IsBusy", 0, NULL, 0xFFFFFFFF);
+        /* models */
+        u32 types[] = {0, 1, 2, 3, 6, 7, 8, 13, 15, 16, 0x1C, 0x1D, 0x20, 0x23};
+        u32 a[10] = {types[rnd() % 14], rnd() % 4 ? rnd() % 16 : rnd() % 3 ? 0x40000000 : rnd()};
+        U16(g + 0x680) = rnd() % 2 ? (u16)a[0] : rnd() % 16; U16(g + 0x682) = rnd() % 2 ? (u16)a[1] : rnd() % 12;
+        S16(g + 0x1388) = rnd() % 4; S16(g + 0x138A) = rnd() % 3 == 0;
+        Flag_Set(2, 0x16, rnd() & 1);
+        sprintf(g_what, "type %u variant %X (loaded %u/%u)", a[0], a[1], U16(g + 0x680), U16(g + 0x682));
+        check(0x482070, Enemy_LoadModel, "Enemy_LoadModel", 2, a, 0);
+        /* stage */
+        anim_setup(); U32(LOG_BASE) = 0;
+        U32(g + 0x940) = AN_OBJ;
+        U8(g + 0x108F) = rnd() % 13;                  /* 13 CORE files */
+        U16(g + 0x67A) = rnd() % 2 ? 0x16 + U8(g + 0x108F) : 0; U16(g + 0x674) = rnd() % 3 ? (u16)rnd() : 0x1FF;
+        U16(g + 0x676) = rnd() % 2 ? (u16)rnd() : 0x214; Flag_Set(9, 0x33, rnd() & 1);
+        a[0] = rnd() % 6; a[1] = rnd() % 4;
+        if (rnd() % 4 == 0) U32(AN_OBJ + 0x64) = 0;
+        sprintf(g_what, "stage %u w %u s %u", U8(g + 0x108F), a[0], a[1]);
+        check(0x4822D0, Stage_Load, "Stage_Load", 2, a, 0);
+        /* room block header and object arrays */
+        gptr hdr = 0x6DB000, sh = 0x6DB100;
+        for (int k = 0; k < 0x30; k += 4) U32(hdr + k) = 0x600000 + rnd() % 0x10000;
+        U32(hdr + 0x14) = sh; U32(hdr + 0x2C) = 0x690000;
+        for (int k = 0; k < 0x1C; k++) U8(sh + k) = (u8)(rnd() % 12);
+        a[0] = hdr;
+        check(0x481E10, Room_SetPointers, "Room_SetPointers", 1, a, 0);
+        check(0x481EC0, Room_Reset, "Room_Reset", 0, NULL, 0);
+        U32(g + 0xA44) = 0x6DB200; U32(0x6DB200) = rnd() % 16;
+        check(0x4034D0, CamZones_Init, "CamZones_Init", 0, NULL, 0);
+        check(0x48AFD0, Aot_Reset, "Aot_Reset", 0, NULL, 0);
+        /* script start and the per-frame modes; every routine just returns */
+        script_setup();
+        for (int r = 0; r < 16; r++) { U8(S_BASE + 0x40 + 0x80 * r) = 0x04; U8(S_BASE + 0x41 + 0x80 * r) = 0; }
+        U32(g + G_SCRIPT) = S_BASE - 0x1C; U32(S_BASE - 0x1C + 0xC) = 0x2000 + 4 * (rnd() % 16);
+        U32(0x87DC00) = rnd(); Flag_Set(2, 6, rnd() % 3 == 0); U32(0x87DE14) = rnd() % 8;
+        U32(g + 0x948) = O_K3;
+        for (int k = 0; k < 8; k++) { U8(O_K3 + k * 0x34) = (u8)rnd(); U8(O_K3 + k * 0x34 + 1) = rnd() % 3; }
+        check(0x48BB60, Script_Init, "Script_Init", 0, NULL, 0);
+        for (u32 m = 0; m < 3; m++) {
+            script_setup();
+            for (int r = 0; r < 16; r++) { U8(S_BASE + 0x40 + 0x80 * r) = 0x04; U8(S_BASE + 0x41 + 0x80 * r) = 0; }
+            U8(0x87FC44) = (u8)m; U8(0x87FC47) = rnd() % 2 ? 0xFF : rnd() % 16; U32(0x87DC00) = rnd();
+            sprintf(g_what, "script mode %u event %u", m, U8(0x87FC47));
+            check(0x48BBF0, Script_Tick, "Script_Tick", 0, NULL, 0);
+        }
+    }
+    g_ign_objpads = 0;
+    stubs_install(0);
+}
+
 static void test_lzss(const char *dir)
 {
     char pat[MAX_PATH]; snprintf(pat, sizeof pat, "%s\\*.DAT", dir);
@@ -1181,7 +1266,7 @@ __declspec(dllexport) void harness_main(int argc, char **argv)
     struct { const char *name; void (*fn)(void); } T[] = {
         {"flags", test_flags}, {"geometry", test_geom}, {"script values", test_script_values},
         {"script opcodes", test_script_ops}, {"script objects", test_objects},
-        {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim},
+        {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"loading", test_room},
     };
     for (unsigned i = 0; i < sizeof T / sizeof T[0]; i++) {
         int f0 = g_fail, t0 = g_tests;

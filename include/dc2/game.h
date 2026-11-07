@@ -156,6 +156,20 @@ void DC2CALL File_Unpack(gptr rec, gptr src);                           /* 0x404
 void DC2CALL File_Texture(gptr rec, gptr src);                          /* 0x404810 */
 void DC2CALL File_PcBuffer(gptr rec, gptr src);                         /* 0x4048F0 */
 
+/* room.c -- models, stages, rooms */
+u32  DC2CALL File_IsBusy(void);                                         /* 0x403A20 */
+void DC2CALL Enemy_LoadModel(u32 type, u32 variant);                    /* 0x482070 */
+void DC2CALL Stage_Load(u32 w, u32 s);                                  /* 0x4822D0 */
+void DC2CALL Room_Reset(void);                                          /* 0x481EC0 */
+void DC2CALL Room_AllocObjects(gptr hdr);                               /* 0x481F10 */
+void DC2CALL Room_SetPointers(gptr hdr);                                /* 0x481E10 */
+void DC2CALL CamZones_Init(void);                                       /* 0x4034D0 */
+void DC2CALL Aot_Reset(void);                                           /* 0x48AFD0 */
+void DC2CALL Script_Skip(void);                                         /* 0x48BCB0 */
+void DC2CALL Script_Event(void);                                        /* 0x48BD60 */
+void DC2CALL Script_Tick(void);                                         /* 0x48BBF0 */
+void DC2CALL Script_Init(void);                                         /* 0x48BB60 */
+
 /* handler used for an opcode that is not reimplemented yet: in the hook
  * build it calls the original code, elsewhere it reports and stops the thread */
 typedef u32 (DC2CALL *ScrOpFn)(gptr thr);

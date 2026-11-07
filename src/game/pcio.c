@@ -10,6 +10,7 @@ s32  DC2CALL Pc_Seek(s32 fd, s32 off, u32 w)    { return ORIG(0x4C0580, s32 (DC2
 void DC2CALL Pc_Close(s32 fd)                   { ORIG(0x4C05A0, void (DC2CALL *)(s32))(fd); }
 gptr DC2CALL Crt_malloc(u32 n)                  { return ORIG(0x4DD711, gptr (DC2CALL *)(u32))(n); }
 void DC2CALL Crt_free(gptr p)                   { ORIG(0x4DD628, void (DC2CALL *)(gptr))(p); }
+void DC2CALL Task_Sleep(u32 n)                  { ORIG(0x4C29A9, void (DC2CALL *)(u32))(n); }
 #else
 #include <stdio.h>
 #include <stdlib.h>
@@ -17,6 +18,8 @@ void DC2CALL Crt_free(gptr p)                   { ORIG(0x4DD628, void (DC2CALL *
 #include <dirent.h>
 
 const char *g_pc_root = ".";
+void (*g_task_sleep)(u32 n);
+void DC2CALL Task_Sleep(u32 n) { if (g_task_sleep) g_task_sleep(n); }
 static FILE *g_files[16];
 
 /* "data\NAME" -> root/data/NAME, each component matched without case */

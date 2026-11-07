@@ -10,7 +10,6 @@
 
 #define ORIG_LIST(F, V) \
     V(Timer_Set,          0x405DE0, (u32 frames, u32 b), (frames, b)) \
-    F(u32, File_IsBusy,   0x403A20, (void), ()) \
     V(Cutscene_End,       0x403A30, (void), ()) \
     V(Fn_448080,          0x448080, (gptr e), (e)) \
     V(Fn_448580,          0x448580, (u32 a), (a)) \
@@ -26,8 +25,6 @@
     V(Fn_47A8C0,          0x47A8C0, (gptr obj, u32 mode, gptr a, gptr b), (obj, mode, a, b)) \
     V(Fn_481D20,          0x481D20, (u32 a), (a)) \
     V(Fn_481DC0,          0x481DC0, (u32 a), (a)) \
-    V(Enemy_LoadModel,    0x482070, (u32 type, u32 variant), (type, variant)) \
-    V(Stage_Load,         0x4822D0, (u32 a, u32 b), (a, b)) \
     V(Fn_48C0B0,          0x48C0B0, (gptr obj, u32 a), (obj, a)) \
     V(Fn_48C600,          0x48C600, (u32 a), (a)) \
     V(Fn_48C640,          0x48C640, (u32 a, u32 b, u32 c), (a, b, c)) \
@@ -46,6 +43,13 @@
     F(u32, Snd_CreateBuffer, 0x4BF720, (gptr wave, u32 a), (wave, a)) \
     F(u32, Strm_Open,     0x4BFC10, (gptr data, u32 size, u32 a), (data, size, a)) \
     V(Gpu_LoadImage,      0x4B4D20, (gptr rect, gptr p), (rect, p)) \
+    V(Fn_47AF60,          0x47AF60, (void), ()) \
+    V(Fn_47ADA0,          0x47ADA0, (gptr obj), (obj)) \
+    V(Model_Setup,        0x48D8B0, (gptr obj, gptr data), (obj, data)) \
+    V(Fn_471A30,          0x471A30, (void), ()) \
+    V(Fn_471A50,          0x471A50, (void), ()) \
+    V(Fn_48D470,          0x48D470, (gptr e), (e)) \
+    V(Fn_478790,          0x478790, (void), ()) \
     V(Gpu_LoadImageIfChanged, 0x4B4DB0, (gptr rect, gptr p), (rect, p))
 
 #define ORIG_DECL_F(ret, name, addr, params, args) ret DC2CALL name params;
