@@ -7,6 +7,7 @@ s32  DC2CALL Pc_Open(gptr p, u32 a, u32 b)      { return ORIG(0x4C03F0, s32 (DC2
 s32  DC2CALL Pc_Read(s32 fd, gptr buf, u32 n)   { return ORIG(0x4C04E0, s32 (DC2CALL *)(s32, gptr, u32))(fd, buf, n); }
 u32  DC2CALL Pc_Size(s32 fd)                    { return ORIG(0x4C0540, u32 (DC2CALL *)(s32))(fd); }
 s32  DC2CALL Pc_Seek(s32 fd, s32 off, u32 w)    { return ORIG(0x4C0580, s32 (DC2CALL *)(s32, s32, u32))(fd, off, w); }
+s32  DC2CALL Pc_SeekSet(s32 fd, s32 off)         { return ORIG(0x4C0560, s32 (DC2CALL *)(s32, s32))(fd, off); }
 void DC2CALL Pc_Close(s32 fd)                   { ORIG(0x4C05A0, void (DC2CALL *)(s32))(fd); }
 gptr DC2CALL Crt_malloc(u32 n)                  { return ORIG(0x4DD711, gptr (DC2CALL *)(u32))(n); }
 void DC2CALL Crt_free(gptr p)                   { ORIG(0x4DD628, void (DC2CALL *)(gptr))(p); }
@@ -18,8 +19,7 @@ void DC2CALL Task_Sleep(u32 n)                  { ORIG(0x4C29A9, void (DC2CALL *
 #include <dirent.h>
 
 const char *g_pc_root = ".";
-void (*g_task_sleep)(u32 n);
-void DC2CALL Task_Sleep(u32 n) { if (g_task_sleep) g_task_sleep(n); }
+
 static FILE *g_files[16];
 
 /* "data\NAME" -> root/data/NAME, each component matched without case */
@@ -64,6 +64,7 @@ u32 DC2CALL Pc_Size(s32 fd)
     return (u32)n;
 }
 s32 DC2CALL Pc_Seek(s32 fd, s32 off, u32 w) { return fseek(g_files[fd], off, (int)w); }
+s32 DC2CALL Pc_SeekSet(s32 fd, s32 off) { return fseek(g_files[fd], off, SEEK_SET); }
 void DC2CALL Pc_Close(s32 fd) { fclose(g_files[fd]); g_files[fd] = NULL; }
 
 /* first-fit heap in the emulated image: blocks of {u32 size | used bit, data} */

@@ -3,11 +3,13 @@
  * pair against the original code. Keep this list in address order. */
 #include "dc2/game.h"
 #include "dc2/gte.h"
+#include "dc2/task.h"
 #include "hooks.h"
 
 const Hook g_hooks[] = {
     {0x4034D0, (void *)CamZones_Init,       "CamZones_Init"},
     {0x403840, (void *)Camera_LookAt,       "Camera_LookAt"},
+    {0x403920, (void *)Save_ScanTask,       "Save_ScanTask"},
     {0x403A20, (void *)File_IsBusy,         "File_IsBusy"},
     {0x403A50, (void *)Camera_Switch,       "Camera_Switch"},
     {0x403E40, (void *)File_Tick,           "File_Tick"},
@@ -23,6 +25,11 @@ const Hook g_hooks[] = {
     {0x4047F0, (void *)File_Unpack,         "File_Unpack"},
     {0x404810, (void *)File_Texture,        "File_Texture"},
     {0x4048F0, (void *)File_PcBuffer,       "File_PcBuffer"},
+    {0x46D710, (void *)RootTask,            "RootTask"},
+    {0x46D740, (void *)Root_Boot,           "Root_Boot"},
+    {0x46D7C0, (void *)Root_Logo,           "Root_Logo"},
+    {0x46D880, (void *)Root_Warning,        "Root_Warning"},
+    {0x46D970, (void *)Root_ToTitle,        "Root_ToTitle"},
     {0x46FAA0, (void *)Flag_Set,            "Flag_Set"},
     {0x46FB20, (void *)Flag_Check,          "Flag_Check"},
     {0x46FB50, (void *)Bits_Set,            "Bits_Set"},
@@ -33,6 +40,7 @@ const Hook g_hooks[] = {
     {0x481F10, (void *)Room_AllocObjects,   "Room_AllocObjects"},
     {0x482070, (void *)Enemy_LoadModel,     "Enemy_LoadModel"},
     {0x4822D0, (void *)Stage_Load,          "Stage_Load"},
+    {0x4828D0, (void *)Screen_LoadImage,    "Screen_LoadImage"},
     {0x4873C0, (void *)ScrOp_Load,          "ScrOp_Load"},
     {0x487400, (void *)ScrOp_Store,         "ScrOp_Store"},
     {0x487440, (void *)ScrOp_Arith,         "ScrOp_Arith"},
@@ -228,5 +236,6 @@ const Hook g_hooks[] = {
     {0x4C2420, (void *)PC_stsz3_gt3,        "PC_stsz3_gt3"},
     {0x4C2460, (void *)PC_stsz4_gt4,        "PC_stsz4_gt4"},
     {0x4C24B0, (void *)gte_stszotz,         "gte_stszotz"},
+    {0x4C2A0D, (void *)Task_Kill,           "Task_Kill"},
 };
 const int g_nhooks = sizeof g_hooks / sizeof g_hooks[0];

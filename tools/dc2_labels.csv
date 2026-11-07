@@ -99,7 +99,6 @@ address,kind,name,category,confidence,notes
 0x4C24C0,func,PC_DrawSpecial,d3d,low,768 bytes x87; called once from 0x410710
 0x4C0490,func,PCcreat,libsn,medium,
 0x4C0510,func,PCwrite,libsn,high,
-0x4C0560,func,PClseek_set,libsn,medium,"fseek(fp, off, SEEK_SET)"
 0x4BF970,func,Snd_Play,sound,medium,DSound slot table 0x878328 (stride 12)
 0x4BFAA0,func,Snd_IsPlaying,sound,high,IDirectSoundBuffer::GetStatus
 0x4BFAE0,func,Snd_Stop,sound,high,::Stop
@@ -238,10 +237,6 @@ address,kind,name,category,confidence,notes
 0x470190,func,WinMain,game,high,main loop inline
 0x470BF0,func,PC_VSync,game,high,message pump + timer frame pacing
 0x46D710,func,RootTask,game,high,g_root_modes[g_root.mode](&g_root); Task_Sleep(1)
-0x46D740,func,Root_Boot,game,medium,mode 0: loads CORE.DAT (0x15)
-0x46D7C0,func,Root_Mode1,game,low,
-0x46D880,func,Root_Mode2,game,low,
-0x46D970,func,Root_Mode3,game,low,
 0x471EC0,func,RootTask_Alt,game,low,used when 0x87DE08 set
 0x48C080,func,Game_Init,game,low,
 0x404280,func,File_Idle,game,high,
@@ -479,3 +474,11 @@ address,kind,name,category,confidence,notes
 0x48BD60,func,Script_Event,game,high,"script mode 2: start routine 0x87FC47 on thread 0"
 0x48D8B0,func,Model_Setup,game,high,"(obj, model data)"
 0x4C29A9,func,Task_Sleep,game,high,"(frames)"
+0x403920,func,Save_ScanTask,game,high,"SAVE00..99.DAT of 0x5F4 bytes, then Task_Chain(0x4A5730) title"
+0x46D740,func,Root_Boot,game,high,"mode 0: CORE.DAT"
+0x46D7C0,func,Root_Logo,game,high,"mode 1: picture 9 for 180 frames"
+0x46D880,func,Root_Warning,game,high,"mode 2: picture 7, skippable"
+0x46D970,func,Root_ToTitle,game,high,"mode 3: Task_Chain(0x403920)"
+0x4828D0,func,Screen_LoadImage,game,high,"(n): file U16(0x703FD8+4n) raw to 0x6C1500"
+0x4A5730,func,TitleTask,game,high,""
+0x4C0560,func,Pc_SeekSet,game,high,""

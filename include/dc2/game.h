@@ -170,6 +170,15 @@ void DC2CALL Script_Event(void);                                        /* 0x48B
 void DC2CALL Script_Tick(void);                                         /* 0x48BBF0 */
 void DC2CALL Script_Init(void);                                         /* 0x48BB60 */
 
+/* root.c -- root task, boot screens, save scan */
+void DC2CALL Screen_LoadImage(u32 n);                                   /* 0x4828D0 */
+void DC2CALL Root_Boot(gptr r);                                         /* 0x46D740 */
+void DC2CALL Root_Logo(gptr r);                                         /* 0x46D7C0 */
+void DC2CALL Root_Warning(gptr r);                                      /* 0x46D880 */
+void DC2CALL Root_ToTitle(gptr r);                                      /* 0x46D970 */
+void DC2CALL RootTask(void);                                            /* 0x46D710 */
+void DC2CALL Save_ScanTask(void);                                       /* 0x403920 */
+
 /* handler used for an opcode that is not reimplemented yet: in the hook
  * build it calls the original code, elsewhere it reports and stops the thread */
 typedef u32 (DC2CALL *ScrOpFn)(gptr thr);

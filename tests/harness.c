@@ -14,6 +14,7 @@
 #include "../src/hook/hooks.h"
 #include "dc2/orig.h"
 #include "dc2/gte.h"
+#include "dc2/task.h"
 
 u8 *g_membase = (u8 *)IMAGE_BASE;
 
@@ -508,6 +509,8 @@ static Stub g_stubs[] = {
     /* 50..: loading and room set-up */
     {0x4C29A9, "dd"}, {0x47AF60, ""}, {0x47ADA0, "d"}, {0x48D8B0, "dd"}, {0x471A30, ""}, {0x471A50, ""},
     {0x48D470, "d"}, {0x478790, ""},
+    {0x4C0560, "dd"},        /* 58: Pc_SeekSet */
+    {0x4C29D6, "d"},         /* 59: Task_Chain */
 };
 #define STUB_LOAD 50
 #define STUB_FILE 36
@@ -550,11 +553,12 @@ REC(12) REC(13) REC(14) REC(15) REC(16) REC(17) REC(18) REC(19) REC(20) REC(21) 
 REC(23) REC(24) REC(25) REC(26) REC(27) REC(28) REC(29) REC(30) REC(31) REC(32) REC(33)
 REC(34) REC(35) REC(36) REC(37) REC(38) REC(39) REC(40) REC(41) REC(42) REC(43) REC(44) REC(45)
 REC(46) REC(47) REC(48) REC(49) REC(50) REC(51) REC(52) REC(53) REC(54) REC(55) REC(56) REC(57)
+REC(58) REC(59)
 static void *const g_recs[] = {rec0, rec1, rec2, rec3, rec4, rec5, rec6, rec7, rec8, rec9, rec10,
     rec11, rec12, rec13, rec14, rec15, rec16, rec17, rec18, rec19, rec20, rec21, rec22, rec23,
     rec24, rec25, rec26, rec27, rec28, rec29, rec30, rec31, rec32, rec33, rec34, rec35, rec36, rec37,
     rec38, rec39, rec40, rec41, rec42, rec43, rec44, rec45, rec46, rec47, rec48, rec49, rec50, rec51,
-    rec52, rec53, rec54, rec55, rec56, rec57};
+    rec52, rec53, rec54, rec55, rec56, rec57, rec58, rec59};
 /* Task_Sleep: the file loader "runs" while the task sleeps */
 static u32 __cdecl ts_sleep(u32 n)
 { u32 v[5] = {n, U16(0x87FFE8)}; rec_common(STUB_LOAD, v); U16(0x87FFEA) = 0; return 0; }   /* + file asked for */
@@ -1015,8 +1019,14 @@ static void test_anim(void)
 #define FK_BASE  0x4F0000u      /* fake heap 0x4F0000..0x5A0000 */
 static u8 *g_fake; static u32 g_fake_len; static s32 g_fake_fd; static u32 g_synth_types;
 
+static int g_fk_by_name;          /* save scan: whether a file exists depends on its name */
 static u32 __cdecl fk_open(u32 path, u32 a, u32 b)
-{ u32 v[5] = {path, a, b}; rec_common(STUB_FILE + 0, v); U32(FK_POS) = 0; return (u32)g_fake_fd; }
+{
+    u32 v[5] = {path, a, b}; rec_common(STUB_FILE + 0, v); U32(FK_POS) = 0;
+    if (g_fk_by_name) { u32 h = 0; for (u32 k = 0; U8(path + k); k++) h = h * 31 + U8(path + k); return h % 3 ? (u32)-1 : 3; }
+    return (u32)g_fake_fd;
+}
+static u32 __cdecl fk_seekset(u32 fd, u32 off) { u32 v[5] = {fd, off}; rec_common(STUB_LOAD + 8, v); U32(FK_POS) = off; return 0; }
 static u32 __cdecl fk_read(u32 fd, u32 buf, u32 n)
 {
     u32 v[5] = {fd, buf, n}; rec_common(STUB_FILE + 1, v);
@@ -1039,8 +1049,10 @@ static u32 __cdecl fk_malloc(u32 n)
 static u32 __cdecl fk_free(u32 p) { u32 v[5] = {p}; rec_common(STUB_FILE + 6, v); return 0; }
 static u32 __cdecl fk_sprintf(u32 buf, u32 fmt, u32 name)
 {
-    (void)fmt;
-    char t[64]; snprintf(t, sizeof t, "data\\%s", (char *)MEM(name));
+    char t[64];
+    const char *f = (const char *)MEM(fmt);
+    if (strstr(f, "%s")) snprintf(t, sizeof t, f, (char *)MEM(name));
+    else snprintf(t, sizeof t, f, (int)name);
     memcpy(MEM(buf), t, strlen(t) + 1);
     return 0;
 }
@@ -1201,6 +1213,52 @@ static void test_room(void)
     stubs_install(0);
 }
 
+/* ---- root task, boot screens, save scan, task slots ---------------------------- */
+static void test_root(void)
+{
+    void *impl[8] = {fk_open, fk_read, fk_size, fk_seek, fk_close, fk_malloc, fk_free, fk_sprintf};
+    for (int i = 0; i < 8; i++) g_stubs[STUB_FILE + i].impl = impl[i];
+    g_stubs[STUB_LOAD + 8].impl = fk_seekset;
+    stubs_install(1);
+    gptr r = 0x74D608;
+    for (int i = 0; i < iters; i++) {
+        U32(LOG_BASE) = 0;
+        U16(0x87FFEA) = rnd() % 2;
+        u32 a[2] = {rnd() % 16};
+        check(0x4828D0, Screen_LoadImage, "Screen_LoadImage", 1, a, 0);
+        /* the boot modes: random step, timer, skip flag, fade flag, buttons */
+        static const struct { u32 addr; void *fn; const char *name; } M[] = {
+            {0x46D740, Root_Boot, "Root_Boot"}, {0x46D7C0, Root_Logo, "Root_Logo"},
+            {0x46D880, Root_Warning, "Root_Warning"}, {0x46D970, Root_ToTitle, "Root_ToTitle"},
+        };
+        for (int k = 0; k < 4; k++) {
+            U32(LOG_BASE) = 0;
+            U8(r) = (u8)k; U8(r + 1) = (u8)rnd(); U8(r + 2) = rnd() % 5; U8(r + 3) = rnd() % 4 == 0;
+            U16(r + 4) = rnd() % 3 ? 1 + rnd() % 3 : (u16)rnd();
+            Flag_Set(2, 6, rnd() & 1); U32(0x87DC12) = rnd() % 2 ? rnd() & 0x820 : 0;
+            U16(0x87FFEA) = rnd() % 2;
+            a[0] = r;
+            sprintf(g_what, "mode %d step %u timer %u skip %u", k, U8(r + 2), U16(r + 4), U8(r + 3));
+            check(M[k].addr, M[k].fn, M[k].name, 1, a, 0);
+        }
+        /* save scan: SAVExx.DAT exists for some names; the right size or not */
+        if (i % 8 == 0) {
+            g_fk_by_name = 1;
+            g_fake_len = rnd() % 4 ? 0x5F4 : 0x600; free(g_fake); g_fake = malloc(g_fake_len);
+            for (u32 k = 0; k < g_fake_len; k++) g_fake[k] = (u8)rnd();
+            U16(0x87DC08) = (u16)rnd(); U16(0x87DC94) = (u16)rnd(); U16(0x87DDFC) = (u16)rnd(); U16(0x87DC00) = (u16)rnd();
+            U32(G() + 0x664) = rnd(); U8(0x87DC90) = (u8)rnd();
+            U32(FK_POS) = 0; U32(FK_HEAP) = FK_BASE; U32(LOG_BASE) = 0;
+            check(0x403920, Save_ScanTask, "Save_ScanTask", 0, NULL, 0);
+            g_fk_by_name = 0;
+        }
+        for (u32 k = 0x73C870; k < 0x73C8F0; k += 4) U32(k) = rnd();
+        a[0] = rnd() % 4;
+        check(0x4C2A0D, Task_Kill, "Task_Kill", 1, a, 0);
+    }
+    stubs_install(0);
+}
+
 static void test_lzss(const char *dir)
 {
     char pat[MAX_PATH]; snprintf(pat, sizeof pat, "%s\\*.DAT", dir);
@@ -1276,7 +1334,9 @@ __declspec(dllexport) void harness_main(int argc, char **argv)
     if (data) { int f0 = g_fail, t0 = g_tests; test_lzss(data);
                 printf("%-16s %6d checks, %d failed\n", "lzss", g_tests - t0, g_fail - f0);
                 f0 = g_fail; t0 = g_tests; test_files(data);
-                printf("%-16s %6d checks, %d failed\n", "files", g_tests - t0, g_fail - f0); }
+                printf("%-16s %6d checks, %d failed\n", "files", g_tests - t0, g_fail - f0);
+                f0 = g_fail; t0 = g_tests; test_root();
+                printf("%-16s %6d checks, %d failed\n", "root", g_tests - t0, g_fail - f0); }
     printf("hook table: %d functions; total %d checks, %d failed\n", g_nhooks, g_tests, g_fail);
     fflush(stdout);
     TerminateProcess(GetCurrentProcess(), g_fail != 0);

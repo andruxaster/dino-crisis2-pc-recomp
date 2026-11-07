@@ -1,6 +1,7 @@
 /* Calls into code that is not rewritten yet, see include/dc2/orig.h. */
 #include "dc2/orig.h"
 #include <stdio.h>
+#include "dc2/task.h"
 
 #ifdef DC2_IN_PROCESS
 #define ORIG_F(ret, name, addr, params, args) \
@@ -39,6 +40,8 @@ void (*g_orig_call1)(gptr fn, u32 a);
 void DC2CALL Orig_Call1(gptr fn, u32 a)
 {
     if (g_orig_call1) { g_orig_call1(fn, a); return; }
+    void (DC2CALL *f)(u32) = (void (DC2CALL *)(u32))Hook_Find(fn);
+    if (f) { f(a); return; }
     static char buf[64][24]; static gptr seen[64]; static int n;
     for (int i = 0; i < n; i++) if (seen[i] == fn) { missing(buf[i]); return; }
     if (n < 64) { seen[n] = fn; snprintf(buf[n], sizeof buf[n], "handler 0x%06X", fn); missing(buf[n++]); }

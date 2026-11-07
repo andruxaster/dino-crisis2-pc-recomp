@@ -25,7 +25,8 @@ One source tree, three builds:
 | build | what | status |
 |---|---|---|
 | `build/dinput.dll` | hook DLL: put next to `Dino2.exe`, redirects the original functions to the C ones | runs inside the game |
-| `build/harness_stub.exe` + `harness.dll` | checks every C function against the original code | 222 functions, ~317 000 checks, 0 differences |
+| `build/harness_stub.exe` + `harness.dll` | checks every C function against the original code | 230 functions, ~329 000 checks, 0 differences |
+| `build/dc2` (Linux) | the game started like WinMain: task system, root task, per-frame work; headless, prints a trace | boots: CORE.DAT, warning and Capcom screens, save scan; stops at the title task 0x4A5730 |
 | `build/smoke` (Linux) | the C game code without any exe code, on an emulated memory image | rooms loaded and set up by the game's own code (File_Process, Room_SetPointers, Script_Init), script VM, animation: 80 of 89 room scripts run 600 frames; 9 stop on cutscene data (SCxx.DAT) that is not loaded yet |
 
 The Dreamcast (KallistiOS) build will reuse the standalone path once the
@@ -77,7 +78,7 @@ Checked under wine 9 (32-bit prefix): all 26 hooks installed; after one
 minute Lzss_Decode 23 calls, Flag_Check 62 000, Script_Run every frame,
 PointInQuad 5 000.
 
-## Reimplemented (222)
+## Reimplemented (230)
 
 The authoritative list is `src/hook/hooks.c`. By area:
 
@@ -93,11 +94,15 @@ The authoritative list is `src/hook/hooks.c`. By area:
 | animation | Anim_Set, Anim_Start, Anim_Step, Anim_ApplyFrame (cubic over four keys, blending into a new animation), Anim_Events, Anim_BlendLinear/BlendMatrix, Matrix_ToAngles; the player's two animation layers (Anim_Save/LoadLayer, Anim_StartLayers, Anim_StepLayers), Anim_FrameFlag | src/game/anim.c |
 | files | File_RequestLoad/Raw, File_Tick, File_Process and the record handlers (copy, VRAM image, CLUT, sound bank, stream, LZSS, texture tiles, PC buffer), Rand8 | src/game/file.c; host files and heap: src/game/pcio.c |
 | loading and room set-up | Enemy_LoadModel, Stage_Load, File_IsBusy; Room_SetPointers, Room_AllocObjects, Room_Reset, CamZones_Init, Aot_Reset; Script_Init, Script_Tick and its skip/event modes | src/game/room.c |
+| root task and tasks | RootTask and its boot modes (boot, logo, warning, to title), Screen_LoadImage, Save_ScanTask; Task_Kill; host coroutines for the task system in standalone builds | src/game/root.c, src/game/task.c |
 | PC layer: GTE | all 80 libgte functions of the port (0x4C08E0..0x4C24C0): rsin/rcos/ratan2, roots, geometry state, Apply/Mul/Rot/Scale/Transpose matrix, RotTransPers 1/3/4 and the float projection, depth cue, normal colour, register loads/stores, rtps/rtpt/nclip/ncct, PC depth stores | src/game/gte.c, include/dc2/gte.h |
 
-Loads wait with `Task_Sleep` (the game runs as cooperative tasks). In the
-standalone builds the driver supplies what a sleeping frame does
-(`g_task_sleep`); smoke runs the file loader there.
+The game runs as cooperative tasks (4 slots, `Task_Sleep(n)` gives up the
+CPU for n frames). In-process the original scheduler switches stacks; the
+standalone builds run each task as a host coroutine (ucontext) and start
+the C version of the task function found by its address in the hook table
+(`Hook_Find`, also used for the game's function tables). Outside a task
+(test drivers) `Task_Sleep` only runs the file loader.
 
 The standalone builds read files from the host (`g_pc_root`, names matched
 without case) and allocate from a heap inside the emulated image, so data
@@ -130,9 +135,9 @@ alone and the harness ignores them.
 
 ## Next
 
-The script VM and the keyframe animation are complete. Next: the task system and the main loop (WinMain 0x470190, RootTask,
-Task_* 0x4C2900..), so that the standalone build runs the game by itself;
-then the object type handlers (Enemy_LoadModel 0x482070), the object
+The script VM and the keyframe animation are complete. Next: the title and its menus (task 0x4A5730), then the game start and the
+room-change sequence, so that `dc2` reaches the first room by itself; then
+the object type handlers (Enemy_LoadModel 0x482070), the object
 type handlers (*0x87DCA0), sound/BGM (0x48C9C0..0x48CE60), messages
 (0x4718F0), fades and menus. Then the libgpu side
 of the PC layer (primitives, DrawOTag, texture cache) — rewritten for

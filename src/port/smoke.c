@@ -52,9 +52,6 @@ static const char *g_exe;
 /* Game code reads data that loaders not rewritten yet would have put in
    memory (models, animations of cutscene files, ...). A fault there ends
    the room's run with a report instead of ending the program. */
-/* a sleeping task lets the frame run: here only the file loader */
-static void sleep_frame(u32 n) { while (n--) File_Tick(); }
-
 static sigjmp_buf g_fault_jmp;
 static volatile int g_fault_sig;
 static void on_fault(int sig) { g_fault_sig = sig; siglongjmp(g_fault_jmp, 1); }
@@ -122,7 +119,6 @@ static int run_room(const char *data, const char *room, int frames)
     for (u32 i = 0; i < U32(0x87F940) && i < 32; i++) type_handler(0, U32(G() + 0x940) + i * 0x260);
     U32(0x87DCA0) = TYPE_TABLE;               /* object type handlers: stand-in */
     g_orig_call1 = type_handler;
-    g_task_sleep = sleep_frame;
     Script_Init();                             /* thread 0 on routine 0, first frame */
 
     for (f = 0; f < frames; f++) {
