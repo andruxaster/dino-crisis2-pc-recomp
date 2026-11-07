@@ -32,7 +32,6 @@
     V(Fn_48CE60,          0x48CE60, (u32 a), (a)) \
     V(Fn_48D070,          0x48D070, (u32 a, u32 b), (a, b)) \
     V(Fn_48D730,          0x48D730, (gptr e), (e)) \
-    V(Fn_48F880,          0x48F880, (gptr obj, u32 a, u32 b, u32 c), (obj, a, b, c)) \
     V(Menu_Open,          0x495E90, (u32 a, u32 b, u32 c, u32 d, u32 e), (a, b, c, d, e)) \
     V(Snd_FreeBank,       0x48CEB0, (u32 slot), (slot)) \
     V(Snd_FreeStream,     0x48CF10, (u32 slot), (slot)) \
@@ -67,6 +66,8 @@
     V(Fn_405E40,          0x405E40, (void), ()) \
     V(Fn_472FD0,          0x472FD0, (void), ()) \
     V(Fn_452370,          0x452370, (void), ()) \
+    V(Fn_452BD0,          0x452BD0, (gptr obj), (obj)) \
+    V(Fn_453430,          0x453430, (gptr obj), (obj)) \
     V(Text_Draw,          0x494BA0, (gptr s, u32 x, u32 y, u32 w, u32 col, u32 a, u32 b), (s, x, y, w, col, a, b)) \
     V(Gpu_DrawOT,         0x4C0600, (gptr ot, gptr a, gptr b), (ot, a, b)) \
     V(Gpu_SetSprt,        0x4C0690, (gptr p), (p)) \

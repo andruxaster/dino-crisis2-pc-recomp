@@ -501,7 +501,7 @@ static Stub g_stubs[] = {
     {0x473130, "d"}, {0x4731F0, ""}, {0x474B20, "d"}, {0x478B80, "dd"}, {0x47A8C0, "ddpp", {16, 8}},
     {0, ""}, {0, ""}, {0, ""}, {0, ""}, {0x48C0B0, "pd", {0x60}},
     {0x48C600, "d"}, {0x48C640, "ddd"}, {0x48C9C0, "w"}, {0x48CD70, "dd"}, {0x48CE20, "bwww"},
-    {0x48CE60, "d"}, {0x48D070, "dd"}, {0x48D730, "d"}, {0, ""}, {0x48F880, "ddww"},
+    {0x48CE60, "d"}, {0x48D070, "dd"}, {0x48D730, "d"}, {0, ""}, {0, ""},
     {0x495E90, "wwwww"}, {0x4B4D20, "pd", {8}}, {0x4B4DB0, "pd", {8}}, {0x4DDDA2, ""},
     {0, "d"},                   /* 34: object type handlers (*0x87DCA0) */
     {0, "d"},                   /* 35: AOT kind handlers (0x738B68) */
@@ -522,6 +522,8 @@ static Stub g_stubs[] = {
     {0x496410, ""}, {0x46FC50, "d"}, {0x403480, ""}, {0x470CB0, ""}, {0x452450, ""}, {0x48FB50, "d"},
     {0x47FE10, "d"}, {0x4BF130, "d"}, {0x48CA10, ""}, {0x403520, ""}, {0x46B8C0, ""}, {0x407170, ""},
     {0x491B10, "bb"}, {0x48CB40, ""}, {0x4A7250, ""}, {0x405E40, ""}, {0x472FD0, ""}, {0x452370, ""},
+    /* 89..: object handlers (collision) */
+    {0x452BD0, "d"}, {0x453430, "d"},
 };
 #define STUB_GAME 71
 #define STUB_LOAD 50
@@ -567,14 +569,14 @@ REC(34) REC(35) REC(36) REC(37) REC(38) REC(39) REC(40) REC(41) REC(42) REC(43) 
 REC(46) REC(47) REC(48) REC(49) REC(50) REC(51) REC(52) REC(53) REC(54) REC(55) REC(56) REC(57)
 REC(58) REC(59) REC(60) REC(61) REC(62) REC(63) REC(64) REC(65) REC(66) REC(67) REC(68) REC(69)
 REC(70) REC(71) REC(72) REC(73) REC(74) REC(75) REC(76) REC(77) REC(78) REC(79) REC(80) REC(81)
-REC(82) REC(83) REC(84) REC(85) REC(86) REC(87) REC(88)
+REC(82) REC(83) REC(84) REC(85) REC(86) REC(87) REC(88) REC(89) REC(90)
 static void *const g_recs[] = {rec0, rec1, rec2, rec3, rec4, rec5, rec6, rec7, rec8, rec9, rec10,
     rec11, rec12, rec13, rec14, rec15, rec16, rec17, rec18, rec19, rec20, rec21, rec22, rec23,
     rec24, rec25, rec26, rec27, rec28, rec29, rec30, rec31, rec32, rec33, rec34, rec35, rec36, rec37,
     rec38, rec39, rec40, rec41, rec42, rec43, rec44, rec45, rec46, rec47, rec48, rec49, rec50, rec51,
     rec52, rec53, rec54, rec55, rec56, rec57, rec58, rec59, rec60, rec61, rec62, rec63,
     rec64, rec65, rec66, rec67, rec68, rec69, rec70, rec71, rec72, rec73, rec74, rec75, rec76, rec77,
-    rec78, rec79, rec80, rec81, rec82, rec83, rec84, rec85, rec86, rec87, rec88};
+    rec78, rec79, rec80, rec81, rec82, rec83, rec84, rec85, rec86, rec87, rec88, rec89, rec90};
 /* Task_Sleep: the file loader "runs" while the task sleeps */
 static u32 __cdecl ts_sleep(u32 n)
 { u32 v[5] = {n, U16(0x87FFE8)}; rec_common(STUB_LOAD, v); U16(0x87FFEA) = 0; return 0; }   /* + file asked for */
@@ -1030,6 +1032,99 @@ static void test_anim(void)
     stubs_install(0);
 }
 
+/* ---- generic object handler and object helpers ----------------------------- */
+static void obj_head_setup(gptr o, u32 n)
+{
+    U32(G() + 0x940) = o;
+    for (u32 k = 0x140; k < 0x170; k += 2) U16(o + k) = (u16)(rnd() % 4 ? rnd() % 0x1000 : rnd());
+    U8(o + 0x15D) = 0;
+    U8(o + 0x15E) = rnd() % 3 ? (u8)(rnd() % n) : 0xFF;
+    U8(o + 0x15F) = (u8)(rnd() % n);
+    U8(o + 0x158) = (u8)(rnd() % 5);
+    U8(o + 0x161) = (u8)(rnd() % 4);
+    if (rnd() % 4 == 0) U16(o + 0x16A) = 0;
+    if (rnd() % 4 == 0) U16(o + 0x16E) = 0;
+    U8(G() + 0x108F) = (u8)(rnd() % 6); U8(0x87E747) = (u8)(rnd() % 3);
+    for (u32 k = 0; k < 4; k++) U32(o + 0x120 + 4 * k) = AN_PART + 0x80 * (rnd() % n);
+    U8(o + 0x11B) = rnd() % 3 ? (u8)rnd() : 0;
+}
+
+static void test_object(void)
+{
+    script_setup();
+    stubs_install(1);
+    g_ign_objpads = 1;
+    gptr o = AN_OBJ;
+    for (int i = 0; i < iters; i++) {
+        u32 a[10] = {0};
+        /* pure helpers */
+        a[0] = rnd() % 4 ? rnd() % 0x1000 : rnd(); a[1] = rnd() % 3 ? rnd() % 0x800 : rnd(); a[2] = rnd() % 4 ? rnd() % 0x1000 : rnd();
+        a[3] = rnd() % 3 ? rnd() % 0x800 : rnd();
+        if (rnd() % 8 == 0) a[2] = a[0] + (rnd() % 3) - 1;
+        if (rnd() % 6 == 0) a[2] = a[0] - a[1] + (rnd() % 3) - 1;     /* exactly one step away */
+        if (rnd() % 6 == 0) a[3] = rnd() % 2 ? (a[2] & 0x7FF) : (-a[2] & 0x7FF); /* |target| == lim */
+        sprintf(g_what, "%X %X %X %X", a[0], a[1], a[2], a[3]);
+        check(0x47A5E0, Angle_Approach, "Angle_Approach", 3, a, 0xFFFFFFFF);
+        check(0x47A6F0, Angle_ApproachLim, "Angle_ApproachLim", 4, a, 0xFFFF);
+        a[0] = rnd() % 3 ? rnd() % 0x10000 : rnd() >> (rnd() % 32); if (rnd() % 16 == 0) a[0] = 0;
+        check(0x48F590, Sqrt_Refined, "Sqrt_Refined", 1, a, 0xFFFFFFFF);
+        a[0] = rnd() % 2 ? 0 : rnd() % 256; U8(0x74B16C) = rnd() % 2 ? 0 : (u8)rnd();
+        check(0x448730, Latch_74B16C, "Latch_74B16C", 1, a, 0xFF);
+        for (u32 k = 0; k < 16; k += 2) U16(G_SCR + k) = (u16)(rnd() % 3 ? (u32)((s32)(rnd() % 8001) - 4000) : rnd());
+        if (rnd() % 8 == 0) { U16(G_SCR + 8) = U16(G_SCR); U16(G_SCR + 12) = U16(G_SCR + 4); }
+        a[0] = G_SCR; a[1] = G_SCR + 8; a[2] = G_SCR + 0x40;
+        sprintf(g_what, "a %d %d %d b %d %d %d", S16(G_SCR), S16(G_SCR + 2), S16(G_SCR + 4), S16(G_SCR + 8), S16(G_SCR + 10), S16(G_SCR + 12));
+        check(0x487300, Dist2_XZ, "Dist2_XZ", 2, a, 0xFFFFFFFF);
+        check(0x48F5C0, Camera_Distance, "Camera_Distance", 2, a, 0xFFFFFFFF);
+        check(0x48F620, Angles_LookAt, "Angles_LookAt", 3, a, 0);
+        check(0x48F6C0, Angle_XZ, "Angle_XZ", 2, a, 0xFFFFFFFF);
+        check(0x48F710, Angle_Seg, "Angle_Seg", 1, a, 0xFFFFFFFF);
+        /* object groups */
+        U32(G() + 0x940) = O_OBJ; U32(0x87F940) = rnd() % 17;
+        for (u32 k = 0; k < 16; k++) { U32(O_OBJ + k * 0x260 + 0x50) = rnd(); U8(O_OBJ + k * 0x260 + 0xFD) = rnd() % 2; }
+        a[0] = O_OBJ + 0x260 * (rnd() % 16);
+        check(0x46B8F0, Obj_PickGroup, "Obj_PickGroup", 1, a, 0);
+        /* object with parts */
+        anim_setup(); U32(LOG_BASE) = 0;
+        u32 n = U32(o + 0x68);
+        obj_head_setup(o, n);
+        a[0] = o; a[1] = rnd() % n; a[2] = rnd() % n; a[3] = (u16)rnd();
+        sprintf(g_what, "parts %u head %u tgt %X mode %u", n, U8(o + 0x15F), U8(o + 0x15E), U8(o + 0x158));
+        check(0x47A880, Head_Reset, "Head_Reset", 1, a, 0);
+        check(0x47A970, Head_Relax, "Head_Relax", 1, a, 0);
+        check(0x47AA60, Head_LookAtObj, "Head_LookAtObj", 1, a, 0);
+        check(0x47AB40, Head_LookAtPoint, "Head_LookAtPoint", 1, a, 0);
+        check(0x47ABA0, Head_Turn, "Head_Turn", 1, a, 0);
+        check(0x47A930, Head_Update, "Head_Update", 1, a, 0);
+        check(0x48F880, Obj_Set118, "Obj_Set118", 4, a, 0);
+        check(0x48FCA0, Obj_SetFeet, "Obj_SetFeet", 3, a, 0);
+        obj_head_setup(o, n);
+        sprintf(g_what, "parts %u foot %02X", n, U8(o + 0x11B));
+        check(0x48FD20, Obj_AnchorFoot, "Obj_AnchorFoot", 1, a, 0xFFFFFFFF);
+        a[1] = G_SCR;
+        check(0x48F3A0, Obj_MoveLocal, "Obj_MoveLocal", 2, a, 0);
+        /* the handler and its modes */
+        u32 mode = rnd() % 7;
+        do { anim_setup(); } while (mode == 0 && U32(o + 0x68) != 16);
+        U32(LOG_BASE) = 0;
+        n = U32(o + 0x68);
+        obj_head_setup(o, n);
+        U8(o + 0x54) = (u8)mode;
+        U32(G() + 0x930) = (u32)(uintptr_t)g_recs[STUB_TYPE];
+        sprintf(g_what, "mode %u parts %u fl %02X head %u foot %02X", mode, n, U8(o + 0x50), U8(o + 0x158), U8(o + 0x11B));
+        check(0x490120, Generic_Handler, "Generic_Handler", 1, a, 0);
+        do { anim_setup(); } while (U32(o + 0x68) != 16);
+        U32(LOG_BASE) = 0;
+        check(0x4901B0, Generic_Init, "Generic_Init", 1, a, 0);
+        anim_setup(); U32(LOG_BASE) = 0; U32(G() + 0x930) = (u32)(uintptr_t)g_recs[STUB_TYPE];
+        check(0x490270, Generic_StepCb, "Generic_StepCb", 1, a, 0);
+        anim_setup(); U32(LOG_BASE) = 0;
+        check(0x4A56D0, Generic_Step, "Generic_Step", 1, a, 0);
+    }
+    g_ign_objpads = 0;
+    stubs_install(0);
+}
+
 /* ---- file loading: a fake file system behind the PC file functions --------- */
 #define FK_POS   0x6DD800u      /* read position (in compared memory, so both runs agree) */
 #define FK_HEAP  0x6DD804u      /* bump pointer of the fake malloc */
@@ -1482,7 +1577,7 @@ __declspec(dllexport) void harness_main(int argc, char **argv)
     struct { const char *name; void (*fn)(void); } T[] = {
         {"flags", test_flags}, {"geometry", test_geom}, {"script values", test_script_values},
         {"script opcodes", test_script_ops}, {"script objects", test_objects},
-        {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"loading", test_room}, {"title", test_title}, {"game task", test_game},
+        {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"objects 2", test_object}, {"loading", test_room}, {"title", test_title}, {"game task", test_game},
     };
     for (unsigned i = 0; i < sizeof T / sizeof T[0]; i++) {
         int f0 = g_fail, t0 = g_tests;

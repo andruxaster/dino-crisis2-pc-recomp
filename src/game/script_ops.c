@@ -244,7 +244,7 @@ u32 DC2CALL ScrOp_Character(gptr t)                                /* 29: switch
 
 u32 DC2CALL ScrOp_ObjMove(gptr t)                                  /* 2B: fn(obj, a, b, c) */
 {
-    Fn_48F880(OBJ(S(t, 3)), S(t, 2), U16(SP_(t) + 4), U16(SP_(t)));
+    Obj_Set118(OBJ(S(t, 3)), S(t, 2), U16(SP_(t) + 4), U16(SP_(t)));
     ADV(t);
     return 0;
 }

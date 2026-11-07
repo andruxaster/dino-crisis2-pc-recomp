@@ -42,6 +42,32 @@ u32  DC2CALL ScrOp_Wait(gptr thr);                                      /* 0x487
 u32  DC2CALL ScrOp_FlagSet(gptr thr);                                   /* 0x487B70  1C */
 u32  DC2CALL ScrOp_FlagCheck(gptr thr);                                 /* 0x487BF0  1D */
 
+/* object.c -- generic object handler and shared object helpers */
+u32  DC2CALL Latch_74B16C(u32 a);                                       /* 0x448730 */
+void DC2CALL Obj_PickGroup(gptr obj);                                   /* 0x46B8F0 */
+u32  DC2CALL Angle_Approach(u32 cur, u32 max, u32 target);              /* 0x47A5E0 */
+u32  DC2CALL Angle_ApproachLim(u32 cur, u32 max, u32 target, u32 lim);  /* 0x47A6F0 */
+void DC2CALL Head_Reset(gptr o);                                        /* 0x47A880 */
+void DC2CALL Head_Update(gptr o);                                       /* 0x47A930 */
+void DC2CALL Head_Relax(gptr o);                                        /* 0x47A970 */
+void DC2CALL Head_LookAtObj(gptr o);                                    /* 0x47AA60 */
+void DC2CALL Head_LookAtPoint(gptr o);                                  /* 0x47AB40 */
+void DC2CALL Head_Turn(gptr o);                                         /* 0x47ABA0 */
+u32  DC2CALL Dist2_XZ(gptr a, gptr b);                                  /* 0x487300 */
+void DC2CALL Obj_MoveLocal(gptr o, gptr v);                             /* 0x48F3A0 */
+u32  DC2CALL Sqrt_Refined(u32 x);                                       /* 0x48F590 */
+u32  DC2CALL Camera_Distance(gptr a, gptr b);                           /* 0x48F5C0 */
+void DC2CALL Angles_LookAt(gptr target, gptr eye, gptr out);            /* 0x48F620 */
+u32  DC2CALL Angle_XZ(gptr a, gptr b);                                  /* 0x48F6C0 */
+u32  DC2CALL Angle_Seg(gptr q);                                         /* 0x48F710 */
+void DC2CALL Obj_Set118(gptr o, u32 a, u32 b, u32 c);                   /* 0x48F880 */
+void DC2CALL Obj_SetFeet(gptr o, u32 a, u32 b);                         /* 0x48FCA0 */
+u32  DC2CALL Obj_AnchorFoot(gptr o);                                    /* 0x48FD20 */
+void DC2CALL Generic_Handler(gptr o);                                   /* 0x490120 */
+void DC2CALL Generic_Init(gptr o);                                      /* 0x4901B0 */
+void DC2CALL Generic_Step(gptr o);                                      /* 0x4A56D0 */
+void DC2CALL Generic_StepCb(gptr o);                                    /* 0x490270 */
+
 /* script_obj.c -- built-ins on objects */
 void DC2CALL Obj_SyncLinks(gptr obj);                                   /* 0x48FC70 */
 void DC2CALL Obj_SavePos(gptr obj);                                     /* 0x48FC40 */
