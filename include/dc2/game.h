@@ -65,6 +65,66 @@ u32  DC2CALL ScrOp_Obj44Init(gptr thr);                                 /* 0x48A
 u32  DC2CALL ScrOp_ObjEnable(gptr thr);                                 /* 0x48A2C0  45 */
 u32  DC2CALL ScrOp_CutsceneCamera(gptr thr);                            /* 0x48A670  4A */
 
+/* script_ops.c, script_aot.c -- remaining built-ins */
+void DC2CALL Obj_Init(u32 slot);                                        /* 0x48D820 */
+gptr DC2CALL Obj_Part(gptr obj, u32 n);                                 /* 0x48D3F0 */
+gptr DC2CALL Script_SelObj(gptr thr);                                   /* 0x48BE50 */
+gptr DC2CALL Room_SoundSlot(u32 area, u32 room);                        /* 0x48CC30 */
+void DC2CALL DrawSync(u32 mode);                                        /* 0x474B10 */
+u32  DC2CALL ScrOp_Message(gptr thr);                                   /* 0x487650  11 */
+u32  DC2CALL ScrOp_ObjSpawn(gptr thr);                                  /* 0x487A10  1A */
+u32  DC2CALL ScrOp_ObjCall(gptr thr);                                   /* 0x48AC60  1B */
+u32  DC2CALL ScrOp_WaitEvent(gptr thr);                                 /* 0x488F70  20 */
+u32  DC2CALL ScrOp_AnimSet(gptr thr);                                   /* 0x488FA0  21 */
+u32  DC2CALL ScrOp_Set87FC47(gptr thr);                                 /* 0x489000  22 */
+u32  DC2CALL ScrOp_LoadModel(gptr thr);                                 /* 0x489020  23 */
+u32  DC2CALL ScrOp_WaitB4A(gptr thr);                                   /* 0x489070  24 */
+u32  DC2CALL ScrOp_Call46FBC0(gptr thr);                                /* 0x4890B0  25 */
+u32  DC2CALL ScrOp_Timer(gptr thr);                                     /* 0x4890E0  26 */
+u32  DC2CALL ScrOp_Fade(gptr thr);                                      /* 0x489110  27 */
+u32  DC2CALL ScrOp_WaitFlag(gptr thr);                                  /* 0x489140  28 */
+u32  DC2CALL ScrOp_Character(gptr thr);                                 /* 0x489180  29 */
+u32  DC2CALL ScrOp_ObjMove(gptr thr);                                   /* 0x489410  2B */
+u32  DC2CALL ScrOp_Menu(gptr thr);                                      /* 0x489460  2C */
+u32  DC2CALL ScrOp_RoomReset(gptr thr);                                 /* 0x4894C0  2D */
+u32  DC2CALL ScrOp_Call48C640(gptr thr);                                /* 0x48AD30  2E */
+u32  DC2CALL ScrOp_Effect2F(gptr thr);                                  /* 0x489540  2F */
+u32  DC2CALL ScrOp_AotDoor(gptr thr);                                   /* 0x4895E0  30 */
+u32  DC2CALL ScrOp_Aot31(gptr thr);                                     /* 0x489710  31 */
+u32  DC2CALL ScrOp_Aot32(gptr thr);                                     /* 0x4897E0  32 */
+u32  DC2CALL ScrOp_Aot33(gptr thr);                                     /* 0x4898B0  33 */
+u32  DC2CALL ScrOp_AotItem(gptr thr);                                   /* 0x4899A0  35 */
+u32  DC2CALL ScrOp_Aot36(gptr thr);                                     /* 0x489B80  36 */
+u32  DC2CALL ScrOp_Aot37(gptr thr);                                     /* 0x489C50  37 */
+u32  DC2CALL ScrOp_Aot38(gptr thr);                                     /* 0x489D10  38 */
+u32  DC2CALL ScrOp_Aot39(gptr thr);                                     /* 0x489DD0  39 */
+u32  DC2CALL ScrOp_Aot3A(gptr thr);                                     /* 0x489EB0  3A */
+u32  DC2CALL ScrOp_Aot3B(gptr thr);                                     /* 0x48A000  3B */
+u32  DC2CALL ScrOp_AotRun(gptr thr);                                    /* 0x48A0D0  3E */
+u32  DC2CALL ScrOp_CamMove(gptr thr);                                   /* 0x48A120  40 */
+u32  DC2CALL ScrOp_WaitCutscene(gptr thr);                              /* 0x48AD60  41 */
+u32  DC2CALL ScrOp_Cutscene(gptr thr);                                  /* 0x48ADC0  42 */
+u32  DC2CALL ScrOp_Sound(gptr thr);                                     /* 0x48AE50  43 */
+u32  DC2CALL ScrOp_ObjAnim(gptr thr);                                   /* 0x48A530  46 */
+u32  DC2CALL ScrOp_LinkPart(gptr thr);                                  /* 0x48A580  47 */
+u32  DC2CALL ScrOp_Random(gptr thr);                                    /* 0x48A640  48 */
+u32  DC2CALL ScrOp_SoundSlot(gptr thr);                                 /* 0x48AF80  49 */
+u32  DC2CALL ScrOp_WaitCamera(gptr thr);                                /* 0x48A720  4B */
+u32  DC2CALL ScrOp_Call478B80(gptr thr);                                /* 0x48A770  4C */
+u32  DC2CALL ScrOp_Call481D20(gptr thr);                                /* 0x48A7A0  4D */
+u32  DC2CALL ScrOp_WaitFile(gptr thr);                                  /* 0x48A7D0  4E */
+u32  DC2CALL ScrOp_EnemySet(gptr thr);                                  /* 0x48A7F0  4F */
+u32  DC2CALL ScrOp_Op50(gptr thr);                                      /* 0x48A8C0  50 */
+u32  DC2CALL ScrOp_Op51(gptr thr);                                      /* 0x48A930  51 */
+u32  DC2CALL ScrOp_Op52(gptr thr);                                      /* 0x48A990  52 */
+u32  DC2CALL ScrOp_Call48C600(gptr thr);                                /* 0x48AD00  53 */
+u32  DC2CALL ScrOp_ObjsHold(gptr thr);                                  /* 0x48AA20  54 */
+u32  DC2CALL ScrOp_Call48CE20(gptr thr);                                /* 0x48AE10  55 */
+u32  DC2CALL ScrOp_Op56(gptr thr);                                      /* 0x48AAC0  56 */
+u32  DC2CALL ScrOp_Call4529C0(gptr thr);                                /* 0x48AAE0  57 */
+u32  DC2CALL ScrOp_PartHide(gptr thr);                                  /* 0x48AB10  58 */
+u32  DC2CALL ScrOp_Texture(gptr thr);                                   /* 0x48AB90  59 */
+
 /* handler used for an opcode that is not reimplemented yet: in the hook
  * build it calls the original code, elsewhere it reports and stops the thread */
 typedef u32 (DC2CALL *ScrOpFn)(gptr thr);

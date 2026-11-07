@@ -414,6 +414,218 @@ static void test_objects(void)
 }
 
 
+/* ---- remaining built-ins: callees replaced by recorders --------------------- */
+/* While these tests run, each callee that is not rewritten yet starts with a
+ * JMP to a recorder that logs its arguments into .psxseg (LOG_BASE), so the
+ * memory compare also checks what the original and the new code passed on.
+ * spec per argument: d dword, w low 16 bits, b low 8 bits, p pointer (the
+ * bytes it points to are logged, plen[] of them). */
+#define LOG_BASE 0x6DE000u
+#define SEL(t)   ((s32)S8((t) + T_SEL1))
+#define LOG_REC  0x80
+typedef struct { u32 addr; const char *spec; u8 plen[2]; u32 ret; u8 saved[5]; } Stub;
+#pragma GCC diagnostic ignored "-Wmissing-field-initializers"
+static Stub g_stubs[] = {
+    {0x405DE0, "dd"}, {0x403A20, ""}, {0x403A30, ""}, {0x448080, "d"}, {0x448580, "b"},
+    {0x448620, "d"}, {0x4529C0, "d"}, {0x450A70, "ddd"}, {0x46FBC0, "ddd"}, {0x4718F0, "dddd"},
+    {0x473130, "d"}, {0x4731F0, ""}, {0x474B20, "d"}, {0x478B80, "dd"}, {0x47A8C0, "ddpp", {16, 8}},
+    {0x481D20, "d"}, {0x481DC0, "d"}, {0x482070, "dd"}, {0x4822D0, "dd"}, {0x48C0B0, "pd", {0x60}},
+    {0x48C600, "d"}, {0x48C640, "ddd"}, {0x48C9C0, "w"}, {0x48CD70, "dd"}, {0x48CE20, "bwww"},
+    {0x48CE60, "d"}, {0x48D070, "dd"}, {0x48D730, "d"}, {0x48DEF0, "ddddd"}, {0x48F880, "ddww"},
+    {0x495E90, "wwwww"}, {0x4B4D20, "pd", {8}}, {0x4B4DB0, "pd", {8}}, {0x4DDDA2, ""},
+    {0, "d"},                   /* 34: object type handlers (*0x87DCA0) */
+    {0, "d"},                   /* 35: AOT kind handlers (0x738B68) */
+};
+#define NSTUBS (int)(sizeof g_stubs / sizeof g_stubs[0])
+#define STUB_TYPE 34
+#define STUB_AOT  35
+
+static u32 rec_common(int id, const u32 *a)
+{
+    Stub *st = &g_stubs[id];
+    u32 n = U32(LOG_BASE);
+    U32(LOG_BASE) = n + 1;
+    if (n < 64) {
+        gptr r = LOG_BASE + 4 + n * LOG_REC, d = r + 0x18;
+        U32(r) = st->addr ? st->addr : 0xF0000000u + id;
+        int np = 0;
+        for (int i = 0; st->spec[i]; i++) {
+            u32 v = a[i];
+            switch (st->spec[i]) {
+            case 'w': v &= 0xFFFF; break;
+            case 'b': v &= 0xFF; break;
+            case 'p': if (v >= 0x401000) { memcpy(MEM(d), MEM(v), st->plen[np]); v = 0; }
+                      d += st->plen[np++]; break;
+            }
+            U32(r + 4 + 4 * i) = v;
+        }
+    }
+    return st->ret;
+}
+#define REC(n) static u32 __cdecl rec##n(u32 a0, u32 a1, u32 a2, u32 a3, u32 a4) \
+    { u32 a[5] = {a0, a1, a2, a3, a4}; return rec_common(n, a); }
+REC(0) REC(1) REC(2) REC(3) REC(4) REC(5) REC(6) REC(7) REC(8) REC(9) REC(10) REC(11)
+REC(12) REC(13) REC(14) REC(15) REC(16) REC(17) REC(18) REC(19) REC(20) REC(21) REC(22)
+REC(23) REC(24) REC(25) REC(26) REC(27) REC(28) REC(29) REC(30) REC(31) REC(32) REC(33)
+REC(34) REC(35)
+static void *const g_recs[] = {rec0, rec1, rec2, rec3, rec4, rec5, rec6, rec7, rec8, rec9, rec10,
+    rec11, rec12, rec13, rec14, rec15, rec16, rec17, rec18, rec19, rec20, rec21, rec22, rec23,
+    rec24, rec25, rec26, rec27, rec28, rec29, rec30, rec31, rec32, rec33, rec34, rec35};
+#define TYPE_TAB 0x6DD000u      /* fake *0x87DCA0: 256 entries */
+static u32 g_aot_saved[12];
+
+static void stubs_install(int on)
+{
+    for (int i = 0; i < NSTUBS; i++) {
+        Stub *st = &g_stubs[i];
+        if (!st->addr) continue;
+        u8 *c = MEM(st->addr);
+        if (on) {
+            memcpy(st->saved, c, 5);
+            c[0] = 0xE9; *(u32 *)(c + 1) = (u32)(uintptr_t)g_recs[i] - (st->addr + 5);
+        } else memcpy(c, st->saved, 5);
+    }
+    for (int k = 0; k < 12; k++) {
+        if (on) { g_aot_saved[k] = U32(0x738B68 + 4 * k); U32(0x738B68 + 4 * k) = (u32)(uintptr_t)g_recs[STUB_AOT]; }
+        else U32(0x738B68 + 4 * k) = g_aot_saved[k];
+    }
+}
+
+static void ops2_args(u8 op, gptr t)
+{
+    gptr sp = U32(t + T_SP), g = G();
+#define A(i) U32(sp + 4 * (i))
+    switch (op) {
+    case 0x1A: A(9) = rnd() % 16; A(8) = rnd() % 40; A(0) = rnd() % 4 ? rnd() % 64 : 0;
+               A(2) = rnd() % 4 ? rnd() % 8 : 0x500000 + rnd() % 0x100000;
+               A(6) = rnd_s16(); if (rnd() % 4 == 0) A(6) = (u32)(s32)(s16)(rnd() % 3 - 1);
+               Flag_Set(4, A(0), rnd() & 1); Flag_Set(2, 0x14, 0); if (rnd() % 4 == 0) A(8) = 15 + rnd() % 2;
+               break;
+    case 0x1B: U8(t + T_SEL0) = rnd() % 5; if (rnd() % 4 == 0) U32(O_OBJ + SEL(t) * 0x260 + 0x64) = 0; break;
+    case 0x20: U8(0x87FC45) = rnd() % 3 ? (u8)rnd() : 0xFF; break;
+    case 0x21: A(4) = rnd() % 16; if (rnd() % 3 == 0) A(0) = 0; break;
+    case 0x23: A(1) = rnd() % 2 ? 0x6DC000 + rnd() % 0x100 : rnd() % 64; break;
+    case 0x24: U8(g + 0xB4A) = rnd() % 3 ? (u8)rnd() : 0xFF; break;
+    case 0x28: A(2) = rnd() % 12; A(1) = rnd() % 64; A(0) = rnd() % 2; break;
+    case 0x29: { s32 v[4] = {-1, -2, -3, (s32)rnd()}; A(0) = (u32)v[rnd() % 4];
+               U8(g + 0x108F) = rnd() % 4; U16(g + 0x10B4) = (u16)rnd();
+               for (int i = 0; i < 4; i++) U16(g + 0x10B6 + 2 * i) = (u16)rnd();
+               U32(O_OBJ + 0x50) = rnd(); U8(O_OBJ + 0x58) = (u8)rnd(); break; }
+    case 0x2B: A(3) = rnd() % 16; break;
+    case 0x2C: A(4) = rnd() % 3; Flag_Set(2, 6, rnd() % 4 == 0); break;
+    case 0x2D: A(0) = rnd() % 4 ? (rnd() % 10) << 8 | rnd() % 32 : 0xFFFF; break;
+    case 0x2F: A(0) = rnd() % 2 ? 0xFFFFFFFF : rnd(); U32(0x87DE04) = rnd() % 28;
+               for (int i = 0; i < 28; i++) { gptr e = O_EFF + i * 0x70; U8(e + 0x4E) = rnd() % 4;
+                   U8(e + 0x4F) = rnd() % 3 ? rnd() % 20 : (u8)rnd(); } break;
+    case 0x30: A(18) = rnd() % 32; break;
+    case 0x31: case 0x32: A(12) = rnd() % 32; break;
+    case 0x33: case 0x39: A(13) = rnd() % 32; break;
+    case 0x35: A(16) = rnd() % 32; A(5) = rnd() % 128; if (rnd() % 4 == 0) A(5) = 0;
+               Flag_Set(5, A(5), rnd() & 1); A(1) = rnd() % 3 ? rnd() % 16 : 0xFF;
+               if (rnd() % 4 == 0) for (int i = 6; i < 15; i++) A(i) = rnd();
+               break;
+    case 0x36: case 0x3B: A(11) = rnd() % 32; break;
+    case 0x37: case 0x38: A(10) = rnd() % 32; break;
+    case 0x3A: A(14) = rnd() % 32; A(2) = rnd() % 64; Flag_Set(8, A(2), rnd() & 1);
+               A(1) = rnd() % 16; A(3) = rnd() % 3; break;
+    case 0x3E: A(0) = rnd() % 32; U8(O_AOT + A(0) * 0x28 + 1) = rnd() % 12; break;
+    case 0x40: A(4) = rnd() % 6; break;
+    case 0x41: case 0x42: if (rnd() % 2) A(0) = rnd() % 2 ? 0 : 0xFFFFFFFF;
+               Flag_Set(2, 0, rnd() % 3 == 0); Flag_Set(2, 2, rnd() % 3 == 0); break;
+    case 0x43: A(0) = (rnd() % 8) << 8 | (u8)rnd(); A(1) = rnd(); break;
+    case 0x46: break;
+    case 0x47: U8(t + T_SEL0) = 1 + rnd() % 2; A(2) = rnd() % 3; A(1) = rnd() % 16; A(0) = rnd() % 2; break;
+    case 0x48: g_stubs[33].ret = rnd(); break;
+    case 0x4B: U8(g + 0x7C4) = rnd() % 4; U8(t + T_A0) = rnd() % 4; break;
+    case 0x4E: g_stubs[1].ret = rnd() % 3 == 0; break;
+    case 0x4F: A(0) = rnd() % 4 ? 0x6DC000 + 0x10 * (rnd() % 4) : 0; U32(g + 0xA68) = rnd() % 4 ? 0 : A(0);
+               U8(g + 0x1091) = rnd() % 10; U8(g + 0x1090) = rnd() % 32; break;
+    case 0x50: case 0x51: Flag_Set(2, 0x17, rnd() & 1); break;
+    case 0x52: U8(t + T_SEL0) = rnd() % 4; break;
+    case 0x54: U32(g + 0xA7C) = rnd() % 16; A(0) = rnd() % 3; break;
+    case 0x58: { gptr part = U32(O_OBJ + SEL(t) * 0x260 + 0x64);
+               A(1) = U32(part + 0x54) && rnd() % 2; A(0) = rnd() % 3; break; }
+    case 0x59: Flag_Set(9, 0x33, rnd() & 1); break;
+    case 0x49: case 0x55: break;
+    }
+#undef A
+}
+
+static void test_ops2(void)
+{
+    static const struct { u8 op; u32 addr; void *fn; const char *name; } ops[] = {
+#define O(op, a, f) {op, a, f, #f}
+        O(0x11, 0x487650, ScrOp_Message),    O(0x1A, 0x487A10, ScrOp_ObjSpawn),
+        O(0x1B, 0x48AC60, ScrOp_ObjCall),    O(0x20, 0x488F70, ScrOp_WaitEvent),
+        O(0x21, 0x488FA0, ScrOp_AnimSet),    O(0x22, 0x489000, ScrOp_Set87FC47),
+        O(0x23, 0x489020, ScrOp_LoadModel),  O(0x24, 0x489070, ScrOp_WaitB4A),
+        O(0x25, 0x4890B0, ScrOp_Call46FBC0), O(0x26, 0x4890E0, ScrOp_Timer),
+        O(0x27, 0x489110, ScrOp_Fade),       O(0x28, 0x489140, ScrOp_WaitFlag),
+        O(0x29, 0x489180, ScrOp_Character),  O(0x2B, 0x489410, ScrOp_ObjMove),
+        O(0x2C, 0x489460, ScrOp_Menu),       O(0x2D, 0x4894C0, ScrOp_RoomReset),
+        O(0x2E, 0x48AD30, ScrOp_Call48C640), O(0x2F, 0x489540, ScrOp_Effect2F),
+        O(0x30, 0x4895E0, ScrOp_AotDoor),    O(0x31, 0x489710, ScrOp_Aot31),
+        O(0x32, 0x4897E0, ScrOp_Aot32),      O(0x33, 0x4898B0, ScrOp_Aot33),
+        O(0x35, 0x4899A0, ScrOp_AotItem),    O(0x36, 0x489B80, ScrOp_Aot36),
+        O(0x37, 0x489C50, ScrOp_Aot37),      O(0x38, 0x489D10, ScrOp_Aot38),
+        O(0x39, 0x489DD0, ScrOp_Aot39),      O(0x3A, 0x489EB0, ScrOp_Aot3A),
+        O(0x3B, 0x48A000, ScrOp_Aot3B),      O(0x3E, 0x48A0D0, ScrOp_AotRun),
+        O(0x40, 0x48A120, ScrOp_CamMove),    O(0x41, 0x48AD60, ScrOp_WaitCutscene),
+        O(0x42, 0x48ADC0, ScrOp_Cutscene),   O(0x43, 0x48AE50, ScrOp_Sound),
+        O(0x46, 0x48A530, ScrOp_ObjAnim),    O(0x47, 0x48A580, ScrOp_LinkPart),
+        O(0x48, 0x48A640, ScrOp_Random),     O(0x49, 0x48AF80, ScrOp_SoundSlot),
+        O(0x4B, 0x48A720, ScrOp_WaitCamera), O(0x4C, 0x48A770, ScrOp_Call478B80),
+        O(0x4D, 0x48A7A0, ScrOp_Call481D20), O(0x4E, 0x48A7D0, ScrOp_WaitFile),
+        O(0x4F, 0x48A7F0, ScrOp_EnemySet),   O(0x50, 0x48A8C0, ScrOp_Op50),
+        O(0x51, 0x48A930, ScrOp_Op51),       O(0x52, 0x48A990, ScrOp_Op52),
+        O(0x53, 0x48AD00, ScrOp_Call48C600), O(0x54, 0x48AA20, ScrOp_ObjsHold),
+        O(0x55, 0x48AE10, ScrOp_Call48CE20), O(0x56, 0x48AAC0, ScrOp_Op56),
+        O(0x57, 0x48AAE0, ScrOp_Call4529C0), O(0x58, 0x48AB10, ScrOp_PartHide),
+        O(0x59, 0x48AB90, ScrOp_Texture),
+#undef O
+    };
+    g_ign_objpads = 1;
+    script_setup();
+    stubs_install(1);
+    U32(0x87DCA0) = TYPE_TAB;
+    for (int i = 0; i < 256; i++) U32(TYPE_TAB + 4 * i) = (u32)(uintptr_t)g_recs[STUB_TYPE];
+    U32(0x87F940) = 16;
+    for (int i = 0; i < iters; i++) {
+        objects_setup();
+        for (u32 a = 0x6DC000; a < 0x6DC100; a += 4) U32(a) = rnd();
+        for (unsigned k = 0; k < sizeof ops / sizeof ops[0]; k++) {
+            gptr t = T_BASE + SCR_THREAD_SIZE * (rnd() % 10);
+            objects_links();
+            random_thread(t);
+            U32(t + T_SP) = t + 0x18;
+            for (int j = 0; j < 26; j++) U32(t + 0x18 + 4 * j) = rnd() % 3 ? rnd() % 64 : rnd();
+            U8(t + T_SEL1) = rnd() % 16;
+            U8(t + T_SEL0) = rnd() % 4;
+            U32(LOG_BASE) = 0;
+            ops2_args(ops[k].op, t);
+            gptr sp = U32(t + T_SP);
+            u32 a[1] = {t};
+            sprintf(g_what, "op %02X sel %u/%d sp %08X %08X %08X %08X %08X", ops[k].op, U8(t + T_SEL0),
+                    S8(t + T_SEL1), U32(sp), U32(sp + 4), U32(sp + 8), U32(sp + 12), U32(sp + 16));
+            check(ops[k].addr, ops[k].fn, ops[k].name, 1, a, 0xFFFFFFFF);
+        }
+        /* helpers */
+        u32 h[2] = {rnd() % 16, 0};
+        check(0x48D820, Obj_Init, "Obj_Init", 1, h, 0);
+        objects_links();
+        h[0] = U32(O_OBJ + (rnd() % 16) * 0x260 + 0x64); h[1] = U32(h[0] + 0x54) ? rnd() % 3 : rnd() % 2;
+        check(0x48D3F0, Obj_Part, "Obj_Part", 2, h, 0xFFFFFFFF);
+        gptr t = T_BASE + SCR_THREAD_SIZE * (rnd() % 10);
+        random_thread(t); U8(t + T_SEL0) = rnd() % 6; U8(t + T_SEL1) = (u8)(rnd() % 40 - 20);
+        h[0] = t;
+        check(0x48BE50, Script_SelObj, "Script_SelObj", 1, h, 0xFFFFFFFF);
+        h[0] = rnd() % 4 ? rnd() % 12 : rnd(); h[1] = rnd();
+        check(0x48CC30, Room_SoundSlot, "Room_SoundSlot", 2, h, 0xFFFFFFFF);
+    }
+    stubs_install(0);
+    g_ign_objpads = 0;
+}
+
 /* ---- GTE (PC layer) ----------------------------------------------------------- */
 #define G_SCR 0x6C0000u         /* 12 scratch blocks of 0x100 bytes */
 
@@ -690,7 +902,7 @@ __declspec(dllexport) void harness_main(int argc, char **argv)
     struct { const char *name; void (*fn)(void); } T[] = {
         {"flags", test_flags}, {"geometry", test_geom}, {"script values", test_script_values},
         {"script opcodes", test_script_ops}, {"script objects", test_objects},
-        {"script run", test_script_run}, {"gte", test_gte},
+        {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte},
     };
     for (unsigned i = 0; i < sizeof T / sizeof T[0]; i++) {
         int f0 = g_fail, t0 = g_tests;

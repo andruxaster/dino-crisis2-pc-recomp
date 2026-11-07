@@ -4,10 +4,13 @@
  * loader does (LZSS record to 0x5E0000), starts the room script like
  * Script_Init and runs Script_Run frame by frame until an opcode that is
  * not reimplemented yet stops the threads.
- *   usage: smoke Dino2.exe DATA_DIR [ROOM] [FRAMES] */
+ * Functions that are not rewritten yet are reported once and skipped.
+ *   usage: smoke Dino2.exe DATA_DIR [ROOM|all] [FRAMES] */
 #include <stdio.h>
 #include <stdlib.h>
+#include <dirent.h>
 #include "dc2/game.h"
+#include "dc2/orig.h"
 
 u8 *g_membase;
 
@@ -38,16 +41,35 @@ static int load_data_sections(const char *exe)
     return 1;
 }
 
-int main(int argc, char **argv)
+static const char *g_exe;
+
+/* stand-in for the object type handlers (not rewritten yet): they build the
+   object's model parts; give each object a chain of 32 empty parts so that
+   code which walks the parts has something to work on */
+#define TYPE_TABLE 0x6B8000u
+#define PARTS      0x6C0000u      /* 32 objects x 32 parts x 0x80 */
+static void type_handler(gptr fn, u32 obj)
 {
-    if (argc < 3) { fprintf(stderr, "usage: %s Dino2.exe DATA_DIR [ROOM] [FRAMES]\n", argv[0]); return 1; }
-    const char *room = argc > 3 ? argv[3] : "ST100";
-    int frames = argc > 4 ? atoi(argv[4]) : 120;
-    if (!load_data_sections(argv[1])) { fprintf(stderr, "cannot read %s\n", argv[1]); return 1; }
+    (void)fn;
+    if (obj < 0x690000 || obj >= 0x690000 + 32 * 0x260 || U32(obj + 0x64)) return;
+    gptr p = PARTS + (obj - 0x690000) / 0x260 * 0x1000, parent = obj;
+    memset(MEM(p), 0, 0x1000);
+    U32(obj + 0x64) = p;
+    for (int i = 0; i < 32; i++, p += 0x80) {
+        U32(p + 0x58) = parent;
+        if (i < 31) U32(p + 0x54) = p + 0x80;
+        parent = p;
+    }
+}
+
+static int run_room(const char *data, const char *room, int frames)
+{
+    free(g_membase);
+    if (!load_data_sections(g_exe)) { fprintf(stderr, "cannot read %s\n", g_exe); return 1; }
     U32(A_G_PTR) = A_G_STATIC;
 
     /* room file: 0x800-byte header of 32-byte records, data sector aligned */
-    char path[512]; snprintf(path, sizeof path, "%s/%s.DAT", argv[2], room);
+    char path[512]; snprintf(path, sizeof path, "%s/%s.DAT", data, room);
     long n; u8 *d = read_all(path, &n);
     if (!d) { fprintf(stderr, "cannot read %s\n", path); return 1; }
     u32 off = 0x800; int got = 0;
@@ -63,17 +85,20 @@ int main(int argc, char **argv)
     }
     free(d);
     if (!got) { fprintf(stderr, "%s: no room block\n", room); return 1; }
-    printf("%s: room block unpacked by Lzss_Decode, script section at %08X\n", room, U32(0x5E0000 + 0x14));
 
     /* runtime tables normally set up by the stage/room loaders (not rewritten
        yet): empty object arrays in a free part of .psxseg, room sections
        from the block header as Room_SetPointers 0x481E10 does */
-    memset(MEM(0x690000), 0, 0x30000);
+    memset(MEM(0x690000), 0, 0x50000);
+    for (int i = 0; i < 32; i++) type_handler(0, 0x690000 + i * 0x260);
     U32(G() + 0x940) = 0x690000;              /* objects, 0x260 bytes */
     U32(G() + 0x93C) = 0x6A0000;              /* effects, 0x70 bytes */
     U32(G() + 0x944) = 0x6A8000;              /* 0xAC bytes */
     U32(G() + 0x948) = 0x6B0000;              /* 0x34 bytes */
     U32(G() + 0xA5C) = 0x6B4000;              /* AOT, 0x28 bytes */
+    U32(0x87DCA0) = TYPE_TABLE;               /* object type handlers: stand-in */
+    g_orig_call1 = type_handler;
+    U32(0x87F940) = 32;                       /* object slots */
     U32(G() + 0xA4C) = U32(0x5E0000 + 0x08);  /* collision */
     U32(G() + 0xA44) = U32(0x5E0000 + 0x0C) + 4;  /* camera zones (CamZones_Init) */
 
@@ -85,14 +110,38 @@ int main(int argc, char **argv)
     memset(MEM(0x6E0000), 0, SCR_NTHREADS * SCR_THREAD_SIZE);
     Script_StartThread(0, 0);
 
-    for (int f = 0; f < frames; f++) {
+    int f, maxalive = 0, alive = 0;
+    for (f = 0; f < frames; f++) {
         Script_Run();
-        int alive = 0;
-        for (int t = 0; t < SCR_NTHREADS; t++) {
-            u8 st = U8(0x6E0000 + t * SCR_THREAD_SIZE + T_STATE);
-            if (st) alive++;
-        }
-        if (!alive) { printf("frame %d: no thread left\n", f); break; }
+        alive = 0;
+        for (int t = 0; t < SCR_NTHREADS; t++)
+            if (U8(0x6E0000 + t * SCR_THREAD_SIZE + T_STATE)) alive++;
+        if (alive > maxalive) maxalive = alive;
+        if (!alive) break;
     }
+    printf("%s: %d frames, up to %d threads, %d running at the end\n", room, f, maxalive, alive);
     return 0;
+}
+
+static int cmp(const void *a, const void *b) { return strcmp(*(char **)a, *(char **)b); }
+
+int main(int argc, char **argv)
+{
+    if (argc < 3) { fprintf(stderr, "usage: %s Dino2.exe DATA_DIR [ROOM|all] [FRAMES]\n", argv[0]); return 1; }
+    g_exe = argv[1];
+    const char *room = argc > 3 ? argv[3] : "ST100";
+    int frames = argc > 4 ? atoi(argv[4]) : 120;
+    if (strcmp(room, "all")) return run_room(argv[2], room, frames);
+    DIR *dir = opendir(argv[2]);
+    if (!dir) { fprintf(stderr, "cannot open %s\n", argv[2]); return 1; }
+    char *names[256]; int n = 0; struct dirent *e;
+    while ((e = readdir(dir)) && n < 256) {
+        size_t l = strlen(e->d_name);
+        if (l == 9 && !strncmp(e->d_name, "ST", 2) && !strcmp(e->d_name + 5, ".DAT")) names[n++] = strndup(e->d_name, 5);
+    }
+    closedir(dir);
+    qsort(names, n, sizeof *names, cmp);
+    int bad = 0;
+    for (int i = 0; i < n; i++) bad |= run_room(argv[2], names[i], frames);
+    return bad;
 }
