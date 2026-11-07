@@ -6,7 +6,7 @@ build/
 *.dll
 viewer/dc2view
 # game data: never commit (use your own copy in game/)
-game/
+/game/
 *.DAT
 *.DBS
 *.TEX
