@@ -5,6 +5,7 @@
 #include "hooks.h"
 
 const Hook g_hooks[] = {
+    {0x403A50, (void *)Camera_Switch,      "Camera_Switch"},
     {0x4041F0, (void *)Lzss_Decode,        "Lzss_Decode"},
     {0x46FAA0, (void *)Flag_Set,           "Flag_Set"},
     {0x46FB20, (void *)Flag_Check,         "Flag_Check"},
@@ -20,9 +21,23 @@ const Hook g_hooks[] = {
     {0x487590, (void *)ScrOp_Branch,       "ScrOp_Branch"},
     {0x4875D0, (void *)ScrOp_Call,         "ScrOp_Call"},
     {0x487620, (void *)ScrOp_Wait,         "ScrOp_Wait"},
+    {0x487690, (void *)ScrOp_ObjSelect,    "ScrOp_ObjSelect"},
+    {0x4876C0, (void *)ScrOp_EffectInit,   "ScrOp_EffectInit"},
+    {0x4877A0, (void *)ScrOp_Obj14Init,    "ScrOp_Obj14Init"},
+    {0x4878B0, (void *)ScrOp_ThreadStart,  "ScrOp_ThreadStart"},
+    {0x487900, (void *)ScrOp_ThreadKill,   "ScrOp_ThreadKill"},
+    {0x487940, (void *)ScrOp_ThreadPause,  "ScrOp_ThreadPause"},
+    {0x487970, (void *)ScrOp_ThreadResume, "ScrOp_ThreadResume"},
+    {0x4879B0, (void *)ScrOp_ThreadGoto,   "ScrOp_ThreadGoto"},
     {0x487B70, (void *)ScrOp_FlagSet,      "ScrOp_FlagSet"},
     {0x487BF0, (void *)ScrOp_FlagCheck,    "ScrOp_FlagCheck"},
+    {0x487C50, (void *)ScrOp_ObjSet,       "ScrOp_ObjSet"},
+    {0x488770, (void *)ScrOp_ObjGet,       "ScrOp_ObjGet"},
+    {0x4893E0, (void *)ScrOp_WaitFrame,    "ScrOp_WaitFrame"},
     {0x489990, (void *)ScrOp_Nop,          "ScrOp_Nop"},
+    {0x48A220, (void *)ScrOp_Obj44Init,    "ScrOp_Obj44Init"},
+    {0x48A2C0, (void *)ScrOp_ObjEnable,    "ScrOp_ObjEnable"},
+    {0x48A670, (void *)ScrOp_CutsceneCamera, "ScrOp_CutsceneCamera"},
     {0x48B8E0, (void *)Script_GetValue,    "Script_GetValue"},
     {0x48B930, (void *)Script_SetValue,    "Script_SetValue"},
     {0x48B980, (void *)Script_BinOp,       "Script_BinOp"},
@@ -30,6 +45,10 @@ const Hook g_hooks[] = {
     {0x48BC50, (void *)Script_Run,         "Script_Run"},
     {0x48BDB0, (void *)Script_StartThread, "Script_StartThread"},
     {0x48BE20, (void *)Script_KillThread,  "Script_KillThread"},
+    {0x48D800, (void *)Obj_Disable,        "Obj_Disable"},
+    {0x48D890, (void *)Obj_Free,           "Obj_Free"},
     {0x48F790, (void *)PointInQuad,        "PointInQuad"},
+    {0x48FC40, (void *)Obj_SavePos,        "Obj_SavePos"},
+    {0x48FC70, (void *)Obj_SyncLinks,      "Obj_SyncLinks"},
 };
 const int g_nhooks = sizeof g_hooks / sizeof g_hooks[0];

@@ -27,7 +27,7 @@ static int load_data_sections(const char *exe)
     long n; u8 *d = read_all(exe, &n);
     if (!d) return 0;
     u32 pe = *(u32 *)(d + 0x3C); u16 nsec = *(u16 *)(d + pe + 6), opt = *(u16 *)(d + pe + 20);
-    g_membase = calloc(1, IMAGE_SIZE);
+    g_membase = calloc(1, IMAGE_SIZE + TMP_SIZE);
     for (int i = 0; i < nsec; i++) {
         u8 *s = d + pe + 24 + opt + 40 * i;
         u32 va = *(u32 *)(s + 12), rs = *(u32 *)(s + 16), ro = *(u32 *)(s + 20), ch = *(u32 *)(s + 36);
@@ -64,6 +64,18 @@ int main(int argc, char **argv)
     free(d);
     if (!got) { fprintf(stderr, "%s: no room block\n", room); return 1; }
     printf("%s: room block unpacked by Lzss_Decode, script section at %08X\n", room, U32(0x5E0000 + 0x14));
+
+    /* runtime tables normally set up by the stage/room loaders (not rewritten
+       yet): empty object arrays in a free part of .psxseg, room sections
+       from the block header as Room_SetPointers 0x481E10 does */
+    memset(MEM(0x690000), 0, 0x30000);
+    U32(G() + 0x940) = 0x690000;              /* objects, 0x260 bytes */
+    U32(G() + 0x93C) = 0x6A0000;              /* effects, 0x70 bytes */
+    U32(G() + 0x944) = 0x6A8000;              /* 0xAC bytes */
+    U32(G() + 0x948) = 0x6B0000;              /* 0x34 bytes */
+    U32(G() + 0xA5C) = 0x6B4000;              /* AOT, 0x28 bytes */
+    U32(G() + 0xA4C) = U32(0x5E0000 + 0x08);  /* collision */
+    U32(G() + 0xA44) = U32(0x5E0000 + 0x0C) + 4;  /* camera zones (CamZones_Init) */
 
     /* Script_Init 0x48BB60: header 0x1C bytes, globals = base + hdr[3] */
     gptr a54 = U32(0x5E0000 + 0x14);

@@ -20,6 +20,7 @@ typedef u32 gptr;                 /* address in the original process */
 
 #define IMAGE_BASE 0x400000u
 #define IMAGE_SIZE 0x483000u      /* SizeOfImage of Dino2.exe */
+#define TMP_SIZE   0x4000u        /* standalone: scratch after the image (orig.c) */
 
 extern u8 *g_membase;             /* host address of IMAGE_BASE */
 

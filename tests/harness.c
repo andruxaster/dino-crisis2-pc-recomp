@@ -12,6 +12,7 @@
 #include <string.h>
 #include "dc2/game.h"
 #include "../src/hook/hooks.h"
+#include "dc2/orig.h"
 
 u8 *g_membase = (u8 *)IMAGE_BASE;
 
@@ -263,6 +264,131 @@ static void test_script_ops(void)
         }
 }
 
+
+/* ---- objects and object built-ins ------------------------------------------- */
+#define O_OBJ   0x690000u      /* 16 objects x 0x260 */
+#define O_PART  0x693000u      /* one or two linked parts per object */
+#define O_EFF   0x694000u
+#define O_K2    0x695000u
+#define O_K3    0x696000u
+#define O_AOT   0x697000u
+#define O_ZONE  0x698000u
+#define O_COLL  0x699000u
+#define O_CAM   0x69A000u
+
+/* part links as the game keeps them (Obj_Free clears them; the game never
+   updates a freed object afterwards) */
+static void objects_links(void)
+{
+    for (int i = 0; i < 16; i++) {
+        gptr o = O_OBJ + i * 0x260, p = O_PART + i * 0x100, q = p + 0x80;
+        U32(o + 0x64) = p;
+        U32(p + 0x58) = o; U32(q + 0x58) = p;              /* parent */
+        U32(p + 0x54) = rnd() & 1 ? q : 0; U32(q + 0x54) = 0;
+        U8(o + 0x54) = rnd() & 1;
+    }
+}
+
+static void objects_setup(void)
+{
+    for (u32 a = O_OBJ; a < O_CAM + 0x100; a += 4) U32(a) = rnd() % 4 ? rnd() % 0x10000 : rnd();
+    objects_links();
+    for (int i = 0; i < 16; i++) U32(O_COLL + 8 + 4 * i) = 0x100 + 0x20 * i;
+    U32(G() + 0x940) = O_OBJ; U32(G() + 0x93C) = O_EFF; U32(G() + 0x944) = O_K2;
+    U32(G() + 0x948) = O_K3;  U32(G() + 0xA5C) = O_AOT; U32(G() + 0xA44) = O_ZONE;
+    U32(G() + 0xA4C) = O_COLL; U32(G() + 0x7B8) = O_CAM;
+}
+
+static void obj_thread(gptr t)
+{
+    random_thread(t);
+    U32(t + T_SP) = t + 0x40;
+    for (int i = 0; i < 16; i++) U32(t + 0x40 + 4 * i) = rnd() % 3 ? rnd() % 64 : rnd();
+    U8(t + T_SEL1) = rnd() % 16;
+    U8(t + T_SEL0) = rnd() % 9;
+}
+
+static void test_objects(void)
+{
+    static const struct { u32 addr; void *fn; const char *name; int argmode; } ops[] = {
+        {0x487690, ScrOp_ObjSelect, "ScrOp_ObjSelect", 0},
+        {0x487C50, ScrOp_ObjSet, "ScrOp_ObjSet", 1},
+        {0x488770, ScrOp_ObjGet, "ScrOp_ObjGet", 2},
+        {0x4893E0, ScrOp_WaitFrame, "ScrOp_WaitFrame", 3},
+        {0x48A220, ScrOp_Obj44Init, "ScrOp_Obj44Init", 4},
+        {0x48A2C0, ScrOp_ObjEnable, "ScrOp_ObjEnable", 5},
+        {0x48A670, ScrOp_CutsceneCamera, "ScrOp_CutsceneCamera", 6},
+        {0x4876C0, ScrOp_EffectInit, "ScrOp_EffectInit", 7},
+        {0x4877A0, ScrOp_Obj14Init, "ScrOp_Obj14Init", 8},
+        {0x4878B0, ScrOp_ThreadStart, "ScrOp_ThreadStart", 9},
+        {0x487900, ScrOp_ThreadKill, "ScrOp_ThreadKill", 10},
+        {0x487940, ScrOp_ThreadPause, "ScrOp_ThreadPause", 10},
+        {0x487970, ScrOp_ThreadResume, "ScrOp_ThreadResume", 10},
+        {0x4879B0, ScrOp_ThreadGoto, "ScrOp_ThreadGoto", 11},
+    };
+    script_setup();
+    for (int i = 0; i < iters; i++) {
+        objects_setup();
+        for (unsigned k = 0; k < sizeof ops / sizeof ops[0]; k++) {
+            gptr t = T_BASE + SCR_THREAD_SIZE * (rnd() % 10);
+            objects_links();
+            obj_thread(t);
+            gptr sp = U32(t + T_SP);
+            switch (ops[k].argmode) {
+            case 1:            /* obj_set(param, value) */
+                U32(sp + 4) = rnd() % 8 ? rnd() % 45 : rnd();
+                if (U8(t + T_SEL0) == 5) U32(sp + 4) = rnd() % 8 ? 30 + rnd() % 46 : rnd();   /* globals 33..72 */
+                break;
+            case 2:            /* obj_get(param) */
+                if (U8(t + T_SEL0) == 4) U8(t + T_SEL0) = 0;      /* undefined result */
+                U32(sp) = U8(t + T_SEL0) == 5 ? 25 + rnd() % 52 : rnd() % 8 ? rnd() % 45 : rnd();
+                break;
+            case 3: S16(0x87FC4A) = rnd() % 64; U32(sp) = rnd() % 64; if (rnd() % 8 == 0) U32(sp) = rnd(); break;
+            case 4: U32(sp + 0x1C) = rnd() % 16; break;
+            case 5: U32(sp + 8) = rnd() % 10; U32(sp + 4) = rnd() % 16; U32(sp) = rnd() % 3; break;
+            case 6: U32(sp) = rnd() % 4 ? rnd() % 8 : (u32)-(s32)(rnd() % 3 + 1);
+                    U8(G() + 0x7C4) = rnd() % 8; Flag_Set(2, 0, rnd() % 4 == 0); break;
+            case 7: U32(sp + 0x38) = rnd() % 16; break;
+            case 8: U32(sp + 0x28) = rnd() % 16; break;
+            case 9: U32(sp + 4) = rnd() % 10; U32(sp) = rnd() % 16; Flag_Set(0, 9, rnd() % 4 == 0); break;
+            case 10: U32(sp) = rnd() % 10; break;
+            case 11: U32(sp) = rnd() % 16; break;
+            }
+            u32 a[1] = {t};
+            sprintf(g_what, "kind %u sel %d sp %08X %08X %08X", U8(t + T_SEL0), S8(t + T_SEL1), U32(sp), U32(sp + 4), U32(sp + 8));
+            check(ops[k].addr, ops[k].fn, ops[k].name, 1, a, 0xFFFFFFFF);
+        }
+        objects_links();
+        u32 o[1] = {O_OBJ + (rnd() % 16) * 0x260};
+        U8(o[0] + 0x50) = rnd() & 1;
+        if (i < 6)          /* every kind x every parameter of obj_set / obj_get */
+            for (u32 kind = 0; kind < 9; kind++)
+                for (u32 p = 0; p < 80; p++) {
+                    gptr t = T_BASE + SCR_THREAD_SIZE * (rnd() % 10);
+                    objects_links();
+                    obj_thread(t);
+                    U8(t + T_SEL0) = (u8)kind;
+                    gptr sp = U32(t + T_SP);
+                    u32 a[1] = {t};
+                    U32(sp + 4) = p; U32(sp) = rnd() % 2 ? rnd() : rnd() % 0x100 | 0x80;
+                    sprintf(g_what, "set kind %u param %u value %08X", kind, p, U32(sp));
+                    check(0x487C50, ScrOp_ObjSet, "ScrOp_ObjSet", 1, a, 0xFFFFFFFF);
+                    if (kind == 4) continue;                  /* undefined result */
+                    U32(sp) = p;
+                    sprintf(g_what, "get kind %u param %u", kind, p);
+                    check(0x488770, ScrOp_ObjGet, "ScrOp_ObjGet", 1, a, 0xFFFFFFFF);
+                }
+        check(0x48FC70, Obj_SyncLinks, "Obj_SyncLinks", 1, o, 0);
+        check(0x48FC40, Obj_SavePos, "Obj_SavePos", 1, o, 0);
+        check(0x48D800, Obj_Disable, "Obj_Disable", 1, o, 0);
+        o[0] = O_OBJ + (rnd() % 16) * 0x260;
+        check(0x48D890, Obj_Free, "Obj_Free", 1, o, 0);
+        u32 c[1] = {rnd() % 4 ? rnd() % 16 : rnd()};
+        U8(G() + 0xB49) = rnd() & 1;
+        check(0x403A50, Camera_Switch, "Camera_Switch", 1, c, 0);
+    }
+}
+
 /* random programs made only of reimplemented opcodes, run by Script_Run */
 static void test_script_run(void)
 {
@@ -384,7 +510,8 @@ __declspec(dllexport) void harness_main(int argc, char **argv)
     U32(A_G_PTR) = A_G_STATIC;
     struct { const char *name; void (*fn)(void); } T[] = {
         {"flags", test_flags}, {"geometry", test_geom}, {"script values", test_script_values},
-        {"script opcodes", test_script_ops}, {"script run", test_script_run},
+        {"script opcodes", test_script_ops}, {"script objects", test_objects},
+        {"script run", test_script_run},
     };
     for (unsigned i = 0; i < sizeof T / sizeof T[0]; i++) {
         int f0 = g_fail, t0 = g_tests;

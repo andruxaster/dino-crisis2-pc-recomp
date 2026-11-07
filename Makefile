@@ -5,7 +5,8 @@
 CC32   ?= i686-w64-mingw32-gcc
 CC     ?= cc
 CFLAGS  = -std=gnu11 -O2 -Wall -Wextra -Wno-unused-parameter -Iinclude
-GAME    = src/game/lzss.c src/game/flag.c src/game/geom.c src/game/script_vm.c
+GAME    = src/game/lzss.c src/game/flag.c src/game/geom.c src/game/script_vm.c \
+          src/game/script_obj.c src/game/orig.c
 DINO2  ?= game/Dino2.exe
 DATA   ?= game/Data
 OUT     = build
@@ -33,7 +34,7 @@ check: $(OUT)/harness_stub.exe
 linux: $(OUT)/libdc2game.a $(OUT)/smoke
 $(OUT)/libdc2game.a: $(GAME) | $(OUT)
 	for f in $(GAME); do $(CC) $(CFLAGS) -c $$f -o $(OUT)/$$(basename $$f .c).o || exit 1; done
-	ar rcs $@ $(OUT)/lzss.o $(OUT)/flag.o $(OUT)/geom.o $(OUT)/script_vm.o
+	ar rcs $@ $(patsubst src/game/%.c,$(OUT)/%.o,$(GAME))
 $(OUT)/smoke: src/port/smoke.c $(OUT)/libdc2game.a
 	$(CC) $(CFLAGS) -o $@ $^
 

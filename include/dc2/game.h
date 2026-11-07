@@ -42,6 +42,27 @@ u32  DC2CALL ScrOp_Wait(gptr thr);                                      /* 0x487
 u32  DC2CALL ScrOp_FlagSet(gptr thr);                                   /* 0x487B70  1C */
 u32  DC2CALL ScrOp_FlagCheck(gptr thr);                                 /* 0x487BF0  1D */
 
+/* script_obj.c -- built-ins on objects */
+void DC2CALL Obj_SyncLinks(gptr obj);                                   /* 0x48FC70 */
+void DC2CALL Obj_SavePos(gptr obj);                                     /* 0x48FC40 */
+void DC2CALL Obj_Disable(gptr obj);                                     /* 0x48D800 */
+void DC2CALL Obj_Free(gptr obj);                                        /* 0x48D890 */
+void DC2CALL Camera_Switch(u32 cam);                                    /* 0x403A50 */
+u32  DC2CALL ScrOp_ObjSelect(gptr thr);                                 /* 0x487690  12 */
+u32  DC2CALL ScrOp_EffectInit(gptr thr);                                /* 0x4876C0  13 */
+u32  DC2CALL ScrOp_Obj14Init(gptr thr);                                 /* 0x4877A0  14 */
+u32  DC2CALL ScrOp_ThreadStart(gptr thr);                               /* 0x4878B0  15 */
+u32  DC2CALL ScrOp_ThreadKill(gptr thr);                                /* 0x487900  16 */
+u32  DC2CALL ScrOp_ThreadPause(gptr thr);                               /* 0x487940  17 */
+u32  DC2CALL ScrOp_ThreadResume(gptr thr);                              /* 0x487970  18 */
+u32  DC2CALL ScrOp_ThreadGoto(gptr thr);                                /* 0x4879B0  19 */
+u32  DC2CALL ScrOp_ObjSet(gptr thr);                                    /* 0x487C50  1E */
+u32  DC2CALL ScrOp_ObjGet(gptr thr);                                    /* 0x488770  1F */
+u32  DC2CALL ScrOp_WaitFrame(gptr thr);                                 /* 0x4893E0  2A */
+u32  DC2CALL ScrOp_Obj44Init(gptr thr);                                 /* 0x48A220  44 */
+u32  DC2CALL ScrOp_ObjEnable(gptr thr);                                 /* 0x48A2C0  45 */
+u32  DC2CALL ScrOp_CutsceneCamera(gptr thr);                            /* 0x48A670  4A */
+
 /* handler used for an opcode that is not reimplemented yet: in the hook
  * build it calls the original code, elsewhere it reports and stops the thread */
 typedef u32 (DC2CALL *ScrOpFn)(gptr thr);
