@@ -47,6 +47,8 @@ void DC2CALL Obj_SyncLinks(gptr obj);                                   /* 0x48F
 void DC2CALL Obj_SavePos(gptr obj);                                     /* 0x48FC40 */
 void DC2CALL Obj_Disable(gptr obj);                                     /* 0x48D800 */
 void DC2CALL Obj_Free(gptr obj);                                        /* 0x48D890 */
+void DC2CALL Obj_UpdateMatrix(gptr obj);                                /* 0x48FDE0 */
+void DC2CALL Camera_LookAt(gptr target, gptr dist, gptr angles, gptr eye); /* 0x403840 */
 void DC2CALL Camera_Switch(u32 cam);                                    /* 0x403A50 */
 u32  DC2CALL ScrOp_ObjSelect(gptr thr);                                 /* 0x487690  12 */
 u32  DC2CALL ScrOp_EffectInit(gptr thr);                                /* 0x4876C0  13 */

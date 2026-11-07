@@ -13,6 +13,7 @@
 #include "dc2/game.h"
 #include "../src/hook/hooks.h"
 #include "dc2/orig.h"
+#include "dc2/gte.h"
 
 u8 *g_membase = (u8 *)IMAGE_BASE;
 
@@ -67,6 +68,8 @@ static void snap(u8 **dst) { for (int i = 0; i < 2; i++) memcpy(dst[i], MEM(RW[i
 static void restore(u8 **src) { for (int i = 0; i < 2; i++) memcpy(MEM(RW[i].lo), src[i], RW[i].hi - RW[i].lo); }
 
 static int g_fail, g_tests;
+static u32 g_ign_addr, g_ign_len;    /* bytes the original fills with stack garbage */
+static int g_ign_objpads;            /* matrix pads (+0x32) of test objects and parts */
 static char g_what[256];
 
 /* after the reimplementation ran: compare with snap1 (original's result) */
@@ -74,15 +77,32 @@ static int compare(const char *name, u32 r_orig, u32 r_new, u32 rmask)
 {
     g_tests++;
     if ((r_orig & rmask) != (r_new & rmask)) {
-        if (g_fail++ < 20) printf("FAIL %s: return %08X, original %08X  [%s]\n", name, r_new, r_orig, g_what);
+        if (g_fail++ < 4000) printf("FAIL %s: return %08X, original %08X  [%s]\n", name, r_new, r_orig, g_what);
         return 0;
     }
+    if (g_ign_objpads) {        /* ... and the RT pad, copied from a parent matrix */
+        snap1[1][GTE_RT + 0x12 - RW[1].lo] = U8(GTE_RT + 0x12);
+        snap1[1][GTE_RT + 0x13 - RW[1].lo] = U8(GTE_RT + 0x13);
+    }
+    if (g_ign_objpads)
+        for (int i = 0; i < 16; i++) {
+            u32 o = 0x690000 + i * 0x260, p = 0x693000 + i * 0x100;
+            u32 pads[3] = {o + 0x32, p + 0x32, p + 0x80 + 0x32};
+            for (int j = 0; j < 3; j++) {
+                snap1[0][pads[j] - RW[0].lo] = U8(pads[j]);
+                snap1[0][pads[j] + 1 - RW[0].lo] = U8(pads[j] + 1);
+            }
+        }
+    for (u32 k = 0; k < g_ign_len; k++)
+        for (int i = 0; i < 2; i++)
+            if (g_ign_addr + k >= RW[i].lo && g_ign_addr + k < RW[i].hi)
+                snap1[i][g_ign_addr + k - RW[i].lo] = U8(g_ign_addr + k);
     for (int i = 0; i < 2; i++) {
         u8 *cur = MEM(RW[i].lo);
         u32 n = RW[i].hi - RW[i].lo;
         if (memcmp(cur, snap1[i], n)) {
             u32 k = 0; while (cur[k] == snap1[i][k]) k++;
-            if (g_fail++ < 20) printf("FAIL %s: memory %08X = %02X, original %02X  [%s]\n",
+            if (g_fail++ < 4000) printf("FAIL %s: memory %08X = %02X, original %02X  [%s]\n",
                                       name, RW[i].lo + k, cur[k], snap1[i][k], g_what);
             return 0;
         }
@@ -96,6 +116,7 @@ typedef u32 (__cdecl *F1)(u32);
 typedef u32 (__cdecl *F2)(u32, u32);
 typedef u32 (__cdecl *F3)(u32, u32, u32);
 typedef u32 (__cdecl *F4)(u32, u32, u32, u32);
+typedef u32 (__cdecl *F10)(u32, u32, u32, u32, u32, u32, u32, u32, u32, u32);
 
 static u32 call(void *f, int n, const u32 *a)
 {
@@ -104,7 +125,8 @@ static u32 call(void *f, int n, const u32 *a)
     case 1: return ((F1)f)(a[0]);
     case 2: return ((F2)f)(a[0], a[1]);
     case 3: return ((F3)f)(a[0], a[1], a[2]);
-    default: return ((F4)f)(a[0], a[1], a[2], a[3]);
+    case 4: return ((F4)f)(a[0], a[1], a[2], a[3]);
+    default: return ((F10)f)(a[0], a[1], a[2], a[3], a[4], a[5], a[6], a[7], a[8], a[9]);
     }
 }
 
@@ -310,6 +332,7 @@ static void obj_thread(gptr t)
 
 static void test_objects(void)
 {
+    g_ign_objpads = 1;
     static const struct { u32 addr; void *fn; const char *name; int argmode; } ops[] = {
         {0x487690, ScrOp_ObjSelect, "ScrOp_ObjSelect", 0},
         {0x487C50, ScrOp_ObjSet, "ScrOp_ObjSet", 1},
@@ -386,6 +409,162 @@ static void test_objects(void)
         u32 c[1] = {rnd() % 4 ? rnd() % 16 : rnd()};
         U8(G() + 0xB49) = rnd() & 1;
         check(0x403A50, Camera_Switch, "Camera_Switch", 1, c, 0);
+    }
+    g_ign_objpads = 0;
+}
+
+
+/* ---- GTE (PC layer) ----------------------------------------------------------- */
+#define G_SCR 0x6C0000u         /* 12 scratch blocks of 0x100 bytes */
+
+static float rnd_coord(void) { return (float)((s32)(rnd() % 1281) - 320) + (float)(rnd() % 256) / 256.0f; }
+
+static void gte_random_state(void)
+{
+    for (u32 a = 0x87B370; a < 0x87B710; a += 2) U16(a) = (u16)(rnd() % 4 ? (u32)((s32)(rnd() % 8193) - 4096) : rnd());
+    for (int i = 0; i < 6; i++) F32(GTE_SXY + 4 * i) = rnd_coord();
+    F32(GTE_ZSCALE) = (float)(1 + rnd() % 65536);
+    S32(GTE_H) = 100 + rnd() % 900;
+    S32(GTE_ZNEAR) = S32(GTE_H) / 2;
+    for (u32 r = GTE_MAC1; r < GTE_MAC1 + 12; r += 4) S32(r) = (s32)(rnd() % 40001) - 20000;
+    switch (rnd() % 4) {                       /* z: far, near, behind */
+    case 0: S32(GTE_MAC1 + 8) = S32(GTE_ZNEAR) + rnd() % 30000; break;
+    case 1: S32(GTE_MAC1 + 8) = 1 + rnd() % S32(GTE_ZNEAR); break;
+    case 2: S32(GTE_MAC1 + 8) = -(s32)(rnd() % 1000); break;
+    }
+    S32(GTE_DQNEAR) = rnd() % 4000; S32(GTE_DQFAR) = S32(GTE_DQNEAR) + 1 + rnd() % 60000;
+    S32(GTE_OFX) = rnd() % 640; S32(GTE_OFY) = rnd() % 480;
+    for (int i = 0; i < 3; i++) S32(GTE_TR + 4 * i) = (s32)(rnd() % 20001) - 10000;
+    for (u32 a = G_SCR; a < G_SCR + 0xC00; a += 2) U16(a) = (u16)(rnd() % 4 ? (u32)((s32)(rnd() % 8193) - 4096) : rnd());
+}
+
+static u32 gte_arg(char k, int i, int same)
+{
+    switch (k) {
+    case 'P': return same ? G_SCR : G_SCR + 0x100 * (u32)i;
+    case 'A': return rnd() % 4 ? (u32)((s32)(rnd() % 8192) - 4096) : rnd();
+    case 'I': return rnd() % 4 ? rnd() % 512 : rnd();
+    case 'Q': return rnd() % 4 ? rnd() % 0x1000000 : rnd() & 0x7FFFFFFF;
+    case 'H': return 1 + rnd() % 2000;
+    case 'S': return rnd() % 4097;
+    case 'Z': switch (rnd() % 6) {             /* depth cue range edges */
+              case 0: return S32(GTE_DQNEAR) + rnd() % 3 - 1;
+              case 1: return S32(GTE_DQFAR) + rnd() % 3 - 1;
+              case 2: return rnd();
+              default: return rnd() % 70000; }
+    case 'F': { float f = rnd() % 8 ? (float)((s32)(rnd() % 20001) - 10000) / (1 + rnd() % 64) : 0.0f; u32 u; memcpy(&u, &f, 4); return u; }
+    }
+    return 0;
+}
+
+static void test_gte(void)
+{
+    static const struct { u32 addr; void *fn; const char *name; int n; const char *kinds; int ign_arg; u32 ign_off, ign_len; u32 rmask; } F[] = {
+        {0x4C08E0, (void *)rsin, "rsin", 1, "A", -1, 0x0, 0, 0xFFFFFFFF},
+        {0x4C0920, (void *)rcos, "rcos", 1, "A", -1, 0x0, 0, 0xFFFFFFFF},
+        {0x4C0940, (void *)ratan2, "ratan2", 2, "FF", -1, 0x0, 0, 0xFFFFFFFF},
+        {0x4C0960, (void *)SquareRoot0, "SquareRoot0", 1, "Q", -1, 0x0, 0, 0xFFFFFFFF},
+        {0x4C0970, (void *)SquareRoot12, "SquareRoot12", 1, "Q", -1, 0x0, 0, 0xFFFFFFFF},
+        {0x4C0990, (void *)InitGeom, "InitGeom", 0, "", -1, 0x0, 0, 0},
+        {0x4C09E0, (void *)SetGeomOffset, "SetGeomOffset", 2, "II", -1, 0x0, 0, 0},
+        {0x4C0A00, (void *)ReadGeomScreen, "ReadGeomScreen", 0, "", -1, 0x0, 0, 0xFFFFFFFF},
+        {0x4C0A10, (void *)SetGeomScreen, "SetGeomScreen", 1, "H", -1, 0x0, 0, 0},
+        {0x4C0A70, (void *)SetBackColor, "SetBackColor", 3, "III", -1, 0x0, 0, 0},
+        {0x4C0AA0, (void *)ApplyMatrix, "ApplyMatrix", 3, "PPP", -1, 0x0, 0, 0xFFFFFFFF},
+        {0x4C0B20, (void *)ApplyMatrixSV, "ApplyMatrixSV", 3, "PPP", -1, 0x0, 0, 0xFFFFFFFF},
+        {0x4C0BA0, (void *)ApplyMatrixLV, "ApplyMatrixLV", 3, "PPP", -1, 0x0, 0, 0xFFFFFFFF},
+        {0x4C0C20, (void *)ApplyRotMatrixLV, "ApplyRotMatrixLV", 2, "PP", -1, 0x0, 0, 0xFFFFFFFF},
+        {0x4C0CB0, (void *)MulMatrix0, "MulMatrix0", 3, "PPP", 2, 0x12, 2, 0xFFFFFFFF},
+        {0x4C0E50, (void *)RotMatrixX, "RotMatrixX", 2, "AP", 1, 0x12, 2, 0xFFFFFFFF},
+        {0x4C0EC0, (void *)RotMatrixY, "RotMatrixY", 2, "AP", 1, 0x12, 2, 0xFFFFFFFF},
+        {0x4C0F30, (void *)RotMatrixZ, "RotMatrixZ", 2, "AP", 1, 0x12, 2, 0xFFFFFFFF},
+        {0x4C0FA0, (void *)RotMatrix, "RotMatrix", 2, "PP", 1, 0x12, 2, 0xFFFFFFFF},
+        {0x4C0FF0, (void *)RotMatrixYXZ, "RotMatrixYXZ", 2, "PP", 1, 0x12, 2, 0xFFFFFFFF},
+        {0x4C1040, (void *)RotMatrixZXY, "RotMatrixZXY", 2, "PP", 1, 0x12, 2, 0xFFFFFFFF},
+        {0x4C1090, (void *)RotMatrixZYX, "RotMatrixZYX", 2, "PP", 1, 0x12, 2, 0xFFFFFFFF},
+        {0x4C10E0, (void *)ScaleMatrix, "ScaleMatrix", 2, "PP", -1, 0x0, 0, 0xFFFFFFFF},
+        {0x4C1170, (void *)TransposeMatrix, "TransposeMatrix", 2, "PP", -1, 0x0, 0, 0xFFFFFFFF},
+        {0x4C11C0, (void *)OuterProduct12, "OuterProduct12", 3, "PPP", 2, 0xC, 4, 0},
+        {0x4C1220, (void *)RotTransPers, "RotTransPers", 4, "PPPP", -1, 0x0, 0, 0xFFFFFFFF},
+        {0x4C1310, (void *)Gte_DepthCue, "Gte_DepthCue", 1, "Z", -1, 0x0, 0, 0xFFFFFFFF},
+        {0x4C1350, (void *)Gte_Project, "Gte_Project", 3, "PPP", -1, 0x0, 0, 0},
+        {0x4C1470, (void *)RotTransPers3, "RotTransPers3", 8, "PPPPPPPP", -1, 0x0, 0, 0xFFFFFFFF},
+        {0x4C15D0, (void *)RotTransPers4, "RotTransPers4", 10, "PPPPPPPPPP", -1, 0x0, 0, 0xFFFFFFFF},
+        {0x4C1790, (void *)VectorNormalS, "VectorNormalS", 2, "PP", -1, 0x0, 0, 0},
+        {0x4C18E0, (void *)Gte_NormalColor, "Gte_NormalColor", 3, "PPP", -1, 0x0, 0, 0},
+        {0x4C19B0, (void *)Gte_ClampIR, "Gte_ClampIR", 2, "PP", -1, 0x0, 0, 0},
+        {0x4C1A30, (void *)SetLightMatrix, "SetLightMatrix", 1, "P", -1, 0x0, 0, 0},
+        {0x4C1A50, (void *)SetColorMatrix, "SetColorMatrix", 1, "P", -1, 0x0, 0, 0},
+        {0x4C1A70, (void *)LoadAverageShort0, "LoadAverageShort0", 5, "PPSSP", -1, 0x0, 0, 0},
+        {0x4C1AD0, (void *)LoadAverageCol, "LoadAverageCol", 5, "PPSSP", -1, 0x0, 0, 0},
+        {0x4C1B40, (void *)SetRotMatrix, "SetRotMatrix", 1, "P", -1, 0x0, 0, 0},
+        {0x4C1B60, (void *)SetTransMatrix, "SetTransMatrix", 1, "P", -1, 0x0, 0, 0},
+        {0x4C1B90, (void *)SetDepthScale, "SetDepthScale", 1, "F", -1, 0x0, 0, 0},
+        {0x4C1BA0, (void *)gte_ldclmv, "gte_ldclmv", 1, "P", -1, 0x0, 0, 0},
+        {0x4C1BD0, (void *)gte_ldrgb, "gte_ldrgb", 1, "P", -1, 0x0, 0, 0},
+        {0x4C1BE0, (void *)gte_ldsxy3, "gte_ldsxy3", 3, "PPP", -1, 0x0, 0, 0},
+        {0x4C1C20, (void *)gte_ldv0, "gte_ldv0", 1, "P", -1, 0x0, 0, 0},
+        {0x4C1C40, (void *)gte_ldv3, "gte_ldv3", 3, "PPP", -1, 0x0, 0, 0},
+        {0x4C1C80, (void *)gte_ldv3c, "gte_ldv3c", 1, "P", -1, 0x0, 0, 0},
+        {0x4C1CC0, (void *)gte_nccs, "gte_nccs", 0, "", -1, 0x0, 0, 0},
+        {0x4C1CE0, (void *)gte_ncct, "gte_ncct", 0, "", -1, 0x0, 0, 0},
+        {0x4C1D20, (void *)gte_nclip, "gte_nclip", 0, "", -1, 0x0, 0, 0},
+        {0x4C1D70, (void *)gte_rtv0, "gte_rtv0", 0, "", -1, 0x0, 0, 0},
+        {0x4C1DB0, (void *)gte_rtv1, "gte_rtv1", 0, "", -1, 0x0, 0, 0},
+        {0x4C1DF0, (void *)gte_rtv2, "gte_rtv2", 0, "", -1, 0x0, 0, 0},
+        {0x4C1E30, (void *)gte_rtir, "gte_rtir", 0, "", -1, 0x0, 0, 0},
+        {0x4C1E70, (void *)gte_rtps, "gte_rtps", 0, "", -1, 0x0, 0, 0},
+        {0x4C1F40, (void *)gte_rtpt, "gte_rtpt", 0, "", -1, 0x0, 0, 0},
+        {0x4C2090, (void *)gte_stclmv, "gte_stclmv", 1, "P", -1, 0x0, 0, 0},
+        {0x4C20C0, (void *)gte_stlvnl, "gte_stlvnl", 1, "P", -1, 0x0, 0, 0},
+        {0x4C20E0, (void *)gte_stopz, "gte_stopz", 1, "P", -1, 0x0, 0, 0},
+        {0x4C20F0, (void *)gte_stflg, "gte_stflg", 1, "P", -1, 0x0, 0, 0},
+        {0x4C2100, (void *)gte_strgb, "gte_strgb", 1, "P", -1, 0x0, 0, 0},
+        {0x4C2110, (void *)gte_strgb3, "gte_strgb3", 1, "P", -1, 0x0, 0, 0},
+        {0x4C2130, (void *)gte_strgb3_gt3, "gte_strgb3_gt3", 1, "P", -1, 0x0, 0, 0},
+        {0x4C2150, (void *)gte_strgb3_gt3, "gte_strgb3_gt3", 1, "P", -1, 0x0, 0, 0},
+        {0x4C2170, (void *)gte_stsv, "gte_stsv", 1, "P", -1, 0x0, 0, 0},
+        {0x4C2190, (void *)gte_stsxy, "gte_stsxy", 1, "P", -1, 0x0, 0, 0},
+        {0x4C21B0, (void *)gte_stsxy3c, "gte_stsxy3c", 1, "P", -1, 0x0, 0, 0},
+        {0x4C21F0, (void *)gte_stsxy3_g3, "gte_stsxy3_g3", 1, "P", -1, 0x0, 0, 0},
+        {0x4C2230, (void *)gte_stsxy3_gt3, "gte_stsxy3_gt3", 1, "P", -1, 0x0, 0, 0},
+        {0x4C2270, (void *)gte_stsxy3_gt3, "gte_stsxy3_gt3", 1, "P", -1, 0x0, 0, 0},
+        {0x4C22B0, (void *)gte_stsz, "gte_stsz", 1, "P", -1, 0x0, 0, 0},
+        {0x4C22C0, (void *)gte_stsz3, "gte_stsz3", 1, "P", -1, 0x0, 0, 0},
+        {0x4C22E0, (void *)gte_stsz4, "gte_stsz4", 1, "P", -1, 0x0, 0, 0},
+        {0x4C2310, (void *)PC_stsz4_g4, "PC_stsz4_g4", 1, "P", -1, 0x0, 0, 0},
+        {0x4C2360, (void *)PC_stsz_g4_flat, "PC_stsz_g4_flat", 1, "P", -1, 0x0, 0, 0},
+        {0x4C2390, (void *)PC_stsz3_g3, "PC_stsz3_g3", 1, "P", -1, 0x0, 0, 0},
+        {0x4C23D0, (void *)PC_stsz4_g4, "PC_stsz4_g4", 1, "P", -1, 0x0, 0, 0},
+        {0x4C2420, (void *)PC_stsz3_gt3, "PC_stsz3_gt3", 1, "P", -1, 0x0, 0, 0},
+        {0x4C2460, (void *)PC_stsz4_gt4, "PC_stsz4_gt4", 1, "P", -1, 0x0, 0, 0},
+        {0x4C24B0, (void *)gte_stszotz, "gte_stszotz", 1, "P", -1, 0x0, 0, 0},
+    };
+    for (int it = 0; it < iters / 4; it++)
+        for (unsigned k = 0; k < sizeof F / sizeof F[0]; k++) {
+            gte_random_state();
+            u32 a[10];
+            int same = rnd() % 8 == 0;            /* in-place calls (out == in) */
+            for (int i = 0; i < F[k].n; i++) a[i] = gte_arg(F[k].kinds[i], i, same);
+            if (F[k].addr == 0x4C1350) { a[0] = GTE_SXY + 16; a[1] = GTE_SXY + 20; a[2] = GTE_SZ3; }
+            g_ign_addr = F[k].ign_arg >= 0 ? a[F[k].ign_arg] + F[k].ign_off : 0;
+            g_ign_len = F[k].ign_arg >= 0 ? F[k].ign_len : 0;
+            sprintf(g_what, "args %08X %08X %08X", a[0], F[k].n > 1 ? a[1] : 0, F[k].n > 2 ? a[2] : 0);
+            check(F[k].addr, F[k].fn, F[k].name, F[k].n, a, F[k].rmask);
+            g_ign_len = 0;
+        }
+    /* users of the GTE */
+    for (int it = 0; it < iters; it++) {
+        gte_random_state();
+        objects_setup();
+        u32 o[1] = {O_OBJ + (rnd() % 16) * 0x260};
+        for (gptr p = U32(o[0] + 0x64); p; p = U32(p + 0x54)) S16(p + 0x48) = rnd() % 4096;
+        g_ign_len = 0;
+        g_ign_objpads = 1;
+        check(0x48FDE0, Obj_UpdateMatrix, "Obj_UpdateMatrix", 1, o, 0);
+        g_ign_objpads = 0;
+        u32 c[4] = {G_SCR, G_SCR + 0x100, G_SCR + 0x200, G_SCR + 0x300};
+        check(0x403840, Camera_LookAt, "Camera_LookAt", 4, c, 0);
     }
 }
 
@@ -511,7 +690,7 @@ __declspec(dllexport) void harness_main(int argc, char **argv)
     struct { const char *name; void (*fn)(void); } T[] = {
         {"flags", test_flags}, {"geometry", test_geom}, {"script values", test_script_values},
         {"script opcodes", test_script_ops}, {"script objects", test_objects},
-        {"script run", test_script_run},
+        {"script run", test_script_run}, {"gte", test_gte},
     };
     for (unsigned i = 0; i < sizeof T / sizeof T[0]; i++) {
         int f0 = g_fail, t0 = g_tests;

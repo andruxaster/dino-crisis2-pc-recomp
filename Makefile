@@ -4,9 +4,9 @@
 #   make linux      game code built natively (64-bit) as a static library + smoke test
 CC32   ?= i686-w64-mingw32-gcc
 CC     ?= cc
-CFLAGS  = -std=gnu11 -O2 -Wall -Wextra -Wno-unused-parameter -Iinclude
+CFLAGS  = -std=gnu11 -O2 -Wall -Wextra -Wno-unused-parameter -Iinclude -fexcess-precision=standard
 GAME    = src/game/lzss.c src/game/flag.c src/game/geom.c src/game/script_vm.c \
-          src/game/script_obj.c src/game/orig.c
+          src/game/script_obj.c src/game/gte.c src/game/orig.c
 DINO2  ?= game/Dino2.exe
 DATA   ?= game/Data
 OUT     = build
@@ -36,7 +36,7 @@ $(OUT)/libdc2game.a: $(GAME) | $(OUT)
 	for f in $(GAME); do $(CC) $(CFLAGS) -c $$f -o $(OUT)/$$(basename $$f .c).o || exit 1; done
 	ar rcs $@ $(patsubst src/game/%.c,$(OUT)/%.o,$(GAME))
 $(OUT)/smoke: src/port/smoke.c $(OUT)/libdc2game.a
-	$(CC) $(CFLAGS) -o $@ $^
+	$(CC) $(CFLAGS) -o $@ $^ -lm
 
 clean:
 	rm -rf $(OUT)

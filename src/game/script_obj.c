@@ -7,6 +7,7 @@
  * 6 camera zones G+0xA44 (0x2C), 8 collision polygons G+0xA4C. */
 #include "dc2/game.h"
 #include "dc2/orig.h"
+#include "dc2/gte.h"
 
 #define SPV(t, i)  (U32(t + T_SP) + 4 * (i))        /* address of stack slot i */
 #define SEL(t)     ((s32)S8(t + T_SEL1))
@@ -57,6 +58,45 @@ void DC2CALL Camera_Switch(u32 cam)
     Flag_Set(2, 1, 0);
     Flag_Set(2, 0xD, 0);
     Flag_Set(2, 2, 1);
+}
+
+/* object matrix: rotation (+0x48) and scale (+0x6C) into +0x20; then each
+ * linked part: own rotation, joint offset (+0x64) rotated by the parent's
+ * matrix and added to the parent's position, matrix = parent * own. */
+void DC2CALL Obj_UpdateMatrix(gptr obj)                            /* 0x48FDE0 */
+{
+    RotMatrixYXZ(obj + 0x48, obj + 0x20);
+    ScaleMatrix(obj + 0x20, obj + 0x6C);
+    gptr p = U32(obj + 0x64);
+    do {
+        gptr parent = U32(p + 0x58);
+        RotMatrixYXZ(p + 0x48, p + 0x20);
+        SetRotMatrix(parent + 0x20);
+        gte_ldv0(p + 0x64);
+        gte_rtv0();
+        gte_stsv(p + 0x40);
+        for (int c = 0; c < 3; c++) {                  /* columns: parent * own */
+            gte_ldclmv(p + 0x20 + 2 * c);
+            gte_rtir();
+            U16(p + 0x40 + 2 * c) += U16(parent + 0x40 + 2 * c);
+            gte_stclmv(p + 0x20 + 2 * c);
+        }
+        p = U32(p + 0x54);
+    } while (p);
+}
+
+/* eye = target + RotMatrixYXZ(angles) * -dist (0x403840) */
+void DC2CALL Camera_LookAt(gptr target, gptr dist, gptr angles, gptr eye)
+{
+    gptr a = Tmp_Push(8 + 0x20), m = a + 8;
+    S16(a) = S16(angles); S16(a + 2) = S16(angles + 2); S16(a + 4) = S16(angles + 4);
+    RotMatrixYXZ(a, m);
+    S16(a) = (s16)-S16(dist); S16(a + 2) = (s16)-S16(dist + 2); S16(a + 4) = (s16)-S16(dist + 4);
+    ApplyMatrixSV(m, a, a);
+    S16(eye) = (s16)(S16(target) + S16(a));
+    S16(eye + 2) = (s16)(S16(target + 2) + S16(a + 2));
+    S16(eye + 4) = (s16)(S16(target + 4) + S16(a + 4));
+    Tmp_Pop(8 + 0x20);
 }
 
 void DC2CALL Obj_Disable(gptr obj)                                 /* 0x48D800 */
@@ -184,7 +224,7 @@ static void camera_rebuild(void)
     U16(v + 0) = (u16)-U16(cam + 0x20);
     U16(v + 2) = (u16)-U16(cam + 0x22);
     U16(v + 4) = U16(cam + 0x24);
-    Gte_RotMatrix(v, cam);
+    RotMatrix(v, cam);
     Tmp_Pop(8);
 }
 
@@ -194,7 +234,7 @@ static void set_global(gptr t)                                      /* 0x4883B0 
     switch (U32(SPV(t, 1)) - 33) {            /* parameters 33..72, same numbers as obj_get */
     case 0: U32(0x87F940) = U32(v); break;
     case 2: U8(g + 0xB4B) = U8(v);
-            Gte_SetFogFar((float)(s32)(0x400u << (U8(G() + 0xB4B) & 31))); break;
+            SetDepthScale((float)(s32)(0x400u << (U8(G() + 0xB4B) & 31))); break;
     case 4: U8(g + 0xB58) = U8(v); break;
     case 5: U8(g + 0xB59) = U8(v); break;
     case 6: U8(g + 0xB5A) = U8(v); break;
@@ -214,7 +254,7 @@ static void set_global(gptr t)                                      /* 0x4883B0 
     case 17: U16(g + 0x7AA) = U16(v); camera_rebuild(); break;
     case 18: U16(g + 0x7AC) = U16(v); camera_rebuild(); break;
     case 19: U16(U32(g + 0x7B8) + 6) = U16(v);
-             Gte_SetGeomScreen(U16(U32(G() + 0x7B8) + 6)); break; /* projection H */
+             SetGeomScreen(U16(U32(G() + 0x7B8) + 6)); break; /* projection H */
     case 21: U8(g + 0x1204) = U8(v); break;
     case 22: U8(g + 0x1205) = U8(v); break;
     case 23: U8(g + 0x1206) = U8(v); break;

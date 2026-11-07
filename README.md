@@ -25,7 +25,7 @@ One source tree, three builds:
 | build | what | status |
 |---|---|---|
 | `build/dinput.dll` | hook DLL: put next to `Dino2.exe`, redirects the original functions to the C ones | runs inside the game |
-| `build/harness_stub.exe` + `harness.dll` | checks every C function against the original code | 45 functions, ~101 000 checks, 0 differences |
+| `build/harness_stub.exe` + `harness.dll` | checks every C function against the original code | 126 functions, ~145 000 checks, 0 differences |
 | `build/smoke` (Linux) | the C game code without any exe code, on an emulated memory image | room load + script VM |
 
 The Dreamcast (KallistiOS) build will reuse the standalone path once the
@@ -77,7 +77,7 @@ Checked under wine 9 (32-bit prefix): all 26 hooks installed; after one
 minute Lzss_Decode 23 calls, Flag_Check 62 000, Script_Run every frame,
 PointInQuad 5 000.
 
-## Reimplemented (45)
+## Reimplemented (126)
 
 The authoritative list is `src/hook/hooks.c`. By area:
 
@@ -87,19 +87,34 @@ The authoritative list is `src/hook/hooks.c`. By area:
 | flags | Flag_Set/Check, Bits_Set/Check | src/game/flag.c |
 | geometry | PointInQuad, Room_GlobalIndex | src/game/geom.c |
 | script VM | GetValue/SetValue/BinOp/SetCond, Run, Start/KillThread; opcodes 00-08, 10, 15-19, 1C, 1D | src/game/script_vm.c |
-| script objects | opcodes 12 obj_select, 13 effect_init, 14, 1E obj_set, 1F obj_get (all 9 object kinds), 2A wait_frame, 44, 45 obj_enable, 4A cutscene camera; Obj_SavePos, Obj_SyncLinks, Obj_Disable, Obj_Free, Camera_Switch | src/game/script_obj.c |
+| script objects | opcodes 12 obj_select, 13 effect_init, 14, 1E obj_set, 1F obj_get (all 9 object kinds), 2A wait_frame, 44, 45 obj_enable, 4A cutscene camera; Obj_SavePos, Obj_SyncLinks, Obj_UpdateMatrix, Obj_Disable, Obj_Free, Camera_Switch, Camera_LookAt | src/game/script_obj.c |
+| PC layer: GTE | all 80 libgte functions of the port (0x4C08E0..0x4C24C0): rsin/rcos/ratan2, roots, geometry state, Apply/Mul/Rot/Scale/Transpose matrix, RotTransPers 1/3/4 and the float projection, depth cue, normal colour, register loads/stores, rtps/rtpt/nclip/ncct, PC depth stores | src/game/gte.c, include/dc2/gte.h |
 
 Functions still called in the original (from C) are declared in
 `include/dc2/orig.h`: in the DLL and the harness they run the original code,
 in the standalone build they are reported once and skipped.
 
+### Floating point
+
+The PC port projects to float screen coordinates on the x87. `gte.c` repeats
+the original operation order in `long double` and rounds to `float` where
+the original stores a float; with `-fexcess-precision=standard` on the
+32-bit build the results are bit-identical (same process, same FPU control
+word in the harness and in the DLL). Other compilers/CPUs (the Dreamcast)
+get the same formulas with their own rounding: screen positions may differ
+in the last bit, which only matters for drawing.
+
+The original leaves stack garbage in a few padding words (MATRIX +0x12
+after MulMatrix0/RotMatrix*, OuterProduct12 out +12); the C code leaves them
+alone and the harness ignores them.
+
 ## Next
 
 Script opcodes still missing, by use: 21 anim_start (705), 1A obj_spawn
 (442), the AOT definitions 30-3B, 49, 4B, 56 — `build/smoke` stops at the
-first one missing (ST100: 35, ST101: 56, ST203: 49). Obj_UpdateMatrix and
-the camera code need the GTE functions of the PC layer (RotMatrix etc.),
-which are the next group. Then the file loader (File_Process 0x404290 and record
+first one missing (ST100: 35, ST101: 56, ST203: 49). Then the libgpu side
+of the PC layer (primitives, DrawOTag, texture cache) — rewritten for
+SDL/GL rather than copied, since it talks to Direct3D. Then the file loader (File_Process 0x404290 and record
 handlers), rooms and cameras, objects and their per-type handlers; the
 PC layer (0x4B4000.., PsyQ on DirectX) is rewritten for SDL/GL rather than
 decompiled.
