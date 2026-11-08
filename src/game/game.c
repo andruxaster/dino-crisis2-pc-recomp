@@ -275,7 +275,7 @@ void DC2CALL Game_RoomEnter(void)                                    /* 0x451330
     default: break;
     }
     if (G8(0x662)) { G8(0x662) = 0; Flag_Set(2, 0x23, 1); }
-    Fn_48CA10();
+    Room_SoundInit();
     CamZones_Init();
     Fn_470CB0();
     Script_Init();
@@ -348,4 +348,10 @@ void DC2CALL GameTask(void)                                          /* 0x4510F0
         }
         Task_Sleep(1);
     }
+}
+
+/* the room's sound set-up from its sound table entry */
+void DC2CALL Room_SoundInit(void)                                  /* 0x48CA10 */
+{
+    Fn_48C9C0(U16(Room_SoundSlot(U8(G() + 0x1091), U8(G() + 0x1090)) + 2));
 }

@@ -130,7 +130,7 @@ void DC2CALL Player_Handler(gptr o)                                /* 0x47CE40 *
         if (-1000 * floor_layer(o) > S16(o + 0x42)) U32(o + 0x54) = 0x40901;   /* surfaced: swim */
     }
     Fn_47AFA0(o);
-    if (!(U8(o + 0x50) & 0x80)) Fn_486870(o);
+    if (!(U8(o + 0x50) & 0x80)) Zone_Update(o);
     Player_Breath(o);
     for (gptr p = U32(G() + 0x940); p < U32(G() + 0x940) + U32(0x87F940) * 0x260; p += 0x260)
         if (U8(p + 0x17B)) U8(p + 0x17B)--;
@@ -1076,4 +1076,54 @@ void DC2CALL Player_LoadWeapons(gptr o)                            /* 0x47ADA0 *
 {
     Orig_Call1(U32(0x737FA0 + U8(G() + 0x10B4) * 4), o);
     Orig_Call1(U32(0x737FF0 + (U16(G() + 0x10B4) >> 8) * 4), o);
+}
+
+/* turn angle cur toward target by at most step; the change (cur is signed,
+ * target unsigned 16-bit, as the original compares them) */
+u32 DC2CALL Angle_Step(u32 cur, u32 step, u32 target)              /* 0x47CAE0 */
+{
+    s32 c = (s16)cur, t = target & 0xFFFF, s = (s16)step;
+    if (c == t) return 0;
+    if (c < t) { s32 d = t - c; return (u32)(s < d ? s : d); }
+    s32 d = c - t;
+    if (s < d) d = s;
+    return (u32)-d;
+}
+
+/* substate 5: the weapon's own handler (0x738018 by weapon) */
+void DC2CALL Player_WeaponState(gptr o)                            /* 0x47ADE0 */
+{
+    Orig_Call1(U32(0x738018 + (U8(G() + 0x10B4) & 0xF) * 4), o);
+}
+
+/* substate 10: the sub-weapon's handler (0x738078 by sub-weapon) */
+void DC2CALL Player_SubState(gptr o)                               /* 0x47AF20 */
+{
+    Orig_Call1(U32(0x738078 + (U16(G() + 0x10B4) >> 8) * 4), o);
+}
+
+/* substate 6, aiming: pitch the upper body (+0x30 of the player block)
+ * toward the target found, then the weapon's aim handler (0x738048) */
+void DC2CALL Player_Aim(gptr o)                                    /* 0x47AE00 */
+{
+    Target_Find(o, 0x200);
+    gptr t = U32(PX() + 0x14);
+    u32 want = 0x800;
+    if (t) {
+        gptr sv = Tmp_Push(0x28), ang = sv + 8, mm = sv + 0x10;
+        gptr p = Obj_Part(U32(t + 0x64), U8(U32(t + 0x134) + 0xA));
+        U16(sv) = 0x16; U16(sv + 2) = 0; U16(sv + 4) = 0xFF22;   /* the gun, from the root */
+        RotMatrix(o + 0x48, mm);
+        ApplyMatrixSV(mm, sv, sv);
+        U16(sv) += U16(o + 0x40);
+        U16(sv + 4) += U16(o + 0x44);
+        U16(sv + 2) += (u16)(U16(o + 0x42) - 0x3E8);
+        Angles_LookAt(p + 0x40, sv, ang);
+        u32 a = U32(ang);
+        s16 x = (s16)a;
+        want = x > 0x200 ? 0x1000 : x < -0x200 ? 0 : a * 4 + 0x800;
+        Tmp_Pop(0x28);
+    }
+    U16(PX() + 0x30) += (u16)Angle_Step(U16(PX() + 0x30), 0x180, want);
+    Orig_Call1(U32(0x738048 + (U8(G() + 0x10B4) & 0xF) * 4), o);
 }

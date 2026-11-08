@@ -298,12 +298,12 @@ address,kind,name,category,confidence,notes
 0x4C1350,func,GTE_Perspective,libgte,high,"sx = H*MAC1/MAC3 + OFX, sy = H*MAC2/MAC3 + OFY; near clamp at H/2"
 0x87B6F8,data,gte_OFX,data,high,
 0x87B6F4,data,gte_OFY,data,high,
-0x486FB0,func,Col_SegmentBlocked,game,high,"(obj, from, to, flag): from->to (x/z) vs edges of G+0xA4C polygons active on level trunc(-y/1000); object kind 0x80 player / 0x40 / 0x20"
-0x487160,func,Col_EdgeIntersect,game,high,"2D segment/segment test with bbox rejection"
+0x486FB0,func,Line_Blocked,zone,high,"(obj, from, to, low): from->to (x/z) vs edges of G+0xA4C polygons active on floor trunc(-y/1000); 0x80 player / 0x40 / 0x20"
+0x487160,func,Wall_Cross,zone,high,2D segment/wall test with bbox rejection; one turning direction only
 0x48F790,func,PointInQuad,game,medium,"(SVECTOR *pos, s16 quad[4][2]) x/z test used by camera and footstep zones"
 0x48C3B0,func,Footstep_Sound,game,high,"event code 0x30/0x31/0x50/0x51 -> G+0xA64 zones (level obj+0x5A, quad) -> code + 2*material"
 0x46B8C0,func,Room_SetLighting,game,medium,"G+0xA3C: SetBackColor(bytes 0..2) ambient"
-0x486D00,func,Waypoint_Nearest,game,medium,"G+0xA50 list, nearest by x/z distance -> obj+0x138/0x13C"
+0x486D00,func,Zone_Find,zone,high,nearest zone point of the object's floor in sight (G+0xA50) -> obj+0x138/0x13C
 0x48BC50,func,Script_Run,game,high,"10 threads x 0xA4 at *0x87FC20; opcode table 0x738C40; handler returns 1 = yield"
 0x48BDB0,func,Script_StartThread,game,high,"(thread, routine): pc = A54 + table[routine], sp = thread+0x80, state 1"
 0x48BE20,func,Script_KillThread,game,high,"(thread) zero 0xA4 bytes"
@@ -320,7 +320,7 @@ address,kind,name,category,confidence,notes
 0x472230,func,EnemySet_Tick,game,medium,"random dinosaur spawner driven by the ENEMY SET at G+0xA68 (script op 0x4F); state G+0xA80"
 0x472210,func,Room_GlobalIndex,game,high,"(area, room) -> 0x70346C[area] + room"
 0x472C60,func,EnemySet_FindZone,game,medium,"zone (32-byte entries) that contains the player"
-0x446170,func,Prop_Move,game,medium,"type 16 room prop: model in the room block (obj+0x60)"
+0x446170,func,Prop_Handler,object,high,room prop type: a model playing its animation (modes 0x721458)
 0x703520,data,g_enemy_files,game,high,"8 bytes per type: u16 file id (E*.DAT), u16 0, u16 ?, u16 ?"
 0x703598,data,g_kof_files,game,high,"8 bytes per type-0x1D: KOF_P*.DAT"
 0x703E48,data,g_raptor_tex,game,high,"type 2 texture file by variant (10)"
@@ -619,3 +619,17 @@ address,kind,name,category,confidence,notes
 0x4B33C0,func,Sub_SetGrenade,weapon,high,
 0x4B3A10,func,Sub_SetMine,weapon,high,
 0x4B3D00,func,Sub_SetKnives2,weapon,high,
+0x486870,func,Zone_Update,zone,high,"per frame for the player: its zone, the shortest paths 0x87FCE0, every live object's goal"
+0x4869F0,func,Zone_Track,zone,high,"(obj, target): target when in sight, else the next zone point on the path"
+0x486C00,func,Zone_TrackPoint,zone,high,"(obj, point) through the stand-in object 0x759148"
+0x486EC0,func,Zone_Paths,zone,high,"Dijkstra over the zone graph: {done, next, length} x16"
+0x47CAE0,func,Angle_Step,player,high,"(cur, step, target): change toward target, at most step"
+0x47ADE0,func,Player_WeaponState,player,high,normal substate 5: weapon handler 0x738018
+0x47AE00,func,Player_Aim,player,high,"normal substate 6: upper-body pitch toward the target, aim handler 0x738048"
+0x47AF20,func,Player_SubState,player,high,normal substate 10: sub-weapon handler 0x738078
+0x4461F0,func,Prop_Init,object,high,
+0x4462B0,func,Prop_Run,object,high,substates 0x721464
+0x446250,func,Prop_Play,object,high,
+0x446270,func,Prop_PlayTimed,object,high,"+0x1C4 frames, then removed"
+0x448620,func,Eff_KillRoom,object,high,effects that do not outlive the room
+0x48CA10,func,Room_SoundInit,sound,high,room's sound table entry +2 -> 0x48C9C0

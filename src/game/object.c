@@ -941,3 +941,85 @@ void DC2CALL Eff_KillKind(u32 kind)                                /* 0x448580 *
         if ((U8(G() + 0x10B4) & 0xF) != 5) Lights_Off();
     }
 }
+
+/* on leaving a room: remove the effects that do not outlive it (by kind;
+ * kind 3 by its +0x7A, kind 16 only in areas 6 and 7), lights off */
+void DC2CALL Eff_KillRoom(u32 unused)                              /* 0x448620 */
+{
+    static const u8 by_kind[16] = {0, 0, 1, 0, 3, 0, 0, 3, 3, 3, 3, 0, 0, 3, 3, 2};
+    static const u8 keep3[16] = {0, 0, 1, 1, 0, 1, 1, 1, 1, 0, 1, 0, 0, 0, 0, 0};
+    (void)unused;
+    u32 total = U32(0x87DC88), n = total - U32(G() + 0xA70);
+    gptr p = k2_at(total) - K2_SIZE;
+    for (; n; n--, p -= K2_SIZE) {
+        if (!(U8(p + 0x50) & 1)) continue;
+        u32 k = (u32)U8(p + 0x58) - 1;
+        if (k > 15) continue;
+        switch (by_kind[k]) {
+        case 0:
+            K2_Unlink(p);
+            if (U32(p + 0x8C)) U8(U32(p + 0x8C)) = 0;
+            break;
+        case 1:
+            if (U8(p + 0x7A) <= 15 && !keep3[U8(p + 0x7A)]) K2_Unlink(p);
+            break;
+        case 2:
+            if (U8(G() + 0x1091) == 6 || U8(G() + 0x1091) == 7) U32(p + 0x50) = 0;
+            break;
+        }
+    }
+    U8(G() + 0xF) = 0;
+    Lights_Off();
+}
+
+/* ---- animated props (a type of every area: a model playing its animation) ---- */
+#define A_PROP_MODES 0x721458u      /* init, run, remove */
+#define A_PROP_SUBS  0x721464u      /* play, nothing (0x402520), timed */
+
+void DC2CALL Prop_Handler(gptr o)                                  /* 0x446170 */
+{
+    U16(o + 0xE0) = U16(o + 0x40);
+    U16(o + 0xE2) = U16(o + 0x42);
+    U16(o + 0xE4) = U16(o + 0x44);
+    Orig_Call1(U32(A_PROP_MODES + U8(o + 0x54) * 4), o);
+    RotMatrix(o + 0x48, o + 0x20);
+    Obj_MoveLocal(o, o + 0xF0);
+    Obj_UpdateMatrix(o);
+    Obj_AnchorFoot(o);
+    if (U32(o + 0x50) & 0x40000000) Obj_Disable(o);
+}
+
+/* mode 0 */
+void DC2CALL Prop_Init(gptr o)                                     /* 0x4461F0 */
+{
+    U16(o + 0x108) = 0x3E8;
+    U32(o + 0x50) |= 2;
+    U16(o + 0x5A) = (u16)(S16(o + 0x42) / -1000);
+    DrawSync(o);                                /* 0x474B10, a lone RET */
+    U32(o + 0x1C0) = 0;
+    Model_Setup(o, U32(o + 0x60));
+    U8(o + 0xFE) = 3;
+    U8(o + 0x54) = 1;
+    U8(o + 0x55) = 0;
+}
+
+/* mode 1: by substate */
+void DC2CALL Prop_Run(gptr o)                                      /* 0x4462B0 */
+{
+    Orig_Call1(U32(A_PROP_SUBS + U8(o + 0x55) * 4), o);
+}
+
+/* substate 0: play; +0x1C0 1 at the end */
+void DC2CALL Prop_Play(gptr o)                                     /* 0x446250 */
+{
+    U32(o + 0x1C0) = Anim_Step(o);
+}
+
+/* substate 2: play for +0x1C4 frames, then remove */
+void DC2CALL Prop_PlayTimed(gptr o)                                /* 0x446270 */
+{
+    U32(o + 0x1C0) = Anim_Step(o);
+    u16 n = U16(o + 0x1C4);
+    U16(o + 0x1C4) = (u16)(n - 1);
+    if (!n) U32(o + 0x50) |= 0x40000000;
+}

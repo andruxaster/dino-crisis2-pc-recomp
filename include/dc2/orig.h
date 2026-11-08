@@ -12,7 +12,6 @@
     V(Timer_Set,          0x405DE0, (u32 frames, u32 b), (frames, b)) \
     V(Cutscene_End,       0x403A30, (void), ()) \
     V(Fn_448080,          0x448080, (gptr e), (e)) \
-    V(Fn_448620,          0x448620, (u32 a), (a)) \
     V(Fn_4529C0,          0x4529C0, (u32 a), (a)) \
     V(Fade_Set,           0x450A70, (u32 a, u32 b, u32 c), (a, b, c)) \
     V(Fn_46FBC0,          0x46FBC0, (u32 a, u32 b, u32 c), (a, b, c)) \
@@ -50,7 +49,6 @@
     V(Fn_452450,          0x452450, (void), ()) \
     V(Fn_48FB50,          0x48FB50, (u32 a), (a)) \
     V(Fn_4BF130,          0x4BF130, (u32 a), (a)) \
-    V(Fn_48CA10,          0x48CA10, (void), ()) \
     V(Fn_403520,          0x403520, (void), ()) \
     V(Fn_46B8C0,          0x46B8C0, (void), ()) \
     V(Fn_407170,          0x407170, (void), ()) \
@@ -62,7 +60,7 @@
     V(Fn_452370,          0x452370, (void), ()) \
     V(Fn_47AFA0,          0x47AFA0, (gptr obj), (obj)) \
     F(u32, Fn_4BF330,     0x4BF330, (void), ()) \
-    V(Fn_486870,          0x486870, (gptr obj), (obj)) \
+    F(u32, Fn_4542F0,     0x4542F0, (gptr a, gptr b, gptr seg, u32 who), (a, b, seg, who)) \
     V(Text_Draw,          0x494BA0, (gptr s, u32 x, u32 y, u32 w, u32 col, u32 a, u32 b), (s, x, y, w, col, a, b)) \
     V(Gpu_DrawOT,         0x4C0600, (gptr ot, gptr a, gptr b), (ot, a, b)) \
     V(Gpu_SetSprt,        0x4C0690, (gptr p), (p)) \

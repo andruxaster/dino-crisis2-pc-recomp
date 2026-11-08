@@ -337,4 +337,29 @@ void DC2CALL GameTask(void);                                            /* 0x451
 typedef u32 (DC2CALL *ScrOpFn)(gptr thr);
 extern ScrOpFn g_scr_ops[96];
 u32 DC2CALL ScrOp_Original(gptr thr);
+
+/* zone.c */
+u32  DC2CALL Wall_Cross(gptr s, gptr w);                               /* 0x487160 */
+u32  DC2CALL Line_Blocked(gptr o, gptr a, gptr b, u32 low);            /* 0x486FB0 */
+u32  DC2CALL Zone_Find(gptr o);                                        /* 0x486D00 */
+void DC2CALL Zone_Paths(gptr o, gptr tab);                             /* 0x486EC0 */
+void DC2CALL Zone_Track(gptr o, gptr t);                               /* 0x4869F0 */
+u32  DC2CALL Zone_TrackPoint(gptr o, gptr p);                          /* 0x486C00 */
+u32  DC2CALL Zone_Update(gptr o);                                      /* 0x486870 */
+/* player.c: aiming */
+u32  DC2CALL Angle_Step(u32 cur, u32 step, u32 target);                /* 0x47CAE0 */
+void DC2CALL Player_WeaponState(gptr o);                               /* 0x47ADE0 */
+void DC2CALL Player_SubState(gptr o);                                  /* 0x47AF20 */
+void DC2CALL Player_Aim(gptr o);                                       /* 0x47AE00 */
+
+/* object.c: room change, props */
+void DC2CALL Eff_KillRoom(u32 unused);                                 /* 0x448620 */
+void DC2CALL Prop_Handler(gptr o);                                     /* 0x446170 */
+void DC2CALL Prop_Init(gptr o);                                        /* 0x4461F0 */
+void DC2CALL Prop_Run(gptr o);                                         /* 0x4462B0 */
+void DC2CALL Prop_Play(gptr o);                                        /* 0x446250 */
+void DC2CALL Prop_PlayTimed(gptr o);                                   /* 0x446270 */
+/* game.c */
+void DC2CALL Room_SoundInit(void);                                     /* 0x48CA10 */
+
 #endif

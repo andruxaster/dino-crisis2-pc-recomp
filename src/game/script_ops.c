@@ -285,7 +285,7 @@ u32 DC2CALL ScrOp_Effect2F(gptr t)                                 /* 2F */
     if (a != -1) {
         Eff_KillKind((u8)a);
     } else {
-        Fn_448620(0);
+        Eff_KillRoom(0);
         for (u32 i = 0; i < U32(A_EFF_COUNT); i++) {
             gptr e = U32(G() + 0x93C) + i * 0x70;
             s8 k = S8(e + 0x4F);
