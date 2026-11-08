@@ -108,6 +108,292 @@ void DC2CALL Sub_SetKnives2(gptr o)                                /* 0x4B3D00 *
     carried(e, o, 0x67C878, 0xC, 0); blade(e); U16(e + 0x5E) = 1;
 }
 
+/* ---- the sub-weapon in use (normal substate 10: handlers 0x738078 by the
+ * sub-weapon) and put back (0x7380A0) ------------------------------------------- */
+#define HELD U32(0x87DC08)
+
+/* n uses of the sub-weapon: taken from its item (sub-weapon | 0x10) unless
+ * unlimited; counted */
+void DC2CALL Sub_AmmoUse(u32 n)                                    /* 0x496350 */
+{
+    U8(G() + 0x75A) = 0;
+    U8(G() + 0x75B) = (U8(0x87DC08) & 8) ? 0x1E : 0x64;
+    u8 i = (u8)Item_Find(G() + 0x10BC, 0x14, U8(G() + 0x10B5) | 0x10);
+    if (!(U8(G() + 0x1094) & 1)) U16(G() + i * 12 + 0x10C4) -= (u16)n;
+    U32(G() + i * 12 + 0x10C0) += n & 0xFFFF;
+}
+
+/* an effect (kind 6) at pos */
+gptr DC2CALL Effect_SpawnAt(gptr pos, gptr data, u32 unused)       /* 0x48DB80 */
+{
+    (void)unused;
+    gptr k = K2_Alloc();
+    if (k) {
+        U8(k + 0x58) = 6;
+        U32(k + 0xA0) = pos; U32(k + 0x98) = data;
+        U32(k + 0xA4) = 1;
+        Orig_Call1(U32(U32(0x87F948) + 0x18), k);
+    }
+    return k;
+}
+
+/* a free light from the end of G+0x948 down to the room's first (G+0xA74):
+ * cleared, in use */
+gptr DC2CALL Light_Alloc(void)                                     /* 0x48D410 */
+{
+    u32 n = U32(0x87DE14);
+    gptr p = U32(G() + 0x948) + n * 0x34 - 0x34;
+    for (u32 k = n - U32(G() + 0xA74) - 1; k; k--, p -= 0x34)
+        if (!(U8(p) & 1)) { memset(MEM(p), 0, 0x34); U8(p) = 1; return p; }
+    return 0;
+}
+
+/* the animation over: back to standing; 1 if so */
+static int sub_end(gptr o)
+{
+    if (!Anim_Step(o)) return 0;
+    U32(o + 0x1DC) = 8;
+    Anim_Start(o, 0x16, U16(PX() + 0x1E), 9, U16(PX() + 0x1C));
+    return 1;
+}
+
+/* a noise 1200 ahead of o */
+static void noise_ahead(gptr o)
+{
+    gptr f = Tmp_Push(0x28), v = f, m = f + 8;
+    RotMatrix(o + 0x48, m);
+    U16(v) = 0; U16(v + 2) = 0; U16(v + 4) = 0x4B0;
+    ApplyMatrixSV(m, v, v);
+    U16(v) += U16(o + 0x40); U16(v + 4) += U16(o + 0x44); U16(v + 2) += U16(o + 0x42);
+    u32 x = U32(v), y = U32(v + 2), z = U32(v + 4);
+    Tmp_Pop(0x28);
+    Noise_Make(x, y, z);
+}
+
+/* the blades (sub-weapons 1, 2, 7, 8): swung through frames 0..7 (hit from
+ * part 6, turned 90 degrees), put back from frame 20 on when walking; kind
+ * B (2, 8) is one blade at its own offset, its slot +0x50 bit 0x8000 set
+ * while swinging */
+struct blade_sub {
+    gptr anim; u8 hit, b;
+    gptr swing, back;           /* models: B swinging (frames 0..7), B put back */
+};
+
+static void blade_offset(gptr e, int b)
+{
+    if (b) { U16(e + 0x40) = 0xFF88; U16(e + 0x42) = 0; U16(e + 0x44) = 0x28; }
+    else { U16(e + 0x40) = 0xFF56; U16(e + 0x42) = 0; U16(e + 0x44) = 0x64; }
+    U16(e + 0x48) = 0xFC7C; U16(e + 0x4A) = 0xFFEC; U16(e + 0x4C) = 0xA;
+}
+
+static void blade_sub(gptr o, const struct blade_sub *s)
+{
+    gptr e = U32(G() + 0x93C);
+    switch (U8(o + 0x56)) {
+    case 0:
+        Anim_Start(o, s->anim, 0, 0, 2);
+        if (s->b) U32(e + 0x50) |= 0x8000;
+        U32(o + 0xF0) = 0; U16(o + 0xF4) = 0;
+        U8(o + 0x17B) = 0xA;
+        U32(o + 0x50) |= 0x100;
+        Flag_Set(1, 0xA, 1);
+        Sub_AmmoUse(0);
+        U8(o + 0x56)++;
+        return;
+    case 1: break;
+    default: return;
+    }
+    if (sub_end(o)) {
+        U32(o + 0x50) &= ~0x100u;
+        U8(o + 0x17B) = 0;
+        Flag_Set(1, 0xA, 0);
+        U16(PX() + 0x38) = 0x200;
+        U32(o + 0x54) = 0x10001;
+        return;
+    }
+    u16 f = U16(o + 0x92);
+    if ((s32)U16(o + 0x90) - 3 < (s32)f) {                  /* the end: in the hand again */
+        if (s->b) U32(e + 0x50) &= ~0x8000u;
+        U32(e + 0x54) = Obj_Part(U32(o + 0x64), 0xC);
+        if (!s->b) U32(e + 0x68) = 0x67C988;
+        blade_offset(e, s->b);
+    } else if (f) {                                         /* swinging: in the other hand */
+        if (!s->b) U32(e + 0x68) = 0x67C510;
+        U32(e + 0x54) = Obj_Part(U32(o + 0x64), 6);
+        U16(e + 0x40) = 0; U16(e + 0x42) = 0; U16(e + 0x44) = 0;
+        U16(e + 0x48) = 0; U16(e + 0x4A) = 0;
+    }
+    f = U16(o + 0x92);
+    if (f < 8) {
+        if (s->b) U32(e + 0x68) = s->swing;
+        Obj_UpdateMatrix(o);
+        gptr p = Obj_Part(U32(o + 0x64), 6);
+        gptr t = Tmp_Push(0x28), a = t, m = t + 8;
+        U16(a) = 0; U16(a + 2) = 0x400; U16(a + 4) = 0;
+        RotMatrixYXZ(a, m);
+        MulMatrix0(p + 0x20, m, m);
+        Weapon_Hit(m, p + 0x40, s->hit);
+        Tmp_Pop(0x28);
+    } else if (f > 0x13) {
+        if (HELD & 0x1000) {                                /* walking: put back */
+            Flag_Set(1, 0xA, 0);
+            U8(o + 0x17B) = 0; U8(o + 0x11B) = 0;
+            U32(o + 0x1DC) = 4; U32(o + 0x54) = 0x201;
+            if (s->b) { U32(e + 0x50) &= ~0x8000u; U32(e + 0x68) = s->back; }
+            U32(e + 0x54) = Obj_Part(U32(o + 0x64), 0xC);
+            if (!s->b) U32(e + 0x68) = 0x67C988;
+            blade_offset(e, s->b);
+        }
+    } else if (s->b && f > 0xD) {
+        U32(e + 0x68) = s->back;
+        U32(e + 0x50) &= ~0x8000u;
+    }
+    if (U16(o + 0x92) == 5) noise_ahead(o);
+}
+
+void DC2CALL Sub1_Use(gptr o)                                      /* 0x4B2CF0 */
+{
+    static const struct blade_sub s = {0x67CB68, 0x10, 0, 0, 0};
+    blade_sub(o, &s);
+}
+
+void DC2CALL Sub2_Use(gptr o)                                      /* 0x4B3030 */
+{
+    static const struct blade_sub s = {0x67CEF4, 0x11, 1, 0x67C50C, 0x67CA00};
+    blade_sub(o, &s);
+}
+
+void DC2CALL Sub7_Use(gptr o)                                      /* 0x4B3DD0 */
+{
+    static const struct blade_sub s = {0x67CB68, 0x1D, 0, 0, 0};
+    blade_sub(o, &s);
+}
+
+void DC2CALL Sub8_Use(gptr o)                                      /* 0x4B41F0 */
+{
+    static const struct blade_sub s = {0x67CEF4, 0x1E, 1, 0x67CA00, 0x67C50C};
+    if (U8(o + 0x56) == 0) U16(U32(G() + 0x93C) + 0x5E) = 1;
+    blade_sub(o, &s);
+}
+
+/* sub-weapon 5: a kick forward (frames 10..18), hitting at frame 10 */
+void DC2CALL Sub5_Use(gptr o)                                      /* 0x4B38E0 */
+{
+    if (U8(o + 0x56) == 0) {
+        Anim_Start(o, 0x67C500, 7, 0, 4);
+        U32(o + 0xF0) = 0; U16(o + 0xF4) = 0;
+        U8(o + 0x17B) = 5; U8(o + 0x11B) = 0;
+        Fn_48C0B0(o, 0x20);
+        Sub_AmmoUse(0);
+        U8(o + 0x56)++;
+        return;
+    }
+    if (U8(o + 0x56) != 1) return;
+    if (sub_end(o)) {
+        U32(o + 0x54) = 0x10001;
+        U16(o + 0xF4) = 0;
+        U16(PX() + 0x38) = 0x200;
+        return;
+    }
+    u16 f = U16(o + 0x92);
+    if (f <= 0x12 && f >= 0xA) U16(o + 0xF4) += 0x1E;
+    if (f >= 0x13) U16(o + 0xF4) = 0;
+    if (f != 0xA) return;
+    gptr p = Obj_Part(U32(o + 0x64), 5);
+    Weapon_Hit(p + 0x20, p + 0x40, 0x12);
+    Flash_Start(o, 5);
+    Effect_SpawnAt(o, 0x67D1E4, 0);
+    U16(o + 0xF4) = 0xFEA2;
+}
+
+/* sub-weapon 9: a flare (a light and an effect at frame 7) */
+void DC2CALL Sub9_Use(gptr o)                                      /* 0x4B4600 */
+{
+    gptr e = U32(G() + 0x93C);
+    if (U8(o + 0x56) == 0) {
+        Anim_Start(o, U8(G() + 0x108F) ? 0x67D420 : 0x67C978, 0, 0x40, 1);
+        U32(o + 0xF0) = 0; U16(o + 0xF4) = 0;
+        Sub_AmmoUse(0);
+        U8(o + 0x17B) = 0x19; U8(o + 0x11B) = 0;
+        U8(o + 0x56)++;
+        return;
+    }
+    if (U8(o + 0x56) != 1) return;
+    if (sub_end(o)) {
+        U32(o + 0x54) = 0x10001;
+        U16(PX() + 0x38) = 0x200;
+    } else if (U16(o + 0x92) >= 1) {
+        if (U16(o + 0x92) >= 0x15) {
+            U32(e + 0x54) = Obj_Part(U32(o + 0x64), 0xC);
+            if (!U8(G() + 0x108F)) { U16(e + 0x40) = 0xFF7E; U16(e + 0x42) = 0xFF92; U16(e + 0x44) = 0xFFCE; }
+            else { U16(e + 0x40) = 0xFF4C; U16(e + 0x42) = 0xFFC4; U16(e + 0x44) = 0; }
+        } else {
+            U32(e + 0x54) = Obj_Part(U32(o + 0x64), 6);
+            U16(e + 0x40) = 0; U16(e + 0x42) = 0; U16(e + 0x44) = 0;
+        }
+    }
+    if (U16(o + 0x92) != 7) return;
+    gptr l = Light_Alloc();
+    if (!l) return;
+    U8(l + 1) = 0x16;
+    U16(l + 0x10) = U16(o + 0x40); U16(l + 0x12) = U16(o + 0x42); U16(l + 0x14) = U16(o + 0x44);
+    Fn_48C0B0(o, 0x20);
+    Effect_SpawnAt(o, 0x67DF90, 0);
+}
+
+/* put back (0x7380A0 by the sub-weapon): the models into the hands again */
+void DC2CALL Sub1_PutBack(gptr o)                                  /* 0x4B40A0 */
+{
+    gptr e = U32(G() + 0x93C);
+    carried(e, o, 0x67C988, 0xC, 0); blade(e);
+    e += 0x70;
+    carried(e, o, 0x67C878, 0xC, 0); blade(e);
+    Flag_Set(1, 0xA, 0);
+}
+
+void DC2CALL Sub2_PutBack(gptr o)                                  /* 0x4B3330 */
+{
+    gptr e = U32(G() + 0x93C);
+    carried(e, o, 0x67CA00, 0xC, 1);
+    blade_offset(e, 1);
+    U32(e + 0x50) &= ~0x8000u;
+    Flag_Set(1, 0xA, 0);
+}
+
+void DC2CALL Sub3_PutBack(gptr o)                                  /* 0x4B3650 */
+{
+    gptr e = U32(G() + 0x93C);
+    U32(e + 0x54) = Obj_Part(U32(o + 0x64), 0xC);
+    U16(e + 0x40) = U8(G() + 0x108F) ? 0xFF4C : 0xFF7E;
+    U16(e + 0x42) = 0xFF60; U16(e + 0x44) = 0;
+}
+
+void DC2CALL Sub4_PutBack(gptr o)                                  /* 0x4B3CA0 */
+{
+    gptr e = U32(G() + 0x93C);
+    U32(e + 0x54) = Obj_Part(U32(o + 0x64), 0xC);
+    if (!U8(G() + 0x108F)) { U16(e + 0x40) = 0xFF7E; U16(e + 0x42) = 0xFF92; U16(e + 0x44) = 0xFFCE; }
+    else { U16(e + 0x40) = 0xFF4C; U16(e + 0x42) = 0xFF60; U16(e + 0x44) = 0; }
+}
+
+void DC2CALL Sub8_PutBack(gptr o)                                  /* 0x4B44F0 */
+{
+    gptr e = U32(G() + 0x93C);
+    carried(e, o, 0x67C50C, 0xC, 1);
+    blade_offset(e, 1);
+    U16(e + 0x5E) = 1;
+    U32(e + 0x50) &= ~0x8000u;
+    Flag_Set(1, 0xA, 0);
+}
+
+void DC2CALL Sub9_PutBack(gptr o)                                  /* 0x4B4580 */
+{
+    gptr e = U32(G() + 0x93C);
+    carried(e, o, 0x67C508, 0xC, 0);
+    if (!U8(G() + 0x108F)) { U16(e + 0x40) = 0xFF7E; U16(e + 0x42) = 0xFF92; U16(e + 0x44) = 0xFFCE; }
+    else { U16(e + 0x40) = 0xFF4C; U16(e + 0x42) = 0xFFC4; U16(e + 0x44) = 0; }
+}
+
 /* ---- hits -------------------------------------------------------------------- */
 /* candidates of a shot (16 bytes: u32 depth along the shot, then the target
  * point x/y/z in the shot's frame, its radius and height, object index,
@@ -399,4 +685,141 @@ void DC2CALL Thrown_Update(gptr o)                                 /* 0x47AFA0 *
         Eff_Free(e);
     }
     Tmp_Pop(0x48);
+}
+
+/* ---- the thrown sub-weapons (3, 4, 6) ----------------------------------------------- */
+/* up to six mines 1200 ahead of o's facing, the first at pos, each further
+ * one scattered from the last; a mine that would land across a wall is
+ * dropped and ends the row; returns how many (the slot +0x46 counts them) */
+u32 DC2CALL Mines_Place(gptr o, gptr pos)                          /* 0x47C8F0 */
+{
+    gptr e = Eff_Alloc();
+    if (!e) return 0;
+    gptr f = Tmp_Push(0x30), v = f, d = f + 8, m = f + 0x10;
+    RotMatrixYXZ(o + 0x48, m);
+    U32(v) = 0; U16(v + 4) = 0x4B0;
+    ApplyMatrixSV(m, v, d);
+    U16(e + 0x40) = U16(pos); U16(e + 0x42) = U16(pos + 2); U16(e + 0x44) = U16(pos + 4);
+    memset(MEM(PROBE), 0, 0x2B * 4);
+    u8 n = 0, step = 2;
+    for (;;) {
+        U32(e + 0x50) = 1;
+        U32(e + 0x68) = 0x67CA14; U32(e + 0x54) = 0;
+        U8(e + 0x4E) = 3; U8(e + 0x4F) = 3;
+        U32(e + 0x58) = U32(e + 0x40); U16(e + 0x5C) = U16(e + 0x44);
+        if (step != 2) {
+            s16 r = (s8)Rand8();
+            U16(e + 0x40) += (u16)(U16(d) + r * 4);
+            U16(e + 0x42) += U16(d + 2);
+            r = (s8)Rand8();
+            U16(e + 0x44) += (u16)(U16(d + 4) + r * 4);
+        }
+        U16(e + 0x48) = 0x800;
+        U8(e + 0x46) = n; U8(e + 0x47) = step;
+        U32(PROBE + 0x50) = 1;
+        U8(PROBE + 0x85) = 0;
+        U16(PROBE + 0x5A) = (u16)(S16(e + 0x42) / -1000);
+        U32(PROBE + 0x40) = U32(e + 0x40); U16(PROBE + 0x44) = U16(e + 0x44);
+        U32(PROBE + 0x74) = U32(e + 0x58); U16(PROBE + 0x78) = U16(e + 0x5C);
+        if (Eff_WallHit(PROBE)) { Eff_Free(e); break; }
+        gptr k = K2_AllocBack();
+        if (k) {                                            /* its shadow */
+            U8(k + 0x7A) = 3;
+            U16(k + 0x6E) = 0x14; U16(k + 0x6C) = 0x14;
+            U8(k + 0x58) = 2;
+            U8(k + 0x64) = 0; U8(k + 0x65) = 0; U8(k + 0x66) = 0xFF;
+            U8(k + 0x84) |= 8;
+            U32(k + 0x60) = e;
+        }
+        u32 xy = U32(e + 0x40); u16 z = U16(e + 0x44);
+        step += 3; n++;
+        if (step > 0x11) break;
+        e = Eff_Alloc();
+        if (!e) break;
+        U32(e + 0x40) = xy; U16(e + 0x44) = z;
+    }
+    Tmp_Pop(0x30);
+    return n;
+}
+
+/* the throw: wound up from frame 3 (the item in the other hand), let go of
+ * in the hand at frame 0x1A on; at frame 6 the landing point 10000 along
+ * part 6, if the floor test (0x4542F0) lets it */
+struct throw_sub { gptr anim[2]; u8 blend, kind; u16 yz[2]; };
+
+static void throw_sub(gptr o, const struct throw_sub *s)
+{
+    gptr e = U32(G() + 0x93C);
+    if (U8(o + 0x56) == 0) {
+        Anim_Start(o, s->anim[U8(G() + 0x108F) != 0], 0, 0x40, s->blend);
+        U32(o + 0xF0) = 0; U16(o + 0xF4) = 0;
+        U8(o + 0x17B) = 5; U8(o + 0x11B) = 0;
+        if (s->kind == 6) Sub_AmmoUse(0);
+        U8(o + 0x56)++;
+        if (s->kind != 3) return;                           /* 3 goes on to the landing test, also below */
+    } else if (U8(o + 0x56) != 1) {
+        if (s->kind != 3) return;
+    } else if (sub_end(o)) {
+        U32(o + 0x54) = 0x10001;
+        U16(PX() + 0x38) = 0x200;
+    } else if (U16(o + 0x92) >= 3) {
+        if (U16(o + 0x92) >= 0x1A) {
+            U32(e + 0x54) = Obj_Part(U32(o + 0x64), 0xC);
+            if (!U8(G() + 0x108F)) { U16(e + 0x40) = 0xFF7E; U16(e + 0x42) = s->yz[0]; U16(e + 0x44) = s->yz[1]; }
+            else { U16(e + 0x40) = 0xFF4C; U16(e + 0x42) = 0xFF60; U16(e + 0x44) = 0; }
+        } else {
+            U32(e + 0x54) = Obj_Part(U32(o + 0x64), 6);
+            U16(e + 0x40) = 0; U16(e + 0x42) = 0; U16(e + 0x44) = 0;
+        }
+    }
+    if (U16(o + 0x92) != 6) return;
+    Obj_UpdateMatrix(o);
+    gptr p = Obj_Part(U32(o + 0x64), 6);
+    gptr v = Tmp_Push(8);
+    U16(v) = 0; U16(v + 2) = 0x2710; U16(v + 4) = 0;
+    ApplyMatrixSV(p + 0x20, v, v);
+    U16(v) += U16(p + 0x40); U16(v + 2) += U16(p + 0x42); U16(v + 4) += U16(p + 0x44);
+    if (!(u16)Fn_4542F0(v, p + 0x40, v, 0x80)) {
+        if (s->kind == 3) {                                 /* a grenade: the effect takes the spot */
+            Effect_SpawnAt(o, 0x67D80C, 0);
+            Sub_AmmoUse(1);
+            Fn_48C0B0(o, 0x20); Fn_48C0B0(o, 0x22); Fn_48C0B0(o, 0x24);
+            U16(v + 6) = U16(o + 0x4A);
+            Effect_Spawn(v, 0x67D888, 0, 0, 0x20, 0);
+        } else if (s->kind == 4) {                          /* one mine (+0x46: as the original, an unset stack byte) */
+            gptr m = Eff_Alloc();
+            if (m) {
+                Sub_AmmoUse(1);
+                Effect_SpawnAt(o, 0x67DA64, 0);
+                Fn_48C0B0(o, 0x20); Fn_48C0B0(o, 0x22);
+                U32(m + 0x50) = 3; U32(m + 0x68) = 0x67CA14; U32(m + 0x54) = 0;
+                U8(m + 0x4E) = 3; U8(m + 0x4F) = 3;
+                U32(m + 0x40) = U32(v); U32(m + 0x44) = U32(v + 4);
+                U8(m + 0x47) = 0; U16(m + 0x48) = 0x800;
+            }
+        } else if (Mines_Place(o, v)) {                     /* a row of mines */
+            Sub_AmmoUse(1);
+            Effect_SpawnAt(o, 0x67DA64, 0);
+            Fn_48C0B0(o, 0x20); Fn_48C0B0(o, 0x22);
+        }
+    }
+    Tmp_Pop(8);
+}
+
+void DC2CALL Sub3_Use(gptr o)                                      /* 0x4B3440 */
+{
+    static const struct throw_sub s = {{0x67C9F4, 0x67D0D0}, 4, 3, {0xFF60, 0}};
+    throw_sub(o, &s);
+}
+
+void DC2CALL Sub4_Use(gptr o)                                      /* 0x4B36B0 */
+{
+    static const struct throw_sub s = {{0x67CB8C, 0x67D268}, 4, 4, {0xFF92, 0xFFCE}};
+    throw_sub(o, &s);
+}
+
+void DC2CALL Sub6_Use(gptr o)                                      /* 0x4B3AA0 */
+{
+    static const struct throw_sub s = {{0x67CB8C, 0x67D268}, 2, 6, {0xFF92, 0xFFCE}};
+    throw_sub(o, &s);
 }

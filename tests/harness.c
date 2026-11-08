@@ -72,6 +72,7 @@ static void restore(u8 **src) { for (int i = 0; i < 2; i++) memcpy(MEM(RW[i].lo)
 static int g_fail, g_tests;
 static u32 g_ign_addr, g_ign_len;    /* bytes the original fills with stack garbage */
 static int g_ign_objpads;            /* matrix pads (+0x32) of test objects and parts */
+static int g_ign_throw;              /* thrown sub-weapons: stack pointers / bytes kept (see below) */
 static char g_what[256];
 
 /* after the reimplementation ran: compare with snap1 (original's result) */
@@ -107,6 +108,11 @@ static int compare(const char *name, u32 r_orig, u32 r_new, u32 rmask)
     for (u32 k = 0; k < 40; k++) {              /* parts of the pool (Model_Setup): matrix pads */
         u32 a = 0x6DA000u + k * 0xCC + 0x32;
         snap1[0][a - RW[0].lo] = U8(a); snap1[0][a + 1 - RW[0].lo] = U8(a + 1);
+    }
+    if (g_ign_throw) {          /* the effects' position pointer (a stack vector in the original), a mine's +0x46 (a stack byte) */
+        for (u32 k = 0; k < 40; k++)
+            for (u32 j = 0; j < 4; j++) { u32 a = 0x6D6000u + k * 0xAC + 0xA0 + j; if (a >= RW[0].lo && a < RW[0].hi) snap1[0][a - RW[0].lo] = U8(a); }
+        for (u32 k = 0; k < 12; k++) { u32 a = 0x694000u + k * 0x70 + 0x46; snap1[0][a - RW[0].lo] = U8(a); }
     }
     for (u32 k = 0; k < g_ign_len; k++)
         for (int i = 0; i < 2; i++)
@@ -489,6 +495,22 @@ static void anim_data(gptr a, u32 nparts, u32 nfr)
         for (u32 i = 0; i < stride; i += 2) U16(fr + i) = wide ? (u16)rnd() : (u16)(rnd() % 0x1400);
         S16(fr + 2) = 1 + rnd() % 8;
     }
+}
+
+/* a long animation (0x20 frames at AN_DATA + 0x2000) for o's parts, o at
+   frame f of it: the sub-weapons act at frames up to 0x15 */
+static void anim_long(gptr o, u32 f)
+{
+    u32 n = U32(o + 0x68), stride = (u8)(((n * 6 + 0x13) >> 2) << 2), nfr = 0x20;
+    gptr a = AN_DATA + 0x2000, fr = a + 0x14;
+    U32(a) = nfr; U32(a + 4) = 0; U32(a + 8) = 0; U32(a + 0xC) = 0; U32(a + 0x10) = rnd();
+    for (u32 k = 0; k < nfr + 2; k++) {
+        for (u32 i = 0; i < stride; i += 2) U16(fr + k * stride + i) = (u16)(rnd() % 0x1400);
+        S16(fr + k * stride + 2) = 1 + rnd() % 8;
+    }
+    U32(o + 0x8C) = fr; U8(o + 0xAC) = (u8)stride; U16(o + 0x90) = (u16)nfr;
+    U32(o + 0x78) = U32(o + 0x7C) = U32(o + 0x80) = U32(o + 0x84) = fr + f * stride;
+    U16(o + 0x92) = (u16)f; U16(o + 0x94) = (u16)f; U16(o + 0x98) = 0; U16(o + 0x9A) = 0;
 }
 
 static void anim_setup_at(gptr o)
@@ -1845,7 +1867,7 @@ static void test_player2(void)
         firearms:
             /* firearms: the player is object 0 (the animation layers work on it) */
             player_setup_obj(); targets_setup(); aim_desc_setup(1);
-            o = O_OBJ; do anim_setup_at(o); while (U32(o + 0x68) < 7);      /* parts 3 and 6: the guns */
+            o = O_OBJ; do anim_setup_at(o); while (U32(o + 0x68) < 13);     /* parts 3, 6: the guns; 12: the sub-weapon */
             U32(G() + 0x940) = O_OBJ; U32(0x87FD60) = o + 0x1C0; a[0] = o;
             U32(0x87F948) = TYPE_TAB;                       /* effect kind handlers: recorders */
             for (int k = 0; k < 256; k++) U32(TYPE_TAB + 4 * k) = (u32)(uintptr_t)g_recs[STUB_TYPE];
@@ -1942,6 +1964,53 @@ static void test_player2(void)
               U8(o + 0x56) = (u8)(rnd() % 9);
               check(WS[k].addr, WS[k].fn, "WState", 1, a, 0);
               for (u32 q = 0; q < 108; q++) U32(0x73B44C + 4 * q) = saved[q]; }
+            /* sub-weapons: in use (substate 10) and put back */
+            { static const struct { u32 addr; void *fn; const char *name; u32 an[2]; } SW[] = {   /* an: their animations */
+                {0x4B2CF0, Sub1_Use, "Sub1_Use", {0x67CB68}}, {0x4B3030, Sub2_Use, "Sub2_Use", {0x67CEF4}},
+                {0x4B3DD0, Sub7_Use, "Sub7_Use", {0x67CB68}}, {0x4B41F0, Sub8_Use, "Sub8_Use", {0x67CEF4}},
+                {0x4B38E0, Sub5_Use, "Sub5_Use", {0x67C500}}, {0x4B4600, Sub9_Use, "Sub9_Use", {0x67C978, 0x67D420}},
+                {0x4B40A0, Sub1_PutBack, "Sub1_PutBack"}, {0x4B3330, Sub2_PutBack, "Sub2_PutBack"},
+                {0x4B3650, Sub3_PutBack, "Sub3_PutBack"}, {0x4B3CA0, Sub4_PutBack, "Sub4_PutBack"},
+                {0x4B44F0, Sub8_PutBack, "Sub8_PutBack"}, {0x4B4580, Sub9_PutBack, "Sub9_PutBack"},
+                {0x4B3440, Sub3_Use, "Sub3_Use", {0x67C9F4, 0x67D0D0}}, {0x4B36B0, Sub4_Use, "Sub4_Use", {0x67CB8C, 0x67D268}},
+                {0x4B3AA0, Sub6_Use, "Sub6_Use", {0x67CB8C, 0x67D268}}};
+              U32(0x87DE14) = 2 + rnd() % 12; U32(G() + 0xA74) = rnd() % 4;   /* lights for the flare */
+              for (u32 k = 0; k < 16; k++) U8(O_K3 + k * 0x34) = (u8)(rnd() % 3 ? 1 : rnd());
+              for (u32 k = 0; k < sizeof SW / sizeof SW[0]; k++) {
+                  U8(o + 0x56) = rnd() % 4 ? 1 : rnd() % 3;
+                  anim_long(o, rnd() % 2 ? rnd() % 0x20 : (u16[]){0, 1, 4, 5, 6, 7, 8, 9, 0xA, 0xC, 0xD, 0xE, 0x11,
+                                                                  0x12, 0x13, 0x14, 0x15, 0x1C, 0x1D, 0x1E}[rnd() % 20]);
+                  if (SW[k].addr == 0x4B38E0 && rnd() % 2) { anim_long(o, 9 + rnd() % 2); U8(o + 0x56) = 1; }   /* the kick lands */
+                  U32(0x87DC08) = rnd() % 2 ? (rnd() % 2 ? 0x1000 : 8) : rnd();
+                  U32(O_EFF + 0x50) = rnd() % 2 ? 3 : rnd(); U8(G() + 0x108F) = rnd() % 2;
+                  for (u32 q = 0; q < 2; q++) {                       /* valid animations at their addresses (some overlap: only this one's) */
+                      gptr an = SW[k].an[q]; if (!an) continue;
+                      u32 stride = (u8)(((U32(o + 0x68) * 6 + 0x13) >> 2) << 2);
+                      U32(an) = 2; for (u32 i = 4; i < 0x14; i += 4) U32(an + i) = 0;
+                      for (u32 i = 0; i < 3 * stride; i += 2) U16(an + 0x14 + i) = (u16)(rnd() % 0x1400);
+                      for (u32 f = 0; f < 3; f++) S16(an + 0x14 + f * stride + 2) = 1 + rnd() % 8;
+                  }
+                  if (rnd() % 3 == 0) { anim_long(o, 5 + rnd() % 2); U8(o + 0x56) = rnd() % 3 ? 1 : 2; }   /* the landing frame */
+                  stub_at(0x4542F0)->ret = rnd() % 3 == 0;
+                  for (u32 j = 0; j < 12; j++) U32(O_EFF + j * 0x70 + 0x50) = rnd() % 3 ? 0 : 1;
+                  if (rnd() % 3 == 0) {                               /* few free effect slots */
+                      for (u32 j = 0; j < 12; j++) U32(O_EFF + j * 0x70 + 0x50) = 1;
+                      for (u32 j = rnd() % 3; j; j--) U32(O_EFF + rnd() % 12 * 0x70 + 0x50) = 0;
+                  }
+                  g_ign_throw = 1;
+                  check(SW[k].addr, SW[k].fn, SW[k].name, 1, a, 0);
+                  g_ign_throw = 0;
+              }
+              stub_at(0x4542F0)->ret = 0;
+              a[1] = O_OBJ + 0x260 * (rnd() % 16); U16(0x6DDA00u) = (u16)rnd(); U16(0x6DDA00u + 2) = (u16)rnd(); U16(0x6DDA00u + 4) = (u16)rnd();
+              a[2] = 0x6DDA00u;
+              for (u32 j = 0; j < 12; j++) U32(O_EFF + j * 0x70 + 0x50) = rnd() % 3 ? 0 : 1;
+              check(0x47C8F0, Mines_Place, "Mines_Place", 2, a + 1, 0xFFFFFFFF);
+              a[1] = rnd() % 4;
+              check(0x496350, Sub_AmmoUse, "Sub_AmmoUse", 1, a + 1, 0);
+              check(0x48D410, Light_Alloc, "Light_Alloc", 0, a, 0xFFFFFFFF);
+              a[1] = O_OBJ + 0x260 * (rnd() % 16); a[2] = rnd(); a[3] = rnd();
+              check(0x48DB80, Effect_SpawnAt, "Effect_SpawnAt", 3, a + 1, 0xFFFFFFFF); }
             a[1] = rnd() % 4; a[2] = rnd() % 2 ? 0x46 : (u32)rnd();
             check(0x4961D0, Ammo_Check, "Ammo_Check", 1, a + 1, 0xFFFFFFFF);
             check(0x4962B0, Ammo_Use, "Ammo_Use", 1, a + 1, 0);

@@ -436,6 +436,25 @@ void DC2CALL Bare_Ready(gptr o);                                       /* 0x4AA7
 void DC2CALL Bare_Walk(gptr o);                                        /* 0x4AADD0 */
 void DC2CALL Bare_Back(gptr o);                                        /* 0x4AAFD0 */
 void DC2CALL Bare_Turn(gptr o);                                        /* 0x4AB1E0 */
+void DC2CALL Sub_AmmoUse(u32 n);                                       /* 0x496350 */
+gptr DC2CALL Effect_SpawnAt(gptr pos, gptr data, u32 unused);          /* 0x48DB80 */
+gptr DC2CALL Light_Alloc(void);                                        /* 0x48D410 */
+void DC2CALL Sub1_Use(gptr o);                                         /* 0x4B2CF0 */
+void DC2CALL Sub2_Use(gptr o);                                         /* 0x4B3030 */
+void DC2CALL Sub7_Use(gptr o);                                         /* 0x4B3DD0 */
+void DC2CALL Sub8_Use(gptr o);                                         /* 0x4B41F0 */
+void DC2CALL Sub5_Use(gptr o);                                         /* 0x4B38E0 */
+void DC2CALL Sub9_Use(gptr o);                                         /* 0x4B4600 */
+void DC2CALL Sub1_PutBack(gptr o);                                     /* 0x4B40A0 */
+void DC2CALL Sub2_PutBack(gptr o);                                     /* 0x4B3330 */
+void DC2CALL Sub3_PutBack(gptr o);                                     /* 0x4B3650 */
+void DC2CALL Sub4_PutBack(gptr o);                                     /* 0x4B3CA0 */
+void DC2CALL Sub8_PutBack(gptr o);                                     /* 0x4B44F0 */
+void DC2CALL Sub9_PutBack(gptr o);                                     /* 0x4B4580 */
+void DC2CALL Sub3_Use(gptr o);                                         /* 0x4B3440 */
+void DC2CALL Sub4_Use(gptr o);                                         /* 0x4B36B0 */
+void DC2CALL Sub6_Use(gptr o);                                         /* 0x4B3AA0 */
+u32  DC2CALL Mines_Place(gptr o, gptr pos);                            /* 0x47C8F0 */
 
 void DC2CALL Spray_Walk(gptr o);                       /* 0x4AD9B0 */
 void DC2CALL Spray_Back(gptr o);                       /* 0x4AD370 */

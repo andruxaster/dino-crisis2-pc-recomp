@@ -3,7 +3,8 @@
 The GOG Dino2.exe is the same build as the reference executable (link time
 2002-02-05, identical layout) with about 40 small binary patches; the added
 code lives in two code caves (0x4C0330..0x4C03D2, a replaced function, and
-0x4E7048..0x4E7120, the padding at the end of .text). The Sourcenext release
+0x4E7048..0x4E7120, the padding at the end of .text). The 2006 Xplosiv / Red Ant re-release ships the reference executable
+unchanged (same SHA-1). The Sourcenext release
 is an earlier, different build (2002-01-28; .text 0xE63F8 bytes, .data
 0x25000) with other addresses.
 
