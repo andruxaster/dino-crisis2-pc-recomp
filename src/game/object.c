@@ -881,7 +881,7 @@ gptr DC2CALL Part_Alloc(void)                                      /* 0x48D740 *
 void DC2CALL Model_Setup(gptr o, gptr d)                           /* 0x48D8B0 */
 {
     u32 n = U32(d + 0x14);
-    gptr parts[31];
+    gptr parts[31] = {0};                           /* n == 0 is not a model */
     gptr r = d + 0x1C;
     for (u32 i = 0; i < n; i++, r += 0x14) {
         gptr p = Part_Alloc();

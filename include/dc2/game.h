@@ -403,4 +403,14 @@ void DC2CALL Gun_Walk(gptr o);                                         /* 0x4AB6
 void DC2CALL Gun_Back(gptr o);                                         /* 0x4AB870 */
 void DC2CALL Gun_Turn(gptr o);                                         /* 0x4ABAA0 */
 
+void DC2CALL Spray_Walk(gptr o);                       /* 0x4AD9B0 */
+void DC2CALL Spray_Back(gptr o);                       /* 0x4AD370 */
+void DC2CALL Rifle_Turn(gptr o);                       /* 0x4B0220 */
+void DC2CALL Rifle_Walk(gptr o);                       /* 0x4B0AE0 */
+void DC2CALL Rifle_Back(gptr o);                       /* 0x4B0CE0 */
+void DC2CALL Weapon3_Fire(gptr o);                     /* 0x4AC9E0 */
+void DC2CALL Weapon4_Fire(gptr o);                     /* 0x4AD6E0 */
+void DC2CALL Weapon8_Fire(gptr o);                     /* 0x4B04D0 */
+void DC2CALL Weapon9_Fire(gptr o);                     /* 0x4B0910 */
+
 #endif

@@ -100,6 +100,10 @@ static int compare(const char *name, u32 r_orig, u32 r_new, u32 rmask)
             u32 a = i == 16 ? 0x6C8000 + 0x32 : 0x6C8400 + i * 0x80 + 0x32;
             snap1[0][a - RW[0].lo] = U8(a); snap1[0][a + 1 - RW[0].lo] = U8(a + 1);
         }
+    for (u32 k = 0; k < 12; k++) {              /* object-effect slots: matrix pads (stack garbage of MulMatrix0) */
+        u32 a = 0x694000u + k * 0x70 + 0x32;
+        snap1[0][a - RW[0].lo] = U8(a); snap1[0][a + 1 - RW[0].lo] = U8(a + 1);
+    }
     for (u32 k = 0; k < 40; k++) {              /* parts of the pool (Model_Setup): matrix pads */
         u32 a = 0x6DA000u + k * 0xCC + 0x32;
         snap1[0][a - RW[0].lo] = U8(a); snap1[0][a + 1 - RW[0].lo] = U8(a + 1);
@@ -1840,6 +1844,8 @@ static void test_player2(void)
             player_setup_obj(); targets_setup(); aim_desc_setup(1);
             o = O_OBJ; do anim_setup_at(o); while (U32(o + 0x68) < 5);
             U32(G() + 0x940) = O_OBJ; U32(0x87FD60) = o + 0x1C0; a[0] = o;
+            U32(0x87F948) = TYPE_TAB;                       /* effect kind handlers: recorders */
+            for (int k = 0; k < 256; k++) U32(TYPE_TAB + 4 * k) = (u32)(uintptr_t)g_recs[STUB_TYPE];
             for (u32 l = 0; l < 2; l++) {                   /* the two layers' shadow objects */
                 gptr sh = 0x7598D8 + l * 0x260;
                 for (u32 k = 0x60; k < 0x110; k += 4) U32(sh + k) = U32(o + k);
@@ -1869,9 +1875,14 @@ static void test_player2(void)
                 {0x4AB490, Handgun_Fire, "Handgun_Fire", 0}, {0x4ACCC0, Gun_Ready, "Gun_Ready", 1},
                 {0x4AD0D0, Gun_Hold, "Gun_Hold", 1}, {0x4AABD0, Gun_Lower, "Gun_Lower", 1},
                 {0x4AE9E0, Gun_NextTarget, "Gun_NextTarget", 1}, {0x4B27C0, Gun_TurnBack, "Gun_TurnBack", 1},
-                {0x4AB640, Gun_Walk, "Gun_Walk", 1}, {0x4AB870, Gun_Back, "Gun_Back", 1}, {0x4ABAA0, Gun_Turn, "Gun_Turn", 1}};
-              for (u32 k = 0; k < 9; k++) {
-                  if (GF[k].sub) U8(o + 0x57) = rnd() % 4 ? rnd() % 3 : 0xFF; else U8(o + 0x56) = (u8)(rnd() % 3);
+                {0x4AB640, Gun_Walk, "Gun_Walk", 1}, {0x4AB870, Gun_Back, "Gun_Back", 1}, {0x4ABAA0, Gun_Turn, "Gun_Turn", 1},
+                {0x4AD9B0, Spray_Walk, "Spray_Walk", 1}, {0x4AD370, Spray_Back, "Spray_Back", 1}, {0x4B0220, Rifle_Turn, "Rifle_Turn", 1},
+                {0x4B0AE0, Rifle_Walk, "Rifle_Walk", 1}, {0x4B0CE0, Rifle_Back, "Rifle_Back", 1},
+                {0x4AC9E0, Weapon3_Fire, "Weapon3_Fire", 0}, {0x4AD6E0, Weapon4_Fire, "Weapon4_Fire", 0},
+                {0x4B04D0, Weapon8_Fire, "Weapon8_Fire", 0}, {0x4B0910, Weapon9_Fire, "Weapon9_Fire", 0}};
+              for (u32 k = 0; k < sizeof GF / sizeof GF[0]; k++) {
+                  if (GF[k].sub) U8(o + 0x57) = rnd() % 4 ? rnd() % 3 : 0xFF; else U8(o + 0x56) = (u8)(rnd() % 4 ? 1 : rnd() % 3);
+                  if (!GF[k].sub && rnd() % 3 == 0) { U32(0x87DC08) = 8 | (rnd() % 2 ? 0x20 : 0); U32(0x87DC94) = 0; }   /* aim held, maybe the trigger */
                   if (rnd() % 3 == 0) U16(o + 0x1C0 + 0x20) = U16(o + 0x4A);          /* already facing */
                   if (rnd() % 3 == 0) U16(o + 0x1C0 + 0x32) = U16(o + 0x1C0 + 0x30);
                   check(GF[k].addr, GF[k].fn, GF[k].name, 1, a, 0);

@@ -389,7 +389,7 @@ void DC2CALL Gun_TurnBack(gptr o)                                  /* 0x4B27C0 *
 }
 
 /* substate 5: walk while aiming, firing on the way */
-void DC2CALL Gun_Walk(gptr o)                                      /* 0x4AB640 */
+static void walk_aim(gptr o, void (*shoot)(gptr))
 {
     switch (U8(o + 0x57)) {
     case 0:
@@ -419,13 +419,13 @@ void DC2CALL Gun_Walk(gptr o)                                      /* 0x4AB640 *
     if (!(h & 0x20)) return;
     if (Ammo_Check(1)) {
         if (!U8(PX() + 0x2F)) return;
-        fire(o, 0x67A950, 0);
+        shoot(o);
         U16(PX() + 0x3C) = 0; U8(PX() + 0x2F) = 0;
     } else if (PRESSED & 0x20) Fn_48C0B0(o, 0x11);
 }
 
 /* substate 6: walk backwards while aiming */
-void DC2CALL Gun_Back(gptr o)                                      /* 0x4AB870 */
+static void back_aim(gptr o, void (*shoot)(gptr))
 {
     switch (U8(o + 0x57)) {
     case 0:
@@ -457,19 +457,13 @@ void DC2CALL Gun_Back(gptr o)                                      /* 0x4AB870 *
     if (!(h & 0x20)) return;
     if (Ammo_Check(1)) {
         if (!U8(PX() + 0x2F)) return;
-        gptr p = Obj_Part(U32(o + 0x64), 3);
-        Weapon_Hit(p + 0x20, p + 0x40, 1);
-        Effect_Attach(o, 0x67AAE4);
-        Flash_Start(o, 8);
-        Flash_StartFor(o, 5, 0x46);
-        Ammo_Use(1);
-        Fn_48C0B0(o, 0x10);
+        shoot(o);
         U16(PX() + 0x3C) = 0; U8(PX() + 0x2F) = 0;
     } else if (PRESSED & 0x20) Fn_48C0B0(o, 0x11);
 }
 
-/* substate 7: turn in place while aiming */
-void DC2CALL Gun_Turn(gptr o)                                      /* 0x4ABAA0 */
+/* substate 7: turn in place while aiming (step: turning speed with the aim held) */
+static void turn_aim(gptr o, u16 step)
 {
     switch (U8(o + 0x57)) {
     case 0:
@@ -509,6 +503,299 @@ void DC2CALL Gun_Turn(gptr o)                                      /* 0x4ABAA0 *
     }
     if (!(HELD & 0xA000)) return;
     U8(PX() + 0x2E) = 1;
-    if (HELD & 0x2000) U16(o + 0x4A) += 0x64;
-    if (HELD & 0x8000) U16(o + 0x4A) -= 0x64;
+    if (HELD & 0x2000) U16(o + 0x4A) += step;
+    if (HELD & 0x8000) U16(o + 0x4A) -= step;
+}
+
+/* ---- the shots of the walking substates ---------------------------------------------- */
+static void shoot_walk(gptr o) { fire(o, 0x67A950, 0); }
+
+static void shoot_back(gptr o)
+{
+    gptr p = Obj_Part(U32(o + 0x64), 3);
+    Weapon_Hit(p + 0x20, p + 0x40, 1);
+    Effect_Attach(o, 0x67AAE4);
+    Flash_Start(o, 8);
+    Flash_StartFor(o, 5, 0x46);
+    Ammo_Use(1);
+    Fn_48C0B0(o, 0x10);
+}
+
+#define PROBE2 0x75BDA8u    /* stand-in effect slot for the spray's wall test */
+
+/* weapon 4's spray: an effect 1000 along the gun, a different one when a
+ * wall is between */
+static void spray_effect(gptr p)
+{
+    gptr sv = Tmp_Push(8);
+    U16(sv) = 0; U16(sv + 2) = 0x3E8; U16(sv + 4) = 0;
+    ApplyMatrixSV(p + 0x20, sv, sv);
+    U16(sv) += U16(p + 0x40);
+    U16(sv + 2) += U16(p + 0x42);
+    U16(sv + 4) += U16(p + 0x44);
+    memset(MEM(PROBE2), 0, 0x2B * 4);
+    U32(PROBE2 + 0x50) = 1;
+    U16(PROBE2 + 0x5A) = (u16)(S16(sv + 2) / -1000);
+    U8(PROBE2 + 0x85) |= 8;
+    U32(PROBE2 + 0x40) = U32(sv); U16(PROBE2 + 0x44) = U16(sv + 4);
+    U32(PROBE2 + 0x74) = U32(p + 0x40); U16(PROBE2 + 0x78) = U16(p + 0x44);
+    Tmp_Pop(8);
+    Effect_Spawn(p, Eff_WallHit(PROBE2) ? 0x67B358 : 0x67B19C, 0, 0, 0x200, 0);
+}
+
+static void shoot_spray(gptr o)
+{
+    gptr p = Obj_Part(U32(o + 0x64), 3);
+    Ammo_Use(1);
+    Flash_Start(o, 0xA);
+    Flash_StartFor(o, 0xA, 0x78);
+    spray_effect(p);
+    Fn_48C0B0(o, 0x10);
+}
+
+void DC2CALL Gun_Walk(gptr o)   { walk_aim(o, shoot_walk); }      /* 0x4AB640 */
+void DC2CALL Gun_Back(gptr o)   { back_aim(o, shoot_back); }      /* 0x4AB870 */
+void DC2CALL Gun_Turn(gptr o)   { turn_aim(o, 0x64); }            /* 0x4ABAA0 */
+void DC2CALL Spray_Walk(gptr o) { walk_aim(o, shoot_spray); }     /* 0x4AD9B0 */
+void DC2CALL Spray_Back(gptr o) { back_aim(o, shoot_spray); }     /* 0x4AD370 */
+void DC2CALL Rifle_Turn(gptr o) { turn_aim(o, 0x46); }            /* 0x4B0220 */
+
+/* ---- the heavier weapons (3, 8, 9: the whole body moves) ----------------------------- */
+/* substate 5: walk aiming; the trigger goes to the firing state */
+void DC2CALL Rifle_Walk(gptr o)                                    /* 0x4B0AE0 */
+{
+    switch (U8(o + 0x57)) {
+    case 0:
+        Anim_Start(o, 0x25, 0, 1, 4);
+        U32(o + 0xF0) = 0; U16(o + 0xF4) = 0x35; U8(o + 0x11B) = 0;
+        U16(PX() + 0x30) = 0x800;
+        U8(o + 0x57)++;
+        break;
+    case 1: U16(o + 0xF4) = 0x36; Anim_Step(o); break;
+    }
+    if (HELD & 0x2000) U16(o + 0x4A) += 0x3C;
+    if (HELD & 0x8000) U16(o + 0x4A) -= 0x3C;
+    if (dodge(o)) return;
+    u8 pr = PRESSED;
+    u32 h = HELD;
+    if (sub_weapon(o, 0)) return;
+    if (pr & 2) { U32(o + 0x54) = 0x40501; return; }
+    if (h & 0x4000) { U32(o + 0x54) = 0x60501; return; }
+    if (!(h & 0x1000)) { U16(o + 0xF4) = 0; U32(o + 0x54) = 0xFF000501; return; }
+    if (!(h & 8)) {
+        U8(o + 0x11B) = 0;
+        U32(o + 0x54) = 0x10201;
+        Anim_Start(o, 0x1D, U16(o + 0x92), 1, 4);
+        U32(o + 0xF0) = 0; U16(o + 0xF4) = 0x82;
+        return;
+    }
+    if (!(h & 0x20)) return;
+    if (Ammo_Check(1)) {
+        if (!U8(PX() + 0x2F)) return;
+        U32(o + 0x54) = 0x601;
+        U16(PX() + 0x3C) = 0; U8(PX() + 0x2F) = 0;
+    } else if (PRESSED & 0x20) Fn_48C0B0(o, 0x11);
+}
+
+/* substate 6: walk back aiming */
+void DC2CALL Rifle_Back(gptr o)                                    /* 0x4B0CE0 */
+{
+    switch (U8(o + 0x57)) {
+    case 0:
+        Anim_Start(o, 0x24, 5, 1, 4);
+        U32(o + 0xF0) = 0; U16(o + 0xF4) = 0xFFD2; U8(o + 0x11B) = 0;
+        U16(PX() + 0x30) = 0x800;
+        U8(o + 0x57)++;
+        break;
+    case 1: Anim_Step(o); break;
+    }
+    if (HELD & 0x2000) U16(o + 0x4A) += 0x20;
+    if (HELD & 0x8000) U16(o + 0x4A) -= 0x20;
+    if (dodge(o)) return;
+    u32 pr = U32(0x87DC94), h = HELD;
+    if ((pr & 0x10) && (U16(G() + 0x10B4) & 0xFF00)) {
+        if (!Player_SubDone()) U32(o + 0x54) = 0xA01;
+        return;
+    }
+    if (pr & 2) { U32(o + 0x54) = 0x40501; return; }
+    if (pr & 0x1000) { U32(o + 0x54) = 0x50501; return; }
+    if (!(h & 0x4000)) { U32(o + 0x54) = 0xFF000501; return; }
+    if (!(h & 8)) {
+        U8(o + 0x11B) = 0;
+        U32(o + 0x54) = 0x10401;
+        Anim_Start(o, 0x20, U16(o + 0x92), 1, 4);
+        U32(o + 0xF0) = 0; U16(o + 0xF4) = 0xFFD8;
+        return;
+    }
+    if (!(h & 0x20)) return;
+    if (Ammo_Check(1)) {
+        if (!U8(PX() + 0x2F)) return;
+        U32(o + 0x54) = 0x601;
+        U16(PX() + 0x3C) = 0; U8(PX() + 0x2F) = 0;
+    } else if (PRESSED & 0x20) Fn_48C0B0(o, 0x11);
+}
+
+/* ---- firing: the follow-up once the shot's animation ends ---------------------------- */
+/* layered (upper body) or whole-body animation. Back to holding the aim
+ * (0x10501): mode 0 plainly; mode 1 restarting the hold animation, when
+ * out of ammunition plainly; mode 2 always restarting it */
+static void after_shot(gptr o, int layers, int mode)
+{
+    if (!(layers ? Anim_StepLayers(U16(PX() + 0x30)) : Anim_Step(o))) {
+        U16(PX() + 0x3C) = 0; U8(PX() + 0x2F) = 0;
+        return;
+    }
+    U8(PX() + 0x2F) = 1;
+    u32 h = HELD;
+    if ((h & 0x10) && (U16(G() + 0x10B4) & 0xFF00)) {
+        if (!Player_SubDone()) U32(o + 0x54) = 0xA01;
+        return;
+    }
+    if (h & 2) { U32(o + 0x54) = 0x40501; return; }
+    if (h & 0x1000) { U32(o + 0x54) = 0x50501; return; }
+    if (h & 0x4000) { U32(o + 0x54) = 0x60501; return; }
+    if (!(h & 8)) { U32(o + 0x54) = 0x20501; return; }
+    if (h & 0x20) {
+        if (Ammo_Check(1)) { U32(o + 0x54) = 0x601; return; }
+        if (mode < 2) { U32(o + 0x1DC) = 0; U32(o + 0x54) = 0x10501; return; }
+    } else {
+        if ((PRESSED & 4) && !Flag_Check(2, 0xE)) { U32(o + 0x54) = 0x30501; return; }
+        if (HELD & 0xA000) { U32(o + 0x54) = 0x70501; return; }
+    }
+    if (!mode) { U32(o + 0x1DC) = 0; U32(o + 0x54) = 0x10501; return; }
+    U32(o + 0x54) = 0x10501;
+    U16(PX() + 0x30) = 0x800;
+    Anim_StartLayers(0x35, 0x35, 0, 0, 0xA, U16(PX() + 0x30));
+}
+
+/* weapon 3: a grenade (object effect, state 5) */
+void DC2CALL Weapon3_Fire(gptr o)                                  /* 0x4AC9E0 */
+{
+    if (U8(o + 0x56) == 1) { after_shot(o, 0, 2); return; }
+    if (U8(o + 0x56)) return;
+    gptr e = Eff_Alloc();
+    if (!e) { U32(o + 0x1DC) = 0; U32(o + 0x54) = 0x10501; Fn_48C0B0(o, 0x11); return; }
+    Anim_Start(o, 0x2A, 0, 0, 6);
+    U8(o + 0x56)++;
+    U32(o + 0xF0) = 0; U16(o + 0xF4) = 0;
+    gptr p = Obj_Part(U32(o + 0x64), 3);
+    U32(e + 0x50) = 3; U32(e + 0x68) = 0x67967C; U32(e + 0x54) = 0;
+    U8(e + 0x4E) = 3; U8(e + 0x4F) = 5;
+    U16(e + 0x48) = 0x400; U16(e + 0x4A) = U16(o + 0x4A); U16(e + 0x4C) = 0;
+    RotMatrixYXZ(e + 0x48, e + 0x20);
+    gptr sv = Tmp_Push(0x28), mm = sv + 8;
+    RotMatrix(o + 0x48, mm);
+    U16(sv) = 0xFFDE; U16(sv + 2) = 0xFF4A; U16(sv + 4) = 0xFE89;     /* the muzzle */
+    ApplyMatrixSV(mm, sv, sv);
+    U16(e + 0x40) = (u16)(U16(p + 0x40) + U16(sv));
+    U16(e + 0x42) = (u16)(U16(p + 0x42) + U16(sv + 2));
+    U16(e + 0x44) = (u16)(U16(p + 0x44) + U16(sv + 4));
+    Tmp_Pop(0x28);
+    U32(e + 0x58) = U32(e + 0x40); U16(e + 0x5C) = U16(e + 0x44);
+    U16(e + 0x60) = 0; U16(e + 0x62) = 0x2BC; U16(e + 0x64) = 0;
+    Effect_Spawn(e, 0x679F9C, 0, 0, 2, 0);
+    Effect_Spawn(e, 0x679FC8, 0, 0, 0xA, 0);
+    Effect_Attach(o, 0x679A1C);
+    Ammo_Use(1);
+    Flash_Start(o, 0xF);
+    Flash_StartFor(o, 0xF, 0xAA);
+    Fn_48C0B0(o, 0x10);
+}
+
+/* weapon 4: the spray */
+void DC2CALL Weapon4_Fire(gptr o)                                  /* 0x4AD6E0 */
+{
+    if (U8(o + 0x56) == 1) { after_shot(o, 1, 1); return; }
+    if (U8(o + 0x56)) return;
+    Anim_StartLayers(0x2A, 0x2C, 0, 0, 6, U16(PX() + 0x30));
+    U32(o + 0xF0) = 0; U16(o + 0xF4) = 0;
+    U8(o + 0x56)++;
+    Ammo_Use(1);
+    Flash_Start(o, 0xA);
+    Flash_StartFor(o, 0xA, 0x78);
+    spray_effect(Obj_Part(U32(o + 0x64), 3));
+    Fn_48C0B0(o, 0x10);
+}
+
+/* weapon 8: three homing missiles (object effects, state 6) at the targets
+ * found, the muzzles 0x7047BC */
+void DC2CALL Weapon8_Fire(gptr o)                                  /* 0x4B04D0 */
+{
+    if (U8(o + 0x56) == 1) { after_shot(o, 0, 2); return; }
+    if (U8(o + 0x56)) return;
+    Anim_Start(o, 0x2A, 0, 0, 6);
+    U8(o + 0x56)++;
+    U32(o + 0xF0) = 0; U16(o + 0xF4) = 0;
+    Target_Find(o, 0x800);
+    gptr p = Obj_Part(U32(o + 0x64), 3);
+    gptr sv = Tmp_Push(0x28), mm = sv + 8;
+    for (u32 j = 0; j < 3; j++) {
+        gptr e = Eff_Alloc();
+        if (!e) continue;
+        U32(e + 0x54) = 0; U32(e + 0x50) = 3; U32(e + 0x68) = 0x679AF0;
+        U8(e + 0x4E) = 3; U8(e + 0x4F) = 6;
+        U16(e + 0x48) = 0x480;
+        U16(e + 0x4A) = (u16)((Rand8() & 0xFF) + U16(o + 0x4A));
+        U16(e + 0x4C) = 0;
+        RotMatrixYXZ(e + 0x48, e + 0x20);
+        RotMatrix(o + 0x48, mm);
+        gptr m = 0x7047BC + j * 6;
+        U16(sv) = U16(m); U16(sv + 2) = U16(m + 2); U16(sv + 4) = U16(m + 4);
+        ApplyMatrixSV(mm, sv, sv);
+        U16(e + 0x40) = (u16)(U16(p + 0x40) + U16(sv));
+        U16(e + 0x42) = (u16)(U16(p + 0x42) + U16(sv + 2));
+        U16(e + 0x44) = (u16)(U16(p + 0x44) + U16(sv + 4));
+        U32(e + 0x58) = U32(e + 0x40); U16(e + 0x5C) = U16(e + 0x44);
+        U16(e + 0x60) = 0; U16(e + 0x62) = 0x1F4; U16(e + 0x64) = 0;
+        s8 slot = S8(e + 0x46);
+        if (U32(PX() + 0x14)) {                                 /* the j-th target, or the last part of the first */
+            gptr t, d;
+            if (j < U32(PX() + 4)) {
+                t = U32(G() + 0x940) + U8(PX() + 8 + j) * 0x260;
+                d = U32(t + 0x134);
+            } else {
+                t = U32(G() + 0x940) + U8(PX() + 8) * 0x260;
+                gptr d0 = U32(t + 0x134);
+                s32 last = -1;
+                for (gptr c = d0 - 1; ; ) { c += 0xC; last++; if (!(U8(c) & 1)) break; }
+                d = last >= (s32)j ? d0 + j * 0xC : d0 + last * 0xC;
+            }
+            U16(0x87FD80 + slot * 4) = U8(t + 0xFF);
+            U16(0x87FD82 + slot * 4) = U8(d + 0xA);
+        } else {
+            U16(e + 0x48) = (u16)((Rand8() & 0xF) + 0x400);
+            U16(0x87FD80 + slot * 4) = 0xFFFF;
+            U16(0x87FD82 + slot * 4) = 0;
+        }
+        U8(e + 0x46) = 0x3C; U8(e + 0x47) = 0x1E;
+        Effect_Spawn(e, 0x67A2C4, 0, 0, 2, 0);
+        Effect_Spawn(e, 0x67A2F0, 0, 0, 0xA, 0);
+    }
+    Tmp_Pop(0x28);
+    Effect_Attach(o, 0x679DE4);
+    Ammo_Use(1);
+    Flash_Start(o, 0xF);
+    Flash_StartFor(o, 0xF, 0xAA);
+    Fn_48C0B0(o, 0x10);
+}
+
+/* weapon 9 */
+void DC2CALL Weapon9_Fire(gptr o)                                  /* 0x4B0910 */
+{
+    if (U8(o + 0x56) == 1) {
+        U16(o + 0xF4) = U16(o + 0x92) == 3 ? 0xFF83 : 0;      /* the recoil */
+        after_shot(o, 1, 0);
+        return;
+    }
+    if (U8(o + 0x56)) return;
+    Anim_StartLayers(0x2A, 0x2C, 0, 0, 0, U16(PX() + 0x30));
+    U32(o + 0xF0) = 0; U16(o + 0xF4) = 0; U8(o + 0x11B) = 0;
+    U8(o + 0x56)++;
+    Ammo_Use(1);
+    Effect_Attach(o, 0x67A498);
+    Flash_Start(o, 0xF);
+    Flash_StartFor(o, 0xF, 0xA0);
+    gptr p = Obj_Part(U32(o + 0x64), 3);
+    Weapon_Hit(p + 0x20, p + 0x40, 9);
+    Fn_48C0B0(o, 0x10);
 }

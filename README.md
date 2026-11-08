@@ -25,7 +25,7 @@ One source tree, three builds:
 | build | what | status |
 |---|---|---|
 | `build/dinput.dll` | hook DLL: put next to `Dino2.exe`, redirects the original functions to the C ones | runs inside the game |
-| `build/harness_stub.exe` + `harness.dll` | checks every C function against the original code | 425 functions, ~700 000 checks, 0 differences |
+| `build/harness_stub.exe` + `harness.dll` | checks every C function against the original code | 434 functions, ~750 000 checks, 0 differences |
 | `build/dc2` (Linux) | the game started like WinMain: task system, root task, per-frame work; headless, prints a trace | boots: CORE.DAT, warning and Capcom screens, save scan, title (menu, opening movie / attract demo in turn); buttons can be given on the command line; New Game runs the opening and the game task into room ST101 (file loads, room set-up, room script start); sets up the player; its first state loads the weapon set and stops at the model set-up (Model_Setup 0x48D8B0, not rewritten yet) |
 | `build/smoke` (Linux) | the C game code without any exe code, on an emulated memory image | rooms loaded and set up by the game's own code (File_Process, Room_SetPointers, Script_Init), script VM, animation: 80 of 89 room scripts run 600 frames; 9 stop on cutscene data (SCxx.DAT) that is not loaded yet |
 
@@ -78,7 +78,7 @@ Checked under wine 9 (32-bit prefix): all 26 hooks installed; after one
 minute Lzss_Decode 23 calls, Flag_Check 62 000, Script_Run every frame,
 PointInQuad 5 000.
 
-## Reimplemented (425)
+## Reimplemented (434)
 
 The authoritative list is `src/hook/hooks.c`. By area:
 
@@ -93,7 +93,7 @@ The authoritative list is `src/hook/hooks.c`. By area:
 | AOT (trigger areas) | opcodes 30-33, 35-3B define entries of G+0xA5C (doors, items, ...), 3E runs an entry's kind handler | src/game/script_aot.c |
 | animation | Anim_Set, Anim_Start, Anim_Step, Anim_ApplyFrame (cubic over four keys, blending into a new animation), Anim_Events, Anim_BlendLinear/BlendMatrix, Matrix_ToAngles; the player's two animation layers (Anim_Save/LoadLayer, Anim_StartLayers, Anim_StepLayers), Anim_FrameFlag | src/game/anim.c |
 | objects | generic object handler (type 1: Generic_Handler, its modes), head tracking (Head_Update and modes 1-4, Angle_Approach/ApproachLim), foot anchoring (Obj_SetFeet, Obj_AnchorFoot), Obj_MoveLocal, distances and angles (Dist2_XZ, Camera_Distance, Angles_LookAt, Angle_XZ, Angle_Seg); collision: objects against each other (cylinders) and against the room's wall polygons (sliding along walls, corners), 2D segment tests | src/game/object.c |
-| player | Player_Setup, Player_Handler, Player_Breath; states: init, normal (target search with MSVC-order qsort, two-gun arm aiming), hits (light, knocked down), dying, scripted; normal substates: standing, walking, turning, walking backwards, quick turn, climbing steps (ledge and step probes Wall_Ahead/Step_Ahead), pushing; damage scaling, inventory search, ammo; floor heights; effect slots; model set-up (part chains), effect removal by kind; weapon and sub-weapon set-ups; aiming (upper-body pitch toward the target) and the weapon/sub-weapon substates; shots (Weapon_Hit: targets in the weapon's cone nearest first, walls between, damage and reaction), sub-weapons in flight (homing, walls, blasts, noise); firearms: the twelve weapon state handlers, the handgun's firing and the shared aiming substates (ready, hold, lower, next target, turn back, walk, walk back, turn), ammunition, muzzle flashes. Still original: the other weapons' own substates and firing (0x4AA7C0..0x4B4600), substate 9 (0x47F0F0) | src/game/gun.c, src/game/player.c, src/game/weapon.c, src/game/object.c, src/game/crt.c |
+| player | Player_Setup, Player_Handler, Player_Breath; states: init, normal (target search with MSVC-order qsort, two-gun arm aiming), hits (light, knocked down), dying, scripted; normal substates: standing, walking, turning, walking backwards, quick turn, climbing steps (ledge and step probes Wall_Ahead/Step_Ahead), pushing; damage scaling, inventory search, ammo; floor heights; effect slots; model set-up (part chains), effect removal by kind; weapon and sub-weapon set-ups; aiming (upper-body pitch toward the target) and the weapon/sub-weapon substates; shots (Weapon_Hit: targets in the weapon's cone nearest first, walls between, damage and reaction), sub-weapons in flight (homing, walls, blasts, noise); firearms: the twelve weapon state handlers, firing of the handgun and weapons 3 (grenades), 4 (spray), 8 (homing missiles), 9, the shared aiming substates (ready, hold, lower, next target, turn back, walk, walk back, turn), ammunition, muzzle flashes. Still original: weapons 0, 2, 5, 6, 7, 10, 11 (their own substates and firing) and the sub-weapon handlers, substate 9 (0x47F0F0) | src/game/gun.c, src/game/player.c, src/game/weapon.c, src/game/object.c, src/game/crt.c |
 | zones (navigation) | the room's zone graph G+0xA50: nearest zone in sight, shortest paths to the player (Dijkstra, 0x87FCE0), each object's goal point, sight lines against the wall polygons | src/game/zone.c |
 | props | room prop type (a model playing its animation): handler, init, play modes; room change: Eff_KillRoom, Room_SoundInit | src/game/object.c, src/game/game.c |
 | files | File_RequestLoad/Raw, File_Tick, File_Process and the record handlers (copy, VRAM image, CLUT, sound bank, stream, LZSS, texture tiles, PC buffer), Rand8 | src/game/file.c; host files and heap: src/game/pcio.c |
@@ -141,7 +141,7 @@ alone and the harness ignores them.
 
 ## Next
 
-The script VM, the keyframe animation, the generic object handler (type 1), object collision and the zone navigation are complete; the standalone build plays 1500 frames into room 101 without faults. Next: the rest of the player (the other weapons' substates and firing in 0x4AA7C0..0x4B4600, substate 9 0x47F0F0), then the room
+The script VM, the keyframe animation, the generic object handler (type 1), object collision and the zone navigation are complete; the standalone build plays 1500 frames into room 101 without faults. Next: the rest of the player (weapons 0, 2, 5, 6, 7, 10, 11 and the sub-weapon handlers, substate 9 0x47F0F0), then the room
 change (game mode 4, 0x451990) and the enemies' type handlers (Enemy_LoadModel 0x482070), the object
 type handlers (*0x87DCA0), sound/BGM (0x48C9C0..0x48CE60), messages
 (0x4718F0), fades and menus. Then the libgpu side

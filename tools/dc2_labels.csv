@@ -669,3 +669,12 @@ address,kind,name,category,confidence,notes
 0x4AB640,func,Gun_Walk,weapon,high,weapon substate 5: walk aiming
 0x4AB870,func,Gun_Back,weapon,high,weapon substate 6: walk back aiming
 0x4ABAA0,func,Gun_Turn,weapon,high,weapon substate 7: turn aiming
+0x4AD9B0,func,Spray_Walk,weapon,high,"weapon 4 substate 5: walk aiming, spraying"
+0x4AD370,func,Spray_Back,weapon,high,"weapon 4 substate 6: walk back, spraying"
+0x4B0220,func,Rifle_Turn,weapon,high,weapons 2-11 substate 7: turn aiming (slower)
+0x4B0AE0,func,Rifle_Walk,weapon,high,weapons 3/8/9 substate 5: walk aiming
+0x4B0CE0,func,Rifle_Back,weapon,high,weapons 3/8/9 substate 6: walk back aiming
+0x4AC9E0,func,Weapon3_Fire,weapon,high,"weapon 3: launches a grenade (object effect, state 5)"
+0x4AD6E0,func,Weapon4_Fire,weapon,high,"weapon 4: the spray (effect 1000 ahead, wall probe 0x75BDA8)"
+0x4B04D0,func,Weapon8_Fire,weapon,high,weapon 8: three homing missiles at the targets
+0x4B0910,func,Weapon9_Fire,weapon,high,weapon 9: shot (Weapon_Hit kind 9)
