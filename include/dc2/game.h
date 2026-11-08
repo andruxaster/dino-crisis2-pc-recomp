@@ -458,6 +458,43 @@ u32  DC2CALL Mines_Place(gptr o, gptr pos);                            /* 0x47C8
 void DC2CALL Player_Crouch(gptr o);                                    /* 0x47F0F0 */
 void DC2CALL Player_WaterStand(gptr o);                                /* 0x47E050 */
 void DC2CALL Player_WaterWalk(gptr o);                                 /* 0x47E640 */
+
+/* door transitions (door.c) */
+gptr DC2CALL Door_Dest(void);                                          /* 0x48B820 */
+gptr DC2CALL Room_Name(u32 area, u32 room);                            /* 0x495C90 */
+void DC2CALL Lights_ListReset(void);                                   /* 0x46B890 */
+void DC2CALL Camera_Aim(gptr eye, gptr target, gptr ang, gptr dist);   /* 0x4038E0 */
+void DC2CALL Door_SetupPlayer(gptr d, u32 idx, gptr pos);              /* 0x41E6B0 */
+void DC2CALL Door_SetupModel(gptr d, u32 idx, gptr model, u32 x, u32 yaw);/* 0x41E790 */
+void DC2CALL Door_SetCamera(gptr cam);                                 /* 0x41E820 */
+void DC2CALL Door_SetLight(gptr d);                                    /* 0x41E8F0 */
+void DC2CALL Door_Init(gptr d);                                        /* 0x41E310 */
+void DC2CALL Door_Run(gptr d);                                         /* 0x41E9C0 */
+void DC2CALL Door_AreaSwitch(gptr d);                                  /* 0x41EAD0 */
+void DC2CALL Room_LoadTask(gptr d);                                    /* 0x41EBB0 */
+void DC2CALL Door_Music(gptr d);                                       /* 0x41EC50 */
+void DC2CALL Door_End(gptr d);                                         /* 0x41ED10 */
+void DC2CALL Door_Task(void);                                          /* 0x41E2D0 */
+void DC2CALL Door_Common(gptr d);                                      /* 0x41CB70 */
+void DC2CALL Door_SwingAMove(gptr d);                                  /* 0x41CA70 */
+void DC2CALL Door_SwingA(gptr d);                                      /* 0x41CA50 */
+void DC2CALL Door_SwingBMove(gptr d);                                  /* 0x41CC60 */
+void DC2CALL Door_SwingB(gptr d);                                      /* 0x41CC40 */
+void DC2CALL Door_Shutter(gptr d, s32 step);                           /* 0x41D090 */
+void DC2CALL Door_ShutterSlow(gptr d);                                 /* 0x41D080 */
+void DC2CALL Door_ShutterFast(gptr d);                                 /* 0x41D210 */
+void DC2CALL Door_Slide(gptr d, u32 dir);                              /* 0x41D230 */
+void DC2CALL Door_SlideL(gptr d);                                      /* 0x41D220 */
+void DC2CALL Door_SlideR(gptr d);                                      /* 0x41D420 */
+void DC2CALL Door_Common2(gptr d);                                     /* 0x41D460 */
+void DC2CALL Door_Double(gptr d, s32 step, s32 lim, s32 lim2);         /* 0x41D4F0 */
+void DC2CALL Door_DoubleA(gptr d);                                     /* 0x41D430 */
+void DC2CALL Door_DoubleB(gptr d);                                     /* 0x41D670 */
+void DC2CALL Door_DoubleC(gptr d);                                     /* 0x41D6A0 */
+void DC2CALL Door_Double2(gptr d, s32 step);                           /* 0x41D6F0 */
+void DC2CALL Door_Double2A(gptr d);                                    /* 0x41D6D0 */
+void DC2CALL Door_Double2B(gptr d);                                    /* 0x41D820 */
+void DC2CALL Door_Double2C(gptr d);                                    /* 0x41D840 */
 u32  DC2CALL Crouch_Fire(gptr o);                                      /* 0x47FA80 */
 
 void DC2CALL Spray_Walk(gptr o);                       /* 0x4AD9B0 */

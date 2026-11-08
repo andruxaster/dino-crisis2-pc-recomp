@@ -313,7 +313,7 @@ address,kind,name,category,confidence,notes
 0x48BB20,func,Script_SetCond,game,high,"value ==0 -> 0x2A, >0 -> 0x4C, <0 -> 0x70 (thread+0x9C)"
 0x48B040,func,AOT_Check,game,high,"each frame: G+0xA5C 32 x 40-byte trigger areas vs player level/x,z; kind handler 0x738B68"
 0x48B390,func,AOT_Door,game,high,"locked (+0x20 msg, +0x21 key flag group 8) -> message; else 0x7593B4 = &aot+0x14 (dest), clear AOTs, Task 0x41E2D0"
-0x41E2D0,func,Door_Task,game,medium,"door transition task started by AOT_Door"
+0x41E2D0,func,Door_Task,game,high,"door transition task started by AOT_Door; state 0x748A60, mode table 0x71FFC4"
 0x495E90,func,Menu_Open,game,medium,"(mode, ...) 1 item pickup, 2 item box; also script op 0x2C"
 0x738C40,data,g_script_ops,game,high,"96 opcode handlers (0x489990 = nop/unused)"
 0x738B68,data,g_aot_kinds,game,high,"12 AOT kind handlers (kind 4 unused)"
@@ -501,7 +501,7 @@ address,kind,name,category,confidence,notes
 0x4512F0,func,Game_AreaLoad,game,high,"mode 1"
 0x451330,func,Game_RoomEnter,game,high,"mode 2"
 0x451790,func,Game_Play,game,high,"mode 3: menus, then 0x452370"
-0x451990,func,Game_RoomChange,game,high,"mode 4"
+0x451990,func,Game_Continue,game,high,"game mode 4: game over / continue screen ('Will you continue?')"
 0x475630,func,OpeningTask,game,high,""
 0x475660,func,Opening_Init,game,high,""
 0x475680,func,Opening_Run,game,high,""
@@ -735,3 +735,37 @@ address,kind,name,category,confidence,notes
 0x47FA80,func,Crouch_Fire,player,high,"shot while crouched: weapon 10 hit, weapon 11 shell"
 0x47E050,func,Player_WaterStand,player,high,"in-water substate 0: standing (dodge button crouches)"
 0x47E640,func,Player_WaterWalk,player,high,"in-water substate 2: wading, aiming while wading"
+0x41E310,func,Door_Init,game,high,"door mode 0: player, models, camera, light, name"
+0x41E6B0,func,Door_SetupPlayer,game,high,
+0x41E790,func,Door_SetupModel,game,high,"door type models +4/+8"
+0x41E820,func,Door_SetCamera,game,high,"camera from 0x71F020 by type +0x14"
+0x41E8F0,func,Door_SetLight,game,high,"light from 0x71FD70"
+0x41E9C0,func,Door_Run,game,high,"door mode 1: type handler, step table 0x71FFD0, name text"
+0x41EAD0,func,Door_AreaSwitch,game,high,"step 0"
+0x41EC50,func,Door_Music,game,high,"step 2"
+0x41ED10,func,Door_End,game,high,"door mode 2: chains to 0x4510F0"
+0x41ED70,func,Door_Score,game,medium,"score panel after a fight, D+0x2491 counts down: points G+0xC14, kills +0xC24, combo bonus +0xC20 graded by 0x71FF68"
+0x41CB70,func,Door_Common,game,high,"shared door states: fade, flag 2/6, done bits 0x11"
+0x48B820,func,Door_Dest,game,high,"returns U32(0x7593B4)"
+0x495C90,func,Room_Name,game,high,"(area, room): name text"
+0x46B890,func,Lights_ListReset,game,medium,
+0x4038E0,func,Camera_Aim,game,high,"distance and look-at angles"
+0x41CA50,func,Door_SwingA,game,high,"Door_Common + Door_SwingAMove"
+0x41CA70,func,Door_SwingAMove,game,high,"hinged door, object 1 yaw +0x14 from frame 0xB to 0x1D"
+0x41CC40,func,Door_SwingB,game,high,
+0x41CC60,func,Door_SwingBMove,game,high,"hinged door, yaw +0x12 from frame 0xA to 0x1C"
+0x41D090,func,Door_Shutter,game,high,"(d, step): object 1 rolled up, stand-in walks under"
+0x41D080,func,Door_ShutterSlow,game,high,"step 0x1E"
+0x41D210,func,Door_ShutterFast,game,high,"step 0x50"
+0x41D230,func,Door_Slide,game,high,"(d, dir): object 1 slides aside and back"
+0x41D220,func,Door_SlideL,game,high,
+0x41D420,func,Door_SlideR,game,high,
+0x41D460,func,Door_Common2,game,high,"shared fade out / end states of the double doors"
+0x41D4F0,func,Door_Double,game,high,"(d, step, lim, lim2): objects 1 and 2 slide apart and close"
+0x41D430,func,Door_DoubleA,game,high,
+0x41D670,func,Door_DoubleB,game,high,
+0x41D6A0,func,Door_DoubleC,game,high,
+0x41D6F0,func,Door_Double2,game,high,"(d, step): double doors that stay open"
+0x41D6D0,func,Door_Double2A,game,high,
+0x41D820,func,Door_Double2B,game,high,
+0x41D840,func,Door_Double2C,game,high,

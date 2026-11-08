@@ -72,6 +72,7 @@ static void restore(u8 **src) { for (int i = 0; i < 2; i++) memcpy(MEM(RW[i].lo)
 static int g_fail, g_tests;
 static u32 g_ign_addr, g_ign_len;    /* bytes the original fills with stack garbage */
 static int g_ign_objpads;            /* matrix pads (+0x32) of test objects and parts */
+static int g_ign_door;               /* door scene: matrix pads */
 static int g_ign_throw;              /* thrown sub-weapons: stack pointers / bytes kept (see below) */
 static char g_what[256];
 
@@ -114,6 +115,13 @@ static int compare(const char *name, u32 r_orig, u32 r_new, u32 rmask)
             for (u32 j = 0; j < 4; j++) { u32 a = 0x6D6000u + k * 0xAC + 0xA0 + j; if (a >= RW[0].lo && a < RW[0].hi) snap1[0][a - RW[0].lo] = U8(a); }
         for (u32 k = 0; k < 12; k++) { u32 a = 0x694000u + k * 0x70 + 0x46; snap1[0][a - RW[0].lo] = U8(a); }
     }
+    if (g_ign_door)             /* the door scene's objects and parts: matrix pads */
+        for (u32 k = 0; k < 3 + 0x1E + 3; k++) {
+            u32 a = k < 3 ? 0x748A60u + 0x530 + k * 0x260 + 0x32 : k < 0x21 ? 0x748A60u + 0xC50 + (k - 3) * 0xCC + 0x32
+                                                                          : 0x6DDB00u + (k - 0x21) * 0x80 + 0x32;
+            snap1[1 - (a < 0x703000)][a - RW[1 - (a < 0x703000)].lo] = U8(a);
+            snap1[1 - (a < 0x703000)][a + 1 - RW[1 - (a < 0x703000)].lo] = U8(a + 1);
+        }
     for (u32 k = 0; k < g_ign_len; k++)
         for (int i = 0; i < 2; i++)
             if (g_ign_addr + k >= RW[i].lo && g_ign_addr + k < RW[i].hi)
@@ -585,7 +593,7 @@ static Stub g_stubs[] = {
     {0x4C29D6, "d"},         /* 59: Task_Chain */
     /* 60..: title */
     {0, ""}, {0, ""}, {0, ""}, {0, ""}, {0, ""}, {0, ""},
-    {0x494BA0, "ddddddd"}, {0x4C0600, "ddd"}, {0x4C0690, "d"}, {0x4C05D0, "dd"}, {0x4C06F0, "ddddd"},
+    {0x494BA0, "dwddddd"}, {0x4C0600, "ddd"}, {0x4C0690, "d"}, {0x4C05D0, "dd"}, {0x4C06F0, "ddddd"},
     /* 71..: game task */
     {0x496410, ""}, {0x46FC50, "d"}, {0x403480, ""}, {0x470CB0, ""}, {0x452450, ""}, {0x48FB50, "d"},
     {0, ""}, {0x4BF130, "d"}, {0, ""}, {0x403520, ""}, {0x46B8C0, ""}, {0x407170, ""},
@@ -594,6 +602,8 @@ static Stub g_stubs[] = {
     {0, ""}, {0, ""},
     /* 91..: player */
     {0, ""}, {0x4542F0, "pdpd", {6, 6}}, {0x4BF330, ""},
+    /* 94..: doors */
+    {0x48CA40, ""}, {0x494DE0, "d"}, {0x41ED70, "d"}, {0x46BA00, "d"},
 };
 #define STUB_GAME 71
 #define STUB_LOAD 50
@@ -648,13 +658,16 @@ REC(46) REC(47) REC(48) REC(49) REC(50) REC(51) REC(52) REC(53) REC(54) REC(55) 
 REC(58) REC(59) REC(60) REC(61) REC(62) REC(63) REC(64) REC(65) REC(66) REC(67) REC(68) REC(69)
 REC(70) REC(71) REC(72) REC(73) REC(74) REC(75) REC(76) REC(77) REC(78) REC(79) REC(80) REC(81)
 REC(82) REC(83) REC(84) REC(85) REC(86) REC(87) REC(88) REC(89) REC(90) REC(91) REC(92) REC(93)
+REC(94) REC(95) REC(96) REC(97) REC(98) REC(99) REC(100) REC(101)
 static void *const g_recs[] = {rec0, rec1, rec2, rec3, rec4, rec5, rec6, rec7, rec8, rec9, rec10,
     rec11, rec12, rec13, rec14, rec15, rec16, rec17, rec18, rec19, rec20, rec21, rec22, rec23,
     rec24, rec25, rec26, rec27, rec28, rec29, rec30, rec31, rec32, rec33, rec34, rec35, rec36, rec37,
     rec38, rec39, rec40, rec41, rec42, rec43, rec44, rec45, rec46, rec47, rec48, rec49, rec50, rec51,
     rec52, rec53, rec54, rec55, rec56, rec57, rec58, rec59, rec60, rec61, rec62, rec63,
     rec64, rec65, rec66, rec67, rec68, rec69, rec70, rec71, rec72, rec73, rec74, rec75, rec76, rec77,
-    rec78, rec79, rec80, rec81, rec82, rec83, rec84, rec85, rec86, rec87, rec88, rec89, rec90, rec91, rec92, rec93};
+    rec78, rec79, rec80, rec81, rec82, rec83, rec84, rec85, rec86, rec87, rec88, rec89, rec90, rec91, rec92, rec93,
+    rec94, rec95, rec96, rec97, rec98, rec99, rec100, rec101};
+_Static_assert(sizeof g_recs / sizeof g_recs[0] >= sizeof g_stubs / sizeof g_stubs[0], "a recorder per stub");
 /* Task_Sleep: the file loader "runs" while the task sleeps */
 static u32 __cdecl ts_sleep(u32 n)
 { u32 v[5] = {n, U16(0x87FFE8)}; rec_common(STUB_LOAD, v); U16(0x87FFEA) = 0; return 0; }   /* + file asked for */
@@ -2447,6 +2460,144 @@ static void game_state(void)
     U16(0x87DE10) = (u16)rnd();
 }
 
+/* ---- doors (the room change) --------------------------------------------------------- */
+static void type_tables_stub(int on);
+#define T_DOOR  0x748A60u
+#define T_DEST  0x6DDA00u       /* the door's destination record */
+#define T_CAM   0x6DDA40u
+static void test_doors(void)
+{
+    stubs_install(1);
+    g_ign_objpads = 1; g_ign_door = 1;
+    for (int i = 0; i < iters; i++) {
+        gptr d = T_DOOR, g = G();
+        game_state(); fake_room_block(); anim_setup();
+        for (u32 k = 0; k < 0x24A0; k += 4) U32(d + k) = rnd();
+        memset(MEM(d + 0x530), 0, 0x2438 - 0x530);          /* the scene's objects and parts start cleared (the task clears all) */
+        U8(d + 0x2474) = rnd() % 3; U8(d + 0x2475) = rnd() % 6; U8(d + 0x2476) = rnd() % 4;
+        U8(d + 0x2478) = rnd() % 4; U8(d + 0x2479) = rnd() % 10; U8(d + 0x2481) = rnd() % 20;
+        u8 t = (u8)(rnd() % 4 ? rnd() % 0x5A : (u8[]){0x44, 0x58, 0x59}[rnd() % 3]);
+        U8(d + 0x2480) = t; U8(d + 0x2492) = rnd() % 2;
+        for (u32 k = 0; k < 0xC; k += 2) U16(T_DEST + k) = (u16)rnd();
+        U8(T_DEST + 8) = rnd() % 4; U8(T_DEST + 9) = rnd() % 10; U8(T_DEST + 0xA) = t; U8(T_DEST + 0xB) = rnd() % 20;
+        U32(0x7593B4) = T_DEST;
+        for (u32 k = 4; k <= 8; k += 4) {                     /* the type's door models: a few parts each */
+            gptr m = U32(0x71F1F0 + t * 0x20 + k);
+            if (m) { model_data(m); u32 n = 1 + rnd() % 4; if (U32(m + 0x14) > n) U32(m + 0x14) = n; }
+        }
+        for (u32 k = 0; k < 0x14; k += 2) U16(T_CAM + k) = (u16)(rnd() % 0x2000 - 0x1000);
+        gptr pl = U32(g + 0x940);
+        U32(pl + 0x60) = MODEL_DATA; U32(pl + 0x88) = 0x6CE000u;                       /* AN_TAB */
+        for (u32 k = 0; k < 0x1E; k++) U32(d + 0xC50 + k * 0xCC + 0x50) = rnd() % 8 == 0;   /* the door's parts */
+        U16(g + 0x67C) = rnd() % 2 ? U8(d + 0x2479) : rnd() % 10;
+        U16(g + 0x678) = (u16)(rnd() % 3 ? rnd() : 0); U32(g + 0xC14) = rnd() % 2; U16(g + 0xC24) = rnd() % 0x28;
+        U16(g + 0x11F8) = (u16)rnd(); U16(g + 0x11FC) = (u16)rnd();     /* the characters' saved health */
+        U16(g + 0x138A) = rnd() % 3; Flag_Set(2, 0x14, rnd() % 2); Flag_Set(2, 6, rnd() % 4 == 0); Flag_Set(1, 3, rnd() % 2);
+        stub_at(0x494DE0)->ret = rnd() % 0x100;
+        u32 a[5] = {0};
+        U32(LOG_BASE) = 0;
+        sprintf(g_what, "door type %02X mode %u step %u/%u dest %u/%u busy %u", t, U8(d + 0x2474), U8(d + 0x2475),
+                U8(d + 0x2476), U8(T_DEST + 9), U8(T_DEST + 8), U16(0x87FFEA));
+        check(0x48B820, Door_Dest, "Door_Dest", 0, a, 0xFFFFFFFF);
+        a[0] = rnd() % 10; a[1] = rnd() % 4;
+        check(0x495C90, Room_Name, "Room_Name", 2, a, 0xFFFFFFFF);
+        check(0x46B890, Lights_ListReset, "Lights_ListReset", 0, a, 0);
+        a[0] = T_CAM; a[1] = T_CAM + 6; a[2] = T_CAM + 0x20; a[3] = T_CAM + 0x28;
+        check(0x4038E0, Camera_Aim, "Camera_Aim", 4, a, 0);
+        a[0] = d; a[1] = rnd() % 3; a[2] = T_CAM;
+        check(0x41E6B0, Door_SetupPlayer, "Door_SetupPlayer", 3, a, 0);
+        U32(g + 0x940) = d + 0x530; U32(g + 0x938) = d + 0xC50; U32(0x87DC0C) = 0x1E;
+        for (u32 k = 0; k < 0x1E; k++) U32(d + 0xC50 + k * 0xCC + 0x50) = rnd() % 8 == 0;
+        a[0] = d; a[1] = rnd() % 2; a[2] = MODEL_DATA; a[3] = rnd(); a[4] = rnd();
+        check(0x41E790, Door_SetupModel, "Door_SetupModel", 5, a, 0);
+        a[0] = T_CAM;
+        check(0x41E820, Door_SetCamera, "Door_SetCamera", 1, a, 0);
+        a[0] = d;
+        check(0x41E8F0, Door_SetLight, "Door_SetLight", 1, a, 0);
+        U32(g + 0x940) = pl;
+        memset(MEM(d + 0x530), 0, 0x2438 - 0x530);
+        check(0x41E310, Door_Init, "Door_Init", 1, a, 0);
+        /* running: the door object animated, the type's handler and the steps recorders */
+        anim_setup_at(d + 0x530);
+        U32(0x87F940) = 1 + rnd() % 3; U32(g + 0x940) = d + 0x530;
+        for (u32 k = 1; k < 3; k++) {
+            gptr o = d + 0x530 + k * 0x260, p = 0x6DDB00u + k * 0x80;
+            U32(o + 0x64) = p; U32(p + 0x54) = 0; U32(p + 0x58) = o;
+        }
+        u32 saved[4] = {U32(0x71F1FC + t * 0x20), U32(0x71FFD0), U32(0x71FFD4), U32(0x71FFD8)};
+        U32(0x71F1FC + t * 0x20) = U32(0x71FFD0) = U32(0x71FFD4) = U32(0x71FFD8) = (u32)(uintptr_t)g_recs[STUB_TYPE];
+        U8(d + 0x2475) = rnd() % 3;
+        check(0x41E9C0, Door_Run, "Door_Run", 1, a, 0);
+        U32(0x71F1FC + t * 0x20) = saved[0]; U32(0x71FFD0) = saved[1]; U32(0x71FFD4) = saved[2]; U32(0x71FFD8) = saved[3];
+        type_tables_stub(1);
+        U8(d + 0x2476) = rnd() % 4;
+        check(0x41EAD0, Door_AreaSwitch, "Door_AreaSwitch", 1, a, 0);
+        type_tables_stub(0);
+        U8(d + 0x2476) = rnd() % 3; U8(g + 0x1091) = rnd() % 10; U8(g + 0x1090) = rnd() % 4;
+        check(0x41EBB0, Room_LoadTask, "Room_LoadTask", 1, a, 0);
+        U8(d + 0x2476) = rnd() % 4;
+        check(0x41EC50, Door_Music, "Door_Music", 1, a, 0);
+        check(0x41ED10, Door_End, "Door_End", 1, a, 0);
+        /* the door types' handlers: the stand-in near each threshold */
+        static const struct { u32 addr; void *fn; const char *name; s32 arg[3]; u32 n; } H[] = {
+            {0x41CB70, Door_Common, "Door_Common", {0}, 0},
+            {0x41CA70, Door_SwingAMove, "Door_SwingAMove", {0}, 0}, {0x41CA50, Door_SwingA, "Door_SwingA", {0}, 0},
+            {0x41CC60, Door_SwingBMove, "Door_SwingBMove", {0}, 0}, {0x41CC40, Door_SwingB, "Door_SwingB", {0}, 0},
+            {0x41D090, Door_Shutter, "Door_Shutter", {0}, 1},
+            {0x41D080, Door_ShutterSlow, "Door_ShutterSlow", {0}, 0}, {0x41D210, Door_ShutterFast, "Door_ShutterFast", {0}, 0},
+            {0x41D230, Door_Slide, "Door_Slide", {0}, 1},
+            {0x41D220, Door_SlideL, "Door_SlideL", {0}, 0}, {0x41D420, Door_SlideR, "Door_SlideR", {0}, 0},
+            {0x41D460, Door_Common2, "Door_Common2", {0}, 0},
+            {0x41D4F0, Door_Double, "Door_Double", {0}, 3},
+            {0x41D430, Door_DoubleA, "Door_DoubleA", {0}, 0}, {0x41D670, Door_DoubleB, "Door_DoubleB", {0}, 0},
+            {0x41D6A0, Door_DoubleC, "Door_DoubleC", {0}, 0},
+            {0x41D6F0, Door_Double2, "Door_Double2", {0}, 1},
+            {0x41D6D0, Door_Double2A, "Door_Double2A", {0}, 0}, {0x41D820, Door_Double2B, "Door_Double2B", {0}, 0},
+            {0x41D840, Door_Double2C, "Door_Double2C", {0}, 0},
+        };
+        for (unsigned kk = 0; kk < 4 * sizeof H / sizeof H[0]; kk++) {
+            unsigned k = kk % (sizeof H / sizeof H[0]);
+            gptr o = d + 0x530;
+            U32(g + 0x940) = o;
+            anim_setup_at(o);
+            U32(d + 0x249C) = AN_TAB;
+            for (u32 j = 1; j < 3; j++) {
+                gptr q = o + j * 0x260, p = 0x6DDB00u + j * 0x80;
+                U32(q + 0x64) = p; U32(p + 0x54) = 0; U32(p + 0x58) = q;
+                /* thresholds, hit exactly after a step (or one off) */
+                static const s16 edge[] = {-2000, -1000, -0x578, -0x3E8, -0x320, -0x258, -0x190, 0, 0x190, 0x258, 0x320, 0x3E8, 0x578, 1000, 2000};
+                static const s16 dlt[] = {0, 1, -1, 0x14, -0x14, 0x19, -0x19, 0x1E, -0x1E, 0x32, -0x32, 0x50, -0x50};
+                U16(q + 0x40) = rnd() % 4 ? (u16)(edge[rnd() % 15] + dlt[rnd() % 13] + (rnd() % 3 ? 0 : (s16)(rnd() % 3) - 1)) : (u16)(rnd() % 3000 - 1500);
+                U16(q + 0x42) = rnd() % 4 ? (u16)(edge[rnd() % 15] + dlt[rnd() % 13] + (rnd() % 3 ? 0 : (s16)(rnd() % 3) - 1)) : (u16)(rnd() % 5000 - 2500);
+                U16(q + 0x48) = (u16)rnd(); U16(q + 0x4A) = (u16)rnd(); U16(q + 0x4C) = (u16)rnd();
+            }
+            U16(o + 0x92) = rnd() % 0x22;
+            static const s16 zed[] = {0, 0x90, 0x300};
+            U16(o + 0x44) = rnd() % 2 ? (u16)(zed[rnd() % 3] + (s16)(rnd() % 3) - 1) : (u16)(rnd() % 0x400 - 0x200);
+            U8(d + 0x2477) = rnd() % 10;
+            U8(d + 0x247D) = rnd() % 2 ? 0x11 : (u8)rnd();
+            U8(d + 0x247E) = rnd() % 2; U8(d + 0x2474) = rnd() % 3;
+            U8(g + 0x108F) = rnd() % 4;
+            Flag_Set(2, 6, rnd() % 3 == 0); Flag_Set(1, 3, rnd() % 2);
+            static const s32 st[] = {-0x50, -0x32, -0x19, -0x14, 0x14, 0x19, 0x1E, 0x32, 0x50};
+            a[0] = d;
+            a[1] = H[k].n == 1 && k == 8 ? rnd() % 2 * (rnd() % 2 ? 1 : 0x100) : (u32)st[rnd() % 9];
+            a[2] = rnd() % 2 ? 0x3E8 : 0x258; a[3] = rnd() % 2 ? 0x320 : 0x190;
+            if (k >= 12 && k <= 15 && rnd() % 4 == 0) {           /* the double doors closing onto lim2 */
+                static const s32 ds[4][2] = {{0, 0}, {-0x32, 0x320}, {0x32, 0x320}, {0x1E, 0x190}};
+                s32 step = k == 12 ? (s32)a[1] : ds[k - 12][0], l2 = k == 12 ? (s32)(s16)a[3] : ds[k - 12][1];
+                U8(d + 0x2477) = 6;
+                U16(o + 0x2A0) = (u16)((rnd() % 2 ? l2 : -l2) - step + (s32)(rnd() % 3) - 1);
+            }
+            U32(LOG_BASE) = 0;
+            sprintf(g_what, "door handler %s state %u frame %u", H[k].name, U8(d + 0x2477), U16(o + 0x92));
+            check(H[k].addr, H[k].fn, H[k].name, 1 + H[k].n, a, 0);
+        }
+    }
+    g_ign_objpads = 0; g_ign_door = 0;
+    stubs_install(0);
+}
+
 /* ---- title screen ---------------------------------------------------------------- */
 static void title_state(void)
 {
@@ -2641,7 +2792,7 @@ __declspec(dllexport) void harness_main(int argc, char **argv)
     struct { const char *name; void (*fn)(void); } T[] = {
         {"flags", test_flags}, {"geometry", test_geom}, {"script values", test_script_values},
         {"script opcodes", test_script_ops}, {"script objects", test_objects},
-        {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"objects 2", test_object}, {"collision", test_collision}, {"player", test_player}, {"player states", test_player2}, {"zones", test_zones}, {"loading", test_room}, {"title", test_title}, {"game task", test_game},
+        {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"objects 2", test_object}, {"collision", test_collision}, {"player", test_player}, {"player states", test_player2}, {"zones", test_zones}, {"loading", test_room}, {"title", test_title}, {"game task", test_game}, {"doors", test_doors},
     };
     for (unsigned i = 0; i < sizeof T / sizeof T[0]; i++) {
         int f0 = g_fail, t0 = g_tests;
