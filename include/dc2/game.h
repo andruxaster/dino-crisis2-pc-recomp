@@ -456,6 +456,8 @@ void DC2CALL Sub4_Use(gptr o);                                         /* 0x4B36
 void DC2CALL Sub6_Use(gptr o);                                         /* 0x4B3AA0 */
 u32  DC2CALL Mines_Place(gptr o, gptr pos);                            /* 0x47C8F0 */
 void DC2CALL Player_Crouch(gptr o);                                    /* 0x47F0F0 */
+void DC2CALL Player_WaterStand(gptr o);                                /* 0x47E050 */
+void DC2CALL Player_WaterWalk(gptr o);                                 /* 0x47E640 */
 u32  DC2CALL Crouch_Fire(gptr o);                                      /* 0x47FA80 */
 
 void DC2CALL Spray_Walk(gptr o);                       /* 0x4AD9B0 */

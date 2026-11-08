@@ -825,6 +825,99 @@ static int try_dodge(gptr o)
     U8(o + 0x11B) = 0;
     return 1;
 }
+/* ---- in water (table 0x738148): standing and wading; the dodge button crouches ---- */
+/* action: a step up ahead (state 8) */
+static int water_step(gptr o)
+{
+    if (!(U8(0x87DC08) & 0x20)) return 0;
+    if (Wall_Ahead(o, 0x280) && Step_Ahead(o, 0x3E8, 0xC8, (U8(o + 0x11A) & 0x30) << 6)) {
+        U8(o + 0x174) |= 1;
+        U8(o + 0x11B) = 0;
+        U32(o + 0x1DC) = 5;
+        U32(o + 0x54) = 0x801;
+        return 1;
+    }
+    Flag_Set(2, 0xD, 1);
+    return 0;
+}
+
+/* the buttons common to both: crouch, sub-weapon, action flag, quick turn;
+ * 1 if one was taken */
+static int water_buttons(gptr o)
+{
+    u8 pr = U8(0x87DC94);
+    if ((pr & 0x40) && !Fn_4BF330()) {
+        Flag_Set(2, 0xD, 0);
+        Flag_Set(1, 9, 1);
+        U8(o + 0x11B) = 0;
+        U32(o + 0x1DC) = 4; U32(o + 0x54) = 0x901;
+        return 1;
+    }
+    pr = U8(0x87DC94);
+    if ((pr & 0x10) && (U16(G() + 0x10B4) & 0xFF00)) {
+        if (!Player_SubDone()) { Flag_Set(2, 0xD, 0); U32(o + 0x54) = 0xA01; }
+        return 1;
+    }
+    if (pr & 0x20) { Flag_Set(2, 1, 1); return 1; }
+    if (pr & 2) {
+        Flag_Set(2, 0xD, 0);
+        U8(o + 0x11B) = 0;
+        U32(o + 0x1DC) = 4; U32(o + 0x54) = 0x701;
+        return 1;
+    }
+    return 0;
+}
+
+void DC2CALL Player_WaterStand(gptr o)                             /* 0x47E050 */
+{
+    switch (U8(o + 0x56)) {
+    case 0:
+        Anim_Start(o, 0x16, U16(PX() + 0x1E), 1, U16(PX() + 0x1C));
+        U8(o + 0x56)++;
+        U32(o + 0xF0) = 0; U16(o + 0xF4) = 0;
+        break;
+    case 1: Anim_Step(o); break;
+    }
+    if (water_step(o) || water_buttons(o)) return;
+    u32 h = PAD_HELD;
+    if ((h & 8) && (U8(G() + 0x10B4) & 0xF)) { Flag_Set(2, 0xD, 0); U32(o + 0x54) = 0x501; return; }
+    if (h & 0x1000) {
+        Flag_Set(2, 0xD, 0);
+        U8(o + 0x11B) = 0;
+        U32(o + 0x1DC) = 4; U32(o + 0x54) = 0x201;
+        return;
+    }
+    if (h & 0x4000) { Flag_Set(2, 0xD, 0); U32(o + 0x1DC) = 8; U32(o + 0x54) = 0x401; return; }
+    if (h & 0xA000) { Flag_Set(2, 0xD, 0); U32(o + 0x1DC) = 4; U32(o + 0x54) = 0x301; }
+}
+
+void DC2CALL Player_WaterWalk(gptr o)                              /* 0x47E640 */
+{
+    switch (U8(o + 0x56)) {
+    case 0:
+        Anim_Start(o, 0x1D, U16(PX() + 0x1E), 1, U16(PX() + 0x1C));
+        U8(o + 0x56)++;
+        U32(o + 0xF0) = 0; U16(o + 0xF4) = 0x60;
+        break;
+    case 1: U16(o + 0xF4) = 0x60; Anim_Step(o); break;
+    }
+    if (water_step(o)) return;
+    if (PAD_HELD & 0x2000) U16(o + 0x4A) += 0x32;
+    if (PAD_HELD & 0x8000) U16(o + 0x4A) -= 0x32;
+    if (water_buttons(o)) return;
+    u32 h = PAD_HELD;
+    if ((h & 8) && (U8(G() + 0x10B4) & 0xF)) {          /* aim while wading */
+        Flag_Set(2, 0xD, 0);
+        U32(o + 0xF0) = 0; U8(o + 0x11B) = 0;
+        U16(PX() + 0x30) = 0x800;
+        Anim_Start(o, 0x25, U16(o + 0x92), 1, 4);
+        U32(o + 0x54) = 0x1050501;
+        return;
+    }
+    if (h & 0x4000) { U16(o + 0xF4) = 0; return; }
+    if (!(h & 0x1000)) { Flag_Set(2, 0xD, 0); U32(o + 0x1DC) = 5; U32(o + 0x54) = 1; }
+}
+
 
 /* walking forward; turning; aim, sub-weapon, stop */
 void DC2CALL Player_Walk(gptr o)                                   /* 0x47E290 */

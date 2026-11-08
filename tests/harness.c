@@ -1852,6 +1852,15 @@ static void test_player2(void)
             U8(o + 0x56) = rnd() % 4 ? rnd() % 3 : 0xFF; U16(o + 0x92) = rnd() % 64;
             U32(0x87DC08) = rnd() % 3 ? (rnd() & 0xF0FE) : rnd();
             check(0x47E290, Player_Walk, "Player_Walk", 1, a, 0);
+            for (u32 r = 0; r < 2; r++) {                   /* in water */
+                U8(o + 0x56) = (u8)(rnd() % 4 ? rnd() % 2 : rnd() % 4);
+                U32(0x87DC08) = rnd() % 3 ? (rnd() & 0xF0FE) : rnd() % 2 ? 0x20 : (u32)(1u << (rnd() % 16));
+                U32(0x87DC94) = rnd() % 2 ? 0 : 1u << (rnd() % 8);
+                stub_at(0x4BF330)->ret = rnd() % 2;
+                sprintf(g_what, "water %02X held %08X press %02X set %04X", U8(o + 0x56), U32(0x87DC08), U8(0x87DC94), U16(G() + 0x10B4));
+                check(r ? 0x47E640 : 0x47E050, r ? (void *)Player_WaterWalk : (void *)Player_WaterStand,
+                      r ? "Player_WaterWalk" : "Player_WaterStand", 1, a, 0);
+            }
             U8(o + 0x56) = rnd() % 3; U32(0x87DC08) = rnd() % 3 ? (rnd() & 0xF0FE) : rnd(); U32(0x87DC94) = rnd() % 2 ? 0 : (u8)rnd();
             check(0x47E890, Player_Turn, "Player_Turn", 1, a, 0);
             U8(o + 0x56) = rnd() % 3; U32(0x87DC08) = rnd() % 3 ? (rnd() & 0xF0FE) : rnd(); U32(0x87DC94) = rnd() % 2 ? 0 : (u8)rnd();

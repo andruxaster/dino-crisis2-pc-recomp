@@ -733,3 +733,5 @@ address,kind,name,category,confidence,notes
 0x4B4580,func,Sub9_PutBack,weapon,high,"flare into the hand"
 0x47F0F0,func,Player_Crouch,player,high,"normal substate 9: crouched aiming with weapons 10/11 (eye offset in the player block +0x40..+0x54)"
 0x47FA80,func,Crouch_Fire,player,high,"shot while crouched: weapon 10 hit, weapon 11 shell"
+0x47E050,func,Player_WaterStand,player,high,"in-water substate 0: standing (dodge button crouches)"
+0x47E640,func,Player_WaterWalk,player,high,"in-water substate 2: wading, aiming while wading"
