@@ -22,25 +22,64 @@ static int overlap(s16 a0, s16 a1, s16 b0, s16 b1)
     return lo2 <= hi1 && hi2 >= lo1;
 }
 
-/* do segments s (x1,z1,x2,z2) and w cross; only crossings of one turning
- * direction count (the walls are one-sided) */
-u32 DC2CALL Wall_Cross(gptr s, gptr w)                              /* 0x487160 */
+/* do segments s (x1,z1,x2,z2) and w cross; *den gets the cross product of
+ * their directions (its sign: which way s crosses w) */
+static int seg_cross(gptr s, gptr w, s32 *den)
 {
     if (!overlap(S16(s), S16(s + 4), S16(w), S16(w + 4))) return 0;
     if (!overlap(S16(s + 2), S16(s + 6), S16(w + 2), S16(w + 6))) return 0;
     s32 x1 = S16(s), z1 = S16(s + 2), x3 = S16(w), z3 = S16(w + 2);
     u32 dx1 = (u32)(S16(s + 4) - x1), dz1 = (u32)(S16(s + 6) - z1);
     u32 dx2 = (u32)(S16(w + 4) - x3), dz2 = (u32)(S16(w + 6) - z3);
-    u32 p = dx1 * dz2, q = dx2 * dz1;
-    s32 den = (s32)(p - q);
-    if (!den) return 0;
+    s32 d = (s32)(dx1 * dz2 - dx2 * dz1);
+    if (!d) return 0;
     u32 ez = (u32)(z1 - z3), ex = (u32)(x1 - x3);
     s32 n1 = (s32)(ez * dx2 - ex * dz2), n2 = (s32)(ez * dx1 - ex * dz1);
-    if (den > 0) { if (n1 < 0 || n1 > den) return 0; }
-    else if (den > n1 || n1 > 0) return 0;
-    if (den > 0) { if (n2 < 0 || n2 > den) return 0; }
-    else if (den > n2 || n2 > 0) return 0;
-    return (s32)(q - p) < 0;
+    if (d > 0) { if (n1 < 0 || n1 > d) return 0; }
+    else if (d > n1 || n1 > 0) return 0;
+    if (d > 0) { if (n2 < 0 || n2 > d) return 0; }
+    else if (d > n2 || n2 > 0) return 0;
+    *den = d;
+    return 1;
+}
+
+/* only crossings of one turning direction count (the walls are one-sided) */
+u32 DC2CALL Wall_Cross(gptr s, gptr w)                              /* 0x487160 */
+{
+    s32 d;
+    return seg_cross(s, w, &d) && (s32)(0u - (u32)d) < 0;
+}
+
+/* both directions */
+u32 DC2CALL Seg_Hit(gptr s, gptr w)                                 /* 0x47C6C0 */
+{
+    s32 d;
+    return (u32)seg_cross(s, w, &d);
+}
+
+/* a wall (flag 1 polygons and edges, not 4) between points a and b on
+ * their floors: shots */
+u32 DC2CALL Wall_Between(gptr a, gptr b)                           /* 0x47C550 */
+{
+    if (!U8(U32(G() + 0xA4C))) return 0;
+    gptr seg = Tmp_Push(0x10), w = seg + 8;
+    u32 r = 0;
+    U16(seg) = U16(a); U16(seg + 2) = U16(a + 4); U16(seg + 4) = U16(b); U16(seg + 6) = U16(b + 4);
+    for (u32 k = 0; k < U8(U32(G() + 0xA4C)); k++) {
+        gptr c = U32(G() + 0xA4C), blk = c + U32(c + 8 + 4 * k);
+        if (!(U8(blk) & 1)) continue;
+        u16 fl = U16(blk + 4);
+        if (!(fl & (1u << ((S16(a + 2) / -1000) & 31))) && !(fl & (1u << ((S16(b + 2) / -1000) & 31)))) continue;
+        if (U8(blk + 3) & 4) continue;
+        gptr e = blk + 8, pt = blk + 8 + U8(blk + 1) * 4;
+        for (u32 j = 0; j < U8(blk + 1); j++, e += 4, pt += 4) {
+            U32(w) = U32(pt); U32(w + 4) = U32(pt + 4);
+            if ((U8(e) & 1) && !(U8(e + 1) & 4) && Seg_Hit(seg, w)) { r = 1; goto done; }
+        }
+    }
+done:
+    Tmp_Pop(0x10);
+    return r;
 }
 
 /* is the way from a to b (points) walled for object o; low walls (flag

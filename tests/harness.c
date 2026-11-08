@@ -115,6 +115,8 @@ static int compare(const char *name, u32 r_orig, u32 r_new, u32 rmask)
             u32 k = 0; while (cur[k] == snap1[i][k]) k++;
             if (g_fail++ < 4000) printf("FAIL %s: memory %08X = %02X, original %02X  [%s]\n",
                                       name, RW[i].lo + k, cur[k], snap1[i][k], g_what);
+            if (getenv("ALLDIFF"))
+                for (u32 j = k; j < n; j++) if (cur[j] != snap1[i][j]) printf("  diff %08X = %02X, original %02X\n", RW[i].lo + j, cur[j], snap1[i][j]);
             return 0;
         }
     }
@@ -565,13 +567,18 @@ static Stub g_stubs[] = {
     /* 89..: object handlers (collision) */
     {0, ""}, {0, ""},
     /* 91..: player */
-    {0x47AFA0, "d"}, {0x4542F0, "pdpd", {6, 8}}, {0x4BF330, ""},
+    {0, ""}, {0x4542F0, "pdpd", {6, 6}}, {0x4BF330, ""},
 };
 #define STUB_GAME 71
 #define STUB_LOAD 50
 #define STUB_FILE 36
 #define NSTUBS (int)(sizeof g_stubs / sizeof g_stubs[0])
 #define STUB_TYPE 34
+static Stub *stub_at(u32 addr)
+{
+    for (u32 k = 0; k < sizeof g_stubs / sizeof g_stubs[0]; k++) if (g_stubs[k].addr == addr) return &g_stubs[k];
+    return &g_stubs[0];
+}
 #define STUB_AOT  35
 
 static u32 rec_common(int id, const u32 *a)
@@ -1405,6 +1412,8 @@ static gptr player_setup_obj(void)
     for (u32 i = 0; i < 16; i++) U8(O_OBJ + i * 0x260 + 0x17B) = rnd() % 3 ? (u8)(rnd() % 3) : (u8)rnd();
     Flag_Set(0, 0xB, rnd() % 4 == 0); Flag_Set(2, 0xF, rnd() % 4 == 0);
     k2_setup();
+    U32(G() + 0x93C) = O_EFF;                           /* no sub-weapon in flight (tested on its own) */
+    for (u32 k = 0; k < 12; k++) U8(O_EFF + k * 0x70 + 0x4E) = 0;
     return o;
 }
 
@@ -1509,6 +1518,24 @@ static void targets_setup(void)
     }
 }
 
+/* aim descriptors of the objects (radius +6, height +8, part +0xA, more +0xB) */
+static void aim_desc_setup(void)
+{
+    { gptr dsc = 0x6DCC00;
+      for (u32 k = 0; k < 16; k++) {
+          gptr ob = O_OBJ + k * 0x260;
+          u32 np = U32(U32(ob + 0x64) + 0x54) ? 2 : 1, nd = 1 + rnd() % 3;
+          U32(ob + 0x134) = rnd() % 8 ? dsc : 0;
+          U8(ob + 0x17B) = rnd() % 4 ? 0 : (u8)rnd();
+          for (u32 m = 0; m < nd; m++, dsc += 0xC) {
+              for (u32 b = 0; b < 6; b += 2) S16(dsc + b) = cl_coord(0, 200);
+              U16(dsc + 6) = rnd() % 400; U16(dsc + 8) = rnd() % 1200;
+              U8(dsc + 0xA) = (u8)(rnd() % np); U8(dsc + 0xB) = (u8)((rnd() & 0xFE) | (m + 1 < nd));
+          }
+      } }
+}
+
+
 static void test_player2(void)
 {
     script_setup();
@@ -1548,14 +1575,20 @@ static void test_player2(void)
             {0x4B2FC0, Sub_SetKnife, "Sub_SetKnife"}, {0x4B33C0, Sub_SetGrenade, "Sub_SetGrenade"},
             {0x4B3A10, Sub_SetMine, "Sub_SetMine"}, {0x4B3D00, Sub_SetKnives2, "Sub_SetKnives2"}};
           for (unsigned k = 0; k < sizeof W / sizeof W[0]; k++) {
-              if (k >= 5 && U32(mo + 0x68) < 13) { a[1] = MODEL_DATA; U32(MODEL_DATA + 0x14) = 13 + rnd() % 4; Model_Setup(mo, MODEL_DATA); }
+              if (k >= 5 && U32(mo + 0x68) < 13) {
+                  for (u32 q = 0; q < 40; q++) U32(PART_POOL + q * 0xCC + 0x50) = 0;   /* room for the model */
+                  a[1] = MODEL_DATA; U32(MODEL_DATA + 0x14) = 13 + rnd() % 4; Model_Setup(mo, MODEL_DATA);
+              }
               check(W[k].addr, W[k].fn, W[k].name, 1, a, 0);
           } }
         a[1] = rnd() % 8;
         check(0x41C970, Light_Reset, "Light_Reset", 1, a + 1, 0xFFFFFFFF);
         U16(G() + 0x10B4) = (u16)(rnd() % 16 | (rnd() % 8) << 8);
         for (int k = 0; k < 24; k++) U32(k < 16 ? 0x737FA0 + 4 * k : 0x737FF0 + 4 * (k - 16)) = g_wep_saved[k];
-        if (U32(mo + 0x68) < 13) { U32(MODEL_DATA + 0x14) = 13 + rnd() % 4; Model_Setup(mo, MODEL_DATA); }
+        if (U32(mo + 0x68) < 13) {
+            for (u32 q = 0; q < 40; q++) U32(PART_POOL + q * 0xCC + 0x50) = 0;
+            U32(MODEL_DATA + 0x14) = 13 + rnd() % 4; Model_Setup(mo, MODEL_DATA);
+        }
         check(0x47ADA0, Player_LoadWeapons, "Player_LoadWeapons", 1, a, 0);
         for (int k = 0; k < 24; k++) U32(k < 16 ? 0x737FA0 + 4 * k : 0x737FF0 + 4 * (k - 16)) = (u32)(uintptr_t)g_recs[STUB_TYPE];
         /* qsort with the target comparator */
@@ -1604,6 +1637,71 @@ static void test_player2(void)
         check(0x47CAE0, Angle_Step, "Angle_Step", 3, a, 0xFFFF);
         a[0] = o;
         check(0x48FCE0, Obj_SaveFeet, "Obj_SaveFeet", 1, a, 0);
+        /* shots */
+        aim_desc_setup();
+        gptr shot = G_SCR + 0x40;
+        S16(G_SCR + 0x60) = (s16)(rnd() % 0x1000); S16(G_SCR + 0x62) = (s16)(rnd() % 0x1000); S16(G_SCR + 0x64) = (s16)(rnd() % 0x1000);
+        if (rnd() % 2) { S16(G_SCR + 0x60) = 0; S16(G_SCR + 0x64) = 0; }
+        RotMatrix(G_SCR + 0x60, shot);
+        U8(0x87E747) = rnd() % 3; U8(G() + 0x108F) = rnd() % 10;
+        U32(G() + 0x948) = O_K3; U16(O_K3 + 0x18) = (u16)(0x200 + rnd() % 0x900);   /* kind 5: the light's reach */
+        a[0] = shot; a[1] = o + 0x40; a[2] = rnd() % 4 ? rnd() % 0x23 : rnd() % 2 ? 5 : 2;
+        sprintf(g_what, "objs %u kind %X rot %X/%X/%X", U32(0x87F940), a[2], U16(G_SCR + 0x60), U16(G_SCR + 0x62), U16(G_SCR + 0x64));
+        check(0x47B430, Weapon_Hit, "Weapon_Hit", 3, a, 0xFFFFFFFF);
+        { u32 n = 1 + rnd() % 24;
+          for (u32 k = 0; k < n * 4; k++) U32(0x74E380 + 4 * k) = rnd() % 4 ? (u32)rnd() : rnd() % 8;
+          a[0] = 0x74E380; a[1] = 0; a[2] = n - 1;
+          sprintf(g_what, "sort %u", n);
+          check(0x47C030, Hit_Sort, "Hit_Sort", 3, a, 0); }
+        check(0x496400, Stat_Shot, "Stat_Shot", 0, a, 0);
+        /* sub-weapons in flight */
+        o = player_setup_obj(); world_setup(); aim_desc_setup(); U32(LOG_BASE) = 0;
+        for (int k = 0; k < 256; k++) U32(TYPE_TAB + 4 * k) = (u32)(uintptr_t)g_recs[STUB_TYPE];
+        U16(O_K3 + 0x18) = (u16)(0x200 + rnd() % 0x900);
+        U32(0x87FD60) = o + 0x1C0;
+        U32(G() + 0x93C) = O_EFF;
+        for (u32 k = 0; k < 12; k++) {
+            gptr e = O_EFF + k * 0x70;
+            static const u8 sts[] = {3, 3, 5, 6, 7, 8, 9, 10, 0x10, 2};
+            U32(e + 0x50) = rnd() % 4 ? 1 | (rnd() & 0x40) : 0;
+            U8(e + 0x4E) = rnd() % 6 ? 3 : (u8)rnd();
+            U8(e + 0x4F) = rnd() % 8 ? sts[rnd() % 10] : (u8)(rnd() % 0x13);   /* weapon kinds stay in the table */
+            U8(e + 0x46) = rnd() % 3 ? (u8)(rnd() % 3) : (u8)rnd(); U8(e + 0x47) = (u8)(rnd() % 3);
+            S16(e + 0x40) = cl_coord(0, 1500); S16(e + 0x42) = rnd() % 3 ? cl_coord(-500, 400) : cl_coord(0, 2500);
+            S16(e + 0x44) = cl_coord(0, 1500);
+            if (rnd() % 16 == 0) S16(e + 0x40 + 2 * (rnd() % 3)) = (s16)(rnd() % 2 ? 29900 : -29900);
+            for (u32 b = 0; b < 6; b += 2) S16(e + 0x48 + b) = (s16)(rnd() % 0x1000);
+            RotMatrix(e + 0x48, e + 0x20);
+            s32 sp = rnd() % 2 ? 1500 : 150;                /* fast ones cross the walls */
+            S16(e + 0x60) = cl_coord(0, sp); S16(e + 0x62) = cl_coord(0, 300); S16(e + 0x64) = cl_coord(0, sp);
+            S16(0x87FD80 + 4 * k) = (s16)(rnd() % 4 ? (s32)(rnd() % 16) : -1);
+            S16(0x87FD82 + 4 * k) = (s16)(U32(U32(O_OBJ + (rnd() % 16) * 0x260 + 0x64) + 0x54) ? rnd() % 2 : 0);
+        }
+        for (u32 k = 0; k < 12; k++) {                  /* homing targets: parts that exist */
+            s16 ti = S16(0x87FD80 + 4 * k);
+            if (ti > 0 && !U32(U32(O_OBJ + ti * 0x260 + 0x64) + 0x54)) S16(0x87FD82 + 4 * k) = 0;
+        }
+        stub_at(0x4542F0)->ret = rnd() % 4 != 0;
+        a[0] = o;
+        { char *w = g_what + sprintf(g_what, "objs %u floor %u:", U32(0x87F940), stub_at(0x4542F0)->ret);
+          for (u32 k = 0; k < 12; k++) {
+              gptr e = O_EFF + k * 0x70;
+              w += sprintf(w, " %X%s/%u", U8(e + 0x4F), (U8(e + 0x50) & 1) && U8(e + 0x4E) == 3 ? "" : "x", U8(e + 0x46));
+          } }
+        check(0x47AFA0, Thrown_Update, "Thrown_Update", 1, a, 0);
+        { gptr e = O_EFF + 0x70 * (rnd() % 12);
+          S16(e + 0x74) = rnd() % 8 ? cl_coord(S16(e + 0x40), 600) : S16(e + 0x40);
+          S16(e + 0x78) = rnd() % 8 ? cl_coord(S16(e + 0x44), 600) : S16(e + 0x44);
+          U16(e + 0x5A) = (u16)(rnd() % 3); U8(e + 0x85) = (u8)(rnd() & 0x18);
+          a[0] = e;
+          check(0x453060, Eff_WallHit, "Eff_WallHit", 1, a, 0xFFFFFFFF);
+          a[0] = e + 0x40; a[1] = rnd(); a[2] = rnd(); a[3] = rnd(); a[4] = rnd(); a[5] = rnd();
+          check(0x48DBC0, Effect_Spawn, "Effect_Spawn", 6, a, 0xFFFFFFFF); }
+        a[0] = rnd(); a[1] = rnd(); a[2] = rnd();
+        U8(G() + 0x10B4) = rnd() % 3 ? (u8)(rnd() % 12) : 0xB; U8(G() + 0x10B5) = (u8)(rnd() % 10);
+        check(0x48B830, Noise_Make, "Noise_Make", 3, a, 0);
+        stub_at(0x4542F0)->ret = 0;
+        targets_setup();                                /* the arms' target needs its descriptors */
         /* arms: the player is the animated object (enough parts) */
         do { anim_setup(); } while (U32(AN_OBJ + 0x68) < 5);
         U32(0x87FD60) = AN_OBJ + 0x1C0; U32(LOG_BASE) = 0;
@@ -1867,6 +1965,7 @@ static void test_zones(void)
         sprintf(g_what, "seg %d %d %d %d / %d %d %d %d", S16(G_SCR), S16(G_SCR + 2), S16(G_SCR + 4), S16(G_SCR + 6),
                 S16(G_SCR + 8), S16(G_SCR + 10), S16(G_SCR + 12), S16(G_SCR + 14));
         check(0x487160, Wall_Cross, "Wall_Cross", 2, a, 0xFFFFFFFF);
+        check(0x47C6C0, Seg_Hit, "Seg_Hit", 2, a, 0xFFFFFFFF);
         check(0x487300, Dist2_XZ, "Dist2_XZ", 2, a, 0xFFFFFFFF);
         /* sight lines */
         gptr o = O_OBJ + 0x260 * (rnd() % 16), t = O_OBJ + 0x260 * (rnd() % 16);
@@ -1876,6 +1975,13 @@ static void test_zones(void)
         a[0] = o; a[1] = o + 0x40; a[2] = rnd() % 2 ? pt : t + 0x40; a[3] = rnd() % 2 ? 0 : rnd();
         sprintf(g_what, "zones %u walls %u who %X fl %X", U16(ZG), U8(CL_ROOM), U8(o + 0x184), U32(o + 0x50));
         check(0x486FB0, Line_Blocked, "Line_Blocked", 4, a, 0xFF);
+        for (u32 k = 0; k < U8(CL_ROOM); k++) {          /* flag 4: not a wall for shots */
+            gptr w = CL_ROOM + U32(CL_ROOM + 8 + 4 * k);
+            if (rnd() % 4 == 0) U8(w + 3) |= 4;
+            for (u32 j = 0; j < U8(w + 1); j++) if (rnd() % 4 == 0) U8(w + 9 + 4 * j) |= 4;
+        }
+        a[0] = o + 0x40; a[1] = rnd() % 2 ? pt : t + 0x40;
+        check(0x47C550, Wall_Between, "Wall_Between", 2, a, 0xFFFFFFFF);
         a[0] = o;
         check(0x486D00, Zone_Find, "Zone_Find", 1, a, 0xFF);
         a[1] = 0x87FCE0;
@@ -2299,9 +2405,10 @@ static LONG WINAPI on_crash(EXCEPTION_POINTERS *e)
 __declspec(dllexport) void harness_main(int argc, char **argv)
 {
     SetUnhandledExceptionFilter(on_crash);
-    const char *exe = argc > 1 ? argv[1] : "Dino2.exe", *data = NULL;
+    const char *exe = argc > 1 ? argv[1] : "Dino2.exe", *data = NULL, *only = NULL;
     for (int i = 2; i < argc; i++) {
         if (!strcmp(argv[i], "-n") && i + 1 < argc) iters = atoi(argv[++i]);
+        else if (!strcmp(argv[i], "-t") && i + 1 < argc) only = argv[++i];   /* one test group */
         else data = argv[i];
     }
     if (!load_image(exe)) { fflush(stdout); TerminateProcess(GetCurrentProcess(), 2); }
@@ -2317,10 +2424,11 @@ __declspec(dllexport) void harness_main(int argc, char **argv)
     };
     for (unsigned i = 0; i < sizeof T / sizeof T[0]; i++) {
         int f0 = g_fail, t0 = g_tests;
+        if (only && strcmp(only, T[i].name)) continue;
         T[i].fn();
         printf("%-16s %6d checks, %d failed\n", T[i].name, g_tests - t0, g_fail - f0);
     }
-    if (data) { int f0 = g_fail, t0 = g_tests; test_lzss(data);
+    if (data && !only) { int f0 = g_fail, t0 = g_tests; test_lzss(data);
                 printf("%-16s %6d checks, %d failed\n", "lzss", g_tests - t0, g_fail - f0);
                 f0 = g_fail; t0 = g_tests; test_files(data);
                 printf("%-16s %6d checks, %d failed\n", "files", g_tests - t0, g_fail - f0);

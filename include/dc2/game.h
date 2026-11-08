@@ -362,4 +362,16 @@ void DC2CALL Prop_PlayTimed(gptr o);                                   /* 0x4462
 /* game.c */
 void DC2CALL Room_SoundInit(void);                                     /* 0x48CA10 */
 
+/* hits */
+u32  DC2CALL Seg_Hit(gptr s, gptr w);                                  /* 0x47C6C0 */
+u32  DC2CALL Wall_Between(gptr a, gptr b);                             /* 0x47C550 */
+void DC2CALL Stat_Shot(void);                                          /* 0x496400 */
+void DC2CALL Hit_Sort(gptr b, u32 lo, u32 hi);                         /* 0x47C030 */
+u32  DC2CALL Weapon_Hit(gptr m, gptr pos, u32 kind);                   /* 0x47B430 */
+
+u32  DC2CALL Eff_WallHit(gptr e);                                     /* 0x453060 */
+gptr DC2CALL Effect_Spawn(gptr pos, gptr data, u32 a, u32 b, u32 c, u32 d); /* 0x48DBC0 */
+void DC2CALL Noise_Make(u32 x, u32 y, u32 z);                          /* 0x48B830 */
+void DC2CALL Thrown_Update(gptr o);                                    /* 0x47AFA0 */
+
 #endif

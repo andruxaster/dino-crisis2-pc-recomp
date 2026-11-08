@@ -129,7 +129,7 @@ void DC2CALL Player_Handler(gptr o)                                /* 0x47CE40 *
     if (U8(G() + 0x108F) == 2 && U8(o + 0x54) == 1 && U8(o + 0x55) != 9 && !Flag_Check(2, 0xF)) {
         if (-1000 * floor_layer(o) > S16(o + 0x42)) U32(o + 0x54) = 0x40901;   /* surfaced: swim */
     }
-    Fn_47AFA0(o);
+    Thrown_Update(o);
     if (!(U8(o + 0x50) & 0x80)) Zone_Update(o);
     Player_Breath(o);
     for (gptr p = U32(G() + 0x940); p < U32(G() + 0x940) + U32(0x87F940) * 0x260; p += 0x260)

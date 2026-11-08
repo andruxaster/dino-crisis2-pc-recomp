@@ -58,7 +58,6 @@
     V(Fn_405E40,          0x405E40, (void), ()) \
     V(Fn_472FD0,          0x472FD0, (void), ()) \
     V(Fn_452370,          0x452370, (void), ()) \
-    V(Fn_47AFA0,          0x47AFA0, (gptr obj), (obj)) \
     F(u32, Fn_4BF330,     0x4BF330, (void), ()) \
     F(u32, Fn_4542F0,     0x4542F0, (gptr a, gptr b, gptr seg, u32 who), (a, b, seg, who)) \
     V(Text_Draw,          0x494BA0, (gptr s, u32 x, u32 y, u32 w, u32 col, u32 a, u32 b), (s, x, y, w, col, a, b)) \

@@ -633,3 +633,12 @@ address,kind,name,category,confidence,notes
 0x446270,func,Prop_PlayTimed,object,high,"+0x1C4 frames, then removed"
 0x448620,func,Eff_KillRoom,object,high,effects that do not outlive the room
 0x48CA10,func,Room_SoundInit,sound,high,room's sound table entry +2 -> 0x48C9C0
+0x47C6C0,func,Seg_Hit,zone,high,"2D segment/segment test, both directions"
+0x47C550,func,Wall_Between,weapon,high,"a wall between two points (flag 1, not 4): shots"
+0x496400,func,Stat_Shot,weapon,high,G+0x688 shots that hit
+0x47C030,func,Hit_Sort,weapon,high,quicksort of the 16-byte hit candidates 0x74E380 by depth
+0x47B430,func,Weapon_Hit,weapon,high,"(shot frame, from, kind): targets in the kind's cone (0x737A90), nearest first; damage, reaction"
+0x453060,func,Eff_WallHit,weapon,high,moving weapon effect across a wall of its floor -> 1 + block<<24 + edge<<16
+0x48DBC0,func,Effect_Spawn,object,high,kind 6 effect slot at a point (explosions)
+0x48B830,func,Noise_Make,weapon,high,"noise position 0x7598B8 for the enemies, flag 2/10"
+0x47AFA0,func,Thrown_Update,weapon,high,sub-weapons in flight / lying / blasting (object-effect slots G+0x93C)
