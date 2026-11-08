@@ -1621,6 +1621,8 @@ static void test_player2(void)
         check(0x47AF60, Eff_FreeAll, "Eff_FreeAll", 0, a, 0);
         /* targets */
         gptr o = player_setup_obj(); targets_setup(); U32(LOG_BASE) = 0;
+        int pass = 1;                                   /* GUNS=1: only the firearms, once (mutation runs) */
+        if (getenv("GUNS")) goto firearms;
         U32(0x87FD60) = o + 0x1C0;
         a[0] = o; a[1] = rnd() % 3 ? (rnd() % 2 ? 0x400 : 0x180) : rnd() % 0x800;
         sprintf(g_what, "objs %u range %X", U32(0x87F940), a[1]);
@@ -1808,7 +1810,7 @@ static void test_player2(void)
             check(0x479FC0, Step_Ahead, "Step_Ahead", 4, a, 0xFFFFFFFF);
         }
         /* standing */
-        for (int rep = 0; rep < 2; rep++) {
+        for (pass = 0; pass < 2; pass++) {
             player_setup_obj(); do anim_setup(); while (U32(AN_OBJ + 0x68) < 5); o = AN_OBJ; U32(LOG_BASE) = 0;
             U32(0x87FD60) = o + 0x1C0; U32(o + 0x128) = CL_CYL + 0x30; U8(o + 0x5A) = 0;
             U8(CL_CYL + 0x30 + 0xA) = rnd() % 2 ? 0xFF : 0;     /* a part the animated object has */
@@ -1840,9 +1842,10 @@ static void test_player2(void)
             check(0x47EF90, Player_Climb, "Player_Climb", 1, a, 0);
             U8(o + 0x56) = rnd() % 9; U16(o + 0x92) = rnd() % 20;
             check(0x47FC70, Player_Push, "Player_Push", 1, a, 0);
+        firearms:
             /* firearms: the player is object 0 (the animation layers work on it) */
             player_setup_obj(); targets_setup(); aim_desc_setup(1);
-            o = O_OBJ; do anim_setup_at(o); while (U32(o + 0x68) < 5);
+            o = O_OBJ; do anim_setup_at(o); while (U32(o + 0x68) < 7);      /* parts 3 and 6: the guns */
             U32(G() + 0x940) = O_OBJ; U32(0x87FD60) = o + 0x1C0; a[0] = o;
             U32(0x87F948) = TYPE_TAB;                       /* effect kind handlers: recorders */
             for (int k = 0; k < 256; k++) U32(TYPE_TAB + 4 * k) = (u32)(uintptr_t)g_recs[STUB_TYPE];
@@ -1855,7 +1858,7 @@ static void test_player2(void)
             for (u32 k = 0x14; k < 0x40; k += 2) U16(o + 0x1C0 + k) = (u16)(rnd() % 3 ? rnd() % 0x1000 : rnd());
             U32(o + 0x1C0 + 0x14) = rnd() % 3 ? O_OBJ + 0x260 * (1 + rnd() % 15) : 0;
             U8(o + 0x1C0 + 8) = (u8)(rnd() % 16); U8(o + 0x1C0 + 0x2E) = rnd() % 2; U8(o + 0x1C0 + 0x2F) = rnd() % 2;
-            S16(o + 0x1C0 + 0x3C) = (s16)(rnd() % 0x18);
+            S16(o + 0x1C0 + 0x3C) = (s16)(rnd() % 2 ? rnd() % 5 : rnd() % 0x18);
             for (u32 k = 0; k < 20; k++) {
                 gptr it = G() + 0x10BC + k * 12;
                 U8(it) = rnd() % 2; U8(it + 1) = (u8)(rnd() % 12); S16(it + 8) = (s16)(rnd() % 3); U32(it + 4) = rnd();
@@ -1865,9 +1868,11 @@ static void test_player2(void)
             U16(G() + 0x10B4) = (u16)(rnd() % 12 | (rnd() % 3 ? 0 : (rnd() % 10) << 8));
             U32(0x87DC08) = rnd() % 3 ? (rnd() & 0xF0FE) : rnd(); U32(0x87DC94) = rnd() % 2 ? 0 : rnd() % 2 ? (u8)rnd() : rnd();
             Flag_Set(2, 0x1C, rnd() % 2); Flag_Set(2, 0xE, rnd() % 4 == 0); Flag_Set(2, 4, rnd() % 4 == 0);
+            stub_at(0x4BF330)->ret = rnd() % 2;                             /* the heavy weapons' dodge */
+            U32(G() + 0x948) = O_K3; U16(O_K3 + 0x18) = (u16)(0x200 + rnd() % 0x900);   /* kind 5 (machine gun): the light's reach */
             for (u32 k = 0; k < 10; k++) U8(G() + 0x94C + k * 0x18 + 0xC) = (u8)(rnd() % 3 ? 1 : rnd());
             U8(o + 0x190 + 0xC) = (u8)rnd(); U8(o + 0x1A8 + 0xC) = (u8)rnd();
-            U16(o + 0x92) = rnd() % 2 ? 9 + rnd() % 2 : rnd() % 20;
+            U16(o + 0x92) = rnd() % 2 ? 9 + rnd() % 2 : rnd() % 3 ? rnd() % 30 : (u16[]){2, 3, 0xD, 0xE, 0x17, 0x18}[rnd() % 6];
             U16(0x7598D8 + 0x92) = U16(o + 0x92); U16(0x7598D8 + 0x260 + 0x92) = U16(o + 0x92);   /* the layers' frames */
             sprintf(g_what, "gun %02X/%02X held %08X press %08X set %04X tgt %X", U8(o + 0x56), U8(o + 0x57),
                     U32(0x87DC08), U32(0x87DC94), U16(G() + 0x10B4), U32(o + 0x1C0 + 0x14));
@@ -1879,11 +1884,52 @@ static void test_player2(void)
                 {0x4AD9B0, Spray_Walk, "Spray_Walk", 1}, {0x4AD370, Spray_Back, "Spray_Back", 1}, {0x4B0220, Rifle_Turn, "Rifle_Turn", 1},
                 {0x4B0AE0, Rifle_Walk, "Rifle_Walk", 1}, {0x4B0CE0, Rifle_Back, "Rifle_Back", 1},
                 {0x4AC9E0, Weapon3_Fire, "Weapon3_Fire", 0}, {0x4AD6E0, Weapon4_Fire, "Weapon4_Fire", 0},
-                {0x4B04D0, Weapon8_Fire, "Weapon8_Fire", 0}, {0x4B0910, Weapon9_Fire, "Weapon9_Fire", 0}};
+                {0x4B04D0, Weapon8_Fire, "Weapon8_Fire", 0}, {0x4B0910, Weapon9_Fire, "Weapon9_Fire", 0},
+                {0x4ABD50, Shotgun_Fire, "Shotgun_Fire", 0}, {0x4AC140, Shotgun_Ready, "Shotgun_Ready", 1},
+                {0x4AC550, Shotgun_Lower, "Shotgun_Lower", 1}, {0x4ABF00, Shotgun_Walk, "Shotgun_Walk", 1},
+                {0x4AC750, Shotgun_Back, "Shotgun_Back", 1}, {0x4AE360, MGun_Fire, "MGun_Fire", 0},
+                {0x4ADCE0, MGun_Ready, "MGun_Ready", 1}, {0x4AE0F0, MGun_Lower, "MGun_Lower", 1},
+                {0x4AE5A0, MGun_Walk, "MGun_Walk", 1}, {0x4AE7D0, MGun_Back, "MGun_Back", 1},
+                {0x4AEFA0, Twin_Fire, "Twin_Fire", 0}, {0x4AF7B0, Twin_Ready, "Twin_Ready", 1},
+                {0x4AFDF0, Twin_Lower, "Twin_Lower", 1}, {0x4AF260, Twin_Walk, "Twin_Walk", 1},
+                {0x4AEC70, Twin_Back, "Twin_Back", 1}, {0x4AF540, Weapon7_Fire, "Weapon7_Fire", 0},
+                {0x4AFBC0, Weapon7_Walk, "Weapon7_Walk", 1}, {0x4AFFF0, Weapon7_Back, "Weapon7_Back", 1},
+                {0x4B23A0, Heavy_Hold, "Heavy_Hold", 1},
+                {0x4B1A50, Heavy_Turn, "Heavy_Turn", 1},
+                {0x4B0F10, Heavy10_Fire, "Heavy10_Fire", 0},
+                {0x4B12C0, Heavy10_Ready, "Heavy10_Ready", 1},
+                {0x4B1690, Heavy10_Lower, "Heavy10_Lower", 1},
+                {0x4B10C0, Heavy10_Walk, "Heavy10_Walk", 1},
+                {0x4B1850, Heavy10_Back, "Heavy10_Back", 1},
+                {0x4B1CF0, Heavy11_Fire, "Heavy11_Fire", 0},
+                {0x4B1FD0, Heavy11_Ready, "Heavy11_Ready", 1},
+                {0x4B2600, Heavy11_Lower, "Heavy11_Lower", 1},
+                {0x4B2890, Heavy11_Walk, "Heavy11_Walk", 1},
+                {0x4B2A60, Heavy11_Back, "Heavy11_Back", 1},
+                {0x4AA7C0, Bare_Ready, "Bare_Ready", 1},
+                {0x4AADD0, Bare_Walk, "Bare_Walk", 1},
+                {0x4AAFD0, Bare_Back, "Bare_Back", 1},
+                {0x4AB1E0, Bare_Turn, "Bare_Turn", 1}};
               for (u32 k = 0; k < sizeof GF / sizeof GF[0]; k++) {
-                  if (GF[k].sub) U8(o + 0x57) = rnd() % 4 ? rnd() % 3 : 0xFF; else U8(o + 0x56) = (u8)(rnd() % 4 ? 1 : rnd() % 3);
-                  if (!GF[k].sub && rnd() % 3 == 0) { U32(0x87DC08) = 8 | (rnd() % 2 ? 0x20 : 0); U32(0x87DC94) = 0; }   /* aim held, maybe the trigger */
+                  if (GF[k].sub) U8(o + 0x57) = rnd() % 4 ? rnd() % 3 : 0xFF; else U8(o + 0x56) = (u8)(rnd() % 2 ? 1 : rnd() % 3);
+                  if (!GF[k].sub && rnd() % 3 == 0) {                  /* aim held, maybe the trigger, maybe a button */
+                      U32(0x87DC08) = 8 | (rnd() % 2 ? 0x20 : 0); U32(0x87DC94) = rnd() % 3 ? 0 : 1u << rnd() % 8;
+                  }
+                  if (GF[k].sub && rnd() % 4 == 0) {                   /* firing on the walk: aim, trigger, a direction */
+                      U32(0x87DC08) = 0x28 | (rnd() % 2 ? 0x1000 : 0x4000) | (rnd() % 2 ? 0x2000 : 0); U32(0x87DC94) = 0;
+                      U8(o + 0x1C0 + 0x2F) = 1; U8(G() + 0x1094) |= rnd() % 2;
+                  } else if (GF[k].sub && rnd() % 3 == 0) {            /* standing: aim and trigger, or one button */
+                      U32(0x87DC08) = rnd() % 2 ? 0x28 : 0x1028; U32(0x87DC94) = rnd() % 2 ? 0 : 0x40u << (rnd() % 2 * 8);
+                      U8(o + 0x1C0 + 0x2E) = 1; U8(o + 0x1C0 + 0x2F) = 1; U16(o + 0x1C0 + 0x20) = U16(o + 0x4A);
+                      U8(G() + 0x1094) |= rnd() % 2;
+                  }
                   if (rnd() % 3 == 0) U16(o + 0x1C0 + 0x20) = U16(o + 0x4A);          /* already facing */
+                  U8(o + 0x190 + 0xC) = rnd() % 2 ? 0 : (u8)rnd(); U8(o + 0x1A8 + 0xC) = rnd() % 2 ? 0 : (u8)rnd();   /* flashes */
+                  S16(o + 0x1C0 + 0x3C) = (s16)(rnd() % 2 ? rnd() % 5 : rnd() % 0x18);
+                  if (rnd() % 3 == 0) {                                /* frames at the thresholds */
+                      U16(o + 0x92) = (u16[]){2, 3, 0xD, 0xE, 0x17, 0x18}[rnd() % 6];
+                      U16(0x7598D8 + 0x92) = U16(o + 0x92); U16(0x7598D8 + 0x260 + 0x92) = U16(o + 0x92);
+                  }
                   if (rnd() % 3 == 0) U16(o + 0x1C0 + 0x32) = U16(o + 0x1C0 + 0x30);
                   check(GF[k].addr, GF[k].fn, GF[k].name, 1, a, 0);
               } }
