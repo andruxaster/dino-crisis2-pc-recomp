@@ -1174,16 +1174,9 @@ void DC2CALL Heavy10_Fire(gptr o)                                  /* 0x4B0F10 *
     Fn_48C0B0(o, 0x10);
 }
 
-/* weapon 11: a shell (object effect, state 7) along the gun, aimed 2600 ahead */
-void DC2CALL Heavy11_Fire(gptr o)                                  /* 0x4B1CF0 */
+/* weapon 11: a shell (object effect e, state 7) along the gun, aimed 2600 ahead */
+static void heavy11_shell(gptr o, gptr e)
 {
-    if (U8(o + 0x56) == 1) { after_shot(o, 1, 0); return; }
-    if (U8(o + 0x56)) return;
-    gptr e = Eff_Alloc();
-    if (!e) { U32(o + 0x1DC) = 0; U32(o + 0x54) = 0x10501; Fn_48C0B0(o, 0x11); return; }
-    Anim_StartLayers(0x2A, 0x2C, 0, 0, 6, U16(PX() + 0x30));
-    U8(o + 0x56)++;
-    U32(o + 0xF0) = 0; U16(o + 0xF4) = 0;
     gptr p = Obj_Part(U32(o + 0x64), 3);
     gptr v = Tmp_Push(8);
     U16(v) = 0; U16(v + 2) = 0xA28; U16(v + 4) = 0;
@@ -1207,6 +1200,204 @@ void DC2CALL Heavy11_Fire(gptr o)                                  /* 0x4B1CF0 *
     Flash_Start(o, 8);
     Flash_StartFor(o, 8, 0x5A);
     Fn_48C0B0(o, 0x10);
+}
+
+void DC2CALL Heavy11_Fire(gptr o)                                  /* 0x4B1CF0 */
+{
+    if (U8(o + 0x56) == 1) { after_shot(o, 1, 0); return; }
+    if (U8(o + 0x56)) return;
+    gptr e = Eff_Alloc();
+    if (!e) { U32(o + 0x1DC) = 0; U32(o + 0x54) = 0x10501; Fn_48C0B0(o, 0x11); return; }
+    Anim_StartLayers(0x2A, 0x2C, 0, 0, 6, U16(PX() + 0x30));
+    U8(o + 0x56)++;
+    U32(o + 0xF0) = 0; U16(o + 0xF4) = 0;
+    heavy11_shell(o, e);
+}
+
+/* ---- substate 9: crouched with a heavy weapon (10, 11), the view lowered --------------
+ * Player block: +0x40 offset of the eye (moved along +0x50 rotation), +0x48
+ * its target offset, +0x4C sideways lean (+-0x2D0), +0x34 height, +0x7A
+ * just crouched, +0x7D turning done (+0x20 yaw wanted, +0x22 before). */
+u32 DC2CALL Crouch_Fire(gptr o)                                    /* 0x47FA80 */
+{
+    U16(PX() + 0x3C) = 0; U8(PX() + 0x2F) = 0;
+    if (!Ammo_Check(1)) {
+        if (PRESSED & 0x20) Fn_48C0B0(o, 0x11);
+        return 1;
+    }
+    Obj_UpdateMatrix(o);
+    if ((U8(G() + 0x10B4) & 0xF) == 0xA) {
+        gptr p = Obj_Part(U32(o + 0x64), 3);
+        Weapon_Hit(p + 0x20, p + 0x40, 0xA);
+        Flash_Start(o, 5);
+        Flash_StartFor(o, 5, 0x3C);
+        Effect_Attach(o, 0x677920);
+        Ammo_Use(0);
+        Fn_48C0B0(o, 0x10);
+        return 0;
+    }
+    gptr e = Eff_Alloc();
+    if (e) heavy11_shell(o, e);
+    return 0;
+}
+
+/* turn toward the wanted yaw; done when there */
+static void crouch_turn(gptr o)
+{
+    u16 d = (u16)Angle_Approach(U16(o + 0x4A), 0x96, U16(PX() + 0x20));
+    U16(o + 0x4A) += d;
+    if (!d) U8(PX() + 0x7D) = 1;
+}
+
+/* the crouch's end (anim 0x3C): stand up, then turn if not done */
+static void crouch_rise(gptr o, u32 blend)
+{
+    Anim_Start(o, 0x3C, 0, 0, blend);
+    U8(o + 0x56)++;
+    U8(o + 0x17B) = 0;
+    U16(PX() + 0x42) = 0;
+    if (!U8(PX() + 0x7D)) crouch_turn(o);
+}
+
+/* while crouched: turn back (button 2), aim at the nearest target (8),
+ * fire, turn, lean (eye: the camera offset +0x40) */
+static void crouch_control(gptr o, gptr eye)
+{
+    u8 pr = PRESSED;
+    if (pr & 2) {
+        U8(PX() + 0x7D) = 0;
+        U16(PX() + 0x22) = U16(o + 0x4A);
+        U16(PX() + 0x20) = (u16)(U16(o + 0x4A) + 0x800);
+        Effect_Attach(o, 0x6826F4);
+        return;
+    }
+    if (pr & 8) {
+        if (Flag_Check(2, 0xE)) U32(PX() + 0x14) = 0; else Target_Find(o, 0x800);
+        gptr t = U32(PX() + 0x14);
+        if (t) {
+            Obj_Part(U32(t + 0x64), U8(U32(t + 0x134) + 0xA));   /* the part is looked up but not used */
+            gptr a = Tmp_Push(8);
+            Angles_LookAt(t + 0x40, eye, a);
+            U8(PX() + 0x7D) = 0;
+            U16(PX() + 0x22) = U16(o + 0x4A);
+            U16(PX() + 0x20) = U16(a + 2);
+            Tmp_Pop(8);
+            Effect_Attach(o, 0x6826F4);
+            return;
+        }
+    }
+    u32 h = HELD;
+    if ((h & 0x20) && (h & 8) && U8(PX() + 0x2F)) { Crouch_Fire(o); h = HELD; }
+    if (h & 0x2000) U16(o + 0x4A) += 0x50;
+    else if (h & 0x8000) U16(o + 0x4A) -= 0x50;
+    if (h & 0x1000) {
+        U16(PX() + 0x4C) += 0x20;
+        if (S16(PX() + 0x4C) > 0x2D0) U16(PX() + 0x4C) = 0x2D0;
+    } else if (h & 0x4000) {
+        U16(PX() + 0x4C) -= 0x20;
+        if (S16(PX() + 0x4C) < -0x2D0) U16(PX() + 0x4C) = (u16)-0x2D0;
+    }
+}
+
+/* the eye moves along its rotation; a lean past `lim` restarts it sideways */
+static void crouch_eye(gptr o, s16 lim, u16 back, gptr d)
+{
+    s16 c = S16(PX() + 0x4C);
+    if (c >= lim || c <= -lim) {
+        U16(PX() + 0x50) = 0; U16(PX() + 0x52) = U16(o + 0x4A); U16(PX() + 0x54) = 0;
+        U16(PX() + 0x44) = U16(PX() + 0x4C);
+        U16(PX() + 0x48) = 0; U16(PX() + 0x4A) = back; U16(PX() + 0x4C) = 0;
+    }
+    gptr m = Tmp_Push(0x20);
+    RotMatrix(PX() + 0x50, m);
+    ApplyMatrixSV(m, PX() + 0x40, d);
+    Tmp_Pop(0x20);
+}
+
+void DC2CALL Player_Crouch(gptr o)                                  /* 0x47F0F0 */
+{
+    s16 n = S16(PX() + 0x3C);
+    U16(PX() + 0x3C) = (u16)(n + 1);
+    if (n >= ((U8(G() + 0x10B4) & 0xF) == 0xA ? 8 : 0xF)) U8(PX() + 0x2F) = 1;
+    gptr f = Tmp_Push(0x10), d = f, b = f + 8;
+    switch (U8(o + 0x56)) {
+    case 0: case 4:                                         /* crouching down (4: again, from standing up) */
+        U16(o + 0x5A) = (u16)(S16(o + 0x42) / -1000);
+        U32(o + 0xF0) = 0; U16(o + 0xF4) = 0;
+        U8(o + 0x17B) = 0x64; U8(o + 0x11B) = 0;
+        Flag_Set(1, 9, 1);
+        U16(PX() + 0x34) = (u16)(U16(o + 0x42) - 0xA28);
+        if (U8(o + 0x56) == 0) {
+            Anim_Start(o, 0x3B, 0, 0, 2);
+            U16(PX() + 0x40) = 0; U16(PX() + 0x42) = 0xFEC0; U16(PX() + 0x44) = 0;
+            if (HELD & 0x1000) U16(PX() + 0x44) = 0x5A;
+            if (HELD & 0x4000) U16(PX() + 0x44) = 0xFFA6;
+            U16(PX() + 0x48) = 0; U16(PX() + 0x4A) = 0xFEC0; U16(PX() + 0x4C) = 0;
+            U8(PX() + 0x7A) = 1;
+            Effect_Attach(o, 0x6826F4);
+        } else {
+            U32(PX() + 0x40) = 0; U16(PX() + 0x44) = 0;
+            U32(PX() + 0x48) = 0; U16(PX() + 0x4C) = 0;
+        }
+        U16(PX() + 0x50) = 0; U16(PX() + 0x52) = U16(o + 0x4A); U16(PX() + 0x54) = 0;
+        U8(PX() + 0x7D) = 1;
+        if (++U8(o + 0x56) != 5) break;
+        U16(PX() + 0x42) += 0xF; U16(PX() + 0x4A) += 0xF;
+        if (S16(PX() + 0x42) >= 0) crouch_rise(o, 4);
+        break;
+    case 1: case 5: {                                       /* going down */
+        U8(o + 0x17B) = 0x64;
+        crouch_eye(o, 0x50, 0xFEC0, d);
+        U16(o + 0x42) += U16(d + 2); U16(o + 0x40) += U16(d); U16(o + 0x44) += U16(d + 4);
+        U16(d) = U16(o + 0x40); U16(d + 2) = (u16)(U16(o + 0x42) - 0x7A8); U16(d + 4) = U16(o + 0x44);
+        U16(b) = U16(o + 0xE0); U16(b + 2) = (u16)(U16(o + 0xE2) - 0x7A8); U16(b + 4) = U16(o + 0xE4);
+        s16 h = (s16)Floor_Height(d, b, 0x80, 0);
+        U16(o + 0x5A) = (u16)(h / -1000);
+        if (S16(o + 0x5A) == 2 - S16(o + 0x42) / 1000) { crouch_rise(o, 0xA); break; }
+        U16(PX() + 0x42) += 0xF; U16(PX() + 0x4A) += 0xF;
+        if (S16(PX() + 0x42) >= 0) { crouch_rise(o, 0xA); break; }
+        Anim_Step(o);
+        if (!U8(PX() + 0x7D)) crouch_turn(o);
+        else crouch_control(o, o + 0x40);
+        break;
+    }
+    case 2: case 6: {                                       /* down */
+        crouch_eye(o, 0x28, 0xFF56, d);
+        U16(o + 0x40) += U16(d); U16(o + 0x42) += U16(d + 2); U16(o + 0x44) += U16(d + 4);
+        s16 h = (s16)Floor_Height(o + 0x40, o + 0xE0, 0x80, 0);
+        U16(o + 0x5A) = (u16)(h / -1000);
+        U16(PX() + 0x42) += 2; U16(PX() + 0x4A) += 2;
+        if (S16(o + 0x42) >= S16(o + 0x5A) * -1000) {       /* on the floor: stand up */
+            if ((s16)Fn_4542F0(o + 0x40, o + 0xE0, d, 0x80) >= 0) {
+                U16(o + 0x40) = U16(d); U16(o + 0x42) = U16(d + 2); U16(o + 0x44) = U16(d + 4);
+            }
+            Anim_Start(o, 0x3D, 0, 0, 0);
+            U16(o + 0x42) = (u16)(U16(o + 0x5A) * 0xFC18);
+            U16(PX() + 0x42) = 0; U16(PX() + 0x44) = 0;
+            U8(o + 0x56) = 3;
+            break;
+        }
+        Anim_Step(o);
+        if ((PRESSED & 0x40) && !Fn_4BF330() && !U8(PX() + 0x7A) && U8(o + 0x56) == 6) {
+            Flag_Set(2, 0xD, 0);
+            Flag_Set(1, 9, 1);
+            U8(o + 0x11B) = 0;
+            U32(o + 0x1DC) = 4; U32(o + 0x54) = 0x901;
+            break;
+        }
+        if (!U8(PX() + 0x7D)) crouch_turn(o);
+        else crouch_control(o, o + 0x40);
+        break;
+    }
+    case 3:                                                 /* standing up */
+        if (!Anim_Step(o)) break;
+        U16(o + 0x174) = 0; U8(o + 0x17B) = 0; U8(PX() + 0x7A) = 0;
+        if ((PRESSED & 0x40) && !Fn_4BF330()) { U32(o + 0x1DC) = 4; U32(o + 0x54) = 0x901; break; }
+        Flag_Set(1, 9, 0);
+        U32(o + 0x1DC) = 4; U32(o + 0x54) = 1;
+        break;
+    }
+    Tmp_Pop(0x10);
 }
 
 /* weapon 3: a grenade (object effect, state 5) */

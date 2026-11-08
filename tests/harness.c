@@ -2006,6 +2006,34 @@ static void test_player2(void)
               a[2] = 0x6DDA00u;
               for (u32 j = 0; j < 12; j++) U32(O_EFF + j * 0x70 + 0x50) = rnd() % 3 ? 0 : 1;
               check(0x47C8F0, Mines_Place, "Mines_Place", 2, a + 1, 0xFFFFFFFF);
+            /* substate 9: crouched with a heavy weapon */
+            for (u32 r = 0; r < 4; r++) {
+                gptr px = o + 0x1C0;
+                U8(o + 0x56) = rnd() % 8 ? rnd() % 7 : rnd() % 9;
+                anim_long(o, rnd() % 0x20);
+                U16(G() + 0x10B4) = (u16)((rnd() % 2 ? 0xA : 0xB) | (U16(G() + 0x10B4) & 0xFF00));
+                for (u32 q = 0x40; q < 0x56; q += 2) U16(px + q) = (u16)(rnd() % 3 ? (s16)(rnd() % 0x800 - 0x400) : (u16)rnd());
+                if (rnd() % 3 == 0) U16(px + 0x4C) = (u16)((rnd() % 2 ? 1 : -1) * (s16)(0x2AF + rnd() % 0x40));
+                if (rnd() % 3 == 0) U16(px + 0x42) = (u16)(-0x10 + rnd() % 0x10);
+                if (U8(o + 0x56) == 3 && rnd() % 2) { anim_long(o, 0x1F); U16(o + 0x98) = 8; U16(o + 0x102) &= ~0x21; }   /* standing up: the end */
+                U8(G() + 0x1094) = rnd() % 3 == 0;                                       /* ammunition: some out */
+                for (u32 q = 0; q < 20; q++) S16(G() + 0x10BC + q * 12 + 8) = (s16)(rnd() % 2);
+                U8(px + 0x7A) = rnd() % 2; U8(px + 0x7D) = rnd() % 3 != 0; U8(px + 0x2F) = rnd() % 2;
+                U16(px + 0x20) = rnd() % 2 ? U16(o + 0x4A) : (u16)rnd();
+                S16(px + 0x3C) = (s16)(rnd() % 0x14);
+                U32(0x87DC08) = rnd() % 3 ? (rnd() & 0xF0FE) : rnd() % 2 ? 0x28 : 0x28 | (rnd() % 2 ? 0x1000 : 0x4000) | (rnd() % 2 ? 0x2000 : 0x8000);
+                U32(0x87DC94) = rnd() % 2 ? 0 : rnd() % 3 ? 1u << rnd() % 8 : 2;
+                stub_at(0x4542F0)->ret = rnd() % 2 ? 0 : 0xFFFF;
+                stub_at(0x4BF330)->ret = rnd() % 2;
+                U16(o + 0x42) = (u16)(rnd() % 3 ? -(s16)(rnd() % 0x1800) : (s16)(rnd() % 0x400));
+                sprintf(g_what, "crouch %u px42 %04X 4C %04X 7D %u held %08X press %08X", U8(o + 0x56), U16(px + 0x42), U16(px + 0x4C),
+                        U8(px + 0x7D), U32(0x87DC08), U32(0x87DC94));
+                check(0x47F0F0, Player_Crouch, "Player_Crouch", 1, a, 0);
+                U8(px + 0x3C) = 0;
+                U32(0x87DC94) = rnd() % 2 ? 0x20 : 0;
+                check(0x47FA80, Crouch_Fire, "Crouch_Fire", 1, a, 0xFFFFFFFF);
+            }
+            stub_at(0x4542F0)->ret = 0;
               a[1] = rnd() % 4;
               check(0x496350, Sub_AmmoUse, "Sub_AmmoUse", 1, a + 1, 0);
               check(0x48D410, Light_Alloc, "Light_Alloc", 0, a, 0xFFFFFFFF);

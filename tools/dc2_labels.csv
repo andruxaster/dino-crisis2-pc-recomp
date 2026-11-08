@@ -731,3 +731,5 @@ address,kind,name,category,confidence,notes
 0x4B3CA0,func,Sub4_PutBack,weapon,high,"mine into the hand"
 0x4B44F0,func,Sub8_PutBack,weapon,high,"blade (+0x5E = 1)"
 0x4B4580,func,Sub9_PutBack,weapon,high,"flare into the hand"
+0x47F0F0,func,Player_Crouch,player,high,"normal substate 9: crouched aiming with weapons 10/11 (eye offset in the player block +0x40..+0x54)"
+0x47FA80,func,Crouch_Fire,player,high,"shot while crouched: weapon 10 hit, weapon 11 shell"

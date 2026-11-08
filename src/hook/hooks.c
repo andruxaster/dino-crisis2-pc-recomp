@@ -124,6 +124,8 @@ const Hook g_hooks[] = {
     {0x47EBB0, (void *)Player_Back,         "Player_Back"},
     {0x47EED0, (void *)Player_TurnBack,     "Player_TurnBack"},
     {0x47EF90, (void *)Player_Climb,        "Player_Climb"},
+    {0x47F0F0, (void *)Player_Crouch,       "Player_Crouch"},
+    {0x47FA80, (void *)Crouch_Fire,         "Crouch_Fire"},
     {0x47FC70, (void *)Player_Push,         "Player_Push"},
     {0x47FE10, (void *)Player_Setup,        "Player_Setup"},
     {0x481C10, (void *)Room_LoadDat,        "Room_LoadDat"},
