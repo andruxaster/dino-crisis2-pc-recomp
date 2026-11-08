@@ -495,6 +495,19 @@ void DC2CALL Door_Double2(gptr d, s32 step);                           /* 0x41D6
 void DC2CALL Door_Double2A(gptr d);                                    /* 0x41D6D0 */
 void DC2CALL Door_Double2B(gptr d);                                    /* 0x41D820 */
 void DC2CALL Door_Double2C(gptr d);                                    /* 0x41D840 */
+void DC2CALL Door_CamTarget(u32 x, u32 y, u32 z);           /* 0x41CEA0 */
+void DC2CALL Door_CamEye(u32 x, u32 y, u32 z);              /* 0x41D990 */
+void DC2CALL Door_LiftDown(gptr d);                         /* 0x41CD60 */
+void DC2CALL Door_LiftUp(gptr d);                           /* 0x41CF20 */
+void DC2CALL Door_Drop(gptr d);                             /* 0x41D860 */
+void DC2CALL Door_WaitHidden(gptr d);                       /* 0x41DA10 */
+void DC2CALL Door_Wait(gptr d);                             /* 0x41DB90 */
+void DC2CALL Door_Message(gptr d);                          /* 0x41DAF0 */
+void DC2CALL Door_Walk(gptr d);                             /* 0x41DC70 */
+void DC2CALL Door_StairsDown(gptr d);                       /* 0x41DDF0 */
+void DC2CALL Door_StairsUp(gptr d);                         /* 0x41E050 */
+void DC2CALL Door_ScoreBox(gptr d);                         /* 0x41F040 */
+void DC2CALL Door_Score(gptr d);                            /* 0x41ED70 */
 u32  DC2CALL Crouch_Fire(gptr o);                                      /* 0x47FA80 */
 
 void DC2CALL Spray_Walk(gptr o);                       /* 0x4AD9B0 */

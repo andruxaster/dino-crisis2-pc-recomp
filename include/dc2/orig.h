@@ -72,8 +72,12 @@
     V(Gpu_LoadImageIfChanged, 0x4B4DB0, (gptr rect, gptr p), (rect, p)) \
     V(Fn_48CA40,          0x48CA40, (void), ()) \
     F(u32, Fn_494DE0,     0x494DE0, (gptr text), (text)) \
-    V(Fn_41ED70,          0x41ED70, (gptr d), (d)) \
-    V(Fn_46BA00,          0x46BA00, (gptr cam), (cam))
+    V(Fn_46BA00,          0x46BA00, (gptr cam), (cam)) \
+    V(Fn_41F080,          0x41F080, (u32 x, u32 y, u32 c, u32 d, u32 e, u32 f), (x, y, c, d, e, f)) \
+    V(Fn_41F3E0,          0x41F3E0, (gptr d), (d)) \
+    V(Fn_41F390,          0x41F390, (gptr d), (d)) \
+    V(Fn_41F170,          0x41F170, (gptr d), (d)) \
+    V(Fn_470CF0,          0x470CF0, (void), ())
 
 #define ORIG_DECL_F(ret, name, addr, params, args) ret DC2CALL name params;
 #define ORIG_DECL_V(name, addr, params, args) void DC2CALL name params;

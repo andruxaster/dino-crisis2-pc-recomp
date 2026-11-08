@@ -603,7 +603,7 @@ static Stub g_stubs[] = {
     /* 91..: player */
     {0, ""}, {0x4542F0, "pdpd", {6, 6}}, {0x4BF330, ""},
     /* 94..: doors */
-    {0x48CA40, ""}, {0x494DE0, "d"}, {0x41ED70, "d"}, {0x46BA00, "d"},
+    {0x48CA40, ""}, {0x494DE0, "d"}, {0x41F080, "dddddd"}, {0x46BA00, "d"}, {0x41F3E0, "d"}, {0x41F390, "d"}, {0x41F170, "d"}, {0x470CF0, ""},
 };
 #define STUB_GAME 71
 #define STUB_LOAD 50
@@ -659,6 +659,7 @@ REC(58) REC(59) REC(60) REC(61) REC(62) REC(63) REC(64) REC(65) REC(66) REC(67) 
 REC(70) REC(71) REC(72) REC(73) REC(74) REC(75) REC(76) REC(77) REC(78) REC(79) REC(80) REC(81)
 REC(82) REC(83) REC(84) REC(85) REC(86) REC(87) REC(88) REC(89) REC(90) REC(91) REC(92) REC(93)
 REC(94) REC(95) REC(96) REC(97) REC(98) REC(99) REC(100) REC(101)
+REC(102) REC(103) REC(104) REC(105)
 static void *const g_recs[] = {rec0, rec1, rec2, rec3, rec4, rec5, rec6, rec7, rec8, rec9, rec10,
     rec11, rec12, rec13, rec14, rec15, rec16, rec17, rec18, rec19, rec20, rec21, rec22, rec23,
     rec24, rec25, rec26, rec27, rec28, rec29, rec30, rec31, rec32, rec33, rec34, rec35, rec36, rec37,
@@ -666,7 +667,7 @@ static void *const g_recs[] = {rec0, rec1, rec2, rec3, rec4, rec5, rec6, rec7, r
     rec52, rec53, rec54, rec55, rec56, rec57, rec58, rec59, rec60, rec61, rec62, rec63,
     rec64, rec65, rec66, rec67, rec68, rec69, rec70, rec71, rec72, rec73, rec74, rec75, rec76, rec77,
     rec78, rec79, rec80, rec81, rec82, rec83, rec84, rec85, rec86, rec87, rec88, rec89, rec90, rec91, rec92, rec93,
-    rec94, rec95, rec96, rec97, rec98, rec99, rec100, rec101};
+    rec94, rec95, rec96, rec97, rec98, rec99, rec100, rec101, rec102, rec103, rec104, rec105};
 _Static_assert(sizeof g_recs / sizeof g_recs[0] >= sizeof g_stubs / sizeof g_stubs[0], "a recorder per stub");
 /* Task_Sleep: the file loader "runs" while the task sleeps */
 static u32 __cdecl ts_sleep(u32 n)
@@ -2554,6 +2555,13 @@ static void test_doors(void)
             {0x41D6F0, Door_Double2, "Door_Double2", {0}, 1},
             {0x41D6D0, Door_Double2A, "Door_Double2A", {0}, 0}, {0x41D820, Door_Double2B, "Door_Double2B", {0}, 0},
             {0x41D840, Door_Double2C, "Door_Double2C", {0}, 0},
+            {0x41CEA0, Door_CamTarget, "Door_CamTarget", {0}, 2}, {0x41D990, Door_CamEye, "Door_CamEye", {0}, 2},
+            {0x41CD60, Door_LiftDown, "Door_LiftDown", {0}, 0}, {0x41CF20, Door_LiftUp, "Door_LiftUp", {0}, 0},
+            {0x41D860, Door_Drop, "Door_Drop", {0}, 0},
+            {0x41DA10, Door_WaitHidden, "Door_WaitHidden", {0}, 0}, {0x41DB90, Door_Wait, "Door_Wait", {0}, 0},
+            {0x41DAF0, Door_Message, "Door_Message", {0}, 0}, {0x41DC70, Door_Walk, "Door_Walk", {0}, 0},
+            {0x41DDF0, Door_StairsDown, "Door_StairsDown", {0}, 0}, {0x41E050, Door_StairsUp, "Door_StairsUp", {0}, 0},
+            {0x41F040, Door_ScoreBox, "Door_ScoreBox", {0}, 0}, {0x41ED70, Door_Score, "Door_Score", {0}, 0},
         };
         for (unsigned kk = 0; kk < 4 * sizeof H / sizeof H[0]; kk++) {
             unsigned k = kk % (sizeof H / sizeof H[0]);
@@ -2583,6 +2591,50 @@ static void test_doors(void)
             a[0] = d;
             a[1] = H[k].n == 1 && k == 8 ? rnd() % 2 * (rnd() % 2 ? 1 : 0x100) : (u32)st[rnd() % 9];
             a[2] = rnd() % 2 ? 0x3E8 : 0x258; a[3] = rnd() % 2 ? 0x320 : 0x190;
+            /* the lifts, stairs, camera drop, waits, walk and score panel */
+            gptr c = g + 0x778;
+            static const s16 ty[] = {-8000, 0x1F40, 0xCE0, -2750, -2000};
+            static const s16 tdy[] = {0, 0x30, -0x30, 0x12, -0x12, 0x13, -0x13};
+            if (rnd() % 2) U16(o + 0x42) = (u16)(ty[rnd() % 5] + tdy[rnd() % 7] + (s16)(rnd() % 3) - 1);
+            for (u32 j = 0x20; j < 0x40; j += 2) U16(c + j) = (u16)(rnd() % 0x2000 - 0x1000);
+            if (rnd() % 3 == 0) U16(c + 0x3A) = (u16)(-30000 + 0x80 + (s16)(rnd() % 3) - 1);
+            U8(d + 0x247C) = rnd() % 2 ? 0x3A + rnd() % 3 : (u8)rnd();
+            U8(d + 0x247F) = rnd() % 2;
+            U16(d + 0x2478) = rnd() % 2 ? 1 : (u16)rnd();
+            U16(o + 0xAA) = (u16)(rnd() % 8 * 2); U32(o + 0x9C) = rnd() % 4 ? AN_EVT : 0;
+            if (rnd() % 2) U16(AN_EVT + 4 + 4 * (rnd() % 4)) = (u16)((S16(o + 0xAA) + U16(o + 0x92) * 2) / 2);
+            U32(o + 0x60) = MODEL_DATA; U32(g + 0x938) = d + 0xC50; U32(0x87DC0C) = 0x1E;
+            for (u32 j = 0; j < 0x1E; j++) U32(d + 0xC50 + j * 0xCC + 0x50) = 0;
+            U16(0x87FFEA) = rnd() % 2;
+            Flag_Set(2, 0x1F, rnd() % 2);
+            U8(d + 0x2491) = (u8)(rnd() % 8 - 1);
+            U16(d + 0x2488) = rnd() % 2 ? (u16)(rnd() % 3 ? 0x27 + rnd() % 3 : 9 + rnd() % 3) : (u16)rnd();
+            U32(g + 0xC14) = rnd() % 4 ? rnd() % 100000 : rnd();
+            U32(d + 0x248C) = rnd() % 2 ? U32(g + 0xC14) - rnd() % 0x2000 : rnd();
+            U16(g + 0xC24) = rnd() % 3 ? rnd() % 3 : rnd() % 0x400; U16(d + 0x248A) = rnd() % 2 ? U16(g + 0xC24) - rnd() % 0x50 : (u16)rnd();
+            U16(g + 0xC20) = rnd() % 3 ? (u16)(rnd() % 0x40) : rnd() % 2 ? 0 : (u16)rnd();
+            U32(d + 0x2484) = rnd() % 2 ? U16(g + 0xC20) - rnd() % 4 : rnd();
+            U16(g + 0xC22) = rnd() % 0x11;
+            U32(g + 0x11F4) = rnd() % 2 ? 9999999 - rnd() % 0x80 : rnd(); U32(g + 0x120C) = rnd();
+            if (rnd() % 3 == 0) {                                   /* exact thresholds of the lifts, stairs, panel */
+                const char *nm = H[k].name; s16 j = (s16)(rnd() % 3) - 1;
+                if (!strcmp(nm, "Door_LiftUp")) { U8(d + 0x2477) = 2; U16(o + 0x42) = (u16)(0x1F40 - 0x30 + j); }
+                if (!strcmp(nm, "Door_LiftDown")) { U8(d + 0x2477) = 2; U16(o + 0x42) = (u16)(-8000 + 0x30 + j); }
+                if (!strcmp(nm, "Door_StairsUp")) { U8(d + 0x2477) = 2; U16(o + 0x42) = (u16)(-2000 + j); }
+                if (!strcmp(nm, "Door_StairsDown")) { U8(d + 0x2477) = 2; U16(o + 0x42) = (u16)(-2750 + j); }
+                if (!strcmp(nm, "Door_Message")) U16(d + 0x2478) = (u16[]){1, 0x101, 0x201}[rnd() % 3];
+                if (!strcmp(nm, "Door_Score")) {
+                    u32 p = U32(g + 0xC14);
+                    U32(d + 0x248C) = p - (p / 15 + 1) + j;
+                    u16 n = U16(g + 0xC24) = 2 + rnd() % 0x200;
+                    U16(d + 0x248A) = (u16)(n - (n / 15 + 1) + j);
+                    u16 t = U16(g + 0xC22) = rnd() % 0xF;
+                    U16(g + 0xC20) = (u16)(U8(0x71FF68 + t * 6 + 4 + rnd() % 2) + j);
+                    if (!U16(g + 0xC20)) U16(g + 0xC20) = 1;
+                    U32(d + 0x2484) = U16(g + 0xC20) - (U16(g + 0xC20) / 15 + 1) + j;
+                }
+            }
+            if (H[k].n == 2) { a[0] = rnd() % 0x2000 - 0x1000; a[1] = rnd() % 0x2000 - 0x1000; a[2] = rnd() % 0x2000 - 0x1000; }
             if (k >= 12 && k <= 15 && rnd() % 4 == 0) {           /* the double doors closing onto lim2 */
                 static const s32 ds[4][2] = {{0, 0}, {-0x32, 0x320}, {0x32, 0x320}, {0x1E, 0x190}};
                 s32 step = k == 12 ? (s32)a[1] : ds[k - 12][0], l2 = k == 12 ? (s32)(s16)a[3] : ds[k - 12][1];

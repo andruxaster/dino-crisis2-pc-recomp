@@ -207,7 +207,7 @@ void DC2CALL Door_Run(gptr d)                                      /* 0x41E9C0 *
     u8 t = U8(d + 0x2480);
     if (t == 0x58) Text_Draw(U32(d + 0x2498), U16(d + 0x2494), 0x68, 0x64, 0x808080, 5, 0);
     else if (t != 0x59) Text_Draw(U32(d + 0x2498), 0x10, 0x18, 0x64, 0x808080, 5, 0);
-    if (U8(d + 0x2492)) Fn_41ED70(d);
+    if (U8(d + 0x2492)) Door_Score(d);
     else U8(d + 0x247D) |= 0x10;
     for (u32 i = 0; i < U32(0x87F940); i++, o += 0x260) {
         RotMatrix(o + 0x48, o + 0x20);
@@ -651,6 +651,416 @@ void DC2CALL Door_Double2C(gptr d)                                 /* 0x41D840 *
 {
     Door_Common2(d);
     Door_Double2(d, 0x19);
+}
+
+/* the camera looking at (x, y, z) from its eye (G+0x778: +0x28 target,
+ * +0x38 eye; as Door_SetCamera) */
+void DC2CALL Door_CamTarget(u32 x, u32 y, u32 z)                   /* 0x41CEA0 */
+{
+    gptr c = G() + 0x778;
+    U16(c + 0x28) = (u16)x; U16(c + 0x2A) = (u16)y; U16(c + 0x2C) = (u16)z;
+    Camera_Aim(c + 0x28, c + 0x38, c + 0x20, c + 0x30);
+    gptr v = Tmp_Push(8);
+    U16(v) = (u16)-U16(c + 0x20); U16(v + 2) = (u16)-U16(c + 0x22); U16(v + 4) = (u16)-U16(c + 0x24);
+    RotMatrix(v, c);
+    Tmp_Pop(8);
+}
+
+/* the camera's eye moved to (x, y, z) */
+void DC2CALL Door_CamEye(u32 x, u32 y, u32 z)                      /* 0x41D990 */
+{
+    gptr c = G() + 0x778;
+    U16(c + 0x38) = (u16)x; U16(c + 0x3A) = (u16)y; U16(c + 0x3C) = (u16)z;
+    Camera_Aim(c + 0x28, c + 0x38, c + 0x20, c + 0x30);
+    gptr v = Tmp_Push(8);
+    U16(v) = (u16)-U16(c + 0x20); U16(v + 2) = (u16)-U16(c + 0x22); U16(v + 4) = (u16)-U16(c + 0x24);
+    RotMatrix(v, c);
+    Tmp_Pop(8);
+}
+
+/* an elevator: the stand-in, the cage (object 1) and the light ride by dy
+ * until the threshold, the camera following */
+static void door_lift(gptr d, s32 dy)
+{
+    gptr pl = U32(G() + 0x940);
+    U16(pl + 0x42) += (u16)dy;
+    U16(pl + 0x2A2) += (u16)dy;
+    U16(G() + 0x12) += (u16)dy;
+    switch (DS(d)) {
+    case 0:
+        U8(d + 0x247C) = 0;
+        Fade_Set(0, 0x14, 1);
+        DS(d)++;
+        Fn_48C0B0(0, 0x78);
+        /* fall through */
+    case 1:
+        if (Flag_Check(2, 6)) break;
+        DS(d)++;
+        break;
+    case 2:
+        if (dy < 0 ? S16(pl + 0x42) > -8000 : S16(pl + 0x42) < 0x1F40) break;
+        DS(d)++;
+        /* fall through */
+    case 3:
+        Fade_Set(1, 0x14, 1);
+        Fn_48C0B0(0, 0x79);
+        DS(d)++;
+        /* fall through */
+    case 4:
+        if (Flag_Check(2, 6)) break;
+        Flag_Set(1, 3, 1);
+        DS(d)++;
+        break;
+    case 5:
+        if (U8(d + 0x247D) == 0x11) U8(d + 0x2474)++;
+        break;
+    }
+    Door_CamTarget(U16(pl + 0x40), (u16)(U16(pl + 0x42) - 0x400), U16(pl + 0x44));
+}
+
+void DC2CALL Door_LiftDown(gptr d)                                 /* 0x41CD60 */
+{
+    U16(G() + 0x7B0) += 0x18;
+    door_lift(d, -0x30);
+}
+
+void DC2CALL Door_LiftUp(gptr d)                                   /* 0x41CF20 */
+{
+    gptr c = G() + 0x778;
+    if (S16(U32(G() + 0x940) + 0x42) > 0xCE0) { U16(c + 0x3C) += 8; U16(c + 0x38) -= 0x10; }
+    else U16(c + 0x3C) += 0x20;
+    door_lift(d, 0x30);
+}
+
+/* the camera drops (eye y) and looks down */
+void DC2CALL Door_Drop(gptr d)                                     /* 0x41D860 */
+{
+    gptr c = G() + 0x778;
+    U16(c + 0x3A) -= 0x80;
+    switch (DS(d)) {
+    case 0:
+        Fade_Set(0, 0x14, 1);
+        Fn_48C0B0(0, 0x7A);
+        DS(d)++;
+        /* fall through */
+    case 1:
+        U8(d + 0x247C) = 0;
+        if (Flag_Check(2, 6)) break;
+        DS(d)++;
+        break;
+    case 2:
+        if (S16(c + 0x3A) > -30000) break;
+        DS(d)++;
+        Fn_48C600(0x7A);
+        Fn_48C0B0(0, 0x79);
+        /* fall through */
+    case 3:
+        Fade_Set(1, 0x14, 1);
+        DS(d)++;
+        /* fall through */
+    case 4:
+        if (Flag_Check(2, 6)) break;
+        Flag_Set(1, 3, 1);
+        DS(d)++;
+        break;
+    case 5:
+        if (U8(d + 0x247D) == 0x11) U8(d + 0x2474)++;
+        break;
+    }
+    Door_CamEye(U16(c + 0x38), U16(c + 0x3A), U16(c + 0x38));
+}
+
+/* no scene: a second's black (the objects hidden when hide) */
+static void door_wait(gptr d, int hide)
+{
+    switch (DS(d)) {
+    case 0:
+        Fade_Set(0, 0x14, 1);
+        DS(d)++;
+        if (hide) U32(0x87F940) = 0;
+        /* fall through */
+    case 1:
+        if (Flag_Check(2, 6)) break;
+        U8(d + 0x247C) = 0;
+        DS(d)++;
+        break;
+    case 2:
+        if (++S8(d + 0x247C) < 0x3C) break;
+        DS(d)++;
+        /* fall through */
+    case 3:
+        Fade_Set(1, 0x14, 1);
+        DS(d)++;
+        /* fall through */
+    case 4:
+        if (Flag_Check(2, 6)) break;
+        if (U8(d + 0x247D) == 0x11) U8(d + 0x2474)++;
+        break;
+    }
+}
+
+void DC2CALL Door_WaitHidden(gptr d)                               /* 0x41DA10 */
+{
+    door_wait(d, 1);
+}
+
+void DC2CALL Door_Wait(gptr d)                                     /* 0x41DB90 */
+{
+    door_wait(d, 0);
+}
+
+/* no scene: a message (to room 1 or elsewhere) until flag 2/0x1F clears */
+void DC2CALL Door_Message(gptr d)                                  /* 0x41DAF0 */
+{
+    switch (DS(d)) {
+    case 0:
+        Fn_470CB0();
+        U32(d + 0x2498) = U16(d + 0x2478) == 1 ? 0x728A66u : 0x728ABCu;
+        Message_Show(0, 0, U32(d + 0x2498), 2);
+        DS(d)++;
+        U32(0x87F940) = 0;
+        /* fall through */
+    case 1:
+        Fn_470CF0();
+        if (Flag_Check(2, 0x1F)) break;
+        DS(d)++;
+        /* fall through */
+    case 2:
+        if (U8(d + 0x247D) == 0x11) U8(d + 0x2474)++;
+        break;
+    }
+}
+
+/* the stand-in walks (footsteps from its animation's events) */
+void DC2CALL Door_Walk(gptr d)                                     /* 0x41DC70 */
+{
+    gptr pl = U32(G() + 0x940);
+    switch (DS(d)) {
+    case 0:
+        Fade_Set(0, 0x14, 1);
+        DS(d)++;
+        /* fall through */
+    case 1:
+        if (Flag_Check(2, 6)) break;
+        DS(d)++;
+        break;
+    case 2:
+        U32(pl + 0x88) = U32(d + 0x249C);
+        Anim_Start(pl, 0x1A, 3, 0x19, 0xA);
+        DS(d)++;
+        /* fall through */
+    case 3:
+        if (U16(pl + 0x92) < 6) break;
+        DS(d)++;
+        /* fall through */
+    case 4:
+        if (S16(pl + 0x44) < 0x300) break;
+        Fade_Set(1, 0x14, 1);
+        DS(d)++;
+        /* fall through */
+    case 5:
+        if (Flag_Check(2, 6)) break;
+        Flag_Set(1, 3, 1);
+        DS(d)++;
+        break;
+    case 6:
+        if (U8(d + 0x247D) == 0x11) U8(d + 0x2474)++;
+        break;
+    }
+    if (DS(d) > 3) U16(pl + 0x44) += 0x1B;
+    gptr e = U32(pl + 0x9C);
+    if (!e || !U32(e)) return;
+    gptr p = e + U32(e) * 4 + 4;
+    for (u32 n = U32(e); n; n--) {
+        p -= 4;
+        if ((s32)U16(p) * 2 == S16(pl + 0xAA) + (s32)U16(pl + 0x92) * 2) Fn_48C0B0(0, 0x78);
+    }
+}
+
+static void wait_busy(void)
+{
+    while (File_IsBusy()) Task_Sleep(1);
+}
+
+/* the stairs' first state: the character's stair animations loaded, the
+ * stand-in re-made from the player's model, a random camera */
+static void stairs_setup(gptr d, gptr pl)
+{
+    u16 f = U8(G() + 0x108F) ? 0x1F9 : 0x1E9;
+    wait_busy();
+    File_RequestLoad(f);
+    wait_busy();
+    U16(G() + 0x674) = f;
+    DS(d)++;
+    Obj_Free(pl);
+    Model_Setup(pl, U32(pl + 0x60));
+    U8(pl + 0xFE) = 3;
+    Anim_Start(pl, U8(G() + 0x108F) == 0, 0, 1, 0);
+    U16(pl + 0x102) &= ~0x10;
+    U8(d + 0x247F) = Rand8() & 1;
+}
+
+/* stairs: the stand-in climbs (dy per frame, one more on the footsteps) */
+void DC2CALL Door_StairsDown(gptr d)                               /* 0x41DDF0 */
+{
+    gptr pl = U32(G() + 0x940), c = G() + 0x778;
+    switch (DS(d)) {
+    case 0: {
+        gptr cam = 0x71F020 + U8(A_DOOR_TYPES + U8(d + 0x2480) * 0x20 + 0x14) * 0x14;
+        stairs_setup(d, pl);
+        if (U8(d + 0x247F)) {
+            U16(c + 0x38) = U16(cam); U16(c + 0x3A) = U16(cam + 2); U16(c + 0x3C) = U16(cam + 4);
+        }
+        if (!U8(G() + 0x108F)) { U16(pl + 0x44) = 0xFEB0; U16(pl + 0x42) = 0xFAFA; }
+        Fade_Set(0, 0x14, 1);
+    }
+        /* fall through */
+    case 1:
+        if (Flag_Check(2, 6)) break;
+        DS(d)++;
+        break;
+    case 2:
+        if (S16(pl + 0x42) > -2750) break;
+        DS(d)++;
+        /* fall through */
+    case 3:
+        if (!U8(d + 0x247E)) break;
+        Fade_Set(1, 0x14, 1);
+        DS(d)++;
+        /* fall through */
+    case 4:
+        if (Flag_Check(2, 6)) break;
+        Flag_Set(1, 3, 1);
+        DS(d)++;
+        break;
+    case 5:
+        if (U8(d + 0x247D) == 0x11) U8(d + 0x2474)++;
+        break;
+    }
+    U16(c + 0x38) += 4;
+    u16 fr = U16(pl + 0x92);
+    U16(pl + 0x42) -= 0x12;
+    if (fr == 0 || fr == 0xC || fr == 0x18) U16(pl + 0x42) -= 1;
+    if (U8(d + 0x247F)) U16(c + 0x3A) -= 0x10;
+    Door_CamTarget(U16(pl + 0x40), (u16)(U16(pl + 0x42) - 0x100), U16(pl + 0x44));
+}
+
+void DC2CALL Door_StairsUp(gptr d)                                 /* 0x41E050 */
+{
+    gptr pl = U32(G() + 0x940), c = G() + 0x778;
+    switch (DS(d)) {
+    case 0:
+        stairs_setup(d, pl);
+        if (U8(d + 0x247F)) {
+            U16(c + 0x38) = U16(0x71F034); U16(c + 0x3A) = U16(0x71F036); U16(c + 0x3C) = U16(0x71F038);
+        } else U16(U32(G() + 0x940) + 0x2AA) += 0x800;
+        if (!U8(G() + 0x108F)) { U16(pl + 0x42) -= 0x40; U16(pl + 0x44) += 0x50; }
+        Fade_Set(0, 0x14, 1);
+        /* fall through */
+    case 1:
+        if (Flag_Check(2, 6)) break;
+        DS(d)++;
+        break;
+    case 2:
+        if (S16(pl + 0x42) < -2000) break;
+        DS(d)++;
+        /* fall through */
+    case 3:
+        if (!U8(d + 0x247E)) break;
+        Fade_Set(1, 0x14, 1);
+        DS(d)++;
+        /* fall through */
+    case 4:
+        if (Flag_Check(2, 6)) break;
+        Flag_Set(1, 3, 1);
+        DS(d)++;
+        break;
+    case 5:
+        if (U8(d + 0x247D) == 0x11) U8(d + 0x2474)++;
+        break;
+    }
+    U16(c + 0x38) += 4;
+    u16 fr = U16(pl + 0x92);
+    U16(pl + 0x42) += 0x12;
+    if (fr == 0 || fr == 0xC || fr == 0x18) U16(pl + 0x42) += 1;
+    if (U8(d + 0x247F)) {
+        U16(c + 0x3A) += 8;
+        Door_CamTarget(0x100, (u16)(U16(pl + 0x42) - 0x100), 0);
+    } else Door_CamTarget(U16(pl + 0x40), (u16)(U16(pl + 0x42) - 0xC0), (u16)(U16(pl + 0x44) + 0x40));
+}
+
+/* the score panel's box */
+void DC2CALL Door_ScoreBox(gptr d)                                 /* 0x41F040 */
+{
+    (void)d;
+    Fn_41F080(0xCD, U16(G() + 0xC20) ? 0x96 : 0xAE, 0, 0xC0, 0, 0x808080);
+}
+
+/* the score panel after a fight (D+0x2491 counts down from 5): the combo
+ * bonus (G+0xC20) graded by the kills (G+0xC22, 0x71FF68), the points
+ * (G+0xC14) and the kills (G+0xC24) counted up, the bonus added */
+void DC2CALL Door_Score(gptr d)                                    /* 0x41ED70 */
+{
+    gptr g = G();
+    switch (S8(d + 0x2491)) {
+    case 0:
+        if (U16(d + 0x2488)++ > 0x28) U8(d + 0x247D) |= 0x10;
+        break;
+    case 1:
+        U32(d + 0x248C) += U32(g + 0xC14) / 15 + 1;
+        if (U32(d + 0x248C) < U32(g + 0xC14)) break;
+        U32(d + 0x248C) = U32(g + 0xC14);
+        U8(d + 0x2491)--;
+        break;
+    case 2: {
+        u16 n = U16(g + 0xC24);
+        if (n > 1) {
+            U16(d + 0x248A) += (u16)(n / 15 + 1);
+            if (U16(d + 0x248A) < n) break;
+            U16(d + 0x248A) = n;
+        }
+        U8(d + 0x2491)--;
+        break;
+    }
+    case 3: {
+        u32 b = U16(g + 0xC20);
+        if (!b) { U8(d + 0x2491)--; break; }
+        U32(d + 0x2484) += b / 15 + 1;
+        if (U32(d + 0x2484) < b) break;
+        U32(d + 0x2484) = b;
+        U32(g + 0x120C) += b;
+        U32(g + 0x11F4) += U32(d + 0x2484);
+        U32(g + 0xC14) += U32(d + 0x2484);
+        if (S32(g + 0x11F4) > 9999999) U32(g + 0x11F4) = 9999999;
+        U8(d + 0x2491)--;
+        break;
+    }
+    case 4:
+        if (U16(d + 0x2488)++ > 0xA) U8(d + 0x2491)--;
+        break;
+    case 5: {
+        u16 t = U16(g + 0xC22), b = U16(g + 0xC20);
+        gptr e = 0x71FF68 + t * 6;
+        if (!b || t >= 0xF) U16(g + 0xC20) = 0;
+        else if (b >= U8(e + 5)) U16(g + 0xC20) = U16(e + 2);
+        else if (b >= U8(e + 4)) U16(g + 0xC20) = U16(e);
+        else U16(g + 0xC20) = 0;
+        U8(d + 0x2491)--;
+        break;
+    }
+    }
+    Door_ScoreBox(d);
+    switch (S8(d + 0x2491)) {
+    case 0: case 1:
+        Fn_41F3E0(d);
+        /* fall through */
+    case 2:
+        Fn_41F390(d);
+        /* fall through */
+    case 3:
+        if (U16(g + 0xC20)) Fn_41F170(d);
+        break;
+    }
 }
 
 void DC2CALL Door_Task(void)                                       /* 0x41E2D0 */

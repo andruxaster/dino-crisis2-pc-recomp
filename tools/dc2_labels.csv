@@ -769,3 +769,15 @@ address,kind,name,category,confidence,notes
 0x41D6D0,func,Door_Double2A,game,high,
 0x41D820,func,Door_Double2B,game,high,
 0x41D840,func,Door_Double2C,game,high,
+0x41CEA0,func,Door_CamTarget,game,high,"(x, y, z): camera target, angles and matrix"
+0x41D990,func,Door_CamEye,game,high,"(x, y, z): camera eye, angles and matrix"
+0x41CD60,func,Door_LiftDown,game,high,"lift down: stand-in, cage and light -0x30 per frame until y -8000"
+0x41CF20,func,Door_LiftUp,game,high,"lift up: +0x30 per frame until y 0x1F40"
+0x41D860,func,Door_Drop,game,high,"camera drop: eye y -0x80 per frame until -30000"
+0x41DA10,func,Door_WaitHidden,game,high,"no scene: one second black, objects hidden"
+0x41DB90,func,Door_Wait,game,high,"no scene: one second black"
+0x41DAF0,func,Door_Message,game,high,"no scene: message 0x728A66 (room 1) or 0x728ABC until flag 2/0x1F clears"
+0x41DC70,func,Door_Walk,game,high,"stand-in walks, footsteps from animation events"
+0x41DDF0,func,Door_StairsDown,game,high,"loads file 0x1E9/0x1F9 (character), climbs -0x12 per frame, random camera"
+0x41E050,func,Door_StairsUp,game,high,"climbs +0x12 per frame"
+0x41F040,func,Door_ScoreBox,game,high,"score panel box via 0x41F080"
