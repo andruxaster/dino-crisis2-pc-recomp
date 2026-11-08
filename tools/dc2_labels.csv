@@ -642,3 +642,30 @@ address,kind,name,category,confidence,notes
 0x48DBC0,func,Effect_Spawn,object,high,kind 6 effect slot at a point (explosions)
 0x48B830,func,Noise_Make,weapon,high,"noise position 0x7598B8 for the enemies, flag 2/10"
 0x47AFA0,func,Thrown_Update,weapon,high,sub-weapons in flight / lying / blasting (object-effect slots G+0x93C)
+0x4961D0,func,Ammo_Check,weapon,high,"n if the weapon has n rounds (or unlimited), else 0"
+0x4962B0,func,Ammo_Use,weapon,high,"rounds fired: item count down, statistics"
+0x478AA0,func,Flash_Alloc,weapon,high,"free flash slot of the room (G+0x94C, 10 x 0x18)"
+0x478AF0,func,Flash_AllocObj,weapon,high,"free flash slot of an object (+0x190, 2)"
+0x478A60,func,Flash_Start,weapon,high,muzzle flash (one frame)
+0x478B40,func,Flash_StartFor,weapon,high,light for n frames
+0x4AA7A0,func,WState_0,weapon,high,"weapon state handler: frames since the last shot, substate table 0x73B44C"
+0x4AB450,func,WState_1,weapon,high,"weapon state handler: frames since the last shot, substate table 0x73B44C"
+0x4ABD10,func,WState_2,weapon,high,"weapon state handler: frames since the last shot, substate table 0x73B44C"
+0x4AC9A0,func,WState_3,weapon,high,"weapon state handler: frames since the last shot, substate table 0x73B44C"
+0x4AD6A0,func,WState_4,weapon,high,"weapon state handler: frames since the last shot, substate table 0x73B44C"
+0x4AE320,func,WState_5,weapon,high,"weapon state handler: frames since the last shot, substate table 0x73B44C"
+0x4AEF60,func,WState_6,weapon,high,"weapon state handler: frames since the last shot, substate table 0x73B44C"
+0x4AF500,func,WState_7,weapon,high,"weapon state handler: frames since the last shot, substate table 0x73B44C"
+0x4B0490,func,WState_8,weapon,high,"weapon state handler: frames since the last shot, substate table 0x73B44C"
+0x4B08D0,func,WState_9,weapon,high,"weapon state handler: frames since the last shot, substate table 0x73B44C"
+0x4B0ED0,func,WState_10,weapon,high,"weapon state handler: frames since the last shot, substate table 0x73B44C"
+0x4B1CB0,func,WState_11,weapon,high,"weapon state handler: frames since the last shot, substate table 0x73B44C"
+0x4AB490,func,Handgun_Fire,weapon,high,handgun firing (normal substate 6)
+0x4ACCC0,func,Gun_Ready,weapon,high,weapon substate 0: raise at the nearest target
+0x4AD0D0,func,Gun_Hold,weapon,high,weapon substate 1: hold the aim
+0x4AABD0,func,Gun_Lower,weapon,high,weapon substate 2: lower
+0x4AE9E0,func,Gun_NextTarget,weapon,high,weapon substate 3: next target
+0x4B27C0,func,Gun_TurnBack,weapon,high,weapon substate 4: aimed turn back
+0x4AB640,func,Gun_Walk,weapon,high,weapon substate 5: walk aiming
+0x4AB870,func,Gun_Back,weapon,high,weapon substate 6: walk back aiming
+0x4ABAA0,func,Gun_Turn,weapon,high,weapon substate 7: turn aiming

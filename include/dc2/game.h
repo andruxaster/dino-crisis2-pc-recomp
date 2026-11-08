@@ -374,4 +374,33 @@ gptr DC2CALL Effect_Spawn(gptr pos, gptr data, u32 a, u32 b, u32 c, u32 d); /* 0
 void DC2CALL Noise_Make(u32 x, u32 y, u32 z);                          /* 0x48B830 */
 void DC2CALL Thrown_Update(gptr o);                                    /* 0x47AFA0 */
 
+/* gun.c */
+u32  DC2CALL Ammo_Check(u32 n);                                        /* 0x4961D0 */
+void DC2CALL Ammo_Use(u32 n);                                          /* 0x4962B0 */
+gptr DC2CALL Flash_Alloc(void);                                        /* 0x478AA0 */
+gptr DC2CALL Flash_AllocObj(gptr o);                                   /* 0x478AF0 */
+gptr DC2CALL Flash_Start(gptr o, u32 k);                               /* 0x478A60 */
+gptr DC2CALL Flash_StartFor(gptr o, u32 k, u32 n);                     /* 0x478B40 */
+void DC2CALL WState_0(gptr o);                                         /* 0x4AA7A0 */
+void DC2CALL WState_1(gptr o);                                         /* 0x4AB450 */
+void DC2CALL WState_2(gptr o);                                         /* 0x4ABD10 */
+void DC2CALL WState_3(gptr o);                                         /* 0x4AC9A0 */
+void DC2CALL WState_4(gptr o);                                         /* 0x4AD6A0 */
+void DC2CALL WState_5(gptr o);                                         /* 0x4AE320 */
+void DC2CALL WState_6(gptr o);                                         /* 0x4AEF60 */
+void DC2CALL WState_7(gptr o);                                         /* 0x4AF500 */
+void DC2CALL WState_8(gptr o);                                         /* 0x4B0490 */
+void DC2CALL WState_9(gptr o);                                         /* 0x4B08D0 */
+void DC2CALL WState_10(gptr o);                                        /* 0x4B0ED0 */
+void DC2CALL WState_11(gptr o);                                        /* 0x4B1CB0 */
+void DC2CALL Handgun_Fire(gptr o);                                     /* 0x4AB490 */
+void DC2CALL Gun_Ready(gptr o);                                        /* 0x4ACCC0 */
+void DC2CALL Gun_Hold(gptr o);                                         /* 0x4AD0D0 */
+void DC2CALL Gun_Lower(gptr o);                                        /* 0x4AABD0 */
+void DC2CALL Gun_NextTarget(gptr o);                                   /* 0x4AE9E0 */
+void DC2CALL Gun_TurnBack(gptr o);                                     /* 0x4B27C0 */
+void DC2CALL Gun_Walk(gptr o);                                         /* 0x4AB640 */
+void DC2CALL Gun_Back(gptr o);                                         /* 0x4AB870 */
+void DC2CALL Gun_Turn(gptr o);                                         /* 0x4ABAA0 */
+
 #endif

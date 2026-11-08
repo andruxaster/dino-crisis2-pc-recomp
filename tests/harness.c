@@ -1519,13 +1519,13 @@ static void targets_setup(void)
 }
 
 /* aim descriptors of the objects (radius +6, height +8, part +0xA, more +0xB) */
-static void aim_desc_setup(void)
+static void aim_desc_setup(int always)
 {
     { gptr dsc = 0x6DCC00;
       for (u32 k = 0; k < 16; k++) {
           gptr ob = O_OBJ + k * 0x260;
           u32 np = U32(U32(ob + 0x64) + 0x54) ? 2 : 1, nd = 1 + rnd() % 3;
-          U32(ob + 0x134) = rnd() % 8 ? dsc : 0;
+          U32(ob + 0x134) = always || rnd() % 8 ? dsc : 0;
           U8(ob + 0x17B) = rnd() % 4 ? 0 : (u8)rnd();
           for (u32 m = 0; m < nd; m++, dsc += 0xC) {
               for (u32 b = 0; b < 6; b += 2) S16(dsc + b) = cl_coord(0, 200);
@@ -1638,7 +1638,7 @@ static void test_player2(void)
         a[0] = o;
         check(0x48FCE0, Obj_SaveFeet, "Obj_SaveFeet", 1, a, 0);
         /* shots */
-        aim_desc_setup();
+        aim_desc_setup(0);
         gptr shot = G_SCR + 0x40;
         S16(G_SCR + 0x60) = (s16)(rnd() % 0x1000); S16(G_SCR + 0x62) = (s16)(rnd() % 0x1000); S16(G_SCR + 0x64) = (s16)(rnd() % 0x1000);
         if (rnd() % 2) { S16(G_SCR + 0x60) = 0; S16(G_SCR + 0x64) = 0; }
@@ -1655,7 +1655,7 @@ static void test_player2(void)
           check(0x47C030, Hit_Sort, "Hit_Sort", 3, a, 0); }
         check(0x496400, Stat_Shot, "Stat_Shot", 0, a, 0);
         /* sub-weapons in flight */
-        o = player_setup_obj(); world_setup(); aim_desc_setup(); U32(LOG_BASE) = 0;
+        o = player_setup_obj(); world_setup(); aim_desc_setup(0); U32(LOG_BASE) = 0;
         for (int k = 0; k < 256; k++) U32(TYPE_TAB + 4 * k) = (u32)(uintptr_t)g_recs[STUB_TYPE];
         U16(O_K3 + 0x18) = (u16)(0x200 + rnd() % 0x900);
         U32(0x87FD60) = o + 0x1C0;
@@ -1836,6 +1836,63 @@ static void test_player2(void)
             check(0x47EF90, Player_Climb, "Player_Climb", 1, a, 0);
             U8(o + 0x56) = rnd() % 9; U16(o + 0x92) = rnd() % 20;
             check(0x47FC70, Player_Push, "Player_Push", 1, a, 0);
+            /* firearms: the player is object 0 (the animation layers work on it) */
+            player_setup_obj(); targets_setup(); aim_desc_setup(1);
+            o = O_OBJ; do anim_setup_at(o); while (U32(o + 0x68) < 5);
+            U32(G() + 0x940) = O_OBJ; U32(0x87FD60) = o + 0x1C0; a[0] = o;
+            for (u32 l = 0; l < 2; l++) {                   /* the two layers' shadow objects */
+                gptr sh = 0x7598D8 + l * 0x260;
+                for (u32 k = 0x60; k < 0x110; k += 4) U32(sh + k) = U32(o + k);
+                for (u32 k = 0; k < 0x78; k += 2) U16(0x759D98 + l * 0x78 + k) = (u16)(rnd() % 0x1000);
+            }
+            U32(LOG_BASE) = 0;
+            for (u32 k = 0x14; k < 0x40; k += 2) U16(o + 0x1C0 + k) = (u16)(rnd() % 3 ? rnd() % 0x1000 : rnd());
+            U32(o + 0x1C0 + 0x14) = rnd() % 3 ? O_OBJ + 0x260 * (1 + rnd() % 15) : 0;
+            U8(o + 0x1C0 + 8) = (u8)(rnd() % 16); U8(o + 0x1C0 + 0x2E) = rnd() % 2; U8(o + 0x1C0 + 0x2F) = rnd() % 2;
+            S16(o + 0x1C0 + 0x3C) = (s16)(rnd() % 0x18);
+            for (u32 k = 0; k < 20; k++) {
+                gptr it = G() + 0x10BC + k * 12;
+                U8(it) = rnd() % 2; U8(it + 1) = (u8)(rnd() % 12); S16(it + 8) = (s16)(rnd() % 3); U32(it + 4) = rnd();
+                if (k < 12 && rnd() % 2) { U8(it) = 1; U8(it + 1) = (u8)k; }      /* most weapons have an entry */
+            }
+            U8(G() + 0x1094) = rnd() % 4 == 0; U8(G() + 0x75B) = (u8)rnd();
+            U16(G() + 0x10B4) = (u16)(rnd() % 12 | (rnd() % 3 ? 0 : (rnd() % 10) << 8));
+            U32(0x87DC08) = rnd() % 3 ? (rnd() & 0xF0FE) : rnd(); U32(0x87DC94) = rnd() % 2 ? 0 : rnd() % 2 ? (u8)rnd() : rnd();
+            Flag_Set(2, 0x1C, rnd() % 2); Flag_Set(2, 0xE, rnd() % 4 == 0); Flag_Set(2, 4, rnd() % 4 == 0);
+            for (u32 k = 0; k < 10; k++) U8(G() + 0x94C + k * 0x18 + 0xC) = (u8)(rnd() % 3 ? 1 : rnd());
+            U8(o + 0x190 + 0xC) = (u8)rnd(); U8(o + 0x1A8 + 0xC) = (u8)rnd();
+            U16(o + 0x92) = rnd() % 2 ? 9 + rnd() % 2 : rnd() % 20;
+            U16(0x7598D8 + 0x92) = U16(o + 0x92); U16(0x7598D8 + 0x260 + 0x92) = U16(o + 0x92);   /* the layers' frames */
+            sprintf(g_what, "gun %02X/%02X held %08X press %08X set %04X tgt %X", U8(o + 0x56), U8(o + 0x57),
+                    U32(0x87DC08), U32(0x87DC94), U16(G() + 0x10B4), U32(o + 0x1C0 + 0x14));
+            { static const struct { u32 addr; void *fn; const char *name; u8 sub; } GF[] = {
+                {0x4AB490, Handgun_Fire, "Handgun_Fire", 0}, {0x4ACCC0, Gun_Ready, "Gun_Ready", 1},
+                {0x4AD0D0, Gun_Hold, "Gun_Hold", 1}, {0x4AABD0, Gun_Lower, "Gun_Lower", 1},
+                {0x4AE9E0, Gun_NextTarget, "Gun_NextTarget", 1}, {0x4B27C0, Gun_TurnBack, "Gun_TurnBack", 1},
+                {0x4AB640, Gun_Walk, "Gun_Walk", 1}, {0x4AB870, Gun_Back, "Gun_Back", 1}, {0x4ABAA0, Gun_Turn, "Gun_Turn", 1}};
+              for (u32 k = 0; k < 9; k++) {
+                  if (GF[k].sub) U8(o + 0x57) = rnd() % 4 ? rnd() % 3 : 0xFF; else U8(o + 0x56) = (u8)(rnd() % 3);
+                  if (rnd() % 3 == 0) U16(o + 0x1C0 + 0x20) = U16(o + 0x4A);          /* already facing */
+                  if (rnd() % 3 == 0) U16(o + 0x1C0 + 0x32) = U16(o + 0x1C0 + 0x30);
+                  check(GF[k].addr, GF[k].fn, GF[k].name, 1, a, 0);
+              } }
+            { static const struct { u32 addr; void *fn; } WS[] = {
+                {0x4AA7A0, WState_0}, {0x4AB450, WState_1}, {0x4ABD10, WState_2}, {0x4AC9A0, WState_3},
+                {0x4AD6A0, WState_4}, {0x4AE320, WState_5}, {0x4AEF60, WState_6}, {0x4AF500, WState_7},
+                {0x4B0490, WState_8}, {0x4B08D0, WState_9}, {0x4B0ED0, WState_10}, {0x4B1CB0, WState_11}};
+              u32 saved[108], k = rnd() % 12;
+              for (u32 q = 0; q < 108; q++) { saved[q] = U32(0x73B44C + 4 * q); U32(0x73B44C + 4 * q) = (u32)(uintptr_t)g_recs[71 + q % 12]; }
+              U8(o + 0x56) = (u8)(rnd() % 9);
+              check(WS[k].addr, WS[k].fn, "WState", 1, a, 0);
+              for (u32 q = 0; q < 108; q++) U32(0x73B44C + 4 * q) = saved[q]; }
+            a[1] = rnd() % 4; a[2] = rnd() % 2 ? 0x46 : (u32)rnd();
+            check(0x4961D0, Ammo_Check, "Ammo_Check", 1, a + 1, 0xFFFFFFFF);
+            check(0x4962B0, Ammo_Use, "Ammo_Use", 1, a + 1, 0);
+            check(0x478AA0, Flash_Alloc, "Flash_Alloc", 0, a, 0xFFFFFFFF);
+            check(0x478AF0, Flash_AllocObj, "Flash_AllocObj", 1, a, 0xFFFFFFFF);
+            { u32 b[3] = {rnd() % 3 ? o : 0, a[1], a[2]};
+              check(0x478A60, Flash_Start, "Flash_Start", 2, b, 0xFFFFFFFF);
+              check(0x478B40, Flash_StartFor, "Flash_StartFor", 3, b, 0xFFFFFFFF); }
         }
         player_setup_obj(); o = O_OBJ; do anim_setup_at(o); while (U32(o + 0x68) < 15);
         world_setup(); U32(0x662514) = 15 + rnd() % 2;   /* the player's model: feet are parts 11/14 */   /* Stage_Load restarts the animation; feet are parts 11/14 */
@@ -2233,6 +2290,7 @@ static void title_state(void)
     gptr g = G(), t = 0x759EF0;
     U32(g + 0x93C) = O_EFF;                         /* object effects (Stage_Load frees them) */
     U32(g + 0x940) = O_OBJ; U8(O_OBJ + 0x58) = 0;  /* the player: Player_Setup calls its type handler */
+    U8(g + 0x108F) = rnd() % 4;                     /* a playable character (types with handlers) */
     world_setup();
     for (u32 k = 0; k < 0x40; k += 4) U32(t + k) = rnd();
     U8(t + 2) = rnd() % 3; U8(t + 0x2A) = 1 + rnd() % 2; U8(t + 0x28) = rnd() % 2; U8(t + 0x2B) = rnd() % 2;
