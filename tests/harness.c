@@ -73,6 +73,7 @@ static int g_fail, g_tests;
 static u32 g_ign_addr, g_ign_len;    /* bytes the original fills with stack garbage */
 static int g_ign_objpads;            /* matrix pads (+0x32) of test objects and parts */
 static int g_ign_door;               /* door scene: matrix pads */
+static int g_ign_campad;             /* the camera matrix's pad (G+0x78A) */
 static int g_ign_throw;              /* thrown sub-weapons: stack pointers / bytes kept (see below) */
 static char g_what[256];
 
@@ -115,6 +116,8 @@ static int compare(const char *name, u32 r_orig, u32 r_new, u32 rmask)
             for (u32 j = 0; j < 4; j++) { u32 a = 0x6D6000u + k * 0xAC + 0xA0 + j; if (a >= RW[0].lo && a < RW[0].hi) snap1[0][a - RW[0].lo] = U8(a); }
         for (u32 k = 0; k < 12; k++) { u32 a = 0x694000u + k * 0x70 + 0x46; snap1[0][a - RW[0].lo] = U8(a); }
     }
+    if (g_ign_campad)
+        for (u32 a = 0x87DE20u + 0x78A; a < 0x87DE20u + 0x78C; a++) snap1[1 - (a < 0x703000)][a - RW[1 - (a < 0x703000)].lo] = U8(a);
     if (g_ign_door)             /* the door scene's objects and parts: matrix pads */
         for (u32 k = 0; k < 3 + 0x1E + 3; k++) {
             u32 a = k < 3 ? 0x748A60u + 0x530 + k * 0x260 + 0x32 : k < 0x21 ? 0x748A60u + 0xC50 + (k - 3) * 0xCC + 0x32
@@ -577,7 +580,7 @@ static Stub g_stubs[] = {
     {0x473130, "d"}, {0x4731F0, ""}, {0x474B20, "d"}, {0x478B80, "dd"}, {0x47A8C0, "ddpp", {16, 8}},
     {0, ""}, {0, ""}, {0, ""}, {0, ""}, {0x48C0B0, "pd", {0x60}},
     {0x48C600, "d"}, {0x48C640, "ddd"}, {0x48C9C0, "w"}, {0x48CD70, "dd"}, {0x48CE20, "bwww"},
-    {0x48CE60, "d"}, {0x48D070, "dd"}, {0, ""}, {0, ""}, {0, ""},
+    {0x48CE60, "d"}, {0, ""}, {0, ""}, {0, ""}, {0, ""},
     {0x495E90, "wwwww"}, {0x4B4D20, "pd", {8}}, {0x4B4DB0, "pd", {8}}, {0x4DDDA2, ""},
     {0, "d"},                   /* 34: object type handlers (*0x87DCA0) */
     {0, "d"},                   /* 35: AOT kind handlers (0x738B68) */
@@ -597,13 +600,18 @@ static Stub g_stubs[] = {
     /* 71..: game task */
     {0x496410, ""}, {0x46FC50, "d"}, {0x403480, ""}, {0x470CB0, ""}, {0x452450, ""}, {0x48FB50, "d"},
     {0, ""}, {0x4BF130, "d"}, {0, ""}, {0x403520, ""}, {0x46B8C0, ""}, {0x407170, ""},
-    {0x491B10, "bb"}, {0x48CB40, ""}, {0x4A7250, ""}, {0x405E40, ""}, {0x472FD0, ""}, {0x452370, ""},
+    {0x491B10, "bb"}, {0x48CB40, ""}, {0x4A7250, ""}, {0x405E40, ""}, {0x4036F0, "ddd"}, {0x452370, ""},
     /* 89..: object handlers (collision) */
     {0, ""}, {0, ""},
     /* 91..: player */
     {0, ""}, {0x4542F0, "pdpd", {6, 6}}, {0x4BF330, ""},
     /* 94..: doors */
     {0x48CA40, ""}, {0x494DE0, "d"}, {0x41F080, "dddddd"}, {0x46BA00, "d"}, {0x41F3E0, "d"}, {0x41F390, "d"}, {0x41F170, "d"}, {0x470CF0, ""},
+    /* 102..: the frame of play */
+    {0x472230, ""}, {0x472D20, ""}, {0x4509C0, ""}, {0x445D10, ""}, {0x4D2990, "dddd"}, {0x404CC0, ""},
+    {0x406050, "dd"}, {0x406520, "dd"}, {0x48FA70, ""},
+    /* 111..: the PC sound buffers */
+    {0x4BF970, "ddd"}, {0x4BFA20, "dd"}, {0x4BFAA0, "d"}, {0x4BFAE0, "d"}, {0x4BFBD0, "d"}, {0x4BFF20, "dd"},
 };
 #define STUB_GAME 71
 #define STUB_LOAD 50
@@ -659,7 +667,8 @@ REC(58) REC(59) REC(60) REC(61) REC(62) REC(63) REC(64) REC(65) REC(66) REC(67) 
 REC(70) REC(71) REC(72) REC(73) REC(74) REC(75) REC(76) REC(77) REC(78) REC(79) REC(80) REC(81)
 REC(82) REC(83) REC(84) REC(85) REC(86) REC(87) REC(88) REC(89) REC(90) REC(91) REC(92) REC(93)
 REC(94) REC(95) REC(96) REC(97) REC(98) REC(99) REC(100) REC(101)
-REC(102) REC(103) REC(104) REC(105)
+REC(102) REC(103) REC(104) REC(105) REC(106) REC(107) REC(108) REC(109) REC(110)
+REC(111) REC(112) REC(113) REC(114) REC(115) REC(116)
 static void *const g_recs[] = {rec0, rec1, rec2, rec3, rec4, rec5, rec6, rec7, rec8, rec9, rec10,
     rec11, rec12, rec13, rec14, rec15, rec16, rec17, rec18, rec19, rec20, rec21, rec22, rec23,
     rec24, rec25, rec26, rec27, rec28, rec29, rec30, rec31, rec32, rec33, rec34, rec35, rec36, rec37,
@@ -667,7 +676,8 @@ static void *const g_recs[] = {rec0, rec1, rec2, rec3, rec4, rec5, rec6, rec7, r
     rec52, rec53, rec54, rec55, rec56, rec57, rec58, rec59, rec60, rec61, rec62, rec63,
     rec64, rec65, rec66, rec67, rec68, rec69, rec70, rec71, rec72, rec73, rec74, rec75, rec76, rec77,
     rec78, rec79, rec80, rec81, rec82, rec83, rec84, rec85, rec86, rec87, rec88, rec89, rec90, rec91, rec92, rec93,
-    rec94, rec95, rec96, rec97, rec98, rec99, rec100, rec101, rec102, rec103, rec104, rec105};
+    rec94, rec95, rec96, rec97, rec98, rec99, rec100, rec101, rec102, rec103, rec104, rec105,
+    rec106, rec107, rec108, rec109, rec110, rec111, rec112, rec113, rec114, rec115, rec116};
 _Static_assert(sizeof g_recs / sizeof g_recs[0] >= sizeof g_stubs / sizeof g_stubs[0], "a recorder per stub");
 /* Task_Sleep: the file loader "runs" while the task sleeps */
 static u32 __cdecl ts_sleep(u32 n)
@@ -675,9 +685,11 @@ static u32 __cdecl ts_sleep(u32 n)
 #define TYPE_TAB 0x6DD000u      /* fake *0x87DCA0: 256 entries */
 static u32 g_aot_saved[12], g_wep_saved[24];
 
+static u32 __cdecl fk_sprintf(u32 buf, u32 fmt, u32 name);
 static void stubs_install(int on)
 {
     g_stubs[STUB_LOAD].impl = ts_sleep;
+    if (!g_stubs[STUB_FILE + 7].impl) g_stubs[STUB_FILE + 7].impl = fk_sprintf;   /* sprintf does its work */
     for (int i = 0; i < NSTUBS; i++) {
         Stub *st = &g_stubs[i];
         if (!st->addr) continue;
@@ -2459,6 +2471,8 @@ static void game_state(void)
     u32 fl[][2] = {{2, 0x1B}, {2, 6}, {2, 0xF}, {1, 9}, {1, 0x10}, {1, 0xA}, {2, 0x25}, {2, 8}, {2, 0x11}, {2, 0x10}, {3, 9}, {2, 0x17}};
     for (unsigned k = 0; k < sizeof fl / sizeof fl[0]; k++) Flag_Set(fl[k][0], fl[k][1], rnd() % 5 == 0);
     U16(0x87DE10) = (u16)rnd();
+    Flag_Set(2, 0x1D, 1);           /* Game_Frame's object part (the "frame" tests) skipped */
+    U8(g + 0x84B) = U8(g + 0x84A);   /* and no camera load */
 }
 
 /* ---- doors (the room change) --------------------------------------------------------- */
@@ -2671,6 +2685,7 @@ static void title_state(void)
     U8(0x87DC90) = rnd() % 3; U8(g + 0x814) = rnd() % 2;
     U32(0x87DC98) = 0x6D0000; U32(0x87F94C) = 0x6CF800; U32(0x87DE0C) = rnd() & 1;
     U16(0x87FFEA) = rnd() % 2;
+    Flag_Set(2, 0x1D, 1); U8(g + 0x84B) = U8(g + 0x84A);
     if (U16(g + 0x76E) == 3 || U16(g + 0x76C) == 5 || U8(t + 0x28)) { game_state(); fake_room_block(); }
     U16(0x87FFEA) = rnd() % 2;
 }
@@ -2725,6 +2740,175 @@ static void test_title(void)
     }
     type_tables_stub(0);
     stubs_install(0);
+}
+
+
+/* ---- the frame of play: object loops, trigger areas ---------------------------------- */
+static void camera_state(void);
+static void frame_state(void)
+{
+    gptr g = G();
+    U32(0x87DCA0) = TYPE_TAB; U32(0x87DC8C) = TYPE_TAB; U32(0x87F320) = TYPE_TAB; U32(0x87F948) = TYPE_TAB;
+    for (int k = 0; k < 256; k++) U32(TYPE_TAB + 4 * k) = (u32)(uintptr_t)g_recs[k & 1 ? STUB_AOT : STUB_TYPE];  /* which entry shows */
+    U32(g + 0x940) = O_OBJ; U32(0x87F940) = 1 + rnd() % 8;
+    for (u32 k = 0; k < 8; k++) {
+        gptr o = O_OBJ + k * 0x260;
+        U8(o + 0x50) = (u8)rnd(); U8(o + 0x58) = (u8)rnd(); U16(o + 0x4A) = (u16)rnd();
+    }
+    U32(g + 0x93C) = O_EFF; U32(0x87DE04) = rnd() % 8;
+    for (u32 k = 0; k < 8; k++) { gptr o = O_EFF + k * 0x70; U8(o + 0x50) = (u8)rnd(); U8(o + 0x4E) = rnd() % 0x80;
+        for (u32 j = 0x48; j < 0x4E; j += 2) U16(o + j) = (u16)rnd(); }
+    U32(g + 0x948) = O_K3; U32(0x87DE14) = rnd() % 8;
+    for (u32 k = 0; k < 8; k++) { U8(O_K3 + k * 0x34) = (u8)rnd(); U8(O_K3 + k * 0x34 + 1) = (u8)rnd(); }
+    U32(g + 0x944) = O_K2; U32(0x87DC88) = rnd() % 8;
+    for (u32 k = 0; k < 8; k++) { U8(O_K2 + k * 0xAC + 0x50) = (u8)rnd(); U8(O_K2 + k * 0xAC + 0x58) = (u8)rnd(); }
+    U8(g + 0x84A) = rnd() % 4; U8(g + 0x84B) = rnd() % 2 ? U8(g + 0x84A) : rnd() % 4;
+    static const u32 fl[][2] = {{2, 0x1D}, {1, 1}, {1, 8}, {1, 6}, {1, 0xB}, {1, 7}, {1, 3}, {1, 2}, {1, 0xD}, {1, 4},
+                                {1, 0xC}, {3, 0xB}, {1, 5}, {1, 0}, {2, 1}, {2, 0xD}, {2, 0xA}};
+    for (unsigned k = 0; k < sizeof fl / sizeof fl[0]; k++) Flag_Set(fl[k][0], fl[k][1], rnd() % 3 == 0);
+    Flag_Set(1, 6, 1);                                      /* Script_Tick has its own tests */
+    camera_state();
+}
+
+/* the camera zones around the player and a camera to load (a fake DBS record
+   in the fake heap: Crt_malloc returns 0x500000) */
+static void camera_state(void)
+{
+    gptr g = G(), pl = U32(g + 0x940), c = g + 0x778;
+    U32(g + 0xA44) = O_ZONE; U32(g + 0xA48) = rnd() % 8;
+    U32(pl + 0x50) = (U32(pl + 0x50) & ~0x100u) | (rnd() % 4 == 0 ? 0x100 : 0);
+    U32(pl + 0x64) = O_PART;                                        /* Obj_Part: a chain of 12 */
+    for (u32 k = 0; k < 12; k++) {
+        U32(O_PART + k * 0x80 + 0x54) = k < 11 ? O_PART + (k + 1) * 0x80 : 0;
+        for (u32 j = 0x40; j < 0x46; j += 2) U16(O_PART + k * 0x80 + j) = (u16)(S16(pl + j) + (s16)(rnd() % 1000 - 500));
+    }
+    for (u32 k = 0; k < 8; k++) {
+        gptr e = O_ZONE + k * 0x2C;
+        for (u32 j = 0; j < 0x2C; j += 4) U32(e + j) = rnd();
+        U8(e) = rnd() % 4 ? 0 : 0x80; U8(e + 4) = rnd() % 4; U8(e + 6) = rnd() % 3; U8(e + 7) = rnd() % 3;
+        s16 cx = S16(pl + 0x40) + (s16)(rnd() % 1000 - 500), cz = S16(pl + 0x44) + (s16)(rnd() % 1000 - 500), r = (s16)(50 + rnd() % 900);
+        U16(e + 0xC) = (u16)(cx + r); U16(e + 0xE) = (u16)(cz + r); U16(e + 0x10) = (u16)(cx + r); U16(e + 0x12) = (u16)(cz - r);
+        U16(e + 0x14) = (u16)(cx - r); U16(e + 0x16) = (u16)(cz - r); U16(e + 0x18) = (u16)(cx - r); U16(e + 0x1A) = (u16)(cz + r);
+    }
+    U8(c + 0x4C) = rnd() % 4; U8(c + 0x4D) = (u8)rnd(); U8(c + 0x4F) = (u8)rnd();
+    U32(c + 0x40) = O_CAM + 0x100;
+    for (u32 k = 0; k < 4 * 0x10; k += 2) U16(O_CAM + 0x100 + k) = (u16)(rnd() % 0x4000 - 0x2000);
+    for (u32 k = 0; k < 4; k++) U16(O_CAM + 0x106 + k * 0x10) = (u16)(0x100 + rnd() % 0x200);
+    U32(g + 0xA6C) = O_CAM;
+    for (u32 k = 0; k < 4; k++) { U32(O_CAM + k * 8) = rnd() % 0x100; U32(O_CAM + k * 8 + 4) = 0x2000 + rnd() % 0x1000; }
+    U8(g + 0x84A) = rnd() % 4; U8(g + 0x84B) = rnd() % 2 ? U8(g + 0x84A) : rnd() % 4;
+    U8(g + 0x927) = rnd() % 4 == 0; U8(g + 0xB49) = (u8)rnd();
+    gptr p = 0x500000;
+    for (u32 k = 0; k < 0x4000; k += 4) U32(p + k) = rnd();
+    U32(p + 4) = rnd() % 0x400; U32(p + 0x24) = rnd() % 2 ? 0x800 * (rnd() % 3) + rnd() % 3 : rnd() % 0x1800;
+    U16(g + 0x664) = rnd() % 5; Flag_Set(3, 0, 0);
+    U32(p + 0x40) = rnd() % 3 ? rnd() : 0x6D6D7564; U32(p + 0x60) = rnd() % 2;
+    U32(p + 0x64) = rnd() % 0x100; U32(p + 0x68) = rnd() % 0x400;
+    stub_at(0x4C03F0)->ret = rnd() % 5 ? 3 : 0xFFFFFFFF;
+    stub_at(0x4DD711)->ret = p;
+}
+
+/* the trigger areas: some around the player (or the point in front of it, or
+   the event position 0x7598B8), on its level or not */
+static void aot_state(void)
+{
+    gptr g = G(), pl = U32(g + 0x940);
+    U32(g + 0xA5C) = 0x7593B8;
+    for (u32 k = 0; k < 0x20; k += 4) U32(g + 0xB28 + k) = rnd();
+    U16(pl + 0x40) = (u16)(rnd() % 4000 - 2000); U16(pl + 0x42) = (u16)(rnd() % 4000 - 2000); U16(pl + 0x44) = (u16)(rnd() % 4000 - 2000);
+    U16(pl + 0x48) = (u16)rnd(); U16(pl + 0x4A) = (u16)rnd(); U16(pl + 0x4C) = (u16)rnd();
+    U16(pl + 0x5A) = rnd() % 3; U8(pl + 0x55) = rnd() % 3 ? 0xA : (u8)rnd(); U8(pl + 0x54) = rnd() % 3 ? 1 : rnd() % 4;
+    U16(g + 0x10B4) = (u16)((rnd() % 3 ? (u16[]){3, 6, 2}[rnd() % 3] : rnd() % 8) << 8 | (rnd() & 0xFF));
+    U16(0x7598B8) = (u16)(rnd() % 4000 - 2000); U16(0x7598BC) = (u16)(rnd() % 4000 - 2000);
+    U16(0x7598BA) = (u16)(rnd() % 3 ? -(s16)(rnd() % 3 * 1000 + rnd() % 3 - 1) : (u16)rnd());
+    U16(0x7593B0) = rnd() % 2 ? (u16[]){0x10, 0x20, 0x30, 0x1030, 0x2010, 0x1020}[rnd() % 6] : (u16)rnd();
+    for (gptr e = 0x7593B8; e < 0x7598B8; e += 0x28) {
+        for (u32 k = 0; k < 0x28; k += 4) U32(e + k) = rnd();
+        U8(e) = rnd() % 3 ? (u8)(rnd() | 1) : (u8)rnd();
+        if (rnd() % 2) U8(e) &= ~4;
+        if (rnd() % 3 == 0) U8(e) = (u8)(0x0D | (u8[]){0x10, 0x20, 0x30}[rnd() % 3] | (rnd() & 0x42));   /* camera events */
+        U8(e + 1) = rnd() % 12; U8(e + 2) = rnd() % 3;
+        s16 cx = rnd() % 2 ? S16(pl + 0x40) : rnd() % 2 ? S16(0x7598B8) : (s16)(rnd() % 4000 - 2000);
+        s16 cz = rnd() % 2 ? S16(pl + 0x44) : rnd() % 2 ? S16(0x7598BC) : (s16)(rnd() % 4000 - 2000);
+        s16 r = (s16)(10 + rnd() % 900);                   /* clockwise in x/z, as the rooms' */
+        U16(e + 4) = (u16)(cx + r); U16(e + 6) = (u16)(cz + r); U16(e + 8) = (u16)(cx + r); U16(e + 0xA) = (u16)(cz - r);
+        U16(e + 0xC) = (u16)(cx - r); U16(e + 0xE) = (u16)(cz - r); U16(e + 0x10) = (u16)(cx - r); U16(e + 0x12) = (u16)(cz + r);
+        U8(e + 0x20) = rnd() % 2 ? 0 : 1 + rnd() % 8; U8(e + 0x21) = (u8)rnd();
+    }
+}
+
+static void test_frame(void)
+{
+    g_ign_campad = 1;
+    stubs_install(1);
+    type_tables_stub(1);
+    script_setup();
+    for (int i = 0; i < iters; i++) {
+        game_state(); fake_room_block();
+        static const struct { u32 addr; void *fn; const char *name; } F[] = {
+            {0x471EF0, Obj_RunAll, "Obj_RunAll"}, {0x471F90, Prop_RunAll, "Prop_RunAll"},
+            {0x471FE0, Eff_RunAll, "Eff_RunAll"}, {0x472040, ObjEff_RunAll, "ObjEff_RunAll"},
+            {0x48B040, AOT_Check, "AOT_Check"}, {0x48AFF0, Aot_Tick, "Aot_Tick"},
+            {0x472FD0, Game_Frame, "Game_Frame"},
+            {0x403570, Camera_Tick, "Camera_Tick"}, {0x403AC0, Camera_Load, "Camera_Load"},
+        };
+        for (unsigned k = 0; k < sizeof F / sizeof F[0]; k++) {
+            frame_state(); aot_state();
+            U32(LOG_BASE) = 0;
+            sprintf(g_what, "objects %u effects %u/%u props %u level %u climb %X", U32(0x87F940), U32(0x87DE14),
+                    U32(0x87DE04), U32(0x87DC88), U16(U32(G() + 0x940) + 0x5A), U16(G() + 0x10B4));
+            check(F[k].addr, F[k].fn, F[k].name, 0, NULL, 0);
+        }
+        for (int r = 0; r < 4; r++) {                          /* the camera events' areas */
+            frame_state(); aot_state(); Flag_Set(2, 0xA, 1); Flag_Set(2, 0x1D, 0);
+            U32(LOG_BASE) = 0;
+            sprintf(g_what, "camera event %X at %d,%d,%d", U16(0x7593B0), S16(0x7598B8), S16(0x7598BA), S16(0x7598BC));
+            check(0x48B040, AOT_Check, "AOT_Check", 0, NULL, 0);
+        }
+        /* sound each frame and the voice */
+        for (u32 k = 0; k < 4; k++) {
+            gptr q = 0x87FB80 + k * 0x14;
+            U32(q) = rnd() % 8; U8(q + 8) = rnd() % 4 != 0; U8(q + 0x10) = rnd() % 4 ? (u8)(rnd() % 2 ? 1 : 0x81) : 0;
+            U8(q + 0x11) = (u8)(1 + rnd() % 0x20); U16(q + 0xC) = (u16)(rnd() % 0x80);
+            U16(q + 0xA) = rnd() % 3 ? (u16)(U16(q + 0xC) + (s16)(rnd() % 0x41) - 0x20) : (u16)(rnd() % 0x80);
+        }
+        for (u32 k = 0; k < 0x20; k++) {
+            gptr q = 0x87F980 + k * 0x10;
+            U32(q) = rnd() % 8; U32(q + 4) = rnd() % 2 ? 0x1D : rnd() % 0x20; U8(q + 8) = rnd() % 4 != 0;
+            U8(q + 0xA) = rnd() % 4 ? (u8)(rnd() % 2 ? 1 : 0x81) : 0; U8(q + 0xB) = (u8)(1 + rnd() % 0x20);
+            U16(q + 0xE) = (u16)(rnd() % 0x80);
+            U16(q + 0xC) = rnd() % 3 ? (u16)(U16(q + 0xE) + (s16)(rnd() % 0x41) - 0x20) : (u16)(rnd() % 0x80);
+        }
+        U8(G() + 0x14ED) = rnd() % 16; U8(G() + 0x14EE) = rnd() % 16;
+        Flag_Set(2, 0, rnd() % 2); U32(0x7598C8) = rnd() % 4; U32(0x7598CC) = 0x6DDC40; U32(0x7598D0) = rnd() % 2 ? 0x1D : rnd() % 0x20;
+        stub_at(0x4BFAA0)->ret = rnd() % 2;
+        U32(LOG_BASE) = 0;
+        sprintf(g_what, "sound volumes %u/%u voice %u", U8(G() + 0x14ED), U8(G() + 0x14EE), Flag_Check(2, 0));
+        check(0x48C700, Snd_Tick, "Snd_Tick", 0, NULL, 0);
+        frame_state();
+        u32 cz[2] = {G() + 0x778, O_ZONE};
+        U32(LOG_BASE) = 0;
+        check(0x4035B0, CamZones_FindForCamera, "CamZones_FindForCamera", 2, cz, 0xFFFFFFFF);
+        check(0x4035F0, CamZones_Check, "CamZones_Check", 2, cz, 0);
+        u32 v[2] = {rnd() % 4, rnd() % 10000};
+        check(0x48D000, Voice_Volume, "Voice_Volume", 1, v, 0xFFFFFFFF);
+        Flag_Set(2, 0, rnd() % 2);
+        stub_at(0x4C03F0)->ret = rnd() % 4 ? 3 : 0xFFFFFFFF; stub_at(0x4C0540)->ret = rnd() % 0x1000;
+        stub_at(0x4DD711)->ret = 0x6DDC40; stub_at(0x4BF720)->ret = rnd() % 4;
+        U32(LOG_BASE) = 0;
+        check(0x48D070, Voice_Play, "Voice_Play", 2, v, 0);
+        check(0x48D130, Voice_Stop, "Voice_Stop", 0, NULL, 0);
+        frame_state(); aot_state();
+        u32 a[1] = {0x7593B8 + 0x28 * (rnd() % 32)};
+        Flag_Set(8, U8(a[0] + 0x21), rnd() % 2);
+        stub_at(0x4718F0)->ret = 0x6DDC00; U8(0x6DDC00) = 0;  /* the message window (compared memory) */
+        U32(LOG_BASE) = 0;
+        sprintf(g_what, "door aot %X flags %02X msg %u", a[0], U8(a[0]), U8(a[0] + 0x20));
+        check(0x48B390, AOT_Door, "AOT_Door", 1, a, 0);
+    }
+    type_tables_stub(0);
+    stubs_install(0);
+    g_ign_campad = 0;
 }
 
 static void test_game(void)
@@ -2844,7 +3028,7 @@ __declspec(dllexport) void harness_main(int argc, char **argv)
     struct { const char *name; void (*fn)(void); } T[] = {
         {"flags", test_flags}, {"geometry", test_geom}, {"script values", test_script_values},
         {"script opcodes", test_script_ops}, {"script objects", test_objects},
-        {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"objects 2", test_object}, {"collision", test_collision}, {"player", test_player}, {"player states", test_player2}, {"zones", test_zones}, {"loading", test_room}, {"title", test_title}, {"game task", test_game}, {"doors", test_doors},
+        {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"objects 2", test_object}, {"collision", test_collision}, {"player", test_player}, {"player states", test_player2}, {"zones", test_zones}, {"loading", test_room}, {"title", test_title}, {"game task", test_game}, {"doors", test_doors}, {"frame", test_frame},
     };
     for (unsigned i = 0; i < sizeof T / sizeof T[0]; i++) {
         int f0 = g_fail, t0 = g_tests;

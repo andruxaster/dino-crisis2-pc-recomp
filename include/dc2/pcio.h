@@ -15,6 +15,17 @@ s32  DC2CALL Pc_SeekSet(s32 fd, s32 off);               /* 0x4C0560: from the st
 void DC2CALL Pc_Close(s32 fd);                          /* 0x4C05A0 */
 gptr DC2CALL Crt_malloc(u32 n);                         /* 0x4DD711 */
 void DC2CALL Crt_free(gptr p);                          /* 0x4DD628 */
+void DC2CALL Crt_sprintf1(gptr buf, gptr fmt, u32 a);   /* 0x4DD5D6: sprintf with one argument */
+
+/* DirectSound buffers (0x4BF720..): in the standalone builds a silent
+ * stand-in that only keeps time, so the game sees sounds start and end */
+u32  DC2CALL Snd_CreateBuffer(gptr wave, u32 voice);   /* 0x4BF720: handle (0 for the voice) or -1 */
+void DC2CALL Snd_Play(u32 h, u32 a, u32 loop);          /* 0x4BF970 */
+void DC2CALL Snd_SetVolume(u32 h, s32 vol);             /* 0x4BFA20 */
+u32  DC2CALL Snd_IsPlaying(u32 h);                      /* 0x4BFAA0 */
+void DC2CALL Snd_Stop(u32 h);                           /* 0x4BFAE0 */
+void DC2CALL Snd_Free(u32 h);                           /* 0x4BFBD0 */
+void DC2CALL Strm_SetVolume(u32 h, s32 vol);            /* 0x4BFF20 */
 
 /* cooperative tasks: give up the CPU for n frames (0x4C29A9, task.c) */
 void DC2CALL Task_Sleep(u32 n);

@@ -2,9 +2,12 @@
  * section pointers of the room block, object arrays, script start, camera
  * zones. Loads wait for the file loader with Task_Sleep (the caller runs as
  * a cooperative task). */
+#include <string.h>
 #include "dc2/game.h"
 #include "dc2/orig.h"
 #include "dc2/pcio.h"
+#include "dc2/gte.h"
+#include "dc2/task.h"
 
 #define A_ENEMY_FILES  0x703520u   /* stride 8: u16 file per object type */
 #define A_KOF_FILES    0x703598u   /* stride 8: playable dinosaurs (type - 0x1D) */
@@ -233,4 +236,89 @@ void DC2CALL Script_Init(void)                                      /* 0x48BB60 
     memset(MEM(U32(A_SCR_THREADS)), 0, 0x19A * 4);
     Script_StartThread(0, 0);
     Script_Tick();
+}
+
+/* ---- AOT (trigger areas) each frame ------------------------------------------------ */
+#define A_AOT_KINDS 0x738B68u
+
+/* the player against the active trigger areas of its level: kind 0 needs the
+ * action button (flag 2/1), kind 8 the check button (2/0xD), kind 0xC the
+ * camera's event (2/0xA, the event's type at 0x7593B0) and its own position
+ * 0x7598B8; bit 2 = run its handler as a trigger, bit 1 = test the point
+ * 0x190 in front of the player; bit 6 = also while climbing */
+void DC2CALL AOT_Check(void)                                        /* 0x48B040 */
+{
+    gptr g = G(), pl = U32(g + 0x940), aot = U32(g + 0xA5C), end = aot + 0x500;
+    u32 lv = U16(g + 0x10B4) >> 8;
+    int climb = U8(pl + 0x55) == 0xA && (lv == 3 || lv == 6);
+    for (gptr e = aot; e < end; e += 0x28) {
+        u8 b = U8(e);
+        if (!(b & 1)) continue;
+        u16 level = (b & 0xC) == 0xC ? (u16)(-(s32)S16(0x7598BA) / 1000) : U16(pl + 0x5A);
+        if (U8(e + 2) != level) continue;
+        if (climb && !(b & 0x40)) continue;
+        switch (b & 0xC) {
+        case 0:
+            if (Flag_Check(1, 0) || !Flag_Check(2, 1)) continue;
+            break;
+        case 8:
+            if (Flag_Check(1, 0) || !Flag_Check(2, 0xD)) continue;
+            break;
+        case 0xC:
+            if (!Flag_Check(2, 0xA)) continue;
+            switch (U8(e) & 0xF0) {
+            case 0x10: if (U16(0x7593B0) != 0x10) continue; break;
+            case 0x20: if (U16(0x7593B0) != 0x20) continue; break;
+            case 0x30: if (U8(0x7593B0) != 0x30) continue; break;
+            }
+            break;
+        }
+        gptr pos, v = 0;
+        b = U8(e);
+        if ((b & 0xC) == 0xC) pos = 0x7598B8;
+        else if (b & 2) {
+            v = Tmp_Push(8);
+            U16(v) = 0; U16(v + 2) = 0; U16(v + 4) = 0x190;
+            RotMatrix(pl + 0x48, pl + 0x20);
+            ApplyMatrixSV(pl + 0x20, v, v);
+            U16(v) += U16(pl + 0x40); U16(v + 2) += U16(pl + 0x42); U16(v + 4) += U16(pl + 0x44);
+            pos = v;
+        } else pos = pl + 0x40;
+        u32 in = PointInQuad(pos, e + 4);
+        if (v) Tmp_Pop(8);
+        if (!in) continue;
+        Orig_Call1(U32(A_AOT_KINDS + U8(e + 1) * 4), e);
+        if (!(U8(e) & 4)) return;
+    }
+}
+
+/* each frame: the pressed-area list cleared, the areas checked while the
+ * player is in its normal state, the buttons' flags cleared */
+void DC2CALL Aot_Tick(void)                                         /* 0x48AFF0 */
+{
+    gptr g = G();
+    memset(MEM(g + 0xB28), 0, 0x20);
+    if (U8(U32(g + 0x940) + 0x54) == 1) AOT_Check();
+    Flag_Set(2, 1, 0);
+    Flag_Set(2, 0xD, 0);
+    Flag_Set(2, 0xA, 0);
+}
+
+/* AOT kind 0, a door: locked (+0x20 message, +0x21 key flag of group 8)
+ * shows its message; else the destination (+0x14) is kept, the areas
+ * cleared and the game task becomes the door task */
+void DC2CALL AOT_Door(gptr e)                                       /* 0x48B390 */
+{
+    u8 key = U8(e + 0x21), msg = U8(e + 0x20), b = U8(e);
+    if ((b & 0xC) != 0xC && (b & 0x80)) U8(G() + 0x926) = 1;
+    if (msg && !Flag_Check(8, key)) {
+        gptr w = Message_Show(0, 0, U32(0x738C28 + msg * 4), 3);
+        if ((U8(e) & 0xC) == 8) U8(w) |= 2;
+        return;
+    }
+    U32(0x7593B4) = e + 0x14;
+    for (u32 k = 0; k < 0x500; k += 0x28) U8(U32(G() + 0xA5C) + k) = 0;
+    Fn_46FBC0(0xFFFFFFFF, 0, 0);
+    Fn_4A7250();
+    Task_Chain(0x41E2D0);
 }

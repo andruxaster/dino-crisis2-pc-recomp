@@ -329,7 +329,7 @@ void DC2CALL Game_Play(void)                                         /* 0x451790
         }
     }
     if (Flag_Check(3, 9)) Fn_405E40();
-    Fn_472FD0();
+    Game_Frame();
     Fn_4A7250();
     Flag_Set(2, 0x25, 0);
     Fn_452370();
@@ -354,4 +354,82 @@ void DC2CALL GameTask(void)                                          /* 0x4510F0
 void DC2CALL Room_SoundInit(void)                                  /* 0x48CA10 */
 {
     Fn_48C9C0(U16(Room_SoundSlot(U8(G() + 0x1091), U8(G() + 0x1090)) + 2));
+}
+
+/* ---- the per-frame game work ------------------------------------------------------- */
+
+/* the player (unless flag 1/3) and the other objects (unless 1/2) by their
+ * type handlers (*0x87DCA0), their yaw kept to 12 bits */
+void DC2CALL Obj_RunAll(void)                                       /* 0x471EF0 */
+{
+    gptr o;
+    if (!Flag_Check(1, 3)) {
+        o = U32(G() + 0x940);
+        if (U8(o + 0x50) & 1) {
+            Orig_Call1(U32(U32(0x87DCA0) + U8(o + 0x58) * 4), o);
+            U16(o + 0x4A) &= 0xFFF;
+        }
+    }
+    if (Flag_Check(1, 2)) return;
+    o = U32(G() + 0x940) + 0x260;
+    for (u32 n = U32(0x87F940) - 1; n; n--, o += 0x260) {
+        if (!(U8(o + 0x50) & 1)) continue;
+        Orig_Call1(U32(U32(0x87DCA0) + U8(o + 0x58) * 4), o);
+        U16(o + 0x4A) &= 0xFFF;
+    }
+}
+
+/* the room's props (G+0x944, 0xAC each) by their handlers (*0x87F948) */
+void DC2CALL Prop_RunAll(void)                                      /* 0x471F90 */
+{
+    gptr o = U32(G() + 0x944);
+    for (u32 n = U32(0x87DC88); n; n--, o += 0xAC)
+        if (U8(o + 0x50) & 1) Orig_Call1(U32(U32(0x87F948) + U8(o + 0x58) * 4), o);
+}
+
+/* the effects (G+0x948, 0x34 each) by their handlers (*0x87DC8C) */
+void DC2CALL Eff_RunAll(void)                                       /* 0x471FE0 */
+{
+    for (gptr e = U32(G() + 0x948); e < U32(G() + 0x948) + U32(0x87DE14) * 0x34; e += 0x34)
+        if (U8(e) & 1) Orig_Call1(U32(U32(0x87DC8C) + U8(e + 1) * 4), e);
+}
+
+/* the object effects (G+0x93C, 0x70 each) by their handlers (*0x87F320),
+ * then their matrices */
+void DC2CALL ObjEff_RunAll(void)                                    /* 0x472040 */
+{
+    for (gptr o = U32(G() + 0x93C); o < U32(G() + 0x93C) + U32(0x87DE04) * 0x70; o += 0x70) {
+        if (!(U8(o + 0x50) & 1)) continue;
+        Orig_Call1(U32(U32(0x87F320) + S8(o + 0x4E) * 4), o);
+        RotMatrixYXZ(o + 0x48, o + 0x20);
+    }
+}
+
+/* one frame of play: each part unless its flag of group 1 is set */
+void DC2CALL Game_Frame(void)                                       /* 0x472FD0 */
+{
+    gptr g = G();
+    if (!Flag_Check(2, 0x1D)) {
+        Flag_Set(2, 0x19, 0);
+        if (!Flag_Check(1, 1)) Camera_Tick();
+        if (!Flag_Check(1, 8)) Aot_Tick();
+        if (!Flag_Check(1, 6)) Script_Tick();
+        if (!Flag_Check(1, 0xB)) { EnemySet_Tick(); Fn_472D20(); }
+        Fn_4509C0();
+        if (!Flag_Check(1, 7)) Eff_RunAll();
+        Obj_RunAll();
+        if (!Flag_Check(1, 0xD)) ObjEff_RunAll();
+        if (!Flag_Check(1, 4)) Prop_RunAll();
+        Fn_445D10();
+        Fn_470CF0();
+    }
+    if (U8(g + 0x84A) != U8(g + 0x84B)) {
+        Camera_Load();
+        U8(G() + 0x84B) = U8(G() + 0x84A);
+    }
+    if (!Flag_Check(1, 0xC)) Fn_404CC0();
+    Fn_406050(0xC0, 0x10);
+    if (Flag_Check(3, 0xB)) Fn_406520(0xC8, 0xD0);
+    Fn_48FA70();
+    if (!Flag_Check(1, 5)) Fn_46BA00(G() + 0x778);
 }

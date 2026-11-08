@@ -474,6 +474,22 @@ void DC2CALL Door_AreaSwitch(gptr d);                                  /* 0x41EA
 void DC2CALL Room_LoadTask(gptr d);                                    /* 0x41EBB0 */
 void DC2CALL Door_Music(gptr d);                                       /* 0x41EC50 */
 void DC2CALL Door_End(gptr d);                                         /* 0x41ED10 */
+void DC2CALL AOT_Check(void);                                          /* 0x48B040 */
+void DC2CALL Aot_Tick(void);                                           /* 0x48AFF0 */
+void DC2CALL AOT_Door(gptr e);                                         /* 0x48B390 */
+void DC2CALL Obj_RunAll(void);                                         /* 0x471EF0 */
+void DC2CALL Prop_RunAll(void);                                        /* 0x471F90 */
+void DC2CALL Eff_RunAll(void);                                         /* 0x471FE0 */
+void DC2CALL ObjEff_RunAll(void);                                      /* 0x472040 */
+void DC2CALL Game_Frame(void);                                         /* 0x472FD0 */
+void DC2CALL Snd_Tick(void);                                           /* 0x48C700 */
+s32  DC2CALL Voice_Volume(u32 kind);                                   /* 0x48D000 */
+void DC2CALL Voice_Play(u32 kind, u32 id);                             /* 0x48D070 */
+void DC2CALL Voice_Stop(void);                                         /* 0x48D130 */
+gptr DC2CALL CamZones_FindForCamera(gptr c, gptr zones);              /* 0x4035B0 */
+void DC2CALL CamZones_Check(gptr c, gptr zones);                      /* 0x4035F0 */
+void DC2CALL Camera_Tick(void);                                        /* 0x403570 */
+void DC2CALL Camera_Load(void);                                        /* 0x403AC0 */
 void DC2CALL Door_Task(void);                                          /* 0x41E2D0 */
 void DC2CALL Door_Common(gptr d);                                      /* 0x41CB70 */
 void DC2CALL Door_SwingAMove(gptr d);                                  /* 0x41CA70 */

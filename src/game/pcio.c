@@ -1,5 +1,6 @@
 /* See include/dc2/pcio.h. */
 #include "dc2/pcio.h"
+#include "dc2/game.h"
 
 #ifdef DC2_IN_PROCESS
 #define ORIG(addr, type) ((type)(uintptr_t)(addr))
@@ -12,9 +13,18 @@ void DC2CALL Pc_Close(s32 fd)                   { ORIG(0x4C05A0, void (DC2CALL *
 gptr DC2CALL Crt_malloc(u32 n)                  { return ORIG(0x4DD711, gptr (DC2CALL *)(u32))(n); }
 void DC2CALL Crt_free(gptr p)                   { ORIG(0x4DD628, void (DC2CALL *)(gptr))(p); }
 void DC2CALL Task_Sleep(u32 n)                  { ORIG(0x4C29A9, void (DC2CALL *)(u32))(n); }
+void DC2CALL Crt_sprintf1(gptr b, gptr f, u32 a) { ORIG(0x4DD5D6, int (__cdecl *)(gptr, gptr, u32))(b, f, a); }
+u32  DC2CALL Snd_CreateBuffer(gptr w, u32 v)    { return ORIG(0x4BF720, u32 (DC2CALL *)(gptr, u32))(w, v); }
+void DC2CALL Snd_Play(u32 h, u32 a, u32 l)      { ORIG(0x4BF970, void (DC2CALL *)(u32, u32, u32))(h, a, l); }
+void DC2CALL Snd_SetVolume(u32 h, s32 v)        { ORIG(0x4BFA20, void (DC2CALL *)(u32, s32))(h, v); }
+u32  DC2CALL Snd_IsPlaying(u32 h)               { return ORIG(0x4BFAA0, u32 (DC2CALL *)(u32))(h); }
+void DC2CALL Snd_Stop(u32 h)                    { ORIG(0x4BFAE0, void (DC2CALL *)(u32))(h); }
+void DC2CALL Snd_Free(u32 h)                    { ORIG(0x4BFBD0, void (DC2CALL *)(u32))(h); }
+void DC2CALL Strm_SetVolume(u32 h, s32 v)       { ORIG(0x4BFF20, void (DC2CALL *)(u32, s32))(h, v); }
 #else
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <strings.h>
 #include <dirent.h>
 
@@ -89,4 +99,42 @@ gptr DC2CALL Crt_malloc(u32 n)
     return 0;
 }
 void DC2CALL Crt_free(gptr p) { if (p) U32(p - 4) &= ~1u; }
+void DC2CALL Crt_sprintf1(gptr b, gptr f, u32 a)
+{
+    if (strstr((const char *)MEM(f), "%s")) sprintf((char *)MEM(b), (const char *)MEM(f), (const char *)MEM(a));
+    else sprintf((char *)MEM(b), (const char *)MEM(f), (int)a);
+}
+
+/* silent sound buffers: the length of the wave's data in frames (30 per
+   second, G+4 counts the frames); handle 0 is the voice's */
+static struct { u32 used, frames, start, playing; } g_snd[0x400];
+u32 DC2CALL Snd_CreateBuffer(gptr w, u32 voice)
+{
+    u32 h = 0;
+    if (!voice) {
+        for (h = 1; h < 0x400 && g_snd[h].used; h++) {}
+        if (h == 0x400) return 0xFFFFFFFF;
+    }
+    u32 bps = U32(w + 0x1C), c = w + 0x14 + U32(w + 0x10), size = 0;
+    for (int k = 0; k < 16; k++, c += 8 + U32(c + 4))
+        if (!memcmp(MEM(c), "data", 4)) { size = U32(c + 4); break; }
+    g_snd[h].used = 1; g_snd[h].playing = 0;
+    g_snd[h].frames = bps ? (u32)((unsigned long long)size * 30 / bps) + 1 : 1;
+    return h;
+}
+void DC2CALL Snd_Play(u32 h, u32 a, u32 loop)
+{
+    (void)a;
+    if (h >= 0x400) return;
+    g_snd[h].start = U32(G() + 4); g_snd[h].playing = loop ? 2 : 1;
+}
+void DC2CALL Snd_SetVolume(u32 h, s32 v) { (void)h; (void)v; }
+u32 DC2CALL Snd_IsPlaying(u32 h)
+{
+    if (h >= 0x400 || !g_snd[h].playing) return 0;
+    return g_snd[h].playing == 2 || U32(G() + 4) - g_snd[h].start < g_snd[h].frames;
+}
+void DC2CALL Snd_Stop(u32 h) { if (h < 0x400) g_snd[h].playing = 0; }
+void DC2CALL Snd_Free(u32 h) { if (h < 0x400) g_snd[h].used = g_snd[h].playing = 0; }
+void DC2CALL Strm_SetVolume(u32 h, s32 v) { (void)h; (void)v; }
 #endif

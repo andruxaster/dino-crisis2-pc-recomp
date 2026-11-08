@@ -256,7 +256,7 @@ address,kind,name,category,confidence,notes
 0x703520,data,g_enemy_files,data,high,
 0x703598,data,g_kof_files,data,medium,KOF_P*.DAT: playable-dinosaur models (KOF_P00P shares rig+mesh with E00)
 0x703EE8,data,g_menu_files,data,medium,
-0x403AC0,func,Camera_Load,game,high,"DBS container for current camera: masks, JPEG, CLUT, PS1 bg; builds view"
+0x403AC0,func,Camera_Load,game,high,"DBS record of camera G+0x84A: masks 0x6B9500, JPEG 0x6C1500, CLUT or mask pixels; eye/target/projection; clears flags 2/0x18, 2/2"
 0x4BDC90,func,PC_DrawBackground,d3d,high,"(rgb16*, dirty): 256+64 textures, screen quad before DrawOTag"
 0x4C0770,func,PutDispEnv,libgpu,medium,copies 20 bytes to 0x87BAC0
 0x4C07A0,func,PutDrawEnv,libgpu,medium,compares isbg/r0g0b0 at +0x19..
@@ -781,3 +781,14 @@ address,kind,name,category,confidence,notes
 0x41DDF0,func,Door_StairsDown,game,high,"loads file 0x1E9/0x1F9 (character), climbs -0x12 per frame, random camera"
 0x41E050,func,Door_StairsUp,game,high,"climbs +0x12 per frame"
 0x41F040,func,Door_ScoreBox,game,high,"score panel box via 0x41F080"
+0x472FD0,func,Game_Frame,game,high,"one frame of play: Aot_Tick, Script_Tick, enemy set, effects, objects, props, camera; each part unless its flag of group 1"
+0x471EF0,func,Obj_RunAll,game,high,"player (unless flag 1/3) and objects (unless 1/2) by *0x87DCA0 type handlers, yaw &= 0xFFF"
+0x471F90,func,Prop_RunAll,game,high,"room props G+0x944 (0xAC each, count 0x87DC88) by *0x87F948"
+0x471FE0,func,Eff_RunAll,game,high,"effects G+0x948 (0x34 each, count 0x87DE14) by *0x87DC8C"
+0x472040,func,ObjEff_RunAll,game,high,"object effects G+0x93C (0x70 each, count 0x87DE04) by *0x87F320, then RotMatrixYXZ"
+0x48AFF0,func,Aot_Tick,game,high,"clears G+0xB28, AOT_Check while the player is in state 1, clears flags 2/1, 2/0xD, 2/0xA"
+0x48D070,func,Voice_Play,game,medium,"(id, volume): speech file via 0x738DCC format into a PC sound buffer 0x7598C8; flag 2/0 while it plays"
+0x48D130,func,Voice_Stop,game,medium,"stops and frees the speech buffer, clears flag 2/0"
+0x48C700,func,Snd_Tick,game,medium,"per frame: sound slots' volume ramps; every 30 frames the speech buffer's end -> Voice_Stop"
+0x403570,func,Camera_Tick,game,high,"per frame: CamZones_Check unless flag 1/0xA"
+0x48D000,func,Voice_Volume,game,high,"(kind): sound volume G+0x14EE * 120/127/110 / 15"

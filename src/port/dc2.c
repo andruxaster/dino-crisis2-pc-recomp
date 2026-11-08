@@ -5,8 +5,11 @@
  * reported as a trace (root mode changes, files, tasks).
  * Buttons can be pressed from the command line (the pad is not read yet):
  * FRAME:MASK sets the "pressed this frame" word 0x87DC00 for that frame
- * (0x820 confirm, 0x40 back, 0x1000 up, 0x4000 down).
- *   usage: dc2 Dino2.exe DATA_DIR [FRAMES] [FRAME:MASK ...] */
+ * (0x820 confirm, 0x40 back, 0x1000 up, 0x4000 down). In play, FROM-TO:MASK
+ * holds game buttons (0x87DC08) over frames FROM..TO, pressed (0x87DC94) on
+ * the first (0x1000 forward, 0x4000 back, 0x2000/0x8000 turn, 0x20 action).
+ * DC2_TRACE=1 prints the player every 50 frames and the room's trigger areas.
+ *   usage: dc2 Dino2.exe DATA_DIR [FRAMES] [FRAME:MASK | FROM-TO:MASK ...] */
 #include <stdio.h>
 #include <stdlib.h>
 #include <libgen.h>
@@ -51,7 +54,7 @@ static void game_frame(void)
     U32(g + 4)++;
     U32(0x87F94C) = 0x87DCC0 + U32(0x87DE0C) * 0x90;
     U32(0x87DC98) = U32(0x87DE0C) ? 0x500000 : 0x550000;
-    Fn_48C700();
+    Snd_Tick();
     if (!Flag_Check(2, 0x17)) File_Tick();
     if (!Flag_Check(2, 0x22)) {
         u32 d = U32(0x87DE00) ? U32(0x87DE00) : 1;
@@ -77,8 +80,12 @@ int main(int argc, char **argv)
     g_pc_root = dirname(root);
     int frames = argc > 3 ? atoi(argv[3]) : 600;
     int npress = 0, press_at[32]; u32 press_mask[32];
-    for (int i = 4; i < argc && npress < 32; i++)
-        if (sscanf(argv[i], "%d:%x", &press_at[npress], &press_mask[npress]) == 2) npress++;
+    int nhold = 0, hold_from[32], hold_to[32]; u32 hold_mask[32];
+    for (int i = 4; i < argc; i++) {
+        if (nhold < 32 && sscanf(argv[i], "%d-%d:%x", &hold_from[nhold], &hold_to[nhold], &hold_mask[nhold]) == 3) nhold++;
+        else if (npress < 32 && sscanf(argv[i], "%d:%x", &press_at[npress], &press_mask[npress]) == 2) npress++;
+    }
+    int trace = getenv("DC2_TRACE") != NULL;
 
     U32(A_G_PTR) = A_G_STATIC;
     Task_InitStackBase();
@@ -102,6 +109,12 @@ int main(int argc, char **argv)
         }
         U32(0x87DC00) = 0;
         for (int k = 0; k < npress; k++) if (press_at[k] == f) { U32(0x87DC00) = press_mask[k]; printf("frame %4d: press %X\n", f, press_mask[k]); }
+        u32 held = 0, pressed = 0;
+        for (int k = 0; k < nhold; k++) if (f >= hold_from[k] && f <= hold_to[k]) {
+            held |= hold_mask[k];
+            if (f == hold_from[k]) { pressed |= hold_mask[k]; printf("frame %4d: hold %X until %d\n", f, hold_mask[k], hold_to[k]); }
+        }
+        if (nhold) { U32(0x87DC08) = held; U32(0x87DC94) = pressed; }
         game_frame();
         u32 mode = U8(0x74D608) | U8(0x74D60A) << 8;
         if (mode != last_mode) { printf("frame %4d: root mode %u step %u\n", f, mode & 0xFF, mode >> 8); last_mode = mode; }
@@ -116,6 +129,24 @@ int main(int argc, char **argv)
         if (gm != last_game && U16(G() + 0x664)) {
             printf("frame %4d: game mode %u, room ST%X%02X\n", f, gm & 0xFF, gm >> 16, (gm >> 8) & 0xFF);
             last_game = gm;
+        }
+        if (trace && f % 50 == 0 && U16(G() + 0x664) == 3 && U8(0x87F940)) {
+            gptr pl = U32(G() + 0x940);
+            printf("frame %4d: player %d,%d,%d yaw %03X state %X level %u\n", f, S16(pl + 0x40), S16(pl + 0x42), S16(pl + 0x44),
+                   U16(pl + 0x4A), U32(pl + 0x54), U16(pl + 0x5A));
+            for (int t = 0; t < 10; t++) {
+                gptr th = U32(0x87FC20) + t * 0xA4;
+                if (U8(th + 0x9B)) printf("  script thread %d state %X at %X: op %02X\n", t, U8(th + 0x9B), U32(th), U8(U32(th)));
+            }
+            printf("  flags 1: %08X 2: %08X\n", U32(U32(0x723C48)), U32(U32(0x723C50)));
+        }
+        static gptr last_aot;
+        if (trace && U16(G() + 0x664) == 3 && U32(G() + 0xA5C) == 0x7593B8 && U8(U32(G() + 0xA5C)) && last_aot != U32(G() + 0xA5C) + U8(G() + 0x1090)) {
+            last_aot = U32(G() + 0xA5C) + U8(G() + 0x1090);
+            for (gptr e = U32(G() + 0xA5C); e < U32(G() + 0xA5C) + 0x500; e += 0x28) if (U8(e) & 1)
+                printf("frame %4d: aot %2u flags %02X kind %u level %u quad %d,%d %d,%d %d,%d %d,%d\n", f,
+                       (e - U32(G() + 0xA5C)) / 0x28, U8(e), U8(e + 1), U8(e + 2), S16(e + 4), S16(e + 6), S16(e + 8),
+                       S16(e + 0xA), S16(e + 0xC), S16(e + 0xE), S16(e + 0x10), S16(e + 0x12));
         }
         u32 tasks = 0;
         for (int i = 0; i < 4; i++) tasks |= (u32)(U16(A_TASK_SLOTS + i * 0x20) != 0) << i;

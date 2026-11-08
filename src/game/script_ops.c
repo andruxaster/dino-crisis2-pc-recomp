@@ -538,7 +538,7 @@ u32 DC2CALL ScrOp_Cutscene(gptr t)                                 /* 42: -1 end
 {
     if (Flag_Check(2, 2)) return 1;
     if (S32(SP_(t)) == -1) Cutscene_End();
-    else Fn_48D070(S(t, 1), S(t, 0));
+    else Voice_Play(S(t, 1), S(t, 0));
     ADV(t);
     return 0;
 }
