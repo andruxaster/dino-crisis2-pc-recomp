@@ -78,6 +78,8 @@
     V(Fn_48FA70,          0x48FA70, (void), ()) \
     V(JPEG_Decode,        0x4D2990, (gptr dst, gptr src, u32 size, u32 a), (dst, src, size, a)) \
     V(Masks_Setup,        0x4036F0, (gptr data, u32 n, gptr pixels), (data, n, pixels)) \
+    V(Fn_495D70,          0x495D70, (gptr list, u32 n), (list, n)) \
+    V(Fn_495DF0,          0x495DF0, (void), ()) \
     V(Fn_46BA00,          0x46BA00, (gptr cam), (cam)) \
     V(Fn_41F080,          0x41F080, (u32 x, u32 y, u32 c, u32 d, u32 e, u32 f), (x, y, c, d, e, f)) \
     V(Fn_41F3E0,          0x41F3E0, (gptr d), (d)) \

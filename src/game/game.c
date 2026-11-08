@@ -433,3 +433,213 @@ void DC2CALL Game_Frame(void)                                       /* 0x472FD0 
     Fn_48FA70();
     if (!Flag_Check(1, 5)) Fn_46BA00(G() + 0x778);
 }
+
+/* ---- game mode 4: game over, "Will you continue?" ----------------------------------- */
+/* a label's animation {first frame, frame, delay, typing}; frames of 8
+ * bytes: u, v, w, h, n | flags (bit 5 last, bit 6 loop), delay, dx, dy */
+#define CONT_YESNO  0x74B178u      /* the "yes / no" choice */
+#define CONT_TITLE  0x74B184u      /* "GAME OVER" */
+#define CONT_TEXT   0x74B190u      /* the question typed out: length, shown, delay, typing */
+#define CONT_LOGO   0x74B19Cu
+
+void DC2CALL Continue_SetAnim(gptr a, gptr f)                       /* 0x4522C0 */
+{
+    U8(a + 9) = 0;
+    U32(a) = f; U32(a + 4) = f;
+    U8(a + 8) = U8(f + 5);
+}
+
+/* 0 running, 1 at the end, 2 looped back */
+u32 DC2CALL Continue_AnimStep(gptr a)                               /* 0x4522E0 */
+{
+    if (U8(a + 8)) { U8(a + 8)--; return 0; }
+    if (U8(a + 9)) {                                /* typing: one character every 3 frames */
+        U16(a + 2)++;
+        U8(a + 8) = 2;
+        return U16(a + 2) > U16(a);
+    }
+    gptr f = U32(a + 4);
+    s32 bits = (s8)U8(f + 4) >> 5;
+    if (bits & 1) return 1;
+    if (bits & 2) { U32(a + 4) = U32(a); U8(a + 8) = U8(U32(a) + 5); return 2; }
+    f += (U8(f + 4) & 0x1F) * 8;
+    U32(a + 4) = f;
+    U8(a + 8) = U8(f + 5);
+    return 0;
+}
+
+/* a label's sprites (CLUT 0x7C00) and its draw mode */
+void DC2CALL Continue_Draw(s32 x, s32 y, u32 color, gptr f)        /* 0x452170 */
+{
+    s32 h = (s8)U8(f + 4);
+    u32 n = h & 0x1F;
+    u32 code = ((((u32)(h >> 5) & 4) >> 1) | 0x64) << 24 | color;
+    for (; n; n--, f += 8) {
+        gptr p = U32(0x87DC98);
+        Gpu_SetSprt(p);
+        U32(p + 4) = code;
+        F32(p + 8) = (float)(u32)(x + (s8)U8(f + 6));
+        F32(p + 0xC) = (float)(u32)(y + (s8)U8(f + 7));
+        U8(p + 0x14) = U8(f); U8(p + 0x15) = U8(f + 1);
+        U16(p + 0x18) = U8(f + 2); U16(p + 0x1A) = U8(f + 3);
+        U16(p + 0x16) = 0x7C00;
+        Gpu_AddPrim(U32(0x87F94C) + 0x88, p);
+        U32(0x87DC98) += 0x1C;
+    }
+    gptr p = U32(0x87DC98);
+    Gpu_SetDrawMode(p, 1, 0, 0x85, 0);
+    Gpu_AddPrim(U32(0x87F94C) + 0x88, p);
+    U32(0x87DC98) += 0xC;
+}
+
+/* characters of a message up to its end code (0xFxxx) */
+u32 DC2CALL Text_Length(gptr s)                                     /* 0x471A90 */
+{
+    u32 n = 0;
+    while ((U16(s) & 0xF000) != 0xF000) { s += 2; n++; }
+    return n;
+}
+
+static void cont_wait(void)
+{
+    while (File_IsBusy()) Task_Sleep(1);
+}
+
+static void cont_flush(void)
+{
+    u32 k = U32(0x87DE0C) << 12;
+    Gpu_DrawOT(U32(0x87F94C) + 0x88, 0x87CBFC + k, 0x87BC00 + k);
+}
+
+/* G+0x666: 0 set-up, 1 the question appears, 2 yes / no, 3 the game over
+ * picture, 4 back to the title; G+0x668 the choice, G+0x66A frames */
+void DC2CALL Game_Continue(void)                                    /* 0x451990  mode 4 */
+{
+    gptr g = G();
+    gptr text = U8(g + 0x108E) ? 0x7275F6u : 0x7275D0u;   /* the question (the extra game's) */
+    switch ((s16)G16(0x666)) {
+    case 0:
+        G16(0x668) += 4;
+        U8(G() + 0xB58) = 0x80; U8(G() + 0xB59) = 0x80; U8(G() + 0xB5A) = 0x80;
+        U8(G() + 0xB5B) = 0; U8(G() + 0xB5C) = 0;
+        DrawSync(0);
+        if (Flag_Check(2, 6)) { Game_Frame(); Fn_4A7250(); return; }
+        Fn_407170();
+        Room_Reset();
+        U32(0x87DE00) = 2;
+        Fn_46FBC0(0xFFFFFFFF, 0, 0);
+        Flag_Set(2, 4, 1);
+        Fn_478790();
+        G16(0x668) = 0;
+        Flag_Set(3, 0, 0);
+        cont_wait();
+        if (U8(G() + 0x927) == 1 || (U8(G() + 0x108E) && (s8)Item_Find(G() + 0x11AC, 6, 0x1E) < 0)) {
+            File_RequestLoad(0x78);                  /* no continue: the game over picture */
+            cont_wait();
+            U32(G() + 8) = 0x6C1500;
+            G16(0x666) = 3;
+            G16(0x66A) = 0x64;
+        } else {
+            File_RequestLoad(0x14);
+            cont_wait();
+            U32(G() + 8) = 0x6C1500;
+            G16(0x666) = 1;
+            G16(0x66A) = 0;
+            Continue_SetAnim(CONT_TITLE, 0x6601D0);
+            text = U8(G() + 0x108E) ? 0x7275F6u : 0x7275D0u;
+            U16(CONT_TEXT) = (u16)Text_Length(text);
+            U32(CONT_TEXT + 4) = (u16)Fn_494DE0(text);
+            U16(CONT_TEXT + 2) = 0;
+            U8(CONT_TEXT + 8) = 0; U8(CONT_TEXT + 9) = 1;
+            Continue_SetAnim(CONT_LOGO, 0x65F500);
+        }
+        Flag_Set(3, 0, 1);
+        Fade_Set(0, 0xA, 1);
+        return;
+    case 1:
+        Flag_Set(3, 0, 1);
+        if (Flag_Check(2, 6)) return;
+        Continue_AnimStep(CONT_TITLE);
+        if (Continue_AnimStep(CONT_TEXT) || (U32(0x87DC00) & 0x70)) {
+            Continue_SetAnim(CONT_YESNO, 0x660220);
+            G16(0x666) = 2;
+        }
+        Text_Draw(text, U16(CONT_TEXT + 4), 0x8A, U16(CONT_TEXT + 2), 0x808080, 1, 1);
+        cont_flush();
+        Continue_AnimStep(CONT_LOGO);
+        Continue_Draw(0x9F, 0x80, 0x808080, U32(CONT_TITLE + 4));
+        Continue_Draw(0x9F, 0x80, 0x808080, U32(CONT_LOGO + 4));
+        return;
+    case 2: {
+        Text_Draw(text, U16(CONT_TEXT + 4), 0x8A, 0x64, 0x808080, 1, 1);
+        cont_flush();
+        Continue_AnimStep(CONT_YESNO);
+        Continue_AnimStep(CONT_TITLE);
+        Continue_AnimStep(CONT_LOGO);
+        Continue_Draw(0x9F, 0x80, 0x808080, U32(CONT_YESNO + 4));
+        Continue_Draw(0x9F, 0x80, 0x808080, U32(CONT_TITLE + 4));
+        Continue_Draw(0x9F, 0x80, 0x808080, U32(CONT_LOGO + 4));
+        G16(0x66A)++;
+        if ((s16)G16(0x66A) > 0x1E) G16(0x66A) = 0x1F;
+        if ((s16)G16(0x66A) <= 5) return;
+        u32 pad = U32(0x87DC00);
+        if (pad & 0xA000) {                          /* left / right */
+            Fn_48C0B0(0, 0);
+            G16(0x668) ^= 1;
+            G16(0x66A) = 0;
+            Continue_SetAnim(CONT_YESNO, G16(0x668) ? 0x660250u : 0x660220u);
+            return;
+        }
+        if (!(pad & 0x20)) return;
+        if (U8(G() + 0x108C) < 0x63) U8(G() + 0x108C)++;   /* continues used */
+        Fn_48C0B0(0, 2);
+        if (!G16(0x668)) {                           /* yes: from the checkpoint */
+            u16 rm = U16(G() + 0x1090);
+            u32 t = U32(G() + 0x1098);
+            if (rm == 1 || rm == 0x80A) G16(0x67E) = 0xFFFF;
+            Checkpoint_Load();
+            if (U8(G() + 0x108E)) {                  /* the extra game: one continue item used */
+                u32 i = Item_Find(G() + 0x11AC, 6, 0x1E) & 0xFF;
+                gptr e = G() + (i + 0x179) * 12;
+                U16(e + 8)--;
+                if (S16(e + 8) <= 0) {
+                    U32(e) = 0; U32(e + 4) = 0; U32(e + 8) = 0;
+                    Fn_495D70(G() + 0x11AC, 6);
+                }
+            }
+            U32(G() + 0x1098) = t;
+            Fn_495DF0();
+            U16(G() + 0x11F8) = 0x4B0; U16(G() + 0x11FC) = 0x4B0; U16(G() + 0x1200) = 0;
+            G16(0x664) = 1; G16(0x66A) = 0; G16(0x668) = 0; G16(0x666) = 0;
+            Fade_Set(1, 0xA, 1);
+            Task_Sleep(0xA);
+            return;
+        }
+        Fade_Set(1, 0xA, 1);                         /* no: the game over picture */
+        Task_Sleep(0xA);
+        cont_wait();
+        Flag_Set(3, 0, 0);
+        File_RequestLoad(0x78);
+        cont_wait();
+        U32(G() + 8) = 0x6C1500;
+        Flag_Set(3, 0, 1);
+        Fade_Set(0, 0xA, 1);
+        G16(0x666) = 3;
+        G16(0x66A) = 0x64;
+        return; }
+    case 3:
+        Flag_Set(3, 0, 1);
+        if (--G16(0x66A)) return;
+        G16(0x666) = 4; G16(0x668) = 0; G16(0x66A) = 0;
+        Fade_Set(1, 0x14, 1);
+        return;
+    case 4:
+        if (Flag_Check(2, 6)) return;
+        Snd_ReleaseAll();
+        Game_ClearState();
+        G16(0x772) = 0; G16(0x770) = 0; G16(0x76E) = 0; G16(0x76C) = 0;
+        if (U8(G() + 0x927) == 1) Game_Start(0x19);
+        Task_Chain(0x471EC0);
+        return;
+    }
+}

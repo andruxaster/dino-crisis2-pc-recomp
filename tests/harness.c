@@ -596,7 +596,7 @@ static Stub g_stubs[] = {
     {0x4C29D6, "d"},         /* 59: Task_Chain */
     /* 60..: title */
     {0, ""}, {0, ""}, {0, ""}, {0, ""}, {0, ""}, {0, ""},
-    {0x494BA0, "dwddddd"}, {0x4C0600, "ddd"}, {0x4C0690, "d"}, {0x4C05D0, "dd"}, {0x4C06F0, "ddddd"},
+    {0x494BA0, "dwdwddd"}, {0x4C0600, "ddd"}, {0x4C0690, "d"}, {0x4C05D0, "dd"}, {0x4C06F0, "ddddd"},
     /* 71..: game task */
     {0x496410, ""}, {0x46FC50, "d"}, {0x403480, ""}, {0x470CB0, ""}, {0x452450, ""}, {0x48FB50, "d"},
     {0, ""}, {0x4BF130, "d"}, {0, ""}, {0x403520, ""}, {0x46B8C0, ""}, {0x407170, ""},
@@ -612,6 +612,7 @@ static Stub g_stubs[] = {
     {0x406050, "dd"}, {0x406520, "dd"}, {0x48FA70, ""},
     /* 111..: the PC sound buffers */
     {0x4BF970, "ddd"}, {0x4BFA20, "dd"}, {0x4BFAA0, "d"}, {0x4BFAE0, "d"}, {0x4BFBD0, "d"}, {0x4BFF20, "dd"},
+    {0x495D70, "dd"}, {0x495DF0, ""},
 };
 #define STUB_GAME 71
 #define STUB_LOAD 50
@@ -668,7 +669,7 @@ REC(70) REC(71) REC(72) REC(73) REC(74) REC(75) REC(76) REC(77) REC(78) REC(79) 
 REC(82) REC(83) REC(84) REC(85) REC(86) REC(87) REC(88) REC(89) REC(90) REC(91) REC(92) REC(93)
 REC(94) REC(95) REC(96) REC(97) REC(98) REC(99) REC(100) REC(101)
 REC(102) REC(103) REC(104) REC(105) REC(106) REC(107) REC(108) REC(109) REC(110)
-REC(111) REC(112) REC(113) REC(114) REC(115) REC(116)
+REC(111) REC(112) REC(113) REC(114) REC(115) REC(116) REC(117) REC(118)
 static void *const g_recs[] = {rec0, rec1, rec2, rec3, rec4, rec5, rec6, rec7, rec8, rec9, rec10,
     rec11, rec12, rec13, rec14, rec15, rec16, rec17, rec18, rec19, rec20, rec21, rec22, rec23,
     rec24, rec25, rec26, rec27, rec28, rec29, rec30, rec31, rec32, rec33, rec34, rec35, rec36, rec37,
@@ -677,7 +678,7 @@ static void *const g_recs[] = {rec0, rec1, rec2, rec3, rec4, rec5, rec6, rec7, r
     rec64, rec65, rec66, rec67, rec68, rec69, rec70, rec71, rec72, rec73, rec74, rec75, rec76, rec77,
     rec78, rec79, rec80, rec81, rec82, rec83, rec84, rec85, rec86, rec87, rec88, rec89, rec90, rec91, rec92, rec93,
     rec94, rec95, rec96, rec97, rec98, rec99, rec100, rec101, rec102, rec103, rec104, rec105,
-    rec106, rec107, rec108, rec109, rec110, rec111, rec112, rec113, rec114, rec115, rec116};
+    rec106, rec107, rec108, rec109, rec110, rec111, rec112, rec113, rec114, rec115, rec116, rec117, rec118};
 _Static_assert(sizeof g_recs / sizeof g_recs[0] >= sizeof g_stubs / sizeof g_stubs[0], "a recorder per stub");
 /* Task_Sleep: the file loader "runs" while the task sleeps */
 static u32 __cdecl ts_sleep(u32 n)
@@ -2950,6 +2951,48 @@ static void test_game(void)
         u32 a0 = rnd() % 10;
         U32(LOG_BASE) = 0;
         check(0x48D170 + 0x40 * a0, areas[a0], "AreaN_SetTables", 0, NULL, 0);
+        /* game mode 4: game over / continue */
+        for (u32 a = 0x65F500; a < 0x660300; a += 4) U32(a) = rnd();
+        for (u32 a = 0x65F500; a < 0x660300; a += 8) {
+            U8(a + 4) = (u8)((rnd() % 3 ? rnd() % 4 : rnd() % 32) | (rnd() % 4 == 0 ? 0x20 : rnd() % 4 == 0 ? 0x40 : 0));
+            U8(a + 5) = rnd() % 3;
+        }
+        for (int r = 0; r < 4; r++) {
+            game_state(); fake_room_block();
+            gptr g = G();
+            U16(g + 0x666) = rnd() % 6; U16(g + 0x668) = rnd() % 3 ? rnd() % 2 : (u16)rnd();
+            U16(g + 0x66A) = rnd() % 2 ? rnd() % 8 : (u16)(0x1C + rnd() % 4);
+            if (U16(g + 0x666) == 3 && rnd() % 2) U16(g + 0x66A) = 1;
+            U8(g + 0x927) = rnd() % 3 == 0; U8(g + 0x108C) = rnd() % 2 ? 0x62 + rnd() % 2 : (u8)rnd();
+            U16(g + 0x1090) = (u16[]){1, 0x80A, 0x101, 0x203}[rnd() % 4];
+            for (u32 k = 0; k < 6 * 12; k += 4) U32(g + 0x11AC + k) = rnd() % 3 ? 0 : rnd();
+            if (rnd() % 2) { U8(g + 0x11AC + 12 * (rnd() % 6) + 1) = 0x1E; }
+            for (u32 k = 0; k < 6; k++) U16(g + (0x179 + k) * 12 + 8) = rnd() % 3;
+            /* the checkpoint copy (G+0xC2C, loaded over G+0x108C on "yes"): the extra game's continue items */
+            U8(g + 0xC2C + 2) = rnd() % 2;
+            for (u32 k = 0; k < 6 * 12; k += 4) U32(g + 0xD4C + k) = rnd() % 3 ? 0 : rnd();
+            if (rnd() % 4) { gptr e = g + 0xD4C + 12 * (rnd() % 6); U8(e) = 1; U8(e + 1) = 0x1E; U16(e + 8) = rnd() % 3; }
+            static const u32 lbl[4] = {0x74B178, 0x74B184, 0x74B190, 0x74B19C};
+            for (int k = 0; k < 4; k++) {
+                gptr l = lbl[k], f = 0x65F500 + 8 * (rnd() % 0x1C0);
+                U32(l) = f; U32(l + 4) = f + 8 * (rnd() % 4); U8(l + 8) = rnd() % 3; U8(l + 9) = k == 2;
+            }
+            U16(0x74B190) = rnd() % 0x30; U16(0x74B192) = rnd() % 0x30; U32(0x74B194) = rnd() % 0x100;
+            U32(0x87DC00) = (u32[]){0, 0x20, 0x2000, 0x8000, 0x40, 0x10, 0x820}[rnd() % 7];
+            U32(0x87DC98) = 0x6D0000; Flag_Set(2, 6, rnd() % 3 == 0);
+            stub_at(0x494DE0)->ret = rnd() % 0x100;
+            U32(LOG_BASE) = 0;
+            sprintf(g_what, "continue step %u choice %u frames %u pad %X", U16(g + 0x666), U16(g + 0x668), U16(g + 0x66A), U32(0x87DC00));
+            check(0x451990, Game_Continue, "Game_Continue", 0, NULL, 0);
+            u32 c[4] = {0x74B178 + 12 * (rnd() % 4)};
+            check(0x4522E0, Continue_AnimStep, "Continue_AnimStep", 1, c, 0xFFFFFFFF);
+            c[1] = 0x65F500 + 8 * (rnd() % 0x1C0);
+            check(0x4522C0, Continue_SetAnim, "Continue_SetAnim", 2, c, 0);
+            u32 d[4] = {(u32)(rnd() % 400) - 50, (u32)(rnd() % 300) - 50, rnd(), 0x65F500 + 8 * (rnd() % 0x1C0)};
+            check(0x452170, Continue_Draw, "Continue_Draw", 4, d, 0);
+            u32 t[1] = {0x7275D0 + (rnd() % 2) * 0x26};
+            check(0x471A90, Text_Length, "Text_Length", 1, t, 0xFFFFFFFF);
+        }
     }
     type_tables_stub(0);
     stubs_install(0);

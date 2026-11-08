@@ -490,6 +490,11 @@ gptr DC2CALL CamZones_FindForCamera(gptr c, gptr zones);              /* 0x4035B
 void DC2CALL CamZones_Check(gptr c, gptr zones);                      /* 0x4035F0 */
 void DC2CALL Camera_Tick(void);                                        /* 0x403570 */
 void DC2CALL Camera_Load(void);                                        /* 0x403AC0 */
+void DC2CALL Continue_SetAnim(gptr a, gptr f);                        /* 0x4522C0 */
+u32  DC2CALL Continue_AnimStep(gptr a);                                /* 0x4522E0 */
+void DC2CALL Continue_Draw(s32 x, s32 y, u32 color, gptr f);           /* 0x452170 */
+u32  DC2CALL Text_Length(gptr s);                                      /* 0x471A90 */
+void DC2CALL Game_Continue(void);                                      /* 0x451990 */
 void DC2CALL Door_Task(void);                                          /* 0x41E2D0 */
 void DC2CALL Door_Common(gptr d);                                      /* 0x41CB70 */
 void DC2CALL Door_SwingAMove(gptr d);                                  /* 0x41CA70 */
