@@ -288,3 +288,15 @@ void DC2CALL GameOver_Start(u32 fade)                               /* 0x4529C0 
     U16(G() + 0x664) = 4;
     U16(G() + 0x666) = 0; U16(G() + 0x668) = 0; U16(G() + 0x66A) = 0;
 }
+
+/* two spheres (s16 x, y, z, radius) touch in x/z and are within h + r of
+   each other in height */
+u32 DC2CALL Sphere_Hit(gptr a, gptr b, u32 h, u32 r)                /* 0x452FF0 */
+{
+    s32 dx = S16(a) - S16(b), dz = S16(a + 4) - S16(b + 4);
+    if ((s32)S16(a + 6) + S16(b + 6) - SquareRoot0((s32)((u32)dz * (u32)dz + (u32)dx * (u32)dx)) < 0) return 0;
+    s32 dy = S16(a + 2) - S16(b + 2);
+    if (dy < 0) dy = -dy;
+    if ((s32)(s16)h + (s16)r - dy < 0) return 0;
+    return 1;
+}

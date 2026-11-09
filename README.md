@@ -25,7 +25,7 @@ One source tree, three builds:
 | build | what | status |
 |---|---|---|
 | `build/dinput.dll` | hook DLL: put next to `Dino2.exe`, redirects the original functions to the C ones | runs inside the game |
-| `build/harness_stub.exe` + `harness.dll` | checks every C function against the original code | 620 functions, ~1 660 000 checks, 0 differences |
+| `build/harness_stub.exe` + `harness.dll` | checks every C function against the original code | 632 functions, ~1 685 000 checks, 0 differences |
 | `build/dc2` (Linux) | the game started like WinMain: task system, root task, per-frame work; headless, prints a trace | boots: CORE.DAT, warning and Capcom screens, save scan, title (menu, opening movie / attract demo in turn); buttons can be given on the command line; New Game runs the opening and the game task into room ST101 (file loads, room set-up, room script start); sets up the player; its first state loads the weapon set and stops at the model set-up (Model_Setup 0x48D8B0, not rewritten yet) |
 | `build/smoke` (Linux) | the C game code without any exe code, on an emulated memory image | rooms loaded and set up by the game's own code (File_Process, Room_SetPointers, Script_Init), script VM, animation: 80 of 89 room scripts run 600 frames; 9 stop on cutscene data (SCxx.DAT) that is not loaded yet |
 
@@ -78,7 +78,7 @@ Checked under wine 9 (32-bit prefix): all 26 hooks installed; after one
 minute Lzss_Decode 23 calls, Flag_Check 62 000, Script_Run every frame,
 PointInQuad 5 000.
 
-## Reimplemented (620)
+## Reimplemented (632)
 
 The authoritative list is `src/hook/hooks.c`. By area:
 
@@ -101,8 +101,8 @@ The authoritative list is `src/hook/hooks.c`. By area:
 | root task and tasks | RootTask and its boot modes (boot, logo, warning, to title), Screen_LoadImage, Save_ScanTask; Task_Kill; host coroutines for the task system in standalone builds | src/game/root.c, src/game/task.c |
 | title | TitleTask, menu (new game / load / options), difficulty choice, opening movie and attract demo, animated labels and their sprites | src/game/title.c |
 | game task | Game_Start, opening task, new-game state, game task modes init / area tables / room enter / play / game over ("Will you continue?"), room / door / armour / music loads, checkpoint copy, room sound tables | src/game/game.c |
-| frame of play | Game_Frame (0x472FD0): the trigger areas (Aot_Tick, AOT_Check, AOT_Door), the object, prop and effect loops; the camera zones and loading a camera's view (Camera_Load); sound each frame and the voice (Snd_Tick, Voice_Play/Stop); the enemy sets that bring enemies in (EnemySet_Tick, EnemySet_Small) | src/game/game.c, src/game/room.c, src/game/camera.c, src/game/sound.c, src/game/enemyset.c |
-| enemies (shared) | attack spheres against the player (Enemy_AttackHit), kill and event scores with the combo, bleeding, hit directions, death fade, flashes and props they leave, the game over start | src/game/enemy.c |
+| frame of play | Game_Frame (0x472FD0): the trigger areas (Aot_Tick, AOT_Check, all their kinds: door, event, message, flag, item, effects, menus), the object, prop and effect loops; the camera zones and loading a camera's view (Camera_Load); sound each frame and the voice (Snd_Tick, Voice_Play/Stop); the enemy sets that bring enemies in (EnemySet_Tick, EnemySet_Small) | src/game/game.c, src/game/room.c, src/game/camera.c, src/game/sound.c, src/game/enemyset.c |
+| enemies (shared) | attack spheres against the player (Enemy_AttackHit, Sphere_Hit), kill and event scores with the combo, bleeding, hit directions, death fade, flashes and props they leave, the game over start | src/game/enemy.c |
 | velociraptor | handler (damage, movement, collisions), init by level, the choice of the next state, normal sub-states (wait, walk, cry, back off, eat, entrance, feint), jumps and climbs, the attacks (pounce, lunge, side bite, leap, tail) and their hits on the player, the hits it takes (flinch, knock-back, blown back, thrown in the air, burnt, drowned), death | src/game/raptor.c |
 | doors (room change) | Door_Task and its modes (set-up: the stand-in, door models, camera, light, room name; run: area switch, room and music loads; end), all door types' handlers: hinged, shutter, sliding and double doors, lifts, stairs, camera drop, waits, message, walk; the score panel after a fight | src/game/door.c |
 | PC layer: GTE | all 80 libgte functions of the port (0x4C08E0..0x4C24C0): rsin/rcos/ratan2, roots, geometry state, Apply/Mul/Rot/Scale/Transpose matrix, RotTransPers 1/3/4 and the float projection, depth cue, normal colour, register loads/stores, rtps/rtpt/nclip/ncct, PC depth stores | src/game/gte.c, include/dc2/gte.h |

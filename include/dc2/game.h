@@ -477,6 +477,17 @@ void DC2CALL Door_End(gptr d);                                         /* 0x41ED
 void DC2CALL AOT_Check(void);                                          /* 0x48B040 */
 void DC2CALL Aot_Tick(void);                                           /* 0x48AFF0 */
 void DC2CALL AOT_Door(gptr e);                                         /* 0x48B390 */
+void DC2CALL AOT_Event(gptr e);                                        /* 0x48B460 */
+void DC2CALL AOT_Message(gptr e);                                      /* 0x48B480 */
+void DC2CALL AOT_Flag(gptr e);                                         /* 0x48B4C0 */
+void DC2CALL AOT_Item(gptr e);                                         /* 0x48B4E0 */
+void DC2CALL AOT_EffectStart(gptr e);                                  /* 0x48B530 */
+void DC2CALL AOT_Kind7(gptr e);                                        /* 0x48B590 */
+void DC2CALL AOT_Menu(gptr e);                                         /* 0x48B5B0 */
+void DC2CALL AOT_Wait(gptr e);                                         /* 0x48B5D0 */
+void DC2CALL AOT_Kind10(gptr e);                                       /* 0x48B620 */
+void DC2CALL AOT_Kind11(gptr e);                                       /* 0x48B7D0 */
+gptr DC2CALL Eff_AllocBack(void);                                      /* 0x48D6C0 */
 void DC2CALL Obj_RunAll(void);                                         /* 0x471EF0 */
 void DC2CALL Prop_RunAll(void);                                        /* 0x471F90 */
 void DC2CALL Eff_RunAll(void);                                         /* 0x471FE0 */
@@ -517,6 +528,7 @@ u32  DC2CALL Enemy_FindState(gptr o, u32 sub);                         /* 0x47AD
 void DC2CALL Light_Flash(gptr o);                                      /* 0x414D20 */
 void DC2CALL Layers_Assign(void);                                      /* 0x46B960 */
 u32  DC2CALL Enemy_AttackHit(gptr o);                                  /* 0x479830 */
+u32  DC2CALL Sphere_Hit(gptr a, gptr b, u32 h, u32 r);                 /* 0x452FF0 */
 void DC2CALL GameOver_Start(u32 fade);                                 /* 0x4529C0 */
 void DC2CALL Raptor_Handler(gptr o);                                   /* 0x41F430 */
 void DC2CALL Raptor_Init(gptr o);                                      /* 0x41F660 */

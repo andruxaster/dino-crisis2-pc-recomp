@@ -576,7 +576,7 @@ typedef struct { u32 addr; const char *spec; u8 plen[2]; u32 ret; u8 saved[5]; v
 #pragma GCC diagnostic ignored "-Wmissing-field-initializers"
 static Stub g_stubs[] = {
     {0x405DE0, "dd"}, {0, ""}, {0x403A30, ""}, {0x448080, "d"}, {0, ""},
-    {0, ""}, {0x452FF0, "ddwd"}, {0x450A70, "ddd"}, {0x46FBC0, "ddd"}, {0x4718F0, "dddd"},
+    {0, ""}, {0, ""}, {0x450A70, "ddd"}, {0x46FBC0, "ddd"}, {0x4718F0, "dddd"},
     {0x473130, "d"}, {0x4731F0, ""}, {0x474B20, "d"}, {0x48FDA0, ""}, {0x47A8C0, "ddpp", {16, 8}},
     {0, ""}, {0, ""}, {0, ""}, {0, ""}, {0x48C0B0, "pd", {0x60}},
     {0x48C600, "d"}, {0x48C640, "ddd"}, {0x48C9C0, "w"}, {0x48CD70, "dd"}, {0x48CE20, "bwww"},
@@ -3055,21 +3055,13 @@ static void enemy_state(void)
     U16(g + 0xC24) = rnd() % 12; U32(g + 0x11F4) = rnd() % 2 ? 9999999 - rnd() % 0x2000 : rnd() % 100000;
     Flag_Set(9, 0x36, rnd() % 2); Flag_Set(2, 0x18, rnd() % 2); Flag_Set(2, 0xB, rnd() % 2);
     U32(0x87DC98) = 0x6D0000;
-    stub_at(0x452FF0)->ret = rnd() % 3 != 0;
     stub_at(0x4C08A0)->ret = rnd();
 }
 
-static u32 __cdecl fk_sphere(u32 a, u32 b, u32 h, u32 r)    /* the spheres' contents, not their (stack) addresses */
-{
-    u32 v[6] = {U32(a), U32(a + 4), U32(b), U32(b + 4), h, r};
-    rec_common((int)(stub_at(0x452FF0) - g_stubs), v);
-    return stub_at(0x452FF0)->ret && ((U32(a) ^ U32(b + 4)) & 3) == 0;   /* hits some spheres, the same in both runs */
-}
 
 static void test_enemies(void)
 {
     g_ign_objpads = 1;
-    stub_at(0x452FF0)->impl = fk_sphere; stub_at(0x452FF0)->spec = "ddddww";
     stubs_install(1);
     type_tables_stub(1);
     for (int i = 0; i < iters; i++) {
@@ -3106,13 +3098,65 @@ static void test_enemies(void)
             check(0x4797D0, Player_Bleed, "Player_Bleed", 1, b, 0xFFFF);
         }
         check(0x46B960, Layers_Assign, "Layers_Assign", 0, NULL, 0);
+        {   /* two spheres (x, y, z, radius) and the heights they reach */
+            gptr sa = 0x6DE100, sb = 0x6DE108;
+            for (int k = 0; k < 8; k += 2) { S16(sa + k) = (s16)(rnd() % 600 - 300); S16(sb + k) = (s16)(rnd() % 600 - 300); }
+            S16(sa + 6) = (s16)(rnd() % 300); S16(sb + 6) = (s16)(rnd() % 300);
+            if (rnd() % 2) {                                 /* touching, about */
+                s32 dx = S16(sa) - S16(sb), dz = S16(sa + 4) - S16(sb + 4);
+                S16(sb + 6) = (s16)((s32)sqrt((double)(dx * dx + dz * dz)) - S16(sa + 6) + (s32)(rnd() % 3) - 1);
+            }
+            s32 dy = S16(sa + 2) - S16(sb + 2); if (dy < 0) dy = -dy;
+            u32 c[4] = {sa, sb, (u32)(rnd() % 400), 0};
+            c[3] = rnd() % 2 ? (u32)(u16)(dy - (s16)c[2] + (s32)(rnd() % 3) - 1) : rnd() % 400;
+            check(0x452FF0, Sphere_Hit, "Sphere_Hit", 4, c, 0xFFFFFFFF);
+        }
         b[0] = rnd() % 2 ? 0 : rnd() % 0x40;
         check(0x4529C0, GameOver_Start, "GameOver_Start", 1, b, 0);
     }
     type_tables_stub(0);
     stubs_install(0);
-    stub_at(0x452FF0)->impl = NULL; stub_at(0x452FF0)->spec = "ddwd";
     g_ign_objpads = 0;
+}
+
+/* ---- the trigger areas' kinds (table 0x738B68) ----------------------------------- */
+static void test_aot_kinds(void)
+{
+    static const struct { u32 addr; void *fn; const char *name; } k[] = {
+        {0x48B460, AOT_Event, "AOT_Event"}, {0x48B480, AOT_Message, "AOT_Message"}, {0x48B4C0, AOT_Flag, "AOT_Flag"},
+        {0x48B4E0, AOT_Item, "AOT_Item"}, {0x48B530, AOT_EffectStart, "AOT_EffectStart"}, {0x48B590, AOT_Kind7, "AOT_Kind7"},
+        {0x48B5B0, AOT_Menu, "AOT_Menu"}, {0x48B5D0, AOT_Wait, "AOT_Wait"}, {0x48B620, AOT_Kind10, "AOT_Kind10"},
+        {0x48B7D0, AOT_Kind11, "AOT_Kind11"}};
+    stubs_install(1);
+    for (int i = 0; i < iters; i++) {
+        game_state(); script_setup();
+        for (int t = 0; t < 10; t++) random_thread(T_BASE + t * SCR_THREAD_SIZE);
+        gptr g = G();
+        U32(g + 0xA5C) = O_AOT; U32(g + 0xA54) = S_BASE;
+        U32(g + 0x93C) = O_EFF; U32(g + 0xA78) = rnd() % 4; U32(0x87DE04) = U32(g + 0xA78) + 12 + rnd() % 13;
+        for (u32 j = 0; j < 28 * 0x70; j += 4) U32(O_EFF + j) = rnd();
+        for (u32 j = 0; j < 28; j++) U8(O_EFF + j * 0x70 + 0x50) = (u8)(rnd() % 3 == 0 ? 1 | (rnd() & 2) : rnd() & 2);
+        gptr e = O_AOT + 0x28 * (rnd() % 32);
+        for (u32 j = 0; j < 0x28; j++) U8(e + j) = (u8)rnd();
+        U8(e + 0x14) = rnd() % 10; U8(e + 0x15) = rnd() % 0x40; U8(e + 0x16) = rnd() % 4;
+        U8(e + 0x17) = rnd() % 20; U16(e + 0x18) = rnd() % 20; U8(e + 0x19) = rnd() % 0x20;
+        U8(g + 0xB4A) = rnd() % 2 ? U8(e + 0x19) : (u8)rnd();
+        U8(g + 0x10B5) = (u8[]){1, 7, 2, 8, 0, 3}[rnd() % 6];
+        stub_at(0x4718F0)->ret = 0x6DDC00; U8(0x6DDC00) = (u8)rnd();
+        u32 a[1] = {e};
+        for (unsigned j = 0; j < sizeof k / sizeof k[0]; j++) {
+            U32(LOG_BASE) = 0;
+            sprintf(g_what, "entry %X: %02X %02X %02X %02X char %u", e, U8(e), U8(e + 0x14), U8(e + 0x15), U8(e + 0x16), U8(g + 0x10B5));
+            u32 keep = U32(e + 0x14);
+            u32 keep2 = U32(e + 0x18);
+            if (k[j].addr == 0x48B530) U32(e + 0x14) = rnd() % 12;   /* a dword: the effect's index */
+            if (k[j].addr == 0x48B620) U32(e + 0x18) = rnd() % 20;   /* a dword: the effect slot's */
+            check(k[j].addr, k[j].fn, k[j].name, 1, a, 0);
+            U32(e + 0x14) = keep; U32(e + 0x18) = keep2;
+        }
+        check(0x48D6C0, Eff_AllocBack, "Eff_AllocBack", 0, a, 0xFFFFFFFF);
+    }
+    stubs_install(0);
 }
 
 /* ---- the velociraptor ------------------------------------------------------------- */
@@ -3268,7 +3312,6 @@ static void raptor_jump_setup(gptr o)
 static void test_raptor(void)
 {
     g_ign_objpads = 1;
-    stub_at(0x452FF0)->impl = fk_sphere; stub_at(0x452FF0)->spec = "ddddww";
     stubs_install(1);
     raptor_tables_stub(1);
     player_tables_stub(1);                                  /* the player's weapon set-ups (Player_Weapon) */
@@ -3464,7 +3507,6 @@ static void test_raptor(void)
     player_tables_stub(0);
     raptor_tables_stub(0);
     stubs_install(0);
-    stub_at(0x452FF0)->impl = NULL; stub_at(0x452FF0)->spec = "ddwd";
     g_ign_objpads = 0;
 }
 
@@ -3627,7 +3669,7 @@ __declspec(dllexport) void harness_main(int argc, char **argv)
     struct { const char *name; void (*fn)(void); } T[] = {
         {"flags", test_flags}, {"geometry", test_geom}, {"script values", test_script_values},
         {"script opcodes", test_script_ops}, {"script objects", test_objects},
-        {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"objects 2", test_object}, {"collision", test_collision}, {"player", test_player}, {"player states", test_player2}, {"zones", test_zones}, {"loading", test_room}, {"title", test_title}, {"game task", test_game}, {"doors", test_doors}, {"frame", test_frame}, {"enemy sets", test_enemyset}, {"enemies", test_enemies}, {"raptor", test_raptor},
+        {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"objects 2", test_object}, {"collision", test_collision}, {"player", test_player}, {"player states", test_player2}, {"zones", test_zones}, {"loading", test_room}, {"title", test_title}, {"game task", test_game}, {"doors", test_doors}, {"frame", test_frame}, {"enemy sets", test_enemyset}, {"enemies", test_enemies}, {"raptor", test_raptor}, {"aot kinds", test_aot_kinds},
     };
     for (unsigned i = 0; i < sizeof T / sizeof T[0]; i++) {
         int f0 = g_fail, t0 = g_tests;

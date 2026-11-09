@@ -77,7 +77,6 @@
     V(Fn_495D70,          0x495D70, (gptr list, u32 n), (list, n)) \
     V(Fn_495DF0,          0x495DF0, (void), ()) \
     V(Fn_48FDA0,          0x48FDA0, (void), ()) \
-    F(u32, Sphere_Hit,    0x452FF0, (gptr a, gptr b, u32 h, u32 r), (a, b, h, r)) \
     V(Gpu_SetTile,        0x4C06A0, (gptr p), (p)) \
     V(Gpu_SetSemiTrans,   0x4C06C0, (gptr p, u32 on), (p, on)) \
     F(u32, Gpu_GetTPage,  0x4C08A0, (u32 tp, u32 abr, u32 x, u32 y), (tp, abr, x, y)) \

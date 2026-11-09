@@ -322,3 +322,121 @@ void DC2CALL AOT_Door(gptr e)                                       /* 0x48B390 
     Fn_4A7250();
     Task_Chain(0x41E2D0);
 }
+
+/* AOT kind 1, an event: starts script routine +0x18 in thread +0x14 */
+void DC2CALL AOT_Event(gptr e)                                      /* 0x48B460 */
+{
+    Script_StartThread(U8(e + 0x14), U16(e + 0x18));
+}
+
+/* AOT kind 2, a message (+0x14 its offset in the room's script data) */
+void DC2CALL AOT_Message(gptr e)                                    /* 0x48B480 */
+{
+    gptr w = Message_Show(0x1E, 0xBE, U32(G() + 0xA54) + U32(e + 0x14), 3);
+    if ((U8(e) & 0xC) == 8) U8(w) |= 2;
+}
+
+/* AOT kind 3: sets flag +0x15 of group +0x14 to +0x16 */
+void DC2CALL AOT_Flag(gptr e)                                       /* 0x48B4C0 */
+{
+    Flag_Set(U8(e + 0x14), U8(e + 0x15), U8(e + 0x16));
+}
+
+/* AOT kind 5, an item: the menu that picks it up (the entry's index and
+   +0x1B in the last argument) */
+void DC2CALL AOT_Item(gptr e)                                       /* 0x48B4E0 */
+{
+    u32 idx = (u32)((s32)(e - U32(G() + 0xA5C)) / 0x28) | (u32)U8(e + 0x1B) << 8;
+    Menu_Open(1, (e & 0xFFFF0000u) | U16(e + 0x14), U8(e + 0x1A), U16(e + 0x18), idx);
+}
+
+/* AOT kind 6: object effect +0x14 starts (flag 1/0) */
+void DC2CALL AOT_EffectStart(gptr e)                                /* 0x48B530 */
+{
+    Flag_Set(1, 0, 1);
+    U8(U32(G() + 0x93C) + U32(e + 0x14) * 0x70 + 0x4E) = 2;
+    U8(U32(G() + 0x93C) + U32(e + 0x14) * 0x70 + 0x46) = 1;
+}
+
+/* AOT kind 7: flag 1/3, and 3 into 0x87FC44 */
+void DC2CALL AOT_Kind7(gptr e)                                      /* 0x48B590 */
+{
+    Flag_Set(1, 3, 1);
+    U8(0x87FC44) = 3;
+}
+
+/* AOT kind 8: menu 2 */
+void DC2CALL AOT_Menu(gptr e)                                       /* 0x48B5B0 */
+{
+    Menu_Open(2, 0, 0, 0, 0);
+}
+
+/* AOT kind 9: once its flag (+0x19 of group 0xA) is the one waited for
+   (G+0xB4A), starts routine +0x14 in thread +0x18 */
+void DC2CALL AOT_Wait(gptr e)                                       /* 0x48B5D0 */
+{
+    if (U8(G() + 0xB4A) == U8(e + 0x19)) {
+        U8(G() + 0xB4A) = 0xFF;
+        Script_StartThread(U8(e + 0x18), U16(e + 0x14));
+    }
+    Flag_Set(0xA, U8(e + 0x19), 1);
+}
+
+/* the last free object effect slot from the end, cleared */
+gptr DC2CALL Eff_AllocBack(void)                                    /* 0x48D6C0 */
+{
+    u32 n = U32(0x87DE04) - U32(G() + 0xA78) - 0xC;
+    gptr e = U32(G() + 0x93C) + U32(0x87DE04) * 0x70 - 0x70;
+    for (; n; n--, e -= 0x70) {
+        if (U8(e + 0x50) & 1) continue;
+        memset(MEM(e), 0, 0x70);
+        U32(e + 0x50) = 1;
+        return e;
+    }
+    return 0;
+}
+
+/* AOT kind 10, by the character (G+0x10B5): Regina (1/7) with step 2 lets
+   out eight object effects from her position (0x7598B8) in a ring
+   (0x738C28 back +0x16 * 0x30), counting +0x16 down; Dylan (2/8) with step 1
+   darkens effect slot +0x18; done: flag 8/+0x15 */
+void DC2CALL AOT_Kind10(gptr e)                                     /* 0x48B620 */
+{
+    u16 ch = U8(G() + 0x10B5);
+    if (ch == 1 || ch == 7) {
+        if (U8(e + 0x14) != 2) return;
+        Fn_48C0B0(U32(G() + 0x940), 0x26);
+        gptr t = 0x738C28 - U8(e + 0x16) * 0x30;
+        for (int k = 0; k < 8; k++, t += 6) {
+            gptr f = Eff_AllocBack();
+            if (!f) continue;
+            U8(f + 0x4E) = 8;
+            U32(f + 0x50) |= 7;
+            U32(f + 0x68) = U32(e + 0x18);
+            U16(f + 0x40) = U16(0x7598B8);
+            U16(f + 0x42) = (u16)(U16(t) + U16(0x7598BA));
+            U16(f + 0x44) = U16(0x7598BC);
+            U16(f + 0x4C) = (U16(U32(G() + 0x940) + 0x4A) + U16(t + 2)) & 0xFFF;
+            U8(f + 0x4F) = U8(t + 4);
+        }
+        u8 n = --U8(e + 0x16);
+        if (n == 0) {
+            Flag_Set(8, U8(e + 0x15), 1);
+            U8(e) = 0;
+            U8(U32(G() + 0x944) + U8(e + 0x17) * 0xAC + 0x54) = 3;
+        } else if (n == 2) U8(U32(G() + 0x944) + U8(e + 0x17) * 0xAC + 0x54) = 2;
+    } else if (ch == 2 || ch == 8) {
+        if (U8(e + 0x14) != 1) return;
+        gptr k2 = U32(G() + 0x944) + U32(e + 0x18) * 0xAC;
+        U8(k2 + 0x64) = 0; U8(k2 + 0x65) = 0xFF; U8(k2 + 0x66) = 0;
+        Fn_48C0B0(U32(G() + 0x940), 0x27);
+        Flag_Set(8, U8(e + 0x15), 1);
+        U8(e) = 0;
+    }
+}
+
+/* AOT kind 11: one of two messages by flag 8/+0x14 */
+void DC2CALL AOT_Kind11(gptr e)                                     /* 0x48B7D0 */
+{
+    Message_Show(0x1E, 0xBE, Flag_Check(8, U8(e + 0x14)) ? 0x72888C : 0x728692, 3);
+}

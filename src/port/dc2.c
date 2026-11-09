@@ -132,8 +132,8 @@ int main(int argc, char **argv)
         }
         if (trace && f % 50 == 0 && U16(G() + 0x664) == 3 && U8(0x87F940)) {
             gptr pl = U32(G() + 0x940);
-            printf("frame %4d: player %d,%d,%d yaw %03X state %X level %u\n", f, S16(pl + 0x40), S16(pl + 0x42), S16(pl + 0x44),
-                   U16(pl + 0x4A), U32(pl + 0x54), U16(pl + 0x5A));
+            printf("frame %4d: player %d,%d,%d yaw %03X state %X level %u health %d\n", f, S16(pl + 0x40), S16(pl + 0x42), S16(pl + 0x44),
+                   U16(pl + 0x4A), U32(pl + 0x54), U16(pl + 0x5A), S16(pl + 0x108));
             for (int t = 0; t < 10; t++) {
                 gptr th = U32(0x87FC20) + t * 0xA4;
                 if (U8(th + 0x9B)) printf("  script thread %d state %X at %X: op %02X\n", t, U8(th + 0x9B), U32(th), U8(U32(th)));
