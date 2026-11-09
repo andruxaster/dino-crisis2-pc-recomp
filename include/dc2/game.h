@@ -535,6 +535,17 @@ void DC2CALL Raptor_Tail(gptr o);                                      /* 0x421C
 void DC2CALL Raptor_TailHit(gptr o, gptr pl);                          /* 0x421CC0 */
 void DC2CALL Raptor_Climb(gptr o);                                     /* 0x421F50 */
 void DC2CALL Raptor_JumpOver(gptr o);                                  /* 0x4221E0 */
+void DC2CALL Raptor_Hurt(gptr o);                                      /* 0x422400 */
+void DC2CALL Raptor_HurtStand(gptr o);                                 /* 0x422430 */
+void DC2CALL Raptor_HurtDown(gptr o);                                  /* 0x4226E0 */
+void DC2CALL Raptor_Knock(gptr o);                                     /* 0x4228C0 */
+void DC2CALL Raptor_KnockStand(gptr o);                                /* 0x4228F0 */
+void DC2CALL Raptor_KnockDown(gptr o);                                 /* 0x422BF0 */
+void DC2CALL Raptor_Blow(gptr o);                                      /* 0x422E00 */
+void DC2CALL Raptor_BlowStand(gptr o);                                 /* 0x422E30 */
+void DC2CALL Raptor_HurtAir(gptr o);                                   /* 0x423080 */
+void DC2CALL Raptor_Burn(gptr o);                                      /* 0x423300 */
+void DC2CALL Raptor_Drown(gptr o);                                     /* 0x4234B0 */
 void DC2CALL Raptor_Wait(gptr o);                                      /* 0x41FF30 */
 void DC2CALL Raptor_Walk(gptr o);                                      /* 0x420190 */
 void DC2CALL Raptor_Attack(gptr o);                                    /* 0x4203B0 */

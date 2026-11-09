@@ -3179,8 +3179,24 @@ static gptr raptor_setup(void)
     return o;
 }
 
-/* the target at the distances it compares, in front; Rand8's first value at
-   the edges it compares */
+/* a Rand8 seed whose first value is want (and the second 0 when zero2) */
+static u16 rand8_seed(u8 want, int zero2)
+{
+    u32 v = rnd() & 0xFFFF;
+    for (u32 n = 0; n < 0x10000; n++, v = (v + 1) & 0xFFFF) {
+        u8 hi = (u8)((v * 3u) >> 8); u16 x = (u16)(hi << 8 | (u8)(v + hi));
+        if (x == v) x += 0x101;
+        if ((u8)x != want) continue;
+        if (!zero2) return (u16)v;
+        u8 h2 = (u8)((x * 3u) >> 8); u16 y = (u16)(h2 << 8 | (u8)(x + h2));
+        if (y == x) y += 0x101;
+        if (!(u8)y) return (u16)v;
+    }
+    return (u16)v;
+}
+
+/* the target at the distances it compares, in front or not; Rand8's first
+   value at the edges it compares */
 static void raptor_think_setup(gptr o)
 {
     gptr t = U8(o + 0x184) & 0x40 ? U32(G() + 0xB50) : U32(G() + 0x940);
@@ -3189,7 +3205,7 @@ static void raptor_think_setup(gptr o)
     s16 dx = (s16)(d[k][sw] * sx + (s32)(rnd() % 3) - 1), dz = d[k][!sw];
     S16(o + 0x40) = (s16)(rnd() % 2000 - 1000); S16(o + 0x44) = (s16)(rnd() % 2000 - 1000);
     S16(t + 0x40) = (s16)(S16(o + 0x40) + dx); S16(t + 0x44) = (s16)(S16(o + 0x44) + dz);
-    U16(o + 0x4A) = (u16)(((u32)(s32)(s16)Angle_XZ(o + 0x40, t + 0x40) + rnd() % 0xA0 - 0x50) & 0xFFF);
+    U16(o + 0x4A) = (u16)(((u32)(s32)(s16)Angle_XZ(o + 0x40, t + 0x40) + (rnd() % 4 ? rnd() % 0xA0 - 0x50 : rnd())) & 0xFFF);
     U16(t + 0x5A) = rnd() % 3 == 0 ? U16(o + 0x5A) ^ 0x100 : rnd() % 2 ? U16(o + 0x5A) : (u16)rnd();
     U8(t + 0x54) = (u8[]){1, 2, 5, 0}[rnd() % 4]; U8(t + 0x55) = rnd() % 2 ? 8 : rnd() % 10;
     U16(t + 0x174) = rnd() % 3 == 0;
@@ -3214,12 +3230,7 @@ static void raptor_think_setup(gptr o)
         U32(G() + 0xA4C) = w;
     }
     static const u8 r[] = {0x27, 0x28, 0x29, 0x3F, 0x40, 0x41, 0x7F, 0x80, 0x81, 0x10, 0x11, 0};
-    u8 want = r[rnd() % 12];
-    for (u32 n = 0, v = rnd() & 0xFFFF; n < 0x10000; n++, v = (v + 1) & 0xFFFF) {   /* a seed giving it */
-        u8 hi = (u8)((v * 3u) >> 8); u16 x = (u16)(hi << 8 | (u8)(v + hi));
-        if (x == v) x += 0x101;
-        if ((u8)x == want) { U16(0x87DE10) = (u16)v; break; }
-    }
+    U16(0x87DE10) = rand8_seed(r[rnd() % 12], rnd() % 4 == 0);
     U32(LOG_BASE) = 0;
 }
 
@@ -3249,7 +3260,7 @@ static void test_raptor(void)
         sprintf(g_what, "raptor %X state %02X/%02X/%02X level %X hit %X/%X", o, U8(o + 0x54), U8(o + 0x55), U8(o + 0x56),
                 U16(o + 0x10C), U8(o + 0x17D), U16(o + 0x172));
         check(0x41FB20, Raptor_Think, "Raptor_Think", 1, a, 0);
-        for (int k = 0; k < 6; k++) {                       /* the edges of its choices */
+        for (int k = 0; k < 16; k++) {                      /* the edges of its choices */
             raptor_think_setup(o);
             sprintf(g_what, "raptor %X think %02X dist %u level %X/%X rnd %04X", o, U8(o + 0x55), Dist2_XZ(o + 0x40, (U8(o + 0x184) & 0x40 ? U32(G() + 0xB50) : U32(G() + 0x940)) + 0x40),
                     U16(o + 0x5A), U16(U32(G() + 0x940) + 0x5A), U16(0x87DE10));
@@ -3277,6 +3288,30 @@ static void test_raptor(void)
         anim_setup_at(AN_OBJ); memcpy(MEM(o + 0x60), MEM(AN_OBJ + 0x60), 0x50);   /* animated */
         raptor_jump_setup(o);
         check(0x420410, Raptor_Jump, "Raptor_Jump", 1, a, 0);
+        /* hit: the states by the kind of hit, in the air, down or standing */
+        static const struct { u32 addr; void *fn; const char *name; } ht[] = {
+            {0x422400, Raptor_Hurt, "Raptor_Hurt"}, {0x422430, Raptor_HurtStand, "Raptor_HurtStand"}, {0x4226E0, Raptor_HurtDown, "Raptor_HurtDown"},
+            {0x4228C0, Raptor_Knock, "Raptor_Knock"}, {0x4228F0, Raptor_KnockStand, "Raptor_KnockStand"}, {0x422BF0, Raptor_KnockDown, "Raptor_KnockDown"},
+            {0x422E00, Raptor_Blow, "Raptor_Blow"}, {0x422E30, Raptor_BlowStand, "Raptor_BlowStand"}, {0x423080, Raptor_HurtAir, "Raptor_HurtAir"},
+            {0x423300, Raptor_Burn, "Raptor_Burn"}, {0x4234B0, Raptor_Drown, "Raptor_Drown"}};
+        for (unsigned k = 0; k < sizeof ht / sizeof ht[0]; k++) {
+            gptr e = o + 0x1C0;
+            U32(0x74AF00) = e;
+            U8(o + 0x56) = rnd() % 3; U16(o + 0x174) = (u16)(rnd() % 2 ? rnd() & 6 : rnd());
+            U16(o + 0x170) = (u16)rnd(); U16(o + 0x172) = rnd() % 6; U16(o + 0x178) = rnd() % 2 ? rnd() % 4 : (u16)rnd() & 0xFFF;
+            U8(o + 0x184) = (u8)rnd(); U8(o + 0x180) = (u8)rnd(); U8(o + 0xFF) = (u8)rnd();
+            S16(o + 0x10A) = (s16)(rnd() % 0x400); S16(o + 0x108) = (s16)(rnd() % 3 ? rnd() % 0x200 : rnd());
+            U16(o + 0x176) = rnd() % 2 ? (u16)(U16(o + 0x108) + rnd() % 3 - 1) : rnd() % 0x100;
+            U8(e + 0x1D) = (u8)rnd(); U8(e + 0x18) = rnd() % 2; U8(e + 0xC) = rnd() % 3; U8(e + 0x1A) = (u8)rnd();
+            U16(o + 0x92) = rnd() % 2 ? (u16[]){3, 4, 0xA, 0xB, 0xD, 0xE}[rnd() % 6] : (u16)rnd();
+            S16(o + 0x42) = (s16)(rnd() % 2 ? -1000 * (s32)(rnd() % 3) + (s32)(rnd() % 600) - 400 : (s32)(rnd() % 0x10000) - 0x8000);
+            if (rnd() % 2) U16(0x87DE10) = rand8_seed((u8[]){0x3F, 0x40, 0x41, 0xDF, 0xE0, 0xE1, 4, 0x10, 0}[rnd() % 9], 0);
+            if (rnd() % 3 == 0) { S16(o + 0x40) = (s16)(rnd() % 0x10000); S16(o + 0x44) = (s16)(rnd() % 0x10000); }
+            U32(LOG_BASE) = 0;
+            sprintf(g_what, "raptor %X hit step %u fl %X kind %u health %d/%d dmg %d y %d", o, U8(o + 0x56), U16(o + 0x174), U16(o + 0x172),
+                    S16(o + 0x108), S16(o + 0x10A), S16(o + 0x176), S16(o + 0x42));
+            check(ht[k].addr, ht[k].fn, ht[k].name, 1, a, 0);
+        }
         model_data(0x633000);
         if (!U32(G() + 0xB50)) U32(G() + 0xB50) = O_OBJ + 0x260 * 15;   /* room 407: rides the part */
         check(0x41F660, Raptor_Init, "Raptor_Init", 1, a, 0);
@@ -3297,8 +3332,14 @@ static void test_raptor(void)
         for (unsigned k = 0; k < sizeof st / sizeof st[0]; k++) {
             U8(o + 0x56) = rnd() % 4; U8(o + 0x18C) = (u8)rnd(); U8(o + 0x18D) = rnd() % 2 ? 0 : (u8)rnd();
             U16(o + 0x172) = rnd() % 3; U8(o + 0x180) = (u8)rnd(); U8(o + 0xFF) = (u8)rnd();
-            U16(o + 0x92) = rnd() % 2 ? 0x29 + rnd() % 3 : (u16)rnd();
-            u32 da = rnd() % 2 ? rnd() % 0x1000 : (u32[]){0x200, 0x400, 0x600, 0x700, 0x900, 0xA00, 0xC00, 0xE00}[rnd() % 8] + rnd() % 3 - 1;
+            U16(o + 0x92) = rnd() % 3 == 0 ? 0x29 + rnd() % 3 : rnd() % 2 ? (u16)(U16(o + 0x90) - 1) : (u16)rnd();   /* the edge, the last frame */
+            u32 da = rnd() % 2 ? rnd() % 0x1000 : (u32[]){0x200, 0x400, 0x600, 0x700, 0x800, 0x900, 0xA00, 0xC00, 0xE00}[rnd() % 9] + rnd() % 3 - 1;
+            if (rnd() % 2) U16(0x87DE10) = rand8_seed((u8[]){0x63, 0x64, 0x65, 0x7F, 0x80, 0x1F, 0x20}[rnd() % 7], 0);
+            {   /* the player near, at the edges of the angles it looks within */
+                double an = (U16(o + 0x4A) + (rnd() % 2 ? 1 : -1) * (s32)(u32[]){0xFF, 0x101, 0x1FF, 0x201, 0x27F, 0x281, 0x400}[rnd() % 7]) * 3.14159265358979 / 2048;
+                double dd = 1000 + rnd() % 3000;
+                S16(O_OBJ + 0x40) = (s16)(S16(o + 0x40) + dd * sin(an)); S16(O_OBJ + 0x44) = (s16)(S16(o + 0x44) + dd * cos(an));
+            }
             U16(e + 8) = (u16)(U16(o + 0x4A) + da);
             U16(e + 0x28) = rnd() % 2 ? 0x1C0 + rnd() % 4 : (u16)rnd();
             U8(e + 0x1C) = rnd() % 2 ? rnd() % 2 : (u8)rnd();
@@ -3320,7 +3361,7 @@ static void test_raptor(void)
         memcpy(MEM(O_OBJ + 0x60), MEM(o + 0x60), 0x50);   /* the same parts and animation data */
         memcpy(MEM(O_OBJ + 0x260 * 7 + 0x60), MEM(o + 0x60), 0x50);   /* ... for the part it may ride */
         U32(G() + 0x940) = O_OBJ;
-        for (int k = 0x40; k < 0xC0; k++) U32(AN_TAB + 4 * k) = AN_DATA + 0x1000 * (k & 1);
+        for (int k = 0x40; k < 0xC0; k++) U32(AN_TAB + 4 * k) = AN_DATA + 0x1000 * ((k ^ k >> 4 ^ k >> 5) & 1);   /* per character apart */
         U32(0x74AF00) = e;
         U32(G() + 0xB50) = O_OBJ + 0x260 * 7; U32(o + 0x184) = (u32)rnd() & ~(rnd() % 4 ? 0x40u : 0);
         U8(G() + 0x108F) = rnd() % 4;
