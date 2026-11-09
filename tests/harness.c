@@ -608,7 +608,7 @@ static Stub g_stubs[] = {
     /* 94..: doors */
     {0x48CA40, ""}, {0x494DE0, "d"}, {0x41F080, "dddddd"}, {0x46BA00, "d"}, {0x41F3E0, "d"}, {0x41F390, "d"}, {0x41F170, "d"}, {0x470CF0, ""},
     /* 102..: the frame of play */
-    {0x472230, ""}, {0x472D20, ""}, {0x4509C0, ""}, {0x445D10, ""}, {0x4D2990, "dddd"}, {0x404CC0, ""},
+    {0, ""}, {0, ""}, {0x4509C0, ""}, {0x445D10, ""}, {0x4D2990, "dddd"}, {0x404CC0, ""},
     {0x406050, "dd"}, {0x406520, "dd"}, {0x48FA70, ""},
     /* 111..: the PC sound buffers */
     {0x4BF970, "ddd"}, {0x4BFA20, "dd"}, {0x4BFAA0, "d"}, {0x4BFAE0, "d"}, {0x4BFBD0, "d"}, {0x4BFF20, "dd"},
@@ -2746,6 +2746,7 @@ static void test_title(void)
 
 /* ---- the frame of play: object loops, trigger areas ---------------------------------- */
 static void camera_state(void);
+static void enemyset_state(void);
 static void frame_state(void)
 {
     gptr g = G();
@@ -2769,6 +2770,7 @@ static void frame_state(void)
     for (unsigned k = 0; k < sizeof fl / sizeof fl[0]; k++) Flag_Set(fl[k][0], fl[k][1], rnd() % 3 == 0);
     Flag_Set(1, 6, 1);                                      /* Script_Tick has its own tests */
     camera_state();
+    enemyset_state();
 }
 
 /* the camera zones around the player and a camera to load (a fake DBS record
@@ -2807,6 +2809,50 @@ static void camera_state(void)
     U32(p + 0x64) = rnd() % 0x100; U32(p + 0x68) = rnd() % 0x400;
     stub_at(0x4C03F0)->ret = rnd() % 5 ? 3 : 0xFFFFFFFF;
     stub_at(0x4DD711)->ret = p;
+}
+
+/* an enemy set (in O_AOT): groups around the player, spawn points at +0x100 */
+static void enemyset_state(void)
+{
+    gptr g = G(), pl = U32(g + 0x940), set = O_AOT, st = g + 0xA80, st2 = g + 0xAC8;
+    U32(g + 0xA68) = rnd() % 6 ? set : 0;
+    U32(g + 0xB50) = rnd() % 6 ? 0 : O_OBJ + 0x260 * (1 + rnd() % 3);
+    u32 n = rnd() % 5;
+    for (u32 k = 0; k < 0x200; k += 4) U32(set + k) = rnd();
+    U8(set) = (u8)n; U8(set + 1) = (u8[]){2, 7, 3, 0x1B}[rnd() % 4]; U8(set + 2) = rnd() % 5;
+    U8(set + 3) = rnd() % 3 ? 0xFF : (u8[]){0, 1, 2, 3, 0xE5, 0xE6, 0xE7}[rnd() % 7]; U8(set + 4) = rnd() % 4;
+    U8(set + 6) = (u8[]){1, 2, 3, 0}[rnd() % 4]; U8(set + 8) = rnd() % 2;
+    for (u32 k = 0; k < 0x40; k += 4) U32(g + 0x12D0 + k) = rnd() % 2 ? rnd() & 0x03030303 : rnd();
+    for (u32 k = 0; k < 4; k++) {
+        gptr e = set + 0x10 + k * 0x20;
+        s16 cx = S16(pl + 0x40) + (s16)(rnd() % 1000 - 500), cz = S16(pl + 0x44) + (s16)(rnd() % 1000 - 500), r = (s16)(50 + rnd() % 900);
+        U16(e) = (u16)(cx + r); U16(e + 2) = (u16)(cz + r); U16(e + 4) = (u16)(cx + r); U16(e + 6) = (u16)(cz - r);
+        U16(e + 8) = (u16)(cx - r); U16(e + 0xA) = (u16)(cz - r); U16(e + 0xC) = (u16)(cx - r); U16(e + 0xE) = (u16)(cz + r);
+        for (u32 j = 0; j < 0x10; j += 2) U16(e + j) += (u16)(rnd() % 7 - 3);   /* centres off the grid */
+        U16(e + 0x10) = (u16)(0x100 + rnd() % 4 * 0x10); U8(e + 0x12) = rnd() % 4 ? 1 + rnd() % 4 : 0;
+        U8(e + 0x13) = rnd() % 3 ? (u8)U16(pl + 0x5A) : rnd() % 3; U8(e + 0x14) = rnd() % 5; U8(e + 0x15) = rnd() % 6;
+        U8(e + 0x16) = rnd() % 5; U16(e + 0x18) = rnd() % 0x20;
+    }
+    for (u32 k = 0; k < 8; k++) {
+        gptr p = set + 0x100 + k * 0x10;
+        U16(p) = (u16)(S16(pl + 0x40) + (s16)(rnd() % 4000 - 2000)); U16(p + 4) = (u16)(S16(pl + 0x44) + (s16)(rnd() % 4000 - 2000));
+        U8(p + 8) = (u8[]){0, 4, 1, 2}[rnd() % 4]; U8(p + 9) = rnd() % 3; U8(p + 0xA) = rnd() % 8;
+    }
+    for (u32 k = 0; k < 0x48; k += 4) U32(st + k) = rnd();
+    U16(st) = rnd() % 3 ? rnd() % 3 : (u16)rnd(); U8(st + 4) = rnd() % 5; U8(st + 6) = rnd() % 2;
+    U8(st + 8) = rnd() % 4; U8(st + 9) = rnd() % 3 ? rnd() % 4 : 0xFF; U8(st + 0xA) = rnd() % 3 ? rnd() % 4 : 0xFF;
+    U8(st + 0xB) = rnd() % 2; U8(st + 0xC) = rnd() % 2; U16(st + 0xE) = rnd() % 2 ? 0 : rnd() % 0x100;
+    for (u32 k = 0; k < 4; k++) U8(st + 0x18 + k) = rnd() % 6;
+    if (rnd() % 4 == 0) U8(st + 4) = (u8)(U8(set + 2) + 8 + rnd() % 3);
+    if (rnd() % 4 == 0) { U32(st + 0x10) = 0; U32(st + 0x14) = 0; }
+    U16(O_PART + 8 * 0x80 + 0x5A) = rnd() % 3;
+    for (u32 k = 0; k < 0x10; k += 4) U32(g + 0xAB8 + k) = rnd() % 3 ? 0 : (rnd() & 0x0305030F);
+    U16(st2) = rnd() % 3 ? rnd() % 3 : rnd() % 2 ? 0x8001 : (u16)rnd(); U8(st2 + 5) = rnd() % 6; U8(st2 + 9) = rnd() % 3 ? rnd() % 4 : 0xFF;
+    U16(pl + 0x17E) = rnd() % 3 ? (u16)(rnd() % 0x500) : rnd() % 2 ? 0 : (u16)(0x41A + rnd() % 3 - 1);
+    U16(g + 0x138A) = rnd() % 3 ? 0 : rnd() % 3; U16(g + 0x1388) = rnd() % 4;
+    U8(g + 0x108E) = rnd() % 3; U8(g + 0x1090) = rnd() % 3; U8(g + 0x1091) = rnd() % 3;
+    U32(g + 0xA7C) = rnd() % 4;
+    for (u32 k = 1; k < 8; k++) U8(O_OBJ + k * 0x260 + 0x58) = (u8[]){2, 7, 3, 0x1B}[rnd() % 4];
 }
 
 /* the trigger areas: some around the player (or the point in front of it, or
@@ -2906,6 +2952,46 @@ static void test_frame(void)
         U32(LOG_BASE) = 0;
         sprintf(g_what, "door aot %X flags %02X msg %u", a[0], U8(a[0]), U8(a[0] + 0x20));
         check(0x48B390, AOT_Door, "AOT_Door", 1, a, 0);
+    }
+    type_tables_stub(0);
+    stubs_install(0);
+    g_ign_campad = 0;
+}
+
+static void test_enemyset(void)
+{
+    g_ign_campad = 1;
+    stubs_install(1);
+    type_tables_stub(1);
+    script_setup();
+    for (int i = 0; i < iters; i++) {
+        game_state(); fake_room_block();
+        /* the enemy sets */
+        static const struct { u32 addr; void *fn; const char *name; } E[] = {
+            {0x472230, EnemySet_Tick, "EnemySet_Tick"}, {0x472D20, EnemySet_Small, "EnemySet_Small"},
+            {0x472130, EnemySet_Cries, "EnemySet_Cries"},
+        };
+        for (int r = 0; r < 4; r++)
+            for (unsigned k = 0; k < sizeof E / sizeof E[0]; k++) {
+                frame_state();
+                U32(LOG_BASE) = 0;
+                u32 ea[1] = {G() + 0xAB8};
+                sprintf(g_what, "set %X groups %u type %u objects %u timer %u", U32(G() + 0xA68), U8(O_AOT), U8(O_AOT + 1),
+                        U32(0x87F940), U16(G() + 0xA80));
+                check(E[k].addr, E[k].fn, E[k].name, k == 2, ea, 0);
+            }
+        frame_state();
+        {
+            u32 a2[3] = {rnd() % 8, rnd() % 8};
+            check(0x4720B0, EnemySet_Cry, "EnemySet_Cry", 2, a2, 0);
+            a2[0] = O_AOT + 0x100 + 0x10 * (rnd() % 8);
+            check(0x4721B0, EnemySet_Light, "EnemySet_Light", 1, a2, 0);
+            a2[0] = O_AOT + 0x10 + 0x20 * (rnd() % 4); a2[1] = O_AOT + 0x10 + 0x20 * (rnd() % 4); a2[2] = G() + 0xA90;
+            check(0x472BB0, EnemySet_Way, "EnemySet_Way", 3, a2, 0);
+            a2[0] = O_AOT + 0x10; a2[1] = rnd() % 6 - 1;
+            check(0x472C60, EnemySet_FindGroup, "EnemySet_FindGroup", 2, a2, 0xFF);
+            check(0x48D7B0, Obj_AllocEnemy, "Obj_AllocEnemy", 0, NULL, 0xFFFFFFFF);
+        }
     }
     type_tables_stub(0);
     stubs_install(0);
@@ -3071,7 +3157,7 @@ __declspec(dllexport) void harness_main(int argc, char **argv)
     struct { const char *name; void (*fn)(void); } T[] = {
         {"flags", test_flags}, {"geometry", test_geom}, {"script values", test_script_values},
         {"script opcodes", test_script_ops}, {"script objects", test_objects},
-        {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"objects 2", test_object}, {"collision", test_collision}, {"player", test_player}, {"player states", test_player2}, {"zones", test_zones}, {"loading", test_room}, {"title", test_title}, {"game task", test_game}, {"doors", test_doors}, {"frame", test_frame},
+        {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"objects 2", test_object}, {"collision", test_collision}, {"player", test_player}, {"player states", test_player2}, {"zones", test_zones}, {"loading", test_room}, {"title", test_title}, {"game task", test_game}, {"doors", test_doors}, {"frame", test_frame}, {"enemy sets", test_enemyset},
     };
     for (unsigned i = 0; i < sizeof T / sizeof T[0]; i++) {
         int f0 = g_fail, t0 = g_tests;

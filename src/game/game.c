@@ -414,7 +414,7 @@ void DC2CALL Game_Frame(void)                                       /* 0x472FD0 
         if (!Flag_Check(1, 1)) Camera_Tick();
         if (!Flag_Check(1, 8)) Aot_Tick();
         if (!Flag_Check(1, 6)) Script_Tick();
-        if (!Flag_Check(1, 0xB)) { EnemySet_Tick(); Fn_472D20(); }
+        if (!Flag_Check(1, 0xB)) { EnemySet_Tick(); EnemySet_Small(); }
         Fn_4509C0();
         if (!Flag_Check(1, 7)) Eff_RunAll();
         Obj_RunAll();

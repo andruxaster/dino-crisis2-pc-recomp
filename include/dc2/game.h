@@ -495,6 +495,14 @@ u32  DC2CALL Continue_AnimStep(gptr a);                                /* 0x4522
 void DC2CALL Continue_Draw(s32 x, s32 y, u32 color, gptr f);           /* 0x452170 */
 u32  DC2CALL Text_Length(gptr s);                                      /* 0x471A90 */
 void DC2CALL Game_Continue(void);                                      /* 0x451990 */
+gptr DC2CALL Obj_AllocEnemy(void);                                     /* 0x48D7B0 */
+void DC2CALL EnemySet_Cries(gptr s);                                   /* 0x472130 */
+void DC2CALL EnemySet_Cry(u32 kind, u32 obj);                          /* 0x4720B0 */
+void DC2CALL EnemySet_Light(gptr p);                                   /* 0x4721B0 */
+void DC2CALL EnemySet_Way(gptr a, gptr b, gptr out);                   /* 0x472BB0 */
+u32  DC2CALL EnemySet_FindGroup(gptr grp, s32 n);                      /* 0x472C60 */
+void DC2CALL EnemySet_Tick(void);                                      /* 0x472230 */
+void DC2CALL EnemySet_Small(void);                                     /* 0x472D20 */
 void DC2CALL Door_Task(void);                                          /* 0x41E2D0 */
 void DC2CALL Door_Common(gptr d);                                      /* 0x41CB70 */
 void DC2CALL Door_SwingAMove(gptr d);                                  /* 0x41CA70 */

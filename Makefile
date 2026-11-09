@@ -6,7 +6,7 @@ CC32   ?= i686-w64-mingw32-gcc
 CC     ?= cc
 CFLAGS  = -std=gnu11 -O2 -Wall -Wextra -Wno-unused-parameter -Iinclude -fexcess-precision=standard -fno-strict-aliasing
 GAME    = src/game/lzss.c src/game/flag.c src/game/geom.c src/game/script_vm.c \
-          src/game/script_obj.c src/game/script_ops.c src/game/script_aot.c src/game/anim.c src/game/object.c src/game/player.c src/game/weapon.c src/game/zone.c src/game/gun.c src/game/door.c src/game/sound.c src/game/camera.c src/game/crt.c src/game/file.c src/game/pcio.c src/game/room.c src/game/root.c src/game/title.c src/game/game.c src/game/task.c src/game/gte.c src/game/orig.c \
+          src/game/script_obj.c src/game/script_ops.c src/game/script_aot.c src/game/anim.c src/game/object.c src/game/player.c src/game/weapon.c src/game/zone.c src/game/gun.c src/game/door.c src/game/sound.c src/game/camera.c src/game/enemyset.c src/game/crt.c src/game/file.c src/game/pcio.c src/game/room.c src/game/root.c src/game/title.c src/game/game.c src/game/task.c src/game/gte.c src/game/orig.c \
           src/hook/hooks.c
 DINO2  ?= game/Dino2.exe
 DATA   ?= game/Data

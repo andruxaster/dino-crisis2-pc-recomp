@@ -68,8 +68,6 @@
     V(Gpu_LoadImageIfChanged, 0x4B4DB0, (gptr rect, gptr p), (rect, p)) \
     V(Fn_48CA40,          0x48CA40, (void), ()) \
     F(u32, Fn_494DE0,     0x494DE0, (gptr text), (text)) \
-    V(EnemySet_Tick,      0x472230, (void), ()) \
-    V(Fn_472D20,          0x472D20, (void), ()) \
     V(Fn_4509C0,          0x4509C0, (void), ()) \
     V(Fn_445D10,          0x445D10, (void), ()) \
     V(Fn_404CC0,          0x404CC0, (void), ()) \
