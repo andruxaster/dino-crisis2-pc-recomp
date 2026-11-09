@@ -3174,6 +3174,12 @@ static gptr raptor_setup(void)
     U16(0x87DE10) = (u16)rnd();
     U32(0x87DC98) = 0x6D0000;
     for (u32 k = 0; k < 16; k++) U8(O_OBJ + k * 0x260 + 0xFD) &= 1;   /* group: Obj_PickGroup counts 2 */
+    for (u32 k = 0; k < U8(CL_ROOM); k++) {                             /* floor kinds (Floor_Height masks) */
+        gptr w = CL_ROOM + U32(CL_ROOM + 8 + 4 * k);
+        U8(w) = rnd() % 5 ? (u8)((rnd() % 3 == 0 ? 0x80 : rnd() % 3 == 0 ? 0x40 : 0) | (rnd() & 0x30) | 1) : 0;
+        U16(w + 4) = rnd() % 4 ? (u16)(1u << (rnd() % 3)) | (u16)(rnd() % 2 ? 1u << (rnd() % 3) : 0) : (u16)rnd();
+        U8(w + 3) = (u8)((2 * k + 2) | (rnd() % 3 ? 0 : rnd() % 2 ? 0x40 : 0x80));   /* which one; the kinds of objects it ignores */
+    }
     U32(0x87F948) = TYPE_TAB;                                           /* effect slot handlers: recorders */
     for (int k = 0; k < 256; k++) U32(TYPE_TAB + 4 * k) = (u32)(uintptr_t)g_recs[STUB_TYPE];
     return o;
@@ -3206,7 +3212,7 @@ static void raptor_think_setup(gptr o)
     S16(o + 0x40) = (s16)(rnd() % 2000 - 1000); S16(o + 0x44) = (s16)(rnd() % 2000 - 1000);
     S16(t + 0x40) = (s16)(S16(o + 0x40) + dx); S16(t + 0x44) = (s16)(S16(o + 0x44) + dz);
     U16(o + 0x4A) = (u16)(((u32)(s32)(s16)Angle_XZ(o + 0x40, t + 0x40) + (rnd() % 4 ? rnd() % 0xA0 - 0x50 : rnd())) & 0xFFF);
-    U16(t + 0x5A) = rnd() % 3 == 0 ? U16(o + 0x5A) ^ 0x100 : rnd() % 2 ? U16(o + 0x5A) : (u16)rnd();
+    U16(t + 0x5A) = rnd() % 4 == 0 ? U16(o + 0x5A) ^ 0x100 : rnd() % 6 ? U16(o + 0x5A) : (u16)rnd();
     U8(t + 0x54) = (u8[]){1, 2, 5, 0}[rnd() % 4]; U8(t + 0x55) = rnd() % 2 ? 8 : rnd() % 10;
     U16(t + 0x174) = rnd() % 3 == 0;
     U8(o + 0x55) = rnd() % 2; U8(o + 0x18D) = 0; U8(o + 0x17B) = 0; U8(o + 0x13A) = rnd() % 2; U8(o + 0xFF) = (u8)rnd();
@@ -3235,6 +3241,13 @@ static void raptor_think_setup(gptr o)
 }
 
 /* a jump on its way: the level, the height about it, the vertical speed */
+/* half the time the animation ends at its next step (Anim_Step returns 1) */
+static void anim_maybe_end(gptr o)
+{
+    if (rnd() % 2) return;
+    U16(o + 0x102) &= ~0x20; U16(o + 0x94) = (u16)(U16(o + 0x90) - 1); U16(o + 0x98) = 0x7000;
+}
+
 static void raptor_jump_setup(gptr o)
 {
     gptr e = o + 0x1C0;
@@ -3245,6 +3258,11 @@ static void raptor_jump_setup(gptr o)
     S16(e + 0x14) = (s16)(rnd() % 2 ? (s32)(rnd() % 3) - 0x3D : (s32)(rnd() % 0x400) - 0x200);
     S16(o + 0xF4) = (s16)(rnd() % 2 ? 0xC6 + rnd() % 4 : rnd() % 0x200);
     U8(o + 0xFF) = (u8)rnd();
+    if (rnd() % 2) {                                    /* after this step's fall, at a level's height */
+        s32 base = rnd() % 2 ? -1000 * (s32)U16(e + 0x16) : -1000 * S16(o + 0x5A);
+        S16(o + 0x42) = (s16)(base + (s32)(rnd() % 3) - 1 - (S16(e + 0x14) + 0x3C));
+    }
+    anim_maybe_end(o);
 }
 
 static void test_raptor(void)
@@ -3253,6 +3271,7 @@ static void test_raptor(void)
     stub_at(0x452FF0)->impl = fk_sphere; stub_at(0x452FF0)->spec = "ddddww";
     stubs_install(1);
     raptor_tables_stub(1);
+    player_tables_stub(1);                                  /* the player's weapon set-ups (Player_Weapon) */
     for (int i = 0; i < iters; i++) {
         game_state();
         gptr o = raptor_setup();
@@ -3260,12 +3279,13 @@ static void test_raptor(void)
         sprintf(g_what, "raptor %X state %02X/%02X/%02X level %X hit %X/%X", o, U8(o + 0x54), U8(o + 0x55), U8(o + 0x56),
                 U16(o + 0x10C), U8(o + 0x17D), U16(o + 0x172));
         check(0x41FB20, Raptor_Think, "Raptor_Think", 1, a, 0);
-        for (int k = 0; k < 16; k++) {                      /* the edges of its choices */
+        for (int k = 0; k < 24; k++) {                      /* the edges of its choices */
             raptor_think_setup(o);
             sprintf(g_what, "raptor %X think %02X dist %u level %X/%X rnd %04X", o, U8(o + 0x55), Dist2_XZ(o + 0x40, (U8(o + 0x184) & 0x40 ? U32(G() + 0xB50) : U32(G() + 0x940)) + 0x40),
                     U16(o + 0x5A), U16(U32(G() + 0x940) + 0x5A), U16(0x87DE10));
             check(0x41FB20, Raptor_Think, "Raptor_Think", 1, a, 0);
         }
+        U32(G() + 0xA4C) = CL_ROOM;                         /* the room's polygons again, not the test wall */
         check(0x41F960, Raptor_Normal, "Raptor_Normal", 1, a, 0);
         check(0x41F9A0, Raptor_Hit, "Raptor_Hit", 1, a, 0);
         check(0x420A00, Raptor_Grab, "Raptor_Grab", 1, a, 0);
@@ -3286,7 +3306,16 @@ static void test_raptor(void)
         check(0x41F430, Raptor_Handler, "Raptor_Handler", 1, a, 0);
         U8(o + 0x11A) = (u8)rnd();
         anim_setup_at(AN_OBJ); memcpy(MEM(o + 0x60), MEM(AN_OBJ + 0x60), 0x50);   /* animated */
+        for (int k = 0x40; k < 0xC0; k++) U32(AN_TAB + 4 * k) = AN_DATA + 0x1000 * ((k ^ k >> 4 ^ k >> 5) & 1);
         raptor_jump_setup(o);
+        if (rnd() % 2 && U8(CL_ROOM)) {                         /* on a floor polygon, below its layers */
+            gptr w = CL_ROOM + U32(CL_ROOM + 8 + 4 * (rnd() % U8(CL_ROOM))), v = w + 8 + U8(w + 1) * 4;
+            s32 sx = 0, sz = 0, n = U8(w + 1) ? U8(w + 1) : 1;
+            for (s32 j = 0; j < U8(w + 1); j++) { sx += S16(v + 4 * j); sz += S16(v + 4 * j + 2); }
+            S16(o + 0x40) = (s16)(sx / n); S16(o + 0x44) = (s16)(sz / n); S16(o + 0x42) = (s16)(-(s32)(rnd() % 5000));
+            if (rnd() % 2) U8(o + 0x56) = 0;
+        }
+        if (rnd() % 4 == 0) S16(o + 0x42) = (s16)(0x7918 - rnd() % 0x30);   /* between the heights it looks down from */
         check(0x420410, Raptor_Jump, "Raptor_Jump", 1, a, 0);
         /* hit: the states by the kind of hit, in the air, down or standing */
         static const struct { u32 addr; void *fn; const char *name; } ht[] = {
@@ -3294,8 +3323,9 @@ static void test_raptor(void)
             {0x4228C0, Raptor_Knock, "Raptor_Knock"}, {0x4228F0, Raptor_KnockStand, "Raptor_KnockStand"}, {0x422BF0, Raptor_KnockDown, "Raptor_KnockDown"},
             {0x422E00, Raptor_Blow, "Raptor_Blow"}, {0x422E30, Raptor_BlowStand, "Raptor_BlowStand"}, {0x423080, Raptor_HurtAir, "Raptor_HurtAir"},
             {0x423300, Raptor_Burn, "Raptor_Burn"}, {0x4234B0, Raptor_Drown, "Raptor_Drown"}};
-        for (unsigned k = 0; k < sizeof ht / sizeof ht[0]; k++) {
+        for (unsigned k = 0; k < 2 * sizeof ht / sizeof ht[0]; k++) {
             gptr e = o + 0x1C0;
+            U32(o + 0x50) ^= rnd() & 0x2878;
             U32(0x74AF00) = e;
             U8(o + 0x56) = rnd() % 3; U16(o + 0x174) = (u16)(rnd() % 2 ? rnd() & 6 : rnd());
             U16(o + 0x170) = (u16)rnd(); U16(o + 0x172) = rnd() % 6; U16(o + 0x178) = rnd() % 2 ? rnd() % 4 : (u16)rnd() & 0xFFF;
@@ -3307,10 +3337,32 @@ static void test_raptor(void)
             S16(o + 0x42) = (s16)(rnd() % 2 ? -1000 * (s32)(rnd() % 3) + (s32)(rnd() % 600) - 400 : (s32)(rnd() % 0x10000) - 0x8000);
             if (rnd() % 2) U16(0x87DE10) = rand8_seed((u8[]){0x3F, 0x40, 0x41, 0xDF, 0xE0, 0xE1, 4, 0x10, 0}[rnd() % 9], 0);
             if (rnd() % 3 == 0) { S16(o + 0x40) = (s16)(rnd() % 0x10000); S16(o + 0x44) = (s16)(rnd() % 0x10000); }
+            if (rnd() % 3 == 0) {                               /* in the water's quads */
+                gptr q = rnd() % 2 ? 0x7032B0 : 0x7032C0;
+                S16(o + 0x40) = (s16)((S16(q) + S16(q + 4) + S16(q + 8) + S16(q + 12)) / 4);
+                S16(o + 0x44) = (s16)((S16(q + 2) + S16(q + 6) + S16(q + 10) + S16(q + 14)) / 4);
+            }
+            if (rnd() % 2 && U8(CL_ROOM)) {                     /* on a floor polygon */
+                gptr w = CL_ROOM + U32(CL_ROOM + 8 + 4 * (rnd() % U8(CL_ROOM))), v = w + 8 + U8(w + 1) * 4;
+                s32 sx = 0, sz = 0, n = U8(w + 1) ? U8(w + 1) : 1;
+                for (s32 j = 0; j < U8(w + 1); j++) { sx += S16(v + 4 * j); sz += S16(v + 4 * j + 2); }
+                S16(o + 0x40) = (s16)(sx / n); S16(o + 0x44) = (s16)(sz / n);
+                U16(o + 0xE0) = U16(o + 0x40); U16(o + 0xE4) = U16(o + 0x44); S16(o + 0xE2) = (s16)(rnd() % 2 ? -10000 : 10000);
+            }
+            if (k % 11 == 4 && rnd() % 2) {                     /* staggering: low health, falls? */
+                U16(o + 0x170) &= ~1; S16(o + 0x10A) = 0x400; S16(o + 0x108) = rnd() % 0x80; U16(o + 0x176) = rnd() % 0x10; U8(e + 0x18) = 1;
+                U16(0x87DE10) = rand8_seed((u8[]){0x3F, 0x40, 0x41}[rnd() % 3], 0);
+            }
+            if (rnd() % 2) {                                    /* the height at the floor's edges */
+                s16 h = (s16)Floor_Height(o + 0xE0, o + 0x40, 0x40, 0);
+                s32 fl = -1000 * ((s32)h / -1000), d = (s32)(rnd() % 3) - 1;
+                S16(o + 0x42) = (s16)(rnd() % 3 == 0 ? h - 0x118 + d : rnd() % 2 ? fl - 0x118 + d : fl + d);
+            }
+            anim_maybe_end(o);
             U32(LOG_BASE) = 0;
             sprintf(g_what, "raptor %X hit step %u fl %X kind %u health %d/%d dmg %d y %d", o, U8(o + 0x56), U16(o + 0x174), U16(o + 0x172),
                     S16(o + 0x108), S16(o + 0x10A), S16(o + 0x176), S16(o + 0x42));
-            check(ht[k].addr, ht[k].fn, ht[k].name, 1, a, 0);
+            check(ht[k % 11].addr, ht[k % 11].fn, ht[k % 11].name, 1, a, 0);
         }
         model_data(0x633000);
         if (!U32(G() + 0xB50)) U32(G() + 0xB50) = O_OBJ + 0x260 * 15;   /* room 407: rides the part */
@@ -3333,7 +3385,7 @@ static void test_raptor(void)
             U8(o + 0x56) = rnd() % 4; U8(o + 0x18C) = (u8)rnd(); U8(o + 0x18D) = rnd() % 2 ? 0 : (u8)rnd();
             U16(o + 0x172) = rnd() % 3; U8(o + 0x180) = (u8)rnd(); U8(o + 0xFF) = (u8)rnd();
             U16(o + 0x92) = rnd() % 3 == 0 ? 0x29 + rnd() % 3 : rnd() % 2 ? (u16)(U16(o + 0x90) - 1) : (u16)rnd();   /* the edge, the last frame */
-            u32 da = rnd() % 2 ? rnd() % 0x1000 : (u32[]){0x200, 0x400, 0x600, 0x700, 0x800, 0x900, 0xA00, 0xC00, 0xE00}[rnd() % 9] + rnd() % 3 - 1;
+            u32 da = rnd() % 2 ? rnd() % 0x1000 : rnd() % 4 == 0 ? 0x800 : (u32[]){0x200, 0x400, 0x600, 0x700, 0x800, 0x900, 0xA00, 0xC00, 0xE00}[rnd() % 9] + rnd() % 3 - 1;
             if (rnd() % 2) U16(0x87DE10) = rand8_seed((u8[]){0x63, 0x64, 0x65, 0x7F, 0x80, 0x1F, 0x20}[rnd() % 7], 0);
             {   /* the player near, at the edges of the angles it looks within */
                 double an = (U16(o + 0x4A) + (rnd() % 2 ? 1 : -1) * (s32)(u32[]){0xFF, 0x101, 0x1FF, 0x201, 0x27F, 0x281, 0x400}[rnd() % 7]) * 3.14159265358979 / 2048;
@@ -3345,14 +3397,17 @@ static void test_raptor(void)
             U8(e + 0x1C) = rnd() % 2 ? rnd() % 2 : (u8)rnd();
             S16(O_OBJ + 0x108) = (s16)(rnd() % 3) - 1;
             U32(LOG_BASE) = 0;
+            anim_maybe_end(o);
             sprintf(g_what, "raptor %X step %u angle %X level %02X", o, U8(o + 0x56), da, U8(o + 0x18C));
             check(st[k].addr, st[k].fn, st[k].name, 1, a, 0);
         }
-        raptor_jump_setup(o);
-        sprintf(g_what, "raptor %X jump step %u y %d level %d vy %d", o, U8(o + 0x56), S16(o + 0x42), S16(o + 0x5A), S16(e + 0x14));
-        check(0x421F50, Raptor_Climb, "Raptor_Climb", 1, a, 0);
-        raptor_jump_setup(o);
-        check(0x4221E0, Raptor_JumpOver, "Raptor_JumpOver", 1, a, 0);
+        for (int k = 0; k < 3; k++) {
+            raptor_jump_setup(o);
+            sprintf(g_what, "raptor %X jump step %u y %d level %d vy %d", o, U8(o + 0x56), S16(o + 0x42), S16(o + 0x5A), S16(e + 0x14));
+            check(0x421F50, Raptor_Climb, "Raptor_Climb", 1, a, 0);
+            raptor_jump_setup(o);
+            check(0x4221E0, Raptor_JumpOver, "Raptor_JumpOver", 1, a, 0);
+        }
         /* the pounce, with the player animated too (its animations in the raptor's table) */
         game_state(); world_setup(); enemy_state();
         o = O_OBJ + 0x260 * (1 + rnd() % 6); a[0] = o; e = o + 0x1C0;
@@ -3365,37 +3420,48 @@ static void test_raptor(void)
         U32(0x74AF00) = e;
         U32(G() + 0xB50) = O_OBJ + 0x260 * 7; U32(o + 0x184) = (u32)rnd() & ~(rnd() % 4 ? 0x40u : 0);
         U8(G() + 0x108F) = rnd() % 4;
-        U8(o + 0x57) = rnd() % 13; U8(o + 0xFF) = (u8)rnd();
+        u8 sv[0x260]; memcpy(sv, MEM(o), 0x260);
+        for (int r = 0; r < 3; r++) {
+        memcpy(MEM(o), sv, 0x260);
+        U8(o + 0x57) = rnd() % 4 ? rnd() % 13 : 0xB; U8(o + 0xFF) = (u8)rnd();
         U16(o + 0x92) = rnd() % 2 ? (u16[]){5, 6, 0xD, 0xE, 0x11, 0x12, 0x13}[rnd() % 7] : (u16)rnd();
-        U16(e + 2) = rnd() % 2 ? 4 + rnd() % 8 : (u16)rnd();
+        U16(e + 2) = rnd() % 2 ? rnd() % 13 : (u16)rnd();
         for (int k = 0; k < 2; k++) { gptr q = k ? O_OBJ + 0x260 * 7 : O_OBJ; S16(q + 0x40) = S16(o + 0x40) + (s16)(rnd() % 6000) - 3000; S16(q + 0x44) = S16(o + 0x44) + (s16)(rnd() % 6000) - 3000; }
         U32(LOG_BASE) = 0;
+        anim_maybe_end(o);
         sprintf(g_what, "raptor %X pounce step %u frame %u shake %u", o, U8(o + 0x57), U16(o + 0x92), U16(e + 2));
         check(0x420A40, Raptor_Pounce, "Raptor_Pounce", 1, a, 0);
+        }
         /* the other attacks and their hits (o, player) */
         static const struct { u32 addr; void *fn; const char *name; int n; } at[] = {
             {0x421460, Raptor_SideBite, "Raptor_SideBite", 1}, {0x4216B0, Raptor_Leap, "Raptor_Leap", 1}, {0x421C10, Raptor_Tail, "Raptor_Tail", 1},
             {0x421290, Raptor_LungeHit, "Raptor_LungeHit", 2}, {0x4215A0, Raptor_SideBiteHit, "Raptor_SideBiteHit", 2},
             {0x421870, Raptor_LeapHit, "Raptor_LeapHit", 2}, {0x421CC0, Raptor_TailHit, "Raptor_TailHit", 2}};
         u32 b[2] = {o, O_OBJ};
-        for (unsigned k = 0; k < sizeof at / sizeof at[0]; k++) {
+        for (unsigned k = 0; k < 2 * sizeof at / sizeof at[0]; k++) {
             gptr p = U32(o + 0x184) & 0x40 ? O_OBJ + 0x260 * 7 : O_OBJ;
-            U8(o + 0x57) = at[k].n == 2 ? (rnd() % 4 ? 1 : rnd() % 4) : rnd() % 5;
+            U8(o + 0x57) = at[k % 7].n == 2 ? (rnd() % 4 ? 1 : rnd() % 4) : rnd() % 5;
             U16(o + 0x92) = rnd() % 2 ? (u16[]){0xC, 0xD, 0x16, 0x17, 0x18}[rnd() % 5] : (u16)rnd();
             U8(o + 0x119) = rnd() % 2 ? 0 : rnd() % 2 ? 3 : (u8)rnd(); U8(o + 0x10C) = (u8)rnd();
             for (int j = 0x19; j < 0x24; j++) U8(e + j) = rnd() % 2;
             U8(e + 0x23) = rnd() % 8; U8(e + 0xC) = rnd() % 3; U8(e + 0xD) = rnd() % 3;
-            U16(e + 8) = (u16)rnd() & 0xFFF;
+            U16(e + 8) = rnd() % 4 ? (u16)rnd() & 0xFFF : (u16)(0x7FF + rnd() % 3);
+            if (rnd() % 3 == 0) U8(o + 0x10C) = (u8)((rnd() & 0xF0) | (1 + rnd() % 3));
+            if (rnd() % 2) U16(0x87DE10) = rand8_seed((u8[]){0x1F, 0x20, 0x21, 0x5F, 0x60, 0x61}[rnd() % 6], 0);
             U16(p + 0x4A) = (u16)(U16(o + 0x4A) + 0x400 * (rnd() % 4) + rnd() % 0x400 - 0x200);
             U16(p + 0x178) = rnd() % 2 ? 0 : (u16)rnd(); U16(p + 0x174) = rnd() % 2 ? 0 : (u16)rnd();
             U8(p + 0x55) = rnd() % 2 ? 2 : (u8)rnd();
-            S16(p + 0x108) = (s16)(rnd() % 2 ? rnd() % 0x60 : rnd());
             U8(G() + 0x108E) = rnd() % 3;
+            S16(p + 0x108) = (s16)(rnd() % 2 ? rnd() % 0x60 : rnd() % 2 ? 0x100 + rnd() % 0x400 : rnd());
+            if (rnd() % 3 == 0)                                 /* left at 0 by the pinning damage */
+                S16(p + 0x108) = (s16)(Damage_Scale(U8(0x7031C4 + U8(e + 0x23) * 9 + 7 + rnd() % 2)) + rnd() % 3 - 1);
             U32(LOG_BASE) = 0;
+            anim_maybe_end(o);
             sprintf(g_what, "raptor %X step %u frame %X dir %X", o, U8(o + 0x57), U16(o + 0x92), (U16(p + 0x4A) - U16(o + 0x4A)) & 0xFFF);
-            check(at[k].addr, at[k].fn, at[k].name, at[k].n, b, 0);
+            check(at[k % 7].addr, at[k % 7].fn, at[k % 7].name, at[k % 7].n, b, 0);
         }
     }
+    player_tables_stub(0);
     raptor_tables_stub(0);
     stubs_install(0);
     stub_at(0x452FF0)->impl = NULL; stub_at(0x452FF0)->spec = "ddwd";
