@@ -337,7 +337,7 @@ void DC2CALL Game_Play(void)                                         /* 0x451790
 
 void DC2CALL GameTask(void)                                          /* 0x4510F0 */
 {
-    Fn_46FC50(0);
+    Game_SetMode723CC0(0);
     for (;;) {
         switch ((s16)G16(0x664)) {
         case 0: Game_Init(); break;
@@ -642,4 +642,19 @@ void DC2CALL Game_Continue(void)                                    /* 0x451990 
         Task_Chain(0x471EC0);
         return;
     }
+}
+
+/* the byte at 0x723CC0 (1 once the game is left) */
+void DC2CALL Game_SetMode723CC0(u32 v)                             /* 0x46FC50 */
+{
+    U8(0x723CC0) = (u8)v;
+}
+
+/* the game left (game over without continuing): the ending sequence when
+   G+0x108D is set, else the save scan and the title */
+void DC2CALL Game_Leave(void)                                       /* 0x471EC0 */
+{
+    Game_SetMode723CC0(1);
+    if (U8(G() + 0x108D)) { Game_Start(0x16); return; }
+    Task_Chain(0x403920);
 }

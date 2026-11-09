@@ -300,6 +300,8 @@ void DC2CALL TitleTask(void);                                           /* 0x4A5
 
 /* game.c -- game start, opening, game task */
 void DC2CALL Game_Start(u32 mode);                                      /* 0x4826F0 */
+void DC2CALL Game_SetMode723CC0(u32 v);                                /* 0x46FC50 */
+void DC2CALL Game_Leave(void);                                         /* 0x471EC0 */
 void DC2CALL Pause_LoadScreen(void);                                    /* 0x4827F0 */
 void DC2CALL Room_LoadDat(void);                                        /* 0x481C10 */
 u32  DC2CALL Snd_RoomMusic(void);                                       /* 0x48CBD0 */

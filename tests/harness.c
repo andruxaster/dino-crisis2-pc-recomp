@@ -598,7 +598,7 @@ static Stub g_stubs[] = {
     {0, ""}, {0, ""}, {0, ""}, {0, ""}, {0, ""}, {0, ""},
     {0x494BA0, "dwdwddd"}, {0x4C0600, "ddd"}, {0x4C0690, "d"}, {0x4C05D0, "dd"}, {0x4C06F0, "ddddd"},
     /* 71..: game task */
-    {0x496410, ""}, {0x46FC50, "d"}, {0x403480, ""}, {0x470CB0, ""}, {0x452450, ""}, {0x48FB50, "d"},
+    {0x496410, ""}, {0, "d"}, {0x403480, ""}, {0x470CB0, ""}, {0x452450, ""}, {0x48FB50, "d"},
     {0, ""}, {0x4BF130, "d"}, {0, ""}, {0x403520, ""}, {0x46B8C0, ""}, {0x407170, ""},
     {0x491B10, "bb"}, {0x48CB40, ""}, {0x4A7250, ""}, {0x405E40, ""}, {0x4036F0, "ddd"}, {0x452370, ""},
     /* 89..: object handlers (collision) */
@@ -3526,6 +3526,7 @@ static void test_game(void)
         {0x475680, Opening_Run, "Opening_Run", 1}, {0x475700, Opening_ToGame, "Opening_ToGame", 1},
         {0x451120, Game_Init, "Game_Init", 0}, {0x4512F0, Game_AreaLoad, "Game_AreaLoad", 0},
         {0x451330, Game_RoomEnter, "Game_RoomEnter", 0}, {0x451790, Game_Play, "Game_Play", 0},
+        {0x471EC0, Game_Leave, "Game_Leave", 0}, {0x46FC50, Game_SetMode723CC0, "Game_SetMode723CC0", 1},
     };
     void *areas[10] = {Area0_SetTables, Area1_SetTables, Area2_SetTables, Area3_SetTables, Area4_SetTables,
                        Area5_SetTables, Area6_SetTables, Area7_SetTables, Area8_SetTables, Area9_SetTables};
@@ -3542,6 +3543,8 @@ static void test_game(void)
             case 5: a[0] = rnd() % 2; break;
             default: a[0] = 0x74DB90; U8(0x74DB91) = 0; U8(0x74DB92) = rnd() % 4; break;
             }
+            if (F[k].addr == 0x471EC0) U8(G() + 0x108D) = rnd() % 2;
+            if (F[k].addr == 0x46FC50) a[0] = rnd();
             g_stubs[STUB_GAME + 12].ret = rnd();
             sprintf(g_what, "mode %u area %u room %u extra %u arg %X", U16(G() + 0x664), U8(G() + 0x1091), U8(G() + 0x1090), U8(G() + 0x927), a[0]);
             check(F[k].addr, F[k].fn, F[k].name, F[k].nargs, a, F[k].nargs ? 0 : 0);

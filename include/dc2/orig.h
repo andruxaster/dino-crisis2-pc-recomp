@@ -39,7 +39,6 @@
     V(Fn_478790,          0x478790, (void), ()) \
     V(Snd_ReleaseAll,     0x48C080, (void), ()) \
     V(Fn_496410,          0x496410, (void), ()) \
-    V(Fn_46FC50,          0x46FC50, (u32 a), (a)) \
     V(Fn_403480,          0x403480, (void), ()) \
     V(Fn_470CB0,          0x470CB0, (void), ()) \
     V(Fn_452450,          0x452450, (void), ()) \

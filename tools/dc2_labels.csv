@@ -235,7 +235,7 @@ address,kind,name,category,confidence,notes
 0x470190,func,WinMain,game,high,main loop inline
 0x470BF0,func,PC_VSync,game,high,message pump + timer frame pacing
 0x46D710,func,RootTask,game,high,g_root_modes[g_root.mode](&g_root); Task_Sleep(1)
-0x471EC0,func,RootTask_Alt,game,low,used when 0x87DE08 set
+0x471EC0,func,Game_Leave,game,high,"game left (game over, no continue): 0x723CC0 = 1, Game_Start(0x16) if G+0x108D else Task_Chain(0x403920); also the boot task when 0x87DE08 is set"
 0x48C080,func,Game_Init,game,low,
 0x404280,func,File_Idle,game,high,
 0x4041F0,func,Unpack,game,low,used by types 5/6 and LoadImage paths
@@ -875,3 +875,4 @@ address,kind,name,category,confidence,notes
 0x48B620,func,AOT_Kind10,game,high,"AOT kind 10: by character, object effects in a ring (Regina) or an effect slot (Dylan)"
 0x48B7D0,func,AOT_Kind11,game,high,"AOT kind 11: one of two messages by flag 8/+0x14"
 0x48D6C0,func,Eff_AllocBack,game,high,"last free object effect slot from the end, cleared"
+0x46FC50,func,Game_SetMode723CC0,game,medium,"U8(0x723CC0) = arg"
