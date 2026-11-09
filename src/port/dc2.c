@@ -139,6 +139,15 @@ int main(int argc, char **argv)
                 if (U8(th + 0x9B)) printf("  script thread %d state %X at %X: op %02X\n", t, U8(th + 0x9B), U32(th), U8(U32(th)));
             }
             printf("  flags 1: %08X 2: %08X\n", U32(U32(0x723C48)), U32(U32(0x723C50)));
+            gptr set = U32(G() + 0xA68), st = G() + 0xA80;
+            if (set) printf("  enemy set n %u type %u alive %u/%u group %u timer %u max %u found %u\n", U8(set), U8(set + 1), U8(st + 4), U8(set + 2),
+                            U8(st + 9), U16(st), U8(st + 5), U8(st + 0xC));
+            for (u32 k = 1; k < U32(0x87F940); k++) {
+                gptr o = pl + k * 0x260;
+                if (U8(o + 0x50) & 1)
+                    printf("  object %u type %u state %X at %d,%d,%d yaw %03X health %d\n", k, U8(o + 0x58), U32(o + 0x54),
+                           S16(o + 0x40), S16(o + 0x42), S16(o + 0x44), U16(o + 0x4A), S16(o + 0x108));
+            }
         }
         static gptr last_aot;
         if (trace && U16(G() + 0x664) == 3 && U32(G() + 0xA5C) == 0x7593B8 && U8(U32(G() + 0xA5C)) && last_aot != U32(G() + 0xA5C) + U8(G() + 0x1090)) {

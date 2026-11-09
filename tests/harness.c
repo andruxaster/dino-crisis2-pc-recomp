@@ -3115,6 +3115,252 @@ static void test_enemies(void)
     g_ign_objpads = 0;
 }
 
+/* ---- the velociraptor ------------------------------------------------------------- */
+/* its state tables point at recorders: one per entry, so the log shows which */
+static const u32 g_rap_tabs[][3] = {{0x72002C, 5, 1}, {0x720040, 9, 1}, {0x720064, 6, 1}, {0x72007C, 5, 1}, {0x720090, 5, 2}};
+static const int g_rap_rec1[] = {1, 4, 5, 15, 16, 17, 18, 26, 27}, g_rap_rec2[] = {28, 29, 51, 52, 53};
+static u32 g_rap_saved[5][9];
+static void raptor_tables_stub(int on)
+{
+    for (int k = 0; k < 9; k++) g_stubs[g_rap_rec1[k]].spec = on ? "d" : "";
+    for (int k = 0; k < 5; k++) g_stubs[g_rap_rec2[k]].spec = on ? "dd" : "";
+    for (int t = 0; t < 5; t++)
+        for (u32 k = 0; k < g_rap_tabs[t][1]; k++) {
+            gptr a = g_rap_tabs[t][0] + 4 * k;
+            if (on) { g_rap_saved[t][k] = U32(a); U32(a) = (u32)(uintptr_t)g_recs[g_rap_tabs[t][2] == 1 ? g_rap_rec1[k] : g_rap_rec2[k]]; }
+            else U32(a) = g_rap_saved[t][k];
+        }
+}
+
+/* a raptor among the collision test objects; its target is the player or
+   the part G+0xB50 it rides on */
+static gptr raptor_setup(void)
+{
+    gptr o = player_setup_obj(), g = G(), pl = U32(g + 0x940);
+    if (o == pl) o += 0x260;
+    U32(LOG_BASE) = 0;
+    U32(g + 0xB50) = rnd() % 4 ? 0 : O_OBJ + 0x260 * 15;
+    U32(o + 0x184) = (rnd() & 0xFFFFFFBF) | (U32(g + 0xB50) && rnd() % 2 ? 0x40 : 0);
+    U32(0x74AF00) = o + 0x1C0;
+    gptr t = U32(o + 0x184) & 0x40 ? U32(g + 0xB50) : pl;
+    if (rnd() % 2) {                                        /* near, in sight or not */
+        S16(t + 0x40) = (s16)(S16(o + 0x40) + (s32)(rnd() % 10000) - 5000);
+        S16(t + 0x44) = (s16)(S16(o + 0x44) + (s32)(rnd() % 10000) - 5000);
+        U16(o + 0x4A) = (u16)(((u32)(s32)(s16)Angle_XZ(o + 0x40, t + 0x40) + rnd() % 0x200 - 0x100) & 0xFFF);
+    }
+    U16(t + 0x5A) = rnd() % 4 ? U16(o + 0x5A) : (u16)rnd();
+    U8(t + 0x54) = (u8[]){1, 2, 5, 0, 1}[rnd() % 5]; U8(t + 0x55) = rnd() % 2 ? 8 : rnd() % 10;
+    U16(t + 0x174) = rnd() % 3 == 0;
+    gptr e = o + 0x1C0;
+    for (u32 k = 0; k < 0x40; k += 4) U32(e + k) = rnd();
+    U32(e + 0xC) = (rnd() & 0xFFFF00) | rnd() % 5;          /* the state it had */
+    U8(e + 0x19) = rnd() % 4; U32(e + 0x24) = rnd() % 2 ? 0 : rnd() % 3;
+    U8(o + 0x54) = rnd() % 2 ? 2 : rnd() % 5; U8(o + 0x55) = rnd() % 4 ? rnd() % 2 : rnd() % 9; U8(o + 0x56) = rnd() % 3 ? 0 : rnd() % 5;
+    U8(o + 0x18D) = rnd() % 3 ? 0 : (u8)rnd(); U8(o + 0x17B) = rnd() % 3 ? 0 : (u8)rnd();
+    U8(o + 0x13A) = rnd() % 2; U8(o + 0xFF) = (u8)rnd(); U8(o + 0x119) = (u8)rnd();
+    U16(o + 0x10C) = rnd() % 3 ? (rnd() % 2 ? 4 + rnd() % 2 : rnd() % 16) | (rnd() % 4 ? 0 : (rnd() & 0x30)) : (u16)rnd();
+    U8(o + 0x18C) = (u8)rnd();
+    U8(o + 0x17D) = (u8[]){0, 1, 2, 3, 0x10, 0x11, 0x1D, 0x1E, 0x20}[rnd() % 9];
+    U16(o + 0x172) = rnd() % 6; U16(o + 0x176) = rnd() % 2 ? rnd() % 0x100 : (u16)rnd();
+    U16(o + 0x108) = rnd() % 2 ? rnd() % 0x100 : (u16)rnd();
+    if (rnd() % 3 == 0) U16(o + 0x176) = (u16)((U16(o + 0x108) << (rnd() % 2)) + rnd() % 3 - 1);   /* health to (about) 0 */
+    U32(o + 0xA0) = 0;                                      /* no attack spheres */
+    U32(o + 0x158) = rnd() % 2;                             /* head: still or relaxing */
+    { u32 np = U32(U32(o + 0x64) + 0x54) ? 2 : 1; U8(o + 0x15F) = (u8)(rnd() % np); U8(o + 0x15E) = rnd() % 2 ? 0xFF : 0; }
+    U32(o + 0x50) = (U32(o + 0x50) & ~0x40000000u) | (rnd() % 8 == 0 ? 0x40000000 : 0);
+    U8(g + 0x108E) = rnd() % 3; U8(g + 0x927) = rnd() % 3 == 0;
+    U16(g + 0x1090) = rnd() % 3 ? 0x407 : (u16)(rnd() % 0x500);
+    Flag_Set(2, 0x1A, rnd() % 3 == 0);
+    U16(0x87DE10) = (u16)rnd();
+    U32(0x87DC98) = 0x6D0000;
+    for (u32 k = 0; k < 16; k++) U8(O_OBJ + k * 0x260 + 0xFD) &= 1;   /* group: Obj_PickGroup counts 2 */
+    U32(0x87F948) = TYPE_TAB;                                           /* effect slot handlers: recorders */
+    for (int k = 0; k < 256; k++) U32(TYPE_TAB + 4 * k) = (u32)(uintptr_t)g_recs[STUB_TYPE];
+    return o;
+}
+
+/* the target at the distances it compares, in front; Rand8's first value at
+   the edges it compares */
+static void raptor_think_setup(gptr o)
+{
+    gptr t = U8(o + 0x184) & 0x40 ? U32(G() + 0xB50) : U32(G() + 0x940);
+    static const s16 d[][2] = {{5000, 0}, {3000, 0}, {2000, 1000}, {3000, 2000}, {4000, 0}, {2500, 0}, {1000, 0}, {6000, 0}};
+    int k = rnd() % 8, sx = rnd() % 2 ? 1 : -1, sw = rnd() % 2;
+    s16 dx = (s16)(d[k][sw] * sx + (s32)(rnd() % 3) - 1), dz = d[k][!sw];
+    S16(o + 0x40) = (s16)(rnd() % 2000 - 1000); S16(o + 0x44) = (s16)(rnd() % 2000 - 1000);
+    S16(t + 0x40) = (s16)(S16(o + 0x40) + dx); S16(t + 0x44) = (s16)(S16(o + 0x44) + dz);
+    U16(o + 0x4A) = (u16)(((u32)(s32)(s16)Angle_XZ(o + 0x40, t + 0x40) + rnd() % 0xA0 - 0x50) & 0xFFF);
+    U16(t + 0x5A) = rnd() % 3 == 0 ? U16(o + 0x5A) ^ 0x100 : rnd() % 2 ? U16(o + 0x5A) : (u16)rnd();
+    U8(t + 0x54) = (u8[]){1, 2, 5, 0}[rnd() % 4]; U8(t + 0x55) = rnd() % 2 ? 8 : rnd() % 10;
+    U16(t + 0x174) = rnd() % 3 == 0;
+    U8(o + 0x55) = rnd() % 2; U8(o + 0x18D) = 0; U8(o + 0x17B) = 0; U8(o + 0x13A) = rnd() % 2; U8(o + 0xFF) = (u8)rnd();
+    U8(o + 0x1C0 + 0x19) = rnd() % 3; U32(o + 0x1C0 + 0x24) = rnd() % 4 ? 1 + rnd() % 3 : 0;
+    U8(G() + 0x108E) = rnd() % 2 ? 0 : 1 + rnd() % 2;
+    u32 att = rnd() % 3 ? 99 : 1 + rnd() % 14;          /* another one attacking or not (Enemy_FindState) */
+    for (u32 k = 1; k < 16; k++) {
+        gptr q = O_OBJ + k * 0x260;
+        if (q == o || q == t) continue;
+        U8(q + 0x50) |= 1; U8(q + 0x58) = rnd() % 4 ? U8(o + 0x58) : (u8)rnd(); U8(q + 0x54) = 1; U8(q + 0x55) = k == att ? 2 : rnd() % 2;
+    }
+    if (rnd() % 2) {                                    /* one wall across its way, near or far (Wall_Ahead) */
+        gptr w = 0x6CFC00u, pg = w + 0x10;
+        U8(w) = 1; U32(w + 8) = 0x10;
+        double a = U16(o + 0x4A) * 3.14159265358979 / 2048, d = rnd() % 2 ? 1000 : 1700 + rnd() % 3 * 100;
+        double cx = S16(o + 0x40) + d * sin(a), cz = S16(o + 0x44) + d * cos(a), ex = 800 * cos(a), ez = -800 * sin(a);
+        int sw = rnd() % 2;
+        U8(pg) = 1; U8(pg + 1) = 1; U8(pg + 3) = 0; U16(pg + 4) = 0xFFFF; U8(pg + 8) = 0x81;
+        S16(pg + 0xC + 4 * sw) = (s16)(cx + ex); S16(pg + 0xE + 4 * sw) = (s16)(cz + ez);
+        S16(pg + 0x10 - 4 * sw) = (s16)(cx - ex); S16(pg + 0x12 - 4 * sw) = (s16)(cz - ez);
+        U32(G() + 0xA4C) = w;
+    }
+    static const u8 r[] = {0x27, 0x28, 0x29, 0x3F, 0x40, 0x41, 0x7F, 0x80, 0x81, 0x10, 0x11, 0};
+    u8 want = r[rnd() % 12];
+    for (u32 n = 0, v = rnd() & 0xFFFF; n < 0x10000; n++, v = (v + 1) & 0xFFFF) {   /* a seed giving it */
+        u8 hi = (u8)((v * 3u) >> 8); u16 x = (u16)(hi << 8 | (u8)(v + hi));
+        if (x == v) x += 0x101;
+        if ((u8)x == want) { U16(0x87DE10) = (u16)v; break; }
+    }
+    U32(LOG_BASE) = 0;
+}
+
+/* a jump on its way: the level, the height about it, the vertical speed */
+static void raptor_jump_setup(gptr o)
+{
+    gptr e = o + 0x1C0;
+    U32(0x74AF00) = e;
+    U8(o + 0x56) = rnd() % 5;
+    S16(o + 0x5A) = (s16)(rnd() % 4); U16(e + 0x16) = (u16)(S16(o + 0x5A) + rnd() % 3);
+    S16(o + 0x42) = (s16)(-1000 * (s32)(S16(o + 0x5A) + rnd() % 3) + (s32)(rnd() % 3) - 1 + (rnd() % 2 ? (s32)(rnd() % 400) - 200 : 0));
+    S16(e + 0x14) = (s16)(rnd() % 2 ? (s32)(rnd() % 3) - 0x3D : (s32)(rnd() % 0x400) - 0x200);
+    S16(o + 0xF4) = (s16)(rnd() % 2 ? 0xC6 + rnd() % 4 : rnd() % 0x200);
+    U8(o + 0xFF) = (u8)rnd();
+}
+
+static void test_raptor(void)
+{
+    g_ign_objpads = 1;
+    stub_at(0x452FF0)->impl = fk_sphere; stub_at(0x452FF0)->spec = "ddddww";
+    stubs_install(1);
+    raptor_tables_stub(1);
+    for (int i = 0; i < iters; i++) {
+        game_state();
+        gptr o = raptor_setup();
+        u32 a[2] = {o};
+        sprintf(g_what, "raptor %X state %02X/%02X/%02X level %X hit %X/%X", o, U8(o + 0x54), U8(o + 0x55), U8(o + 0x56),
+                U16(o + 0x10C), U8(o + 0x17D), U16(o + 0x172));
+        check(0x41FB20, Raptor_Think, "Raptor_Think", 1, a, 0);
+        for (int k = 0; k < 6; k++) {                       /* the edges of its choices */
+            raptor_think_setup(o);
+            sprintf(g_what, "raptor %X think %02X dist %u level %X/%X rnd %04X", o, U8(o + 0x55), Dist2_XZ(o + 0x40, (U8(o + 0x184) & 0x40 ? U32(G() + 0xB50) : U32(G() + 0x940)) + 0x40),
+                    U16(o + 0x5A), U16(U32(G() + 0x940) + 0x5A), U16(0x87DE10));
+            check(0x41FB20, Raptor_Think, "Raptor_Think", 1, a, 0);
+        }
+        check(0x41F960, Raptor_Normal, "Raptor_Normal", 1, a, 0);
+        check(0x41F9A0, Raptor_Hit, "Raptor_Hit", 1, a, 0);
+        check(0x420A00, Raptor_Grab, "Raptor_Grab", 1, a, 0);
+        u8 st0[0x260]; memcpy(st0, MEM(o), 0x260);
+        for (int k = 0; k < 2; k++) {                       /* the damage it takes, to about 0 */
+            U8(o + 0x54) = 2; U8(o + 0x56) = 0; U8(o + 0x10C) = (u8)((rnd() & 0xF0) | (4 + rnd() % 2));
+            U8(o + 0x17D) = (u8[]){0, 1, 2, 3, 0x10, 0x11, 0x1D, 0x1E}[rnd() % 8]; U16(o + 0x172) = rnd() % 6;
+            U16(o + 0x108) = rnd() % 0x200; U16(o + 0x176) = (u16)((U16(o + 0x108) << (rnd() % 2)) + rnd() % 3 - 1);
+            U8(o + 0x17B) = rnd() % 3 ? 0 : (u8)rnd(); U32(o + 0x50) &= ~0x40000000u;
+            U32(0x74AF00) = o + 0x1C0; U32(o + 0x1C0 + 0xC) = (rnd() & 0xFFFF00) | rnd() % 5;
+            U32(LOG_BASE) = 0;
+            sprintf(g_what, "raptor %X hit %X kind %X health %d damage %d", o, U8(o + 0x17D), U8(o + 0x10C) & 0xF, S16(o + 0x108), S16(o + 0x176));
+            check(0x41F430, Raptor_Handler, "Raptor_Handler", 1, a, 0);
+        }
+        memcpy(MEM(o), st0, 0x260); U32(0x74AF00) = o + 0x1C0;
+        sprintf(g_what, "raptor %X state %02X/%02X/%02X level %X hit %X/%X", o, U8(o + 0x54), U8(o + 0x55), U8(o + 0x56),
+                U16(o + 0x10C), U8(o + 0x17D), U16(o + 0x172));
+        check(0x41F430, Raptor_Handler, "Raptor_Handler", 1, a, 0);
+        U8(o + 0x11A) = (u8)rnd();
+        anim_setup_at(AN_OBJ); memcpy(MEM(o + 0x60), MEM(AN_OBJ + 0x60), 0x50);   /* animated */
+        raptor_jump_setup(o);
+        check(0x420410, Raptor_Jump, "Raptor_Jump", 1, a, 0);
+        model_data(0x633000);
+        if (!U32(G() + 0xB50)) U32(G() + 0xB50) = O_OBJ + 0x260 * 15;   /* room 407: rides the part */
+        check(0x41F660, Raptor_Init, "Raptor_Init", 1, a, 0);
+        game_state(); world_setup(); enemy_state();
+        o = O_OBJ + 0x260 * (1 + rnd() % 6); a[0] = o;
+        anim_setup_at(o);
+        U8(o + 0x55) = rnd() % 4; U8(o + 0x170) = (u8)rnd(); U8(o + 0x11C) = (u8)rnd();
+        U32(LOG_BASE) = 0;
+        sprintf(g_what, "raptor %X dies %02X", o, U8(o + 0x55));
+        check(0x41F9D0, Raptor_Die, "Raptor_Die", 1, a, 0);
+        /* the normal sub-states, each step */
+        static const struct { u32 addr; void *fn; const char *name; } st[] = {
+            {0x41FF30, Raptor_Wait, "Raptor_Wait"}, {0x420190, Raptor_Walk, "Raptor_Walk"}, {0x4203B0, Raptor_Attack, "Raptor_Attack"},
+            {0x4204A0, Raptor_Cry, "Raptor_Cry"}, {0x4205D0, Raptor_Back, "Raptor_Back"}, {0x420660, Raptor_Eat, "Raptor_Eat"},
+            {0x4207E0, Raptor_Enter, "Raptor_Enter"}, {0x420960, Raptor_Feint, "Raptor_Feint"}};
+        gptr e = o + 0x1C0;
+        U32(0x74AF00) = e;
+        for (unsigned k = 0; k < sizeof st / sizeof st[0]; k++) {
+            U8(o + 0x56) = rnd() % 4; U8(o + 0x18C) = (u8)rnd(); U8(o + 0x18D) = rnd() % 2 ? 0 : (u8)rnd();
+            U16(o + 0x172) = rnd() % 3; U8(o + 0x180) = (u8)rnd(); U8(o + 0xFF) = (u8)rnd();
+            U16(o + 0x92) = rnd() % 2 ? 0x29 + rnd() % 3 : (u16)rnd();
+            u32 da = rnd() % 2 ? rnd() % 0x1000 : (u32[]){0x200, 0x400, 0x600, 0x700, 0x900, 0xA00, 0xC00, 0xE00}[rnd() % 8] + rnd() % 3 - 1;
+            U16(e + 8) = (u16)(U16(o + 0x4A) + da);
+            U16(e + 0x28) = rnd() % 2 ? 0x1C0 + rnd() % 4 : (u16)rnd();
+            U8(e + 0x1C) = rnd() % 2 ? rnd() % 2 : (u8)rnd();
+            S16(O_OBJ + 0x108) = (s16)(rnd() % 3) - 1;
+            U32(LOG_BASE) = 0;
+            sprintf(g_what, "raptor %X step %u angle %X level %02X", o, U8(o + 0x56), da, U8(o + 0x18C));
+            check(st[k].addr, st[k].fn, st[k].name, 1, a, 0);
+        }
+        raptor_jump_setup(o);
+        sprintf(g_what, "raptor %X jump step %u y %d level %d vy %d", o, U8(o + 0x56), S16(o + 0x42), S16(o + 0x5A), S16(e + 0x14));
+        check(0x421F50, Raptor_Climb, "Raptor_Climb", 1, a, 0);
+        raptor_jump_setup(o);
+        check(0x4221E0, Raptor_JumpOver, "Raptor_JumpOver", 1, a, 0);
+        /* the pounce, with the player animated too (its animations in the raptor's table) */
+        game_state(); world_setup(); enemy_state();
+        o = O_OBJ + 0x260 * (1 + rnd() % 6); a[0] = o; e = o + 0x1C0;
+        anim_setup_at(O_OBJ);
+        do anim_setup_at(o); while (U32(o + 0x68) < 16);  /* all the parts the player's weapon may look for */
+        memcpy(MEM(O_OBJ + 0x60), MEM(o + 0x60), 0x50);   /* the same parts and animation data */
+        memcpy(MEM(O_OBJ + 0x260 * 7 + 0x60), MEM(o + 0x60), 0x50);   /* ... for the part it may ride */
+        U32(G() + 0x940) = O_OBJ;
+        for (int k = 0x40; k < 0xC0; k++) U32(AN_TAB + 4 * k) = AN_DATA + 0x1000 * (k & 1);
+        U32(0x74AF00) = e;
+        U32(G() + 0xB50) = O_OBJ + 0x260 * 7; U32(o + 0x184) = (u32)rnd() & ~(rnd() % 4 ? 0x40u : 0);
+        U8(G() + 0x108F) = rnd() % 4;
+        U8(o + 0x57) = rnd() % 13; U8(o + 0xFF) = (u8)rnd();
+        U16(o + 0x92) = rnd() % 2 ? (u16[]){5, 6, 0xD, 0xE, 0x11, 0x12, 0x13}[rnd() % 7] : (u16)rnd();
+        U16(e + 2) = rnd() % 2 ? 4 + rnd() % 8 : (u16)rnd();
+        for (int k = 0; k < 2; k++) { gptr q = k ? O_OBJ + 0x260 * 7 : O_OBJ; S16(q + 0x40) = S16(o + 0x40) + (s16)(rnd() % 6000) - 3000; S16(q + 0x44) = S16(o + 0x44) + (s16)(rnd() % 6000) - 3000; }
+        U32(LOG_BASE) = 0;
+        sprintf(g_what, "raptor %X pounce step %u frame %u shake %u", o, U8(o + 0x57), U16(o + 0x92), U16(e + 2));
+        check(0x420A40, Raptor_Pounce, "Raptor_Pounce", 1, a, 0);
+        /* the other attacks and their hits (o, player) */
+        static const struct { u32 addr; void *fn; const char *name; int n; } at[] = {
+            {0x421460, Raptor_SideBite, "Raptor_SideBite", 1}, {0x4216B0, Raptor_Leap, "Raptor_Leap", 1}, {0x421C10, Raptor_Tail, "Raptor_Tail", 1},
+            {0x421290, Raptor_LungeHit, "Raptor_LungeHit", 2}, {0x4215A0, Raptor_SideBiteHit, "Raptor_SideBiteHit", 2},
+            {0x421870, Raptor_LeapHit, "Raptor_LeapHit", 2}, {0x421CC0, Raptor_TailHit, "Raptor_TailHit", 2}};
+        u32 b[2] = {o, O_OBJ};
+        for (unsigned k = 0; k < sizeof at / sizeof at[0]; k++) {
+            gptr p = U32(o + 0x184) & 0x40 ? O_OBJ + 0x260 * 7 : O_OBJ;
+            U8(o + 0x57) = at[k].n == 2 ? (rnd() % 4 ? 1 : rnd() % 4) : rnd() % 5;
+            U16(o + 0x92) = rnd() % 2 ? (u16[]){0xC, 0xD, 0x16, 0x17, 0x18}[rnd() % 5] : (u16)rnd();
+            U8(o + 0x119) = rnd() % 2 ? 0 : rnd() % 2 ? 3 : (u8)rnd(); U8(o + 0x10C) = (u8)rnd();
+            for (int j = 0x19; j < 0x24; j++) U8(e + j) = rnd() % 2;
+            U8(e + 0x23) = rnd() % 8; U8(e + 0xC) = rnd() % 3; U8(e + 0xD) = rnd() % 3;
+            U16(e + 8) = (u16)rnd() & 0xFFF;
+            U16(p + 0x4A) = (u16)(U16(o + 0x4A) + 0x400 * (rnd() % 4) + rnd() % 0x400 - 0x200);
+            U16(p + 0x178) = rnd() % 2 ? 0 : (u16)rnd(); U16(p + 0x174) = rnd() % 2 ? 0 : (u16)rnd();
+            U8(p + 0x55) = rnd() % 2 ? 2 : (u8)rnd();
+            S16(p + 0x108) = (s16)(rnd() % 2 ? rnd() % 0x60 : rnd());
+            U8(G() + 0x108E) = rnd() % 3;
+            U32(LOG_BASE) = 0;
+            sprintf(g_what, "raptor %X step %u frame %X dir %X", o, U8(o + 0x57), U16(o + 0x92), (U16(p + 0x4A) - U16(o + 0x4A)) & 0xFFF);
+            check(at[k].addr, at[k].fn, at[k].name, at[k].n, b, 0);
+        }
+    }
+    raptor_tables_stub(0);
+    stubs_install(0);
+    stub_at(0x452FF0)->impl = NULL; stub_at(0x452FF0)->spec = "ddwd";
+    g_ign_objpads = 0;
+}
+
 static void test_game(void)
 {
     stubs_install(1);
@@ -3274,7 +3520,7 @@ __declspec(dllexport) void harness_main(int argc, char **argv)
     struct { const char *name; void (*fn)(void); } T[] = {
         {"flags", test_flags}, {"geometry", test_geom}, {"script values", test_script_values},
         {"script opcodes", test_script_ops}, {"script objects", test_objects},
-        {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"objects 2", test_object}, {"collision", test_collision}, {"player", test_player}, {"player states", test_player2}, {"zones", test_zones}, {"loading", test_room}, {"title", test_title}, {"game task", test_game}, {"doors", test_doors}, {"frame", test_frame}, {"enemy sets", test_enemyset}, {"enemies", test_enemies},
+        {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"objects 2", test_object}, {"collision", test_collision}, {"player", test_player}, {"player states", test_player2}, {"zones", test_zones}, {"loading", test_room}, {"title", test_title}, {"game task", test_game}, {"doors", test_doors}, {"frame", test_frame}, {"enemy sets", test_enemyset}, {"enemies", test_enemies}, {"raptor", test_raptor},
     };
     for (unsigned i = 0; i < sizeof T / sizeof T[0]; i++) {
         int f0 = g_fail, t0 = g_tests;
