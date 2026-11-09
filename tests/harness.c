@@ -576,8 +576,8 @@ typedef struct { u32 addr; const char *spec; u8 plen[2]; u32 ret; u8 saved[5]; v
 #pragma GCC diagnostic ignored "-Wmissing-field-initializers"
 static Stub g_stubs[] = {
     {0x405DE0, "dd"}, {0, ""}, {0x403A30, ""}, {0x448080, "d"}, {0, ""},
-    {0, ""}, {0x4529C0, "d"}, {0x450A70, "ddd"}, {0x46FBC0, "ddd"}, {0x4718F0, "dddd"},
-    {0x473130, "d"}, {0x4731F0, ""}, {0x474B20, "d"}, {0x478B80, "dd"}, {0x47A8C0, "ddpp", {16, 8}},
+    {0, ""}, {0x452FF0, "ddwd"}, {0x450A70, "ddd"}, {0x46FBC0, "ddd"}, {0x4718F0, "dddd"},
+    {0x473130, "d"}, {0x4731F0, ""}, {0x474B20, "d"}, {0x48FDA0, ""}, {0x47A8C0, "ddpp", {16, 8}},
     {0, ""}, {0, ""}, {0, ""}, {0, ""}, {0x48C0B0, "pd", {0x60}},
     {0x48C600, "d"}, {0x48C640, "ddd"}, {0x48C9C0, "w"}, {0x48CD70, "dd"}, {0x48CE20, "bwww"},
     {0x48CE60, "d"}, {0, ""}, {0, ""}, {0, ""}, {0, ""},
@@ -613,6 +613,7 @@ static Stub g_stubs[] = {
     /* 111..: the PC sound buffers */
     {0x4BF970, "ddd"}, {0x4BFA20, "dd"}, {0x4BFAA0, "d"}, {0x4BFAE0, "d"}, {0x4BFBD0, "d"}, {0x4BFF20, "dd"},
     {0x495D70, "dd"}, {0x495DF0, ""},
+    {0x4C06A0, "d"}, {0x4C06C0, "dd"}, {0x4C08A0, "dddd"},
 };
 #define STUB_GAME 71
 #define STUB_LOAD 50
@@ -669,7 +670,7 @@ REC(70) REC(71) REC(72) REC(73) REC(74) REC(75) REC(76) REC(77) REC(78) REC(79) 
 REC(82) REC(83) REC(84) REC(85) REC(86) REC(87) REC(88) REC(89) REC(90) REC(91) REC(92) REC(93)
 REC(94) REC(95) REC(96) REC(97) REC(98) REC(99) REC(100) REC(101)
 REC(102) REC(103) REC(104) REC(105) REC(106) REC(107) REC(108) REC(109) REC(110)
-REC(111) REC(112) REC(113) REC(114) REC(115) REC(116) REC(117) REC(118)
+REC(111) REC(112) REC(113) REC(114) REC(115) REC(116) REC(117) REC(118) REC(119) REC(120) REC(121)
 static void *const g_recs[] = {rec0, rec1, rec2, rec3, rec4, rec5, rec6, rec7, rec8, rec9, rec10,
     rec11, rec12, rec13, rec14, rec15, rec16, rec17, rec18, rec19, rec20, rec21, rec22, rec23,
     rec24, rec25, rec26, rec27, rec28, rec29, rec30, rec31, rec32, rec33, rec34, rec35, rec36, rec37,
@@ -678,7 +679,7 @@ static void *const g_recs[] = {rec0, rec1, rec2, rec3, rec4, rec5, rec6, rec7, r
     rec64, rec65, rec66, rec67, rec68, rec69, rec70, rec71, rec72, rec73, rec74, rec75, rec76, rec77,
     rec78, rec79, rec80, rec81, rec82, rec83, rec84, rec85, rec86, rec87, rec88, rec89, rec90, rec91, rec92, rec93,
     rec94, rec95, rec96, rec97, rec98, rec99, rec100, rec101, rec102, rec103, rec104, rec105,
-    rec106, rec107, rec108, rec109, rec110, rec111, rec112, rec113, rec114, rec115, rec116, rec117, rec118};
+    rec106, rec107, rec108, rec109, rec110, rec111, rec112, rec113, rec114, rec115, rec116, rec117, rec118, rec119, rec120, rec121};
 _Static_assert(sizeof g_recs / sizeof g_recs[0] >= sizeof g_stubs / sizeof g_stubs[0], "a recorder per stub");
 /* Task_Sleep: the file loader "runs" while the task sleeps */
 static u32 __cdecl ts_sleep(u32 n)
@@ -2998,6 +2999,118 @@ static void test_enemyset(void)
     g_ign_campad = 0;
 }
 
+/* ---- what the enemies share -------------------------------------------------------- */
+/* the player (object 0) with hit spheres, enemies 1..7 with attack spheres;
+   both on parts of their own (O_PART chains) */
+static void enemy_state(void)
+{
+    gptr g = G(), pl = O_OBJ;
+    for (int k = 0; k < 256; k++) U32(TYPE_TAB + 4 * k) = (u32)(uintptr_t)g_recs[k & 1 ? STUB_AOT : STUB_TYPE];
+    U32(g + 0x940) = pl; U32(0x87F940) = 2 + rnd() % 6;
+    U32(g + 0xB50) = rnd() % 4 ? 0 : O_OBJ + 0x260 * 7;
+    for (u32 k = 0; k < 8; k++) {
+        gptr o = O_OBJ + k * 0x260;
+        U8(o + 0x50) = (u8)(rnd() % 4 ? 1 : rnd()); U8(o + 0x58) = (u8[]){2, 2, 7, 8, 3}[rnd() % 5];
+        U8(o + 0x54) = rnd() % 3; U8(o + 0x55) = rnd() % 4; U8(o + 0xFD) = rnd() % 2;
+        for (u32 j = 0x40; j < 0x46; j += 2) U16(o + j) = (u16)(rnd() % 2000 - 1000);
+        for (u32 j = 0x48; j < 0x4E; j += 2) U16(o + j) = (u16)rnd();
+        U16(o + 0x4A) = (u16)rnd(); U16(o + 0x178) = (u16)rnd(); U8(o + 0x184) = (u8)((rnd() % 2 || !U32(g + 0xB50) ? 0 : 0x40) | (rnd() & 8));
+        U32(o + 0x64) = O_PART + k * 0x200;
+        for (u32 j = 0; j < 4; j++) {
+            gptr q = O_PART + k * 0x200 + j * 0x80;
+            U32(q + 0x54) = j < 3 ? q + 0x80 : 0;
+            for (u32 m = 0x20; m < 0x46; m += 2) U16(q + m) = (u16)(rnd() % 0x2000 - 0x1000);
+        }
+        U16(o + 0x92) = rnd() % 0x20; U16(o + 0x102) = (u16)(rnd() & 0xE); U16(o + 0x10C) = rnd() % 7;
+        U8(o + 0x11D) = (u8)(rnd() % 3 ? rnd() % 0x80 - 0x40 : rnd()); U8(o + 0x174) = rnd() % 4 == 0; U8(o + 0x17B) = rnd() % 4 == 0;
+        U8(o + 0xF8) = rnd() % 3 ? 0 : (u8)rnd(); U8(o + 0xF9) = (u8)rnd(); U8(o + 0xFA) = (u8)rnd();
+        U32(o + 0x6C) = rnd(); U32(o + 0x70) = rnd(); U32(o + 0x74) = rnd();
+        /* attack spheres (0x10) and hit spheres (0xC) */
+        gptr a = O_COLL + k * 0x80;
+        U32(o + 0xA0) = rnd() % 5 ? a : 0;
+        u32 na = 1 + rnd() % 3;
+        for (u32 j = 0; j < na; j++, a += 0x10) {
+            for (u32 m = 0; m < 6; m += 2) U16(a + m) = (u16)(rnd() % 400 - 200);
+            U16(a + 6) = 50 + rnd() % 200; U8(a + 8) = rnd() % 0x10; U8(a + 9) = U8(a + 8) + rnd() % 0x10;
+            U8(a + 0xA) = rnd() % 3 ? 0xFF : rnd() % 4; U8(a + 0xB) = j + 1 < na; U16(a + 0xC) = rnd() % 300;
+        }
+        gptr h = O_COLL + 0x400 + k * 0x40;
+        U32(o + 0x134) = rnd() % 5 ? h : 0;
+        u32 nh = 1 + rnd() % 3;
+        for (u32 j = 0; j < nh; j++, h += 0xC) {
+            for (u32 m = 0; m < 6; m += 2) U16(h + m) = (u16)(rnd() % 400 - 200);
+            U16(h + 6) = 50 + rnd() % 200; U16(h + 8) = rnd() % 500; U8(h + 0xA) = rnd() % 3 ? 0xFF : rnd() % 4; U8(h + 0xB) = j + 1 < nh;
+        }
+        U16(o + 0x17E) = rnd() % 2 ? 0 : (u16)rnd();
+    }
+    U8(g + 0x108F) = rnd() % 4; U8(g + 0x108E) = rnd() % 3; U8(g + 0x927) = rnd() % 3 == 0;
+    U16(g + 0x1090) = (u16[]){0x808, 0x407, 0x100, 0x80A, 0x408, 0x409, 0x001, 0x203}[rnd() % 8];
+    U16(g + 0x664) = rnd() % 5;
+    gptr r = g + 0x68C;
+    U8(r + 0xCC) = rnd() % 2; U8(r + 0xCD) = rnd() % 2; U16(r + 0xC4) = rnd() % 2 ? rnd() % 12 : (u16)rnd(); U32(r + 0xB4) = rnd();
+    U16(g + 0xC24) = rnd() % 12; U32(g + 0x11F4) = rnd() % 2 ? 9999999 - rnd() % 0x2000 : rnd() % 100000;
+    Flag_Set(9, 0x36, rnd() % 2); Flag_Set(2, 0x18, rnd() % 2); Flag_Set(2, 0xB, rnd() % 2);
+    U32(0x87DC98) = 0x6D0000;
+    stub_at(0x452FF0)->ret = rnd() % 3 != 0;
+    stub_at(0x4C08A0)->ret = rnd();
+}
+
+static u32 __cdecl fk_sphere(u32 a, u32 b, u32 h, u32 r)    /* the spheres' contents, not their (stack) addresses */
+{
+    u32 v[6] = {U32(a), U32(a + 4), U32(b), U32(b + 4), h, r};
+    rec_common((int)(stub_at(0x452FF0) - g_stubs), v);
+    return stub_at(0x452FF0)->ret && ((U32(a) ^ U32(b + 4)) & 3) == 0;   /* hits some spheres, the same in both runs */
+}
+
+static void test_enemies(void)
+{
+    g_ign_objpads = 1;
+    stub_at(0x452FF0)->impl = fk_sphere; stub_at(0x452FF0)->spec = "ddddww";
+    stubs_install(1);
+    type_tables_stub(1);
+    for (int i = 0; i < iters; i++) {
+        game_state(); world_setup(); enemy_state();
+        gptr o = O_OBJ + 0x260 * (1 + rnd() % 6);
+        u32 a[6] = {o};
+        U32(LOG_BASE) = 0;
+        sprintf(g_what, "enemy %X type %u frame %u flags %X", o, U8(o + 0x58), U16(o + 0x92), U16(o + 0x102));
+        check(0x479830, Enemy_AttackHit, "Enemy_AttackHit", 1, a, 0xFF);
+        check(0x404AF0, Score_Kill, "Score_Kill", 1, a, 0);
+        check(0x404980, Score_Event, "Score_Event", 1, a, 0);
+        check(0x479D00, Enemy_HitDir, "Enemy_HitDir", 1, a, 0xFF);
+        check(0x479CB0, Obj_HitDir, "Obj_HitDir", 1, a, 0xFF);
+        check(0x48FBB0, Obj_DeathFade, "Obj_DeathFade", 1, a, 0);
+        check(0x414D20, Light_Flash, "Light_Flash", 1, a, 0);
+        a[1] = rnd() % 4;
+        check(0x47AD00, Enemy_FindState, "Enemy_FindState", 2, a, 0xFFFFFFFF);
+        a[1] = O_OBJ + 0x40; a[2] = rnd() % 2 ? rnd() % 0x100000 : rnd(); a[3] = rnd() % 0x800;
+        if (rnd() % 2) a[2] = Dist2_XZ(o + 0x40, a[1]) + rnd() % 3 - 1;          /* the edges */
+        if (rnd() % 2) a[3] = (((u32)(s32)(s16)Angle_XZ(o + 0x40, a[1]) - U16(o + 0x4A)) & 0xFFF) + rnd() % 3 - 1;
+        check(0x47A780, Obj_InSight, "Obj_InSight", 4, a, 0xFFFFFFFF);
+        a[1] = rnd();
+        check(0x48DAB0, Prop_Attach, "Prop_Attach", 2, a, 0xFFFFFFFF);
+        for (u32 k = 0; k < 20; k++) if (rnd() % 3 == 0) U32(O_K2 + k * 0xAC + 0xA8) = o;
+        check(0x48DAB0, Prop_Attach, "Prop_Attach", 2, a, 0xFFFFFFFF);
+        u32 b[6] = {(u32)(rnd() % 8), O_OBJ + 0x40, rnd(), rnd(), rnd(), rnd()};
+        check(0x48DC20, Prop_SpawnC, "Prop_SpawnC", 6, b, 0xFFFFFFFF);
+        b[0] = rnd() % 2 ? o : 0; b[1] = 0x6DE100;
+        U8(0x6DE100) = 4 + rnd() % 8; U8(0x6DE101) = rnd() % 2; U8(0x6DE102) = rnd() % 2;
+        check(0x478B80, Flash_Play, "Flash_Play", 2, b, 0xFFFFFFFF);
+        b[0] = rnd() % 2 ? rnd() % 0x400 : (u32)(u16)rnd();
+        for (int r = 0; r < 8; r++) {                       /* the random edge 0x80 */
+            U16(0x87DE10) = (u16)rnd();
+            check(0x4797D0, Player_Bleed, "Player_Bleed", 1, b, 0xFFFF);
+        }
+        check(0x46B960, Layers_Assign, "Layers_Assign", 0, NULL, 0);
+        b[0] = rnd() % 2 ? 0 : rnd() % 0x40;
+        check(0x4529C0, GameOver_Start, "GameOver_Start", 1, b, 0);
+    }
+    type_tables_stub(0);
+    stubs_install(0);
+    stub_at(0x452FF0)->impl = NULL; stub_at(0x452FF0)->spec = "ddwd";
+    g_ign_objpads = 0;
+}
+
 static void test_game(void)
 {
     stubs_install(1);
@@ -3157,7 +3270,7 @@ __declspec(dllexport) void harness_main(int argc, char **argv)
     struct { const char *name; void (*fn)(void); } T[] = {
         {"flags", test_flags}, {"geometry", test_geom}, {"script values", test_script_values},
         {"script opcodes", test_script_ops}, {"script objects", test_objects},
-        {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"objects 2", test_object}, {"collision", test_collision}, {"player", test_player}, {"player states", test_player2}, {"zones", test_zones}, {"loading", test_room}, {"title", test_title}, {"game task", test_game}, {"doors", test_doors}, {"frame", test_frame}, {"enemy sets", test_enemyset},
+        {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"objects 2", test_object}, {"collision", test_collision}, {"player", test_player}, {"player states", test_player2}, {"zones", test_zones}, {"loading", test_room}, {"title", test_title}, {"game task", test_game}, {"doors", test_doors}, {"frame", test_frame}, {"enemy sets", test_enemyset}, {"enemies", test_enemies},
     };
     for (unsigned i = 0; i < sizeof T / sizeof T[0]; i++) {
         int f0 = g_fail, t0 = g_tests;

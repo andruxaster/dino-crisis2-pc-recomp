@@ -351,7 +351,7 @@ u32 DC2CALL ScrOp_WaitCamera(gptr t)                               /* 4B: r0 = c
 
 u32 DC2CALL ScrOp_Call478B80(gptr t)                               /* 4C */
 {
-    Fn_478B80(0, S(t, 0));
+    Flash_Play(0, S(t, 0));
     ADV(t);
     return 0;
 }
@@ -466,7 +466,7 @@ u32 DC2CALL ScrOp_Op56(gptr t)                                     /* 56 */
 
 u32 DC2CALL ScrOp_Call4529C0(gptr t)                               /* 57 */
 {
-    Fn_4529C0(S(t, 0));
+    GameOver_Start(S(t, 0));
     ADV(t);
     return 0;
 }

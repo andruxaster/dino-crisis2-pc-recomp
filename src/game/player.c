@@ -512,7 +512,7 @@ void DC2CALL Player_Die(gptr o)                                    /* 0x47DAB0 *
         u8 s = (u8)(U8(o + 0x55) + 1);
         U32(o + 0xF0) = 0; U16(o + 0xF4) = 0;
         U8(o + 0x55) = s;
-        Fn_4529C0(0);
+        GameOver_Start(0);
         break; }
     case 1:
         Anim_Step(o);

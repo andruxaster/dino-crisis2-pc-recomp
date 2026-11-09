@@ -503,6 +503,21 @@ void DC2CALL EnemySet_Way(gptr a, gptr b, gptr out);                   /* 0x472B
 u32  DC2CALL EnemySet_FindGroup(gptr grp, s32 n);                      /* 0x472C60 */
 void DC2CALL EnemySet_Tick(void);                                      /* 0x472230 */
 void DC2CALL EnemySet_Small(void);                                     /* 0x472D20 */
+gptr DC2CALL Flash_Play(gptr owner, gptr data);                        /* 0x478B80 */
+gptr DC2CALL Prop_Attach(gptr obj, u32 arg);                           /* 0x48DAB0 */
+gptr DC2CALL Prop_SpawnC(u32 kind, gptr pos, u32 a, u32 b, u32 c, u32 d);/* 0x48DC20 */
+u32  DC2CALL Obj_InSight(gptr o, gptr target, u32 dist, u32 ang);      /* 0x47A780 */
+void DC2CALL Score_Event(gptr o);                                      /* 0x404980 */
+void DC2CALL Score_Kill(gptr o);                                       /* 0x404AF0 */
+u32  DC2CALL Enemy_HitDir(gptr o);                                     /* 0x479D00 */
+u32  DC2CALL Obj_HitDir(gptr o);                                       /* 0x479CB0 */
+u32  DC2CALL Player_Bleed(u32 n);                                      /* 0x4797D0 */
+void DC2CALL Obj_DeathFade(gptr o);                                    /* 0x48FBB0 */
+u32  DC2CALL Enemy_FindState(gptr o, u32 sub);                         /* 0x47AD00 */
+void DC2CALL Light_Flash(gptr o);                                      /* 0x414D20 */
+void DC2CALL Layers_Assign(void);                                      /* 0x46B960 */
+u32  DC2CALL Enemy_AttackHit(gptr o);                                  /* 0x479830 */
+void DC2CALL GameOver_Start(u32 fade);                                 /* 0x4529C0 */
 void DC2CALL Door_Task(void);                                          /* 0x41E2D0 */
 void DC2CALL Door_Common(gptr d);                                      /* 0x41CB70 */
 void DC2CALL Door_SwingAMove(gptr d);                                  /* 0x41CA70 */

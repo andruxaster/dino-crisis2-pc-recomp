@@ -12,14 +12,12 @@
     V(Timer_Set,          0x405DE0, (u32 frames, u32 b), (frames, b)) \
     V(Cutscene_End,       0x403A30, (void), ()) \
     V(Fn_448080,          0x448080, (gptr e), (e)) \
-    V(Fn_4529C0,          0x4529C0, (u32 a), (a)) \
     V(Fade_Set,           0x450A70, (u32 a, u32 b, u32 c), (a, b, c)) \
     V(Fn_46FBC0,          0x46FBC0, (u32 a, u32 b, u32 c), (a, b, c)) \
     F(gptr, Message_Show, 0x4718F0, (u32 a, u32 b, gptr text, u32 d), (a, b, text, d)) \
     V(Fn_473130,          0x473130, (u32 a), (a)) \
     V(Fn_4731F0,          0x4731F0, (void), ()) \
     V(Fn_474B20,          0x474B20, (gptr e), (e)) \
-    V(Fn_478B80,          0x478B80, (u32 a, u32 b), (a, b)) \
     V(Fn_47A8C0,          0x47A8C0, (gptr obj, u32 mode, gptr a, gptr b), (obj, mode, a, b)) \
     V(Fn_48C0B0,          0x48C0B0, (gptr obj, u32 a), (obj, a)) \
     V(Fn_48C600,          0x48C600, (u32 a), (a)) \
@@ -78,6 +76,11 @@
     V(Masks_Setup,        0x4036F0, (gptr data, u32 n, gptr pixels), (data, n, pixels)) \
     V(Fn_495D70,          0x495D70, (gptr list, u32 n), (list, n)) \
     V(Fn_495DF0,          0x495DF0, (void), ()) \
+    V(Fn_48FDA0,          0x48FDA0, (void), ()) \
+    F(u32, Sphere_Hit,    0x452FF0, (gptr a, gptr b, u32 h, u32 r), (a, b, h, r)) \
+    V(Gpu_SetTile,        0x4C06A0, (gptr p), (p)) \
+    V(Gpu_SetSemiTrans,   0x4C06C0, (gptr p, u32 on), (p, on)) \
+    F(u32, Gpu_GetTPage,  0x4C08A0, (u32 tp, u32 abr, u32 x, u32 y), (tp, abr, x, y)) \
     V(Fn_46BA00,          0x46BA00, (gptr cam), (cam)) \
     V(Fn_41F080,          0x41F080, (u32 x, u32 y, u32 c, u32 d, u32 e, u32 f), (x, y, c, d, e, f)) \
     V(Fn_41F3E0,          0x41F3E0, (gptr d), (d)) \
