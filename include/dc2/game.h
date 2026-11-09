@@ -615,4 +615,24 @@ void DC2CALL Weapon4_Fire(gptr o);                     /* 0x4AD6E0 */
 void DC2CALL Weapon8_Fire(gptr o);                     /* 0x4B04D0 */
 void DC2CALL Weapon9_Fire(gptr o);                     /* 0x4B0910 */
 
+
+/* object effects (effect.c) */
+void DC2CALL Nothing(gptr e);                                          /* 0x402520 */
+void DC2CALL ObjEff_Turning(gptr e);                                   /* 0x474BB0 */
+void DC2CALL ObjEff_Turn(gptr e);                                      /* 0x474BD0 */
+void DC2CALL ObjEff_Blink(gptr e);                                     /* 0x474BE0 */
+void DC2CALL ObjEff_BlinkMove(gptr e);                                 /* 0x474C00 */
+void DC2CALL ObjEff_BlinkDark(gptr e);                                 /* 0x474C80 */
+void DC2CALL ObjEff_BlinkLit(gptr e);                                  /* 0x474CA0 */
+void DC2CALL ObjEff_Shade(gptr e, u32 v);                              /* 0x474CC0 */
+void DC2CALL ObjEff_ThrownInit(gptr e);                                /* 0x474D50 */
+void DC2CALL ObjEff_ThrownMove(gptr e);                                /* 0x474DC0 */
+void DC2CALL ObjEff_Thrown(gptr e);                                    /* 0x474E50 */
+void DC2CALL ObjEff_Debris(gptr e);                                    /* 0x474E70 */
+void DC2CALL ObjEff_DebrisInit(gptr e);                                /* 0x474EA0 */
+void DC2CALL ObjEff_DebrisMove(gptr e);                                /* 0x474F10 */
+void DC2CALL ObjEff_InHand(gptr e);                                    /* 0x474FB0 */
+void DC2CALL ObjEff_InHandInit(gptr e);                                /* 0x474FD0 */
+void DC2CALL ObjEff_InHandHold(gptr e);                                /* 0x475080 */
+
 #endif

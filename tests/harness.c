@@ -3119,6 +3119,59 @@ static void test_enemies(void)
     g_ign_objpads = 0;
 }
 
+/* ---- object effects (G+0x93C) ---------------------------------------------------- */
+#define OE_MODEL 0x6CF200u      /* the model block an effect points at */
+static void test_obj_effects(void)
+{
+    static const struct { u32 addr; void *fn; const char *name; } k[] = {
+        {0x474BB0, ObjEff_Turning, "ObjEff_Turning"}, {0x474BD0, ObjEff_Turn, "ObjEff_Turn"}, {0x474BE0, ObjEff_Blink, "ObjEff_Blink"},
+        {0x474C00, ObjEff_BlinkMove, "ObjEff_BlinkMove"}, {0x474C80, ObjEff_BlinkDark, "ObjEff_BlinkDark"}, {0x474CA0, ObjEff_BlinkLit, "ObjEff_BlinkLit"},
+        {0x474D50, ObjEff_ThrownInit, "ObjEff_ThrownInit"}, {0x474DC0, ObjEff_ThrownMove, "ObjEff_ThrownMove"}, {0x474E50, ObjEff_Thrown, "ObjEff_Thrown"},
+        {0x474E70, ObjEff_Debris, "ObjEff_Debris"}, {0x474EA0, ObjEff_DebrisInit, "ObjEff_DebrisInit"}, {0x474F10, ObjEff_DebrisMove, "ObjEff_DebrisMove"},
+        {0x474FB0, ObjEff_InHand, "ObjEff_InHand"}, {0x474FD0, ObjEff_InHandInit, "ObjEff_InHandInit"}, {0x475080, ObjEff_InHandHold, "ObjEff_InHandHold"},
+        {0x402520, Nothing, "Nothing"}, {0x474B10, DrawSync, "DrawSync"}};
+    g_ign_objpads = 1;
+    stubs_install(1);
+    for (int i = 0; i < iters; i++) {
+        game_state();
+        do anim_setup_at(O_OBJ); while (U32(O_OBJ + 0x68) < 8);   /* the player, with a part 7 */
+        U32(G() + 0x940) = O_OBJ;
+        S16(O_OBJ + 0x42) = (s16)(rnd() % 4000 - 2000);
+        U8(G() + 0x108F) = rnd() % 3 ? 0 : rnd() % 4;
+        Flag_Set(9, 0x2E, rnd() % 3 != 0);
+        U32(OE_MODEL) = OE_MODEL + 0x100; U32(OE_MODEL + 4) = OE_MODEL + 0x400;
+        U16(OE_MODEL + 8) = rnd() % 10; U16(OE_MODEL + 0xA) = rnd() % 10;
+        for (u32 a = OE_MODEL + 0x100; a < OE_MODEL + 0xA00; a += 4) U32(a) = rnd();
+        for (unsigned j = 0; j < sizeof k / sizeof k[0]; j++) {
+            gptr e = O_EFF + 0x70 * (rnd() % 12);
+            for (u32 a = 0; a < 0x70; a += 4) U32(e + a) = rnd();
+            U32(e + 0x68) = OE_MODEL; U8(e + 0x4F) = rnd() % 4; U8(e + 0x47) = rnd() % 2 ? (u8)(0x76 + rnd() % 4) : (u8)rnd();
+            U8(e + 0x46) = rnd() % 2; S16(e + 0x42) = (s16)(S16(O_OBJ + 0x42) + (s32)(rnd() % 3) - 1 - (rnd() % 2 ? 0 : (s32)(rnd() % 300)));
+            if (rnd() % 2) U32(e + 0x50) &= ~0x40000000u;
+            if (j == 6 || j == 7 || j == 8) { if (!U8(0x737790 + S8(e + 0x4F) * 5)) U8(e + 0x4F) = 0; }
+            if (j >= 9 && j <= 11) { if (!U8(0x7377C4 + S8(e + 0x4F) * 5) || U8(0x7377C8 + S8(e + 0x4F) * 5) > 2) U8(e + 0x4F) = 0; }
+            if (j == 8) U8(e + 0x46) = rnd() % 3;
+            if (j == 9) U8(e + 0x46) = rnd() % 2;
+            if (j == 12) U8(e + 0x46) = rnd() % 4;
+            if (j == 0) U8(e + 0x46) = rnd() % 3;
+            if (j == 2) U8(e + 0x46) = rnd() % 3;
+            if (rnd() % 2) {                                /* lands at the player's height, about */
+                s32 d = (s32)(rnd() % 3) - 1, inc;
+                if (j == 7 || j == 8) inc = S16(e + 0x62);
+                else { s8 v = S8(e + 0x47); if (v < 0x78) v++; inc = (v - 0xC) * 10; }
+                S16(e + 0x42) = (s16)(S16(O_OBJ + 0x42) - inc + d);
+            }
+            U32(LOG_BASE) = 0;
+            u32 a[2] = {e, rnd()};
+            sprintf(g_what, "effect %X step %u kind %u", e, U8(e + 0x46), U8(e + 0x4F));
+            check(k[j].addr, k[j].fn, k[j].name, 1, a, 0);
+            if (j == 5) check(0x474CC0, ObjEff_Shade, "ObjEff_Shade", 2, a, 0);
+        }
+    }
+    stubs_install(0);
+    g_ign_objpads = 0;
+}
+
 /* ---- the trigger areas' kinds (table 0x738B68) ----------------------------------- */
 static void test_aot_kinds(void)
 {
@@ -3672,7 +3725,7 @@ __declspec(dllexport) void harness_main(int argc, char **argv)
     struct { const char *name; void (*fn)(void); } T[] = {
         {"flags", test_flags}, {"geometry", test_geom}, {"script values", test_script_values},
         {"script opcodes", test_script_ops}, {"script objects", test_objects},
-        {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"objects 2", test_object}, {"collision", test_collision}, {"player", test_player}, {"player states", test_player2}, {"zones", test_zones}, {"loading", test_room}, {"title", test_title}, {"game task", test_game}, {"doors", test_doors}, {"frame", test_frame}, {"enemy sets", test_enemyset}, {"enemies", test_enemies}, {"raptor", test_raptor}, {"aot kinds", test_aot_kinds},
+        {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"objects 2", test_object}, {"collision", test_collision}, {"player", test_player}, {"player states", test_player2}, {"zones", test_zones}, {"loading", test_room}, {"title", test_title}, {"game task", test_game}, {"doors", test_doors}, {"frame", test_frame}, {"enemy sets", test_enemyset}, {"enemies", test_enemies}, {"raptor", test_raptor}, {"aot kinds", test_aot_kinds}, {"object effects", test_obj_effects},
     };
     for (unsigned i = 0; i < sizeof T / sizeof T[0]; i++) {
         int f0 = g_fail, t0 = g_tests;
