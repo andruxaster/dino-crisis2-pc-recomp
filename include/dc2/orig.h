@@ -11,7 +11,6 @@
 #define ORIG_LIST(F, V) \
     V(Timer_Set,          0x405DE0, (u32 frames, u32 b), (frames, b)) \
     V(Cutscene_End,       0x403A30, (void), ()) \
-    V(Fn_448080,          0x448080, (gptr e), (e)) \
     V(Fade_Set,           0x450A70, (u32 a, u32 b, u32 c), (a, b, c)) \
     V(Fn_46FBC0,          0x46FBC0, (u32 a, u32 b, u32 c), (a, b, c)) \
     F(gptr, Message_Show, 0x4718F0, (u32 a, u32 b, gptr text, u32 d), (a, b, text, d)) \

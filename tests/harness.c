@@ -575,7 +575,7 @@ static void anim_setup(void) { anim_setup_at(AN_OBJ); }
 typedef struct { u32 addr; const char *spec; u8 plen[2]; u32 ret; u8 saved[5]; void *impl; } Stub;
 #pragma GCC diagnostic ignored "-Wmissing-field-initializers"
 static Stub g_stubs[] = {
-    {0x405DE0, "dd"}, {0, ""}, {0x403A30, ""}, {0x448080, "d"}, {0, ""},
+    {0x405DE0, "dd"}, {0, ""}, {0x403A30, ""}, {0, ""}, {0, ""},
     {0, ""}, {0, ""}, {0x450A70, "ddd"}, {0x46FBC0, "ddd"}, {0x4718F0, "dddd"},
     {0x473130, "d"}, {0x4731F0, ""}, {0x474B20, "d"}, {0x48FDA0, ""}, {0x47A8C0, "ddpp", {16, 8}},
     {0, ""}, {0, ""}, {0, ""}, {0, ""}, {0x48C0B0, "pd", {0x60}},
@@ -591,7 +591,7 @@ static Stub g_stubs[] = {
     {0x4BFC10, "ddd"},
     /* 50..: loading and room set-up */
     {0x4C29A9, "dd"}, {0, ""}, {0, ""}, {0, ""}, {0x471A30, ""}, {0x471A50, ""},
-    {0x48D470, "d"}, {0x478790, ""},
+    {0, ""}, {0x478790, ""},
     {0x4C0560, "dd"},        /* 58: Pc_SeekSet */
     {0x4C29D6, "d"},         /* 59: Task_Chain */
     /* 60..: title */
@@ -3439,6 +3439,106 @@ static void test_eff_slots(void)
     g_ign_objpads = 0;
 }
 
+/* ---- effect slots: puffs, a glow, lone sprites, screen sparkles and bursts --------- */
+static void test_k2_more(void)
+{
+    static const struct { u32 addr; void *fn; const char *name; int n; } k[] = {
+        {0x449FD0, K2Puff_Init, "K2Puff_Init", 1}, {0x44A160, K2Puff_Move, "K2Puff_Move", 1}, {0x44A210, K2Puff_Wait, "K2Puff_Wait", 1},
+        {0x44A250, K2Puff_Shrink, "K2Puff_Shrink", 1}, {0x449F90, K2_Puff, "K2_Puff", 1}, {0x44A2A0, K2Glow_Init, "K2Glow_Init", 1},
+        {0x44A300, K2Glow_Dim, "K2Glow_Dim", 1}, {0x44A330, K2Glow_Brighten, "K2Glow_Brighten", 1}, {0x44A360, K2Glow_Place, "K2Glow_Place", 1},
+        {0x44A280, K2_Glow, "K2_Glow", 1}, {0x44A400, K2Lone_Init, "K2Lone_Init", 1}, {0x44C0A0, K2Lone_Move, "K2Lone_Move", 1},
+        {0x44CAF0, K2Lone_End, "K2Lone_End", 1}, {0x44A380, K2_Lone, "K2_Lone", 1}, {0x44A9E0, K2Spark_New, "K2Spark_New", 5},
+        {0x44AAD0, K2Spark_Draw, "K2Spark_Draw", 6}, {0x44A4A0, K2Sparks_Init, "K2Sparks_Init", 1}, {0x44A620, K2Sparks_Turn, "K2Sparks_Turn", 1},
+        {0x44A890, K2Sparks_Draw, "K2Sparks_Draw", 1}, {0x44AFC0, K2Sparks_Off, "K2Sparks_Off", 1}, {0x44AFD0, K2Burst_New, "K2Burst_New", 3},
+        {0x44AD30, K2Bursts_Init, "K2Bursts_Init", 1}, {0x44B030, K2Burst_Draw, "K2Burst_Draw", 5}, {0x44AE80, K2Bursts_Run, "K2Bursts_Run", 1},
+        {0x44A480, K2_Sparks, "K2_Sparks", 1}, {0x448080, K2_Detach, "K2_Detach", 1}, {0x48D470, Eff_Off, "Eff_Off", 1}};
+    g_ign_objpads = 1;
+    stubs_install(1);
+    for (int i = 0; i < iters; i++) {
+        for (unsigned j = 0; j < sizeof k / sizeof k[0]; j++) {
+            game_state(); objects_setup(); world_setup();
+            if (j == 0 || j == 4) coll_setup();             /* the floor under a kind 5 puff */
+            gptr g = G();
+            U32(0x87DC88) = 22;
+            gptr kk = O_K2 + 0xAC * (rnd() % 20);
+            for (u32 a = 0x20; a < 0xAC; a += 4) U32(kk + a) = rnd() % 3 ? rnd() % 0x10000 : rnd();
+            U8(kk + 0x50) |= 1; U8(kk + 0x87) = (u8)((kk - O_K2) / 0xAC); U8(kk + 0x86) = rnd() % 4 ? (u8)(rnd() % 20) : 0xFF;
+            U8(g + 0x852) = rnd() % 4 ? (u8)(rnd() % 20) : 0xFF;
+            gptr src = 0x6CF000 + 0x40 * (rnd() % 4);
+            U8(src) = (u8)rnd(); U8(src + 1) = rnd() % 2; U8(src + 0x18) = (u8)rnd();
+            U32(kk + 0x8C) = rnd() % 3 ? src : 0;
+            u32 pr = rnd() % 4;
+            U32(kk + 0x60) = pr == 0 ? 0 : pr == 1 ? kk : pr == 2 ? O_OBJ + 0x260 * (rnd() % 16) : O_K2 + 0xAC * (rnd() % 20);
+            gptr an = 0x6CF900;
+            for (u32 a = 0; a < 0x80; a += 4) U32(an + a) = rnd();
+            for (u32 q = 0; q < 16; q++) { U8(an + 8 * q + 4) = (u8)((rnd() % 4 == 0 ? 0x20 * (rnd() % 8) : 0) | (rnd() % 16)); U8(an + 8 * q + 5) = rnd() % 3; }
+            U32(kk + 0x90) = an; U32(kk + 0x94) = an + 8 * (rnd() % 8); U16(kk + 0x82) = rnd() % 3;
+            U32(kk + 0x70) = an + 8 * (rnd() % 8);
+            U8(kk + 0x7B) = rnd() % 10; U8(kk + 0x7A) = rnd() % 9; U8(kk + 0x46) = rnd() % 3;
+            U32(kk + 0xA4) = O_OBJ + 0x260 * (rnd() % 16);
+            Flag_Set(3, 0xA, rnd() % 4 == 0); U32(g + 0x7BC) = rnd() % 2 ? 0 : O_ZONE;
+            /* the camera and the screen */
+            for (int q = 0; q < 3; q++) {
+                U16(g + 0x798 + 2 * q) = (u16)rnd(); U16(g + 0x7A0 + 2 * q) = (u16)(rnd() % 8000 - 4000);
+                U16(g + 0x7A8 + 2 * q) = (u16)(rnd() % 4000 - 2000);
+            }
+            for (int q = 0; q < 9; q++) S16(g + 0x778 + 2 * q) = (s16)((q % 4 == 0 ? 0x1000 : 0) + (s32)(rnd() % 0x400) - 0x200);
+            SetGeomScreen(0x100 + rnd() % 0x100); SetGeomOffset(160, 120);
+            U8(g + 0xB4B) = rnd() % 4 ? 2 + rnd() % 2 : (u8)rnd();
+            U32(0x87DC98) = 0x6D0000; U32(0x87F94C) = 0x6CF800; U32(0x87DE0C) = rnd() & 1;
+            Flag_Set(2, 0x10, rnd() % 4 == 0);
+            U8(g + 0x7C4) = (u8)rnd(); if (rnd() % 2) U8(kk + 0x59) = U8(g + 0x7C4);
+            if ((j >= 14 && j <= 18) || j == 24) {   /* the sparkles' depths as the game makes them (1..511) */
+                static const u8 dp[9] = {0x24, 0x2C, 0x34, 0x3C, 0x44, 0x4C, 0x60, 0x68, 0x70};
+                for (int q = 0; q < 9; q++) U16(kk + dp[q]) = (u16)(rnd() % 512);
+            }
+            /* step-specific edges */
+            if (j == 1 && rnd() % 2) { U8(kk + 0x7A) = 3 + rnd() % 2; U16(kk + 0xA0) = rnd() % 2; U16(kk + 0x6C) = rnd() % 2; U16(kk + 0x6E) = rnd() % 2; }
+            if (j == 2) U16(kk + 0x9E) = rnd() % 3;
+            if (j == 3) U16(kk + 0xA2) = rnd() % 0x30;
+            if (j == 4) U8(kk + 0x54) = rnd() % 5;
+            if (j == 6 || j == 7) { U8(kk + 0x64) = rnd() % 2 ? (u8)(8 * (rnd() % 4)) : (u8)(0x40 + rnd() % 0x20); }
+            if (j == 9) U8(kk + 0x54) = rnd() % 3;
+            if (j == 13) U8(kk + 0x54) = rnd() % 3;
+            if (j == 24) U8(kk + 0x54) = (u8[]){0, 1, 2, 3, 5, 6}[rnd() % 6];
+            if (j == 16 && rnd() % 2) { U8(kk + 0x98) = 0; U8(kk + 0x9A) = 0; U8(kk + 0x9C) = 0; }
+            if (j == 21 && rnd() % 2) { U8(kk + 0x98) = 0; U8(kk + 0x9A) = 0; U8(kk + 0x9C) = 0; }
+            if (j == 25) { U8(kk + 0x7B) = rnd() % 2 ? 3 : (u8)(rnd() % 10); U8(kk + 0x84) = (u8)rnd(); }
+            u32 a[6] = {kk, 0, 0, 0, 0, 0};
+            if (j == 14 || j == 15) {                       /* one sparkle */
+                u32 q = rnd() % 9;
+                static const u8 sp[9][5] = {{0x20, 0x74, 0x75, 0x76, 0x92}, {0x28, 0x78, 0x79, 0x77, 0x94}, {0x30, 0x7A, 0x7B, 0x7C, 0x96},
+                    {0x38, 0x7E, 0x7F, 0x7D, 0x98}, {0x40, 0x80, 0x81, 0x82, 0x9A}, {0x48, 0x84, 0x85, 0x83, 0x9C},
+                    {0x5C, 0x88, 0x89, 0x8A, 0x9E}, {0x64, 0x8C, 0x8D, 0x8B, 0xA0}, {0x6C, 0x8E, 0x8F, 0x90, 0x5A}};
+                for (int c = 0; c < 5; c++) a[c + (j == 15)] = kk + sp[q][c];
+                if (j == 15) {
+                    if (rnd() % 2) S16(kk + sp[q][4]) = (s16)(rnd() % 3 - 1);
+                    if (rnd() % 2) for (int c = 1; c < 4; c++) U8(kk + sp[q][c]) = (u8)(rnd() % 12);
+                }
+            }
+            if (j == 20) { a[0] = kk + 0x54; a[1] = kk + 0x76; a[2] = kk + 0x26; }
+            if (j == 22) {                                  /* one bit of a burst */
+                static const u8 bu[7][4] = {{0x20, 0x54, 0x76, 0x26}, {0x28, 0x66, 0x7A, 0x2E}, {0x30, 0x6A, 0x7E, 0x36}, {0x38, 0x6E, 0x82, 0x3E},
+                    {0x40, 0x72, 0x86, 0x46}, {0x48, 0x98, 0x8A, 0x4E}, {0x5C, 0x9C, 0x8E, 0x62}};
+                u32 q = rnd() % 7;
+                for (int c = 0; c < 4; c++) a[c + 1] = kk + bu[q][c];
+                if (rnd() % 2) U8(kk + bu[q][2] + 3) = (u8)(rnd() % 6);
+                if (rnd() % 2) S16(kk + bu[q][1]) = (s16)(-14 + (s32)(rnd() % 8));
+                if (rnd() % 2) S16(kk + bu[q][3]) = (s16)(rnd() % 3 - 1);
+                if (rnd() % 2) for (int c = 0; c < 3; c++) U8(kk + bu[q][2] + c) = (u8)(rnd() % 12);
+                /* a point in front of the camera */
+                S16(kk + bu[q][0]) = (s16)(rnd() % 600 - 300); S16(kk + bu[q][0] + 2) = (s16)(rnd() % 600 - 300); S16(kk + bu[q][0] + 4) = (s16)(rnd() % 600 - 300);
+                S16(kk + 0x92) = (s16)(rnd() % 200 - 100); S16(kk + 0x94) = (s16)(rnd() % 200 - 100); S16(kk + 0x96) = (s16)(rnd() % 4000);
+            }
+            U32(LOG_BASE) = 0;
+            sprintf(g_what, "slot %X step %u kind %u motion %u parent %X", kk, U8(kk + 0x54), U8(kk + 0x7A), U8(kk + 0x7B), U32(kk + 0x60));
+            check(k[j].addr, k[j].fn, k[j].name, k[j].n, a, 0);
+        }
+    }
+    stubs_install(0);
+    g_ign_objpads = 0;
+}
+
 /* ---- the trigger areas' kinds (table 0x738B68) ----------------------------------- */
 static void test_aot_kinds(void)
 {
@@ -3992,7 +4092,7 @@ __declspec(dllexport) void harness_main(int argc, char **argv)
     struct { const char *name; void (*fn)(void); } T[] = {
         {"flags", test_flags}, {"geometry", test_geom}, {"script values", test_script_values},
         {"script opcodes", test_script_ops}, {"script objects", test_objects},
-        {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"objects 2", test_object}, {"collision", test_collision}, {"player", test_player}, {"player states", test_player2}, {"zones", test_zones}, {"loading", test_room}, {"title", test_title}, {"game task", test_game}, {"doors", test_doors}, {"frame", test_frame}, {"enemy sets", test_enemyset}, {"enemies", test_enemies}, {"raptor", test_raptor}, {"aot kinds", test_aot_kinds}, {"object effects", test_obj_effects}, {"effect slots", test_k2}, {"effect drops", test_k2_drops}, {"effect emitters", test_eff_slots},
+        {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"objects 2", test_object}, {"collision", test_collision}, {"player", test_player}, {"player states", test_player2}, {"zones", test_zones}, {"loading", test_room}, {"title", test_title}, {"game task", test_game}, {"doors", test_doors}, {"frame", test_frame}, {"enemy sets", test_enemyset}, {"enemies", test_enemies}, {"raptor", test_raptor}, {"aot kinds", test_aot_kinds}, {"object effects", test_obj_effects}, {"effect slots", test_k2}, {"effect drops", test_k2_drops}, {"effect emitters", test_eff_slots}, {"effect slots 3", test_k2_more},
     };
     for (unsigned i = 0; i < sizeof T / sizeof T[0]; i++) {
         int f0 = g_fail, t0 = g_tests;

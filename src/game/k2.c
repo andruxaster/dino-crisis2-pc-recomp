@@ -37,6 +37,18 @@ gptr DC2CALL K2_OwnerObj(gptr k)                                    /* 0x448140 
     }
 }
 
+/* let go of what it follows: its place, speed (unless +0x84 bit 1) and, for
+   motion step 3, its spin into the world */
+void DC2CALL K2_Detach(gptr k)                                      /* 0x448080 */
+{
+    if (!U32(k + 0x60)) return;
+    ApplyMatrixSV(k + 0x20, k + 0x40, k + 0x40);
+    U16(k + 0x40) += U16(k + 0x34); U16(k + 0x42) += U16(k + 0x38); U16(k + 0x44) += U16(k + 0x3C);
+    if (!(U8(k + 0x84) & 2)) ApplyMatrixSV(k + 0x20, k + 0x7C, k + 0x7C);
+    if (U8(k + 0x7B) == 3) ApplyMatrixSV(k + 0x20, k + 0x98, k + 0x98);
+    U32(k + 0x60) = 0;
+}
+
 /* the matrix of what it follows; itself once that is gone */
 void DC2CALL K2_SyncParent(gptr k)                                  /* 0x4481A0 */
 {
@@ -63,7 +75,7 @@ void DC2CALL K2_Light(gptr k, u32 c)                                /* 0x448240 
 {
     gptr l = G() + 0xC;
     K2_SyncParent(k);
-    Fn_448080(k);
+    K2_Detach(k);
     U8(l + 3) = 1;
     U16(l + 4) = U16(k + 0x40); U16(l + 6) = U16(k + 0x42); U16(l + 8) = U16(k + 0x44);
     U16(l + 0xE) = U16(0x7033A8 + (c & 0xFF) * 2);
@@ -254,7 +266,7 @@ void DC2CALL K2_Handler(gptr k)                                     /* 0x448900 
     if (s && !((U8(k + 0x84) & 8) + (U8(s) & 1)) && U8(s + 1) == 1) K2_Unlink(k);
 vis:
     if (U8(k + 0x50) & 4) K2_UpdateHidden(k);
-    if (U8(k + 0x46) && !--U8(k + 0x46)) Fn_448080(k);
+    if (U8(k + 0x46) && !--U8(k + 0x46)) K2_Detach(k);
 }
 
 /* its kind (+0x7A, 8 bytes at 0x721668: drawing bits, size, palette, animation) */
@@ -1018,6 +1030,12 @@ void DC2CALL EffSlots_Wait(gptr e)                                  /* 0x40F210 
     if (!U8(e + 0x18)) U8(e + 3)++;
 }
 
+/* step 3: off */
+void DC2CALL Eff_Off(gptr e)                                        /* 0x48D470 */
+{
+    U8(e) = 0;
+}
+
 void DC2CALL EffSlots(gptr e)                                       /* 0x40EED0 */
 {
     Orig_Call1(U32(0x71E17C + S8(e + 3) * 4), e);
@@ -1049,4 +1067,372 @@ void DC2CALL EffArea_Run(gptr e)                                    /* 0x4141A0 
         U8(s + 0x54) = 2;
         Orig_Call1(U32(U32(0x87F948) + U32(0x71E75C + U16(G() + 0x67C) * 4) * 4), s);
     }
+}
+
+/* ---- puffs (0x449F90): steps 0x721998; kind +0x7A (8 bytes at 0x721950: drawing
+   bits, size, palette, animation) -------------------------------------------------- */
+
+void DC2CALL K2Puff_Init(gptr k)                                    /* 0x449FD0 */
+{
+    U8(k + 0x54)++;
+    gptr a = Tmp_Push(8);
+    U32(a) = 0; U32(a + 4) = 0;
+    RotMatrix(a, k + 0x20);
+    Tmp_Pop(8);
+    gptr t = 0x721950 + U8(k + 0x7A) * 8;
+    U16(k + 0x6A) = (u16)((U8(t + 1) << 5) | 0xB);
+    U16(k + 0x68) = (u16)(U8(t + 2) + 0x7DC0);
+    K2_SetAnim(k, U32(t + 4));
+    U32(k + 0x50) |= 2;
+    U8(k + 0x67) |= U8(0x721950 + U8(k + 0x7A) * 8);
+    U16(k + 0xA0) = 0x32;
+    if (U8(k + 0x7A) == 5) {                        /* on the floor under a part of +0xA4 */
+        U8(k + 0x7B) = 1;
+        U8(k + 0x84) |= 1;
+        U16(k + 0x9E) += 0x1E; U16(k + 0x98) = 0x400; U16(k + 0x9C) = 0; U16(k + 0x9A) = 0;
+        gptr p = Obj_Part(U32(U32(k + 0xA4) + 0x64), 0);
+        u16 sz = (u16)(U16(k + 0x6E) + (Rand8() & 3));
+        U16(k + 0x6C) = sz; U16(k + 0x6E) = sz;
+        U16(k + 0x40) = (u16)(U16(p + 0x40) - Rand8() * 2 + 0x100);
+        U16(k + 0x44) = (u16)(U16(p + 0x44) - Rand8() * 2 + 0x100);
+        U16(k + 0x42) = U16(p + 0x42);
+        gptr v = Tmp_Push(8);
+        U16(v) = U16(k + 0x40); U16(v + 2) = 0x3E8; U16(v + 4) = U16(k + 0x44);
+        U16(k + 0x42) = (u16)Floor_Height(v, k + 0x40, 0, 0);
+        Tmp_Pop(8);
+        U8(k + 0x54)++;
+    }
+    K2_PushFront(k);
+}
+
+/* moving; kinds 3 and 4 shrink away after +0xA0 frames; gone at the animation's end */
+void DC2CALL K2Puff_Move(gptr k)                                    /* 0x44A160 */
+{
+    U16(k + 0x40) += U16(k + 0x7C); U16(k + 0x42) += U16(k + 0x7E); U16(k + 0x44) += U16(k + 0x80);
+    gptr s = U32(k + 0x8C);
+    if (U8(k + 0x7A) == 3 || U8(k + 0x7A) == 4) {
+        if (U16(k + 0xA0)) U16(k + 0xA0)--;
+        else {
+            if (U16(k + 0x6E)) U16(k + 0x6E)--;
+            if (U16(k + 0x6C)) U16(k + 0x6C)--;
+            else { k2_src_dec(s); K2_Unlink(k); }
+        }
+    }
+    if (K2_AnimStep(k)) { k2_src_dec(s); K2_Unlink(k); }
+}
+
+/* +0x9E frames, then shrinks */
+void DC2CALL K2Puff_Wait(gptr k)                                    /* 0x44A210 */
+{
+    K2_AnimStep(k);
+    if (--U16(k + 0x9E)) return;
+    U16(k + 0xA2) = (u16)(U16(k + 0x6E) << 4);
+    U8(k + 0x54)++;
+}
+
+void DC2CALL K2Puff_Shrink(gptr k)                                  /* 0x44A250 */
+{
+    K2_AnimStep(k);
+    U16(k + 0xA2)--;
+    u16 s = (u16)(S16(k + 0xA2) >> 4);
+    U16(k + 0x6C) = s; U16(k + 0x6E) = s;
+    if (!s) U8(k + 0x54)++;
+}
+
+void DC2CALL K2_Puff(gptr k)                                        /* 0x449F90 */
+{
+    Orig_Call1(U32(0x7215E4 + U8(k + 0x7B) * 4), k);
+    Orig_Call1(U32(0x721998 + U8(k + 0x54) * 4), k);
+    K2_SyncParent(k);
+    if (!--U8(k + 0x46)) K2_Detach(k);
+}
+
+/* ---- a glow at a fixed place (0x44A280): steps 0x7219AC ---------------------------- */
+
+void DC2CALL K2Glow_Init(gptr k)                                    /* 0x44A2A0 */
+{
+    U16(k + 0x6A) = 0x2B;
+    U8(k + 0x54)++;
+    U16(k + 0x68) = 0x7DC3;
+    K2_SetAnim(k, 0x681E48);
+    U32(k + 0x50) |= 2;
+    U8(k + 0x67) |= 2;
+    U8(k + 0x84) |= 0x80;
+    U16(k + 0x6C) = 1; U16(k + 0x6E) = 1;
+    U32(k + 0x60) = 0;
+}
+
+void DC2CALL K2Glow_Dim(gptr k)                                     /* 0x44A300 */
+{
+    U8(k + 0x65) -= 8; U8(k + 0x64) -= 8; U8(k + 0x66) -= 8;
+    if (!U8(k + 0x64)) U8(k + 0x54)++;
+}
+
+void DC2CALL K2Glow_Brighten(gptr k)                                /* 0x44A330 */
+{
+    U8(k + 0x65) += 0x10; U8(k + 0x64) += 0x10; U8(k + 0x66) += 0x10;
+    if (U8(k + 0x64) > 0x50) U8(k + 0x54)--;
+}
+
+void DC2CALL K2Glow_Place(gptr k)                                   /* 0x44A360 */
+{
+    U16(k + 0x40) = 0xA3; U16(k + 0x42) = 0x7C; U16(k + 0x44) = 1;
+}
+
+void DC2CALL K2_Glow(gptr k)                                        /* 0x44A280 */
+{
+    Orig_Call1(U32(0x7219AC + U8(k + 0x54) * 4), k);
+    K2Glow_Place(k);
+}
+
+/* ---- a sprite on its own (0x44A380): steps 0x7219B8 -------------------------------- */
+
+void DC2CALL K2Lone_Init(gptr k)                                    /* 0x44A400 */
+{
+    gptr s = U32(k + 0x8C);
+    U8(k + 0x54)++;
+    gptr a = Tmp_Push(8);
+    U32(a) = 0; U32(a + 4) = 0;
+    RotMatrix(a, k + 0x20);
+    Tmp_Pop(8);
+    K2_SetAnim(k, U32(k + 0x70));
+    U32(k + 0x50) |= 2;
+    if (s && (U8(k + 0x84) & 8)) { U8(s + 0x18)--; U32(k + 0x8C) = 0; }
+}
+
+void DC2CALL K2Lone_Move(gptr k)                                    /* 0x44C0A0 */
+{
+    U16(k + 0x40) += U16(k + 0x7C); U16(k + 0x42) += U16(k + 0x7E); U16(k + 0x44) += U16(k + 0x80);
+    if (K2_AnimStep(k) && !(U8(k + 0x84) & 8)) U8(k + 0x54)++;
+}
+
+void DC2CALL K2Lone_End(gptr k)                                     /* 0x44CAF0 */
+{
+    gptr s = U32(k + 0x8C);
+    K2_Unlink(k);
+    if (s) U8(s + 0x18)--;
+}
+
+void DC2CALL K2_Lone(gptr k)                                        /* 0x44A380 */
+{
+    gptr s = U32(k + 0x8C);
+    Orig_Call1(U32(0x7215E4 + U8(k + 0x7B) * 4), k);
+    Orig_Call1(U32(0x7219B8 + U8(k + 0x54) * 4), k);
+    K2_SyncParent(k);
+    if (U8(k + 0x50) & 4) K2_UpdateHidden(k);
+    if (s && !(U8(s) & 1) && !(U8(k + 0x84) & 8)) K2_Unlink(k);
+    if (U8(k + 0x46) && !--U8(k + 0x46) && U32(k + 0x60)) K2_Detach(k);
+}
+
+/* ---- screen sparkles and bursts (0x44A480): steps 0x7219C4; the slot holds nine
+   (sparkles) or seven (bursts) little ones, each a position (+6 an angle), three
+   colour bytes and a timer --------------------------------------------------------- */
+static const u8 k2_sparks[9][5] = {
+    {0x20, 0x74, 0x75, 0x76, 0x92}, {0x28, 0x78, 0x79, 0x77, 0x94}, {0x30, 0x7A, 0x7B, 0x7C, 0x96},
+    {0x38, 0x7E, 0x7F, 0x7D, 0x98}, {0x40, 0x80, 0x81, 0x82, 0x9A}, {0x48, 0x84, 0x85, 0x83, 0x9C},
+    {0x5C, 0x88, 0x89, 0x8A, 0x9E}, {0x64, 0x8C, 0x8D, 0x8B, 0xA0}, {0x6C, 0x8E, 0x8F, 0x90, 0x5A}};
+
+/* skips a random count of random numbers */
+static void k2_rand_skip(void)
+{
+    s32 i = 0, r = Rand8() % 10;
+    if (r > 0) do { Rand8(); i++; r = Rand8() % 10; } while (i < r);
+}
+
+/* a sparkle anew: somewhere on screen, dark, for a while */
+void DC2CALL K2Spark_New(gptr pos, gptr c0, gptr c1, gptr c2, gptr w) /* 0x44A9E0 */
+{
+    U16(pos) = (u16)(Rand8() + 0x20);
+    k2_rand_skip();
+    U16(pos + 2) = Rand8();
+    k2_rand_skip();
+    U16(pos + 4) = (u16)(Rand8() * 2 + 1);
+    U16(pos + 6) = (u16)(Rand8() << 3);
+    U16(c0) = 0;                                    /* c0 and c1 side by side */
+    U8(c2) = 0;
+    U16(w) = (u16)(((Rand8() & 0x1F) + 1) * 30);
+    if (S16(pos + 2) > 0xF0) U16(pos + 2) -= 0xF0;
+}
+
+/* drawn as a 1x1 tile circling its point; brightens to the slot's colour
+   (+0x55..+0x57), then after its time fades and starts anew */
+void DC2CALL K2Spark_Draw(gptr k, gptr pos, gptr c0, gptr c1, gptr c2, gptr w) /* 0x44AAD0 */
+{
+    u8 r = U8(c0), g = U8(c1), b = U8(c2);
+    s32 x = rcos((U16(pos + 6) * 2) & 0xFFF) / 1024 + S16(pos);
+    s32 y = rsin(S16(pos + 6)) / 512 + S16(pos + 2);
+    gptr p = U32(0x87DC98);
+    U8(p + 4) = r; U8(p + 5) = g; U8(p + 6) = b; U8(p + 7) = 0x62;
+    F32(p + 8) = (float)x; F32(p + 0xC) = (float)y;
+    U32(p + 0x10) = 0x3C23D70A; U16(p + 0x14) = 1; U16(p + 0x16) = 1;
+    gptr ot = 0x87BC00 + 4 * ((S16(pos + 4) / 4) + (U32(0x87DE0C) << 10));
+    U32(p) = U32(ot) | 0x3000000; U32(ot) = p & 0xFFFFFF;
+    U32(0x87DC98) += 0x18;
+    u32 tp = Gpu_GetTPage(0, 1, 0x140, 0x100) & 0xFFFF;
+    Gpu_SetDrawMode(U32(0x87DC98), 1, 0, tp, 0);
+    Gpu_AddPrim(0x87BC00 + 4 * ((S16(pos + 4) / 4) + (U32(0x87DE0C) << 10)), U32(0x87DC98));
+    U32(0x87DC98) += 0xC;
+    if (Flag_Check(2, 0x10)) return;
+    s16 t = S16(w);
+    U16(w) = (u16)(t - 1);
+    if (t >= 0) {
+        U8(c0) += 8; if (U8(c0) > U8(k + 0x55)) U8(c0) = U8(k + 0x55);
+        U8(c1) += 8; if (U8(c1) > U8(k + 0x56)) U8(c1) = U8(k + 0x56);
+        U8(c2) += 8; if (U8(c2) > U8(k + 0x57)) U8(c2) = U8(k + 0x57);
+        return;
+    }
+    s16 a = (s16)(U8(c0) - 8), d = (s16)(U8(c1) - 8), c = (s16)(U8(c2) - 8);
+    if (a < 0) a = 0;
+    if (d < 0) d = 0;
+    if (c < 0) c = 0;
+    if (d + c + a < 1) { K2Spark_New(pos, c0, c1, c2, w); return; }
+    U8(c0) = (u8)a; U8(c1) = (u8)d; U8(c2) = (u8)c;
+}
+
+/* step 0: colour from +0x98/+0x9A/+0x9C (else 0x60, 0x30, 0x30), nine sparkles */
+void DC2CALL K2Sparks_Init(gptr k)                                  /* 0x44A4A0 */
+{
+    U8(k + 0x54)++;
+    U32(k + 0x50) &= ~2u;
+    U8(k + 0x55) = U8(k + 0x98); U8(k + 0x56) = U8(k + 0x9A); U8(k + 0x57) = U8(k + 0x9C);
+    if (!(U8(k + 0x56) + U8(k + 0x55) + U8(k + 0x57))) { U8(k + 0x55) = 0x60; U8(k + 0x56) = 0x30; U8(k + 0x57) = 0x30; }
+    for (int i = 0; i < 9; i++) {
+        const u8 *t = k2_sparks[i];
+        K2Spark_New(k + t[0], k + t[1], k + t[2], k + t[3], k + t[4]);
+    }
+}
+
+/* step 1: turning; all anew when the camera changed (G+0x7C4) */
+void DC2CALL K2Sparks_Turn(gptr k)                                  /* 0x44A620 */
+{
+    for (int i = 0; i < 9; i++) {
+        gptr a = k + k2_sparks[i][0] + 6;
+        U16(a) = (u16)((U16(a) + (Rand8() & 0xF) + 0x10) & 0xFFF);
+    }
+    if ((s32)S8(k + 0x59) != (s32)U8(G() + 0x7C4))
+        for (int i = 0; i < 9; i++) {
+            const u8 *t = k2_sparks[i];
+            K2Spark_New(k + t[0], k + t[1], k + t[2], k + t[3], k + t[4]);
+        }
+    U8(k + 0x59) = U8(G() + 0x7C4);
+}
+
+/* step 2: drawn, back to step 1 */
+void DC2CALL K2Sparks_Draw(gptr k)                                  /* 0x44A890 */
+{
+    for (int i = 0; i < 9; i++) {
+        const u8 *t = k2_sparks[i];
+        K2Spark_Draw(k, k + t[0], k + t[1], k + t[2], k + t[3], k + t[4]);
+    }
+    U8(k + 0x54) = 1;
+}
+
+/* steps 3 and 6: off */
+void DC2CALL K2Sparks_Off(gptr k)                                   /* 0x44AFC0 */
+{
+    U32(k + 0x50) = 0;
+}
+
+/* the seven of a burst: speed (+0 down, +2 heading), colour (+3 its spread) and time */
+static const u8 k2_burst[7][4] = {
+    {0x20, 0x54, 0x76, 0x26}, {0x28, 0x66, 0x7A, 0x2E}, {0x30, 0x6A, 0x7E, 0x36}, {0x38, 0x6E, 0x82, 0x3E},
+    {0x40, 0x72, 0x86, 0x46}, {0x48, 0x98, 0x8A, 0x4E}, {0x5C, 0x9C, 0x8E, 0x62}};
+
+void DC2CALL K2Burst_New(gptr vel, gptr col, gptr t)                /* 0x44AFD0 */
+{
+    U8(col + 3) = (u8)((Rand8() & 0xF) + 0x64);
+    U16(vel) = (u16)(-50 - (s32)(Rand8() & 0x3F));
+    U16(vel + 2) += (u16)(Rand8() * 4 - 0x200);
+    U16(t) = (u16)(((Rand8() & 0x1F) + 10) * 30);
+}
+
+/* step 4: seven bits at +0x40/+0x44, colour +0x98.. (else grey); the first one's
+   speed is the slot's step bytes */
+void DC2CALL K2Bursts_Init(gptr k)                                  /* 0x44AD30 */
+{
+    U8(k + 0x59)++;
+    u16 c = U16(k + 0x98);
+    U32(k + 0x50) &= ~2u;
+    u32 x = U32(k + 0x40), z = U32(k + 0x44);
+    U8(k + 0x5A) = (u8)c; U8(k + 0x5B) = U8(k + 0x9A); U8(k + 0x64) = U8(k + 0x9C);
+    U32(k + 0x20) = x; U32(k + 0x24) = z; U32(k + 0x28) = x; U32(k + 0x2C) = z;
+    U32(k + 0x30) = x; U32(k + 0x34) = z; U32(k + 0x38) = x; U32(k + 0x3C) = z;
+    U32(k + 0x40) = x; U32(k + 0x48) = x; U32(k + 0x5C) = x;
+    u32 sum = U8(k + 0x5B) + (c & 0xFF) + U8(k + 0x64);
+    U32(k + 0x44) = z; U32(k + 0x4C) = z; U32(k + 0x60) = z;
+    if (!sum) { U8(k + 0x5A) = 0x80; U8(k + 0x5B) = 0x80; U8(k + 0x64) = 0x80; }
+    U16(k + 0x9E) = c; U16(k + 0x9A) = c; U16(k + 0x74) = c; U16(k + 0x70) = c;
+    U16(k + 0x6C) = c; U16(k + 0x68) = c; U16(k + 0x56) = c;
+    for (int i = 0; i < 7; i++) K2Burst_New(k + k2_burst[i][1], k + k2_burst[i][2], k + k2_burst[i][3]);
+}
+
+/* one bit: falls and drifts, drawn as a grey dot (depth by its distance), fades
+   after its time; +0x59 counts those gone */
+void DC2CALL K2Burst_Draw(gptr k, gptr pos, gptr vel, gptr col, gptr tm) /* 0x44B030 */
+{
+    s8 sp = (s8)(U8(col + 3) - 3);
+    U8(col + 3) = (u8)sp;
+    if (sp < 0) { U8(col + 3) = 0; U16(vel) = 1; }
+    else {
+        U16(vel) += 4;
+        if (S16(vel) > -10) U16(vel) = 1;
+    }
+    gptr t = Tmp_Push(0x40), v = t, ang = t + 8, sxy = t + 0x10, m = t + 0x18;
+    U16(v) = 0; U16(v + 2) = 0; U16(v + 4) = U8(col + 3);
+    U16(ang) = 0; U16(ang + 2) = U16(vel + 2); U16(ang + 4) = 0; U16(ang + 6) = 0;
+    RotMatrix(ang, m);
+    ApplyMatrixSV(m, v, v);
+    U16(pos) += U16(v); U16(pos + 4) += U16(v + 4);
+    U16(pos + 2) += U16(vel);
+    S32(m + 0x14) = S16(k + 0x92); S32(m + 0x18) = S16(k + 0x94); S32(m + 0x1C) = S16(k + 0x96);
+    SetTransMatrix(m);
+    SetRotMatrix(G() + 0x778);
+    gte_ldv0(pos);
+    gte_rtps();
+    gte_stsxy(sxy);
+    gte_stsz(t + 0x38);
+    s32 z = S32(t + 0x38) >> (U8(G() + 0xB4B) & 31);
+    if (z >= 0x3FF) z = 0x3FF;
+    u32 sx = U32(sxy), sy = U32(sxy + 4);
+    s32 div = (s32)(0x400u << ((U8(G() + 0xB4B) + 1) & 31));
+    Tmp_Pop(0x40);
+    gptr p = U32(0x87DC98);
+    U8(p + 4) = 0x80; U8(p + 5) = 0x80; U8(p + 6) = 0x80; U8(p + 7) = 0x62;
+    U32(p + 8) = sx; U32(p + 0xC) = sy;
+    F32(p + 0x10) = (float)((long double)z / (long double)div);
+    U16(p + 0x14) = 1; U16(p + 0x16) = 1;
+    gptr ot = 0x87BC00 + 4 * ((U32(0x87DE0C) << 10) + (u32)z);
+    U32(p) = U32(ot) | 0x3000000; U32(ot) = p & 0xFFFFFF;
+    U32(0x87DC98) += 0x18;
+    Gpu_SetDrawMode(U32(0x87DC98), 1, 0, 0x35, 0);
+    Gpu_AddPrim(0x87BC00 + 4 * ((U32(0x87DE0C) << 10) + (u32)z), U32(0x87DC98));
+    U32(0x87DC98) += 0xC;
+    s16 w = S16(tm);
+    U16(tm) = (u16)(w - 1);
+    if (w >= 0) return;
+    s16 a = (s16)(U8(col) - 8), d = (s16)(U8(col + 1) - 8), c = (s16)(U8(col + 2) - 8);
+    if (a < 0) a = 0;
+    if (d < 0) d = 0;
+    if (c < 0) c = 0;
+    if (c + d + a < 1) { U8(k + 0x59)++; return; }
+    U8(col) = (u8)a; U8(col + 1) = (u8)d; U8(col + 2) = (u8)c;
+}
+
+/* step 5: the seven, seen from the camera's eye (+0x92..) */
+void DC2CALL K2Bursts_Run(gptr k)                                   /* 0x44AE80 */
+{
+    gptr c = G() + 0x778, v = Tmp_Push(8);
+    U16(v) = (u16)-U16(G() + 0x7A0); U16(v + 2) = (u16)-U16(c + 0x2A); U16(v + 4) = (u16)-U16(c + 0x2C);
+    ApplyMatrixSV(c, v, v);
+    U16(k + 0x92) = (u16)(U16(c + 0x30) + U16(v));
+    U16(k + 0x94) = (u16)(U16(c + 0x32) + U16(v + 2));
+    U16(k + 0x96) = (u16)(U16(c + 0x34) + U16(v + 4));
+    Tmp_Pop(8);
+    for (int i = 0; i < 7; i++)
+        K2Burst_Draw(k, k + k2_burst[i][0], k + k2_burst[i][1], k + k2_burst[i][2], k + k2_burst[i][3]);
+}
+
+void DC2CALL K2_Sparks(gptr k)                                      /* 0x44A480 */
+{
+    Orig_Call1(U32(0x7219C4 + U8(k + 0x54) * 4), k);
 }

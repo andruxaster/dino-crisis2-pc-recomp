@@ -418,7 +418,7 @@ u32 DC2CALL ScrOp_Op52(gptr t)                                     /* 52: on the
 {
     switch (U8(t + T_SEL0)) {
     case 1: Fn_474B20(EFF(SEL(t) + 12)); break;
-    case 2: Fn_448080(K2(SEL(t))); break;
+    case 2: K2_Detach(K2(SEL(t))); break;
     default: break;
     }
     ADV(t);

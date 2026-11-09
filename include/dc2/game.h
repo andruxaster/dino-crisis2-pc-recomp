@@ -697,5 +697,32 @@ void DC2CALL EffSlots_Wait(gptr e);                                     /* 0x40F
 void DC2CALL EffSlots(gptr e);                                          /* 0x40EED0 */
 void DC2CALL EffArea_Start(gptr e);                                     /* 0x4140E0 */
 void DC2CALL EffArea_Run(gptr e);                                       /* 0x4141A0 */
+void DC2CALL K2Puff_Init(gptr k);                                       /* 0x449FD0 */
+void DC2CALL K2Puff_Move(gptr k);                                       /* 0x44A160 */
+void DC2CALL K2Puff_Wait(gptr k);                                       /* 0x44A210 */
+void DC2CALL K2Puff_Shrink(gptr k);                                     /* 0x44A250 */
+void DC2CALL K2_Puff(gptr k);                                           /* 0x449F90 */
+void DC2CALL K2Glow_Init(gptr k);                                       /* 0x44A2A0 */
+void DC2CALL K2Glow_Dim(gptr k);                                        /* 0x44A300 */
+void DC2CALL K2Glow_Brighten(gptr k);                                   /* 0x44A330 */
+void DC2CALL K2Glow_Place(gptr k);                                      /* 0x44A360 */
+void DC2CALL K2_Glow(gptr k);                                           /* 0x44A280 */
+void DC2CALL K2Lone_Init(gptr k);                                       /* 0x44A400 */
+void DC2CALL K2Lone_Move(gptr k);                                       /* 0x44C0A0 */
+void DC2CALL K2Lone_End(gptr k);                                        /* 0x44CAF0 */
+void DC2CALL K2_Lone(gptr k);                                           /* 0x44A380 */
+void DC2CALL K2Spark_New(gptr pos, gptr c0, gptr c1, gptr c2, gptr w);  /* 0x44A9E0 */
+void DC2CALL K2Spark_Draw(gptr k, gptr pos, gptr c0, gptr c1, gptr c2, gptr w);/* 0x44AAD0 */
+void DC2CALL K2Sparks_Init(gptr k);                                     /* 0x44A4A0 */
+void DC2CALL K2Sparks_Turn(gptr k);                                     /* 0x44A620 */
+void DC2CALL K2Sparks_Draw(gptr k);                                     /* 0x44A890 */
+void DC2CALL K2Sparks_Off(gptr k);                                      /* 0x44AFC0 */
+void DC2CALL K2Burst_New(gptr vel, gptr col, gptr t);                   /* 0x44AFD0 */
+void DC2CALL K2Bursts_Init(gptr k);                                     /* 0x44AD30 */
+void DC2CALL K2Burst_Draw(gptr k, gptr pos, gptr vel, gptr col, gptr tm);/* 0x44B030 */
+void DC2CALL K2Bursts_Run(gptr k);                                      /* 0x44AE80 */
+void DC2CALL K2_Sparks(gptr k);                                         /* 0x44A480 */
+void DC2CALL K2_Detach(gptr k);                                         /* 0x448080 */
+void DC2CALL Eff_Off(gptr e);                                           /* 0x48D470 */
 
 #endif
