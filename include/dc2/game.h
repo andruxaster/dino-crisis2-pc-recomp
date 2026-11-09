@@ -635,4 +635,67 @@ void DC2CALL ObjEff_InHand(gptr e);                                    /* 0x474F
 void DC2CALL ObjEff_InHandInit(gptr e);                                /* 0x474FD0 */
 void DC2CALL ObjEff_InHandHold(gptr e);                                /* 0x475080 */
 
+
+/* effect slots (k2.c) */
+void DC2CALL K2_ToWorld(gptr k, gptr out);                             /* 0x448100 */
+gptr DC2CALL K2_OwnerObj(gptr k);                                      /* 0x448140 */
+void DC2CALL K2_SyncParent(gptr k);                                    /* 0x4481A0 */
+void DC2CALL K2_PushFront(gptr k);                                     /* 0x4481E0 */
+void DC2CALL K2_Light(gptr k, u32 c);                                  /* 0x448240 */
+void DC2CALL K2Step_SetAngles(gptr k);                                 /* 0x4482B0 */
+void DC2CALL K2Step_SetYaw(gptr k);                                    /* 0x4482E0 */
+void DC2CALL K2Step_Accel(gptr k);                                     /* 0x448300 */
+void DC2CALL K2Step_SpinAccel(gptr k);                                 /* 0x448330 */
+void DC2CALL K2Step_Rise(gptr k);                                      /* 0x448350 */
+void DC2CALL K2Step_Grow(gptr k);                                      /* 0x4483A0 */
+void DC2CALL K2Step_GrowLaterInit(gptr k);                             /* 0x448430 */
+void DC2CALL K2Step_GrowLater(gptr k);                                 /* 0x448470 */
+void DC2CALL K2Step_Hold(gptr k);                                      /* 0x448520 */
+void DC2CALL K2_MatrixAngles(gptr m, gptr out);                        /* 0x448760 */
+s32 DC2CALL K2_AnimStep(gptr k);                                       /* 0x48DD10 */
+void DC2CALL K2_SetAnim(gptr k, gptr list);                            /* 0x48DCE0 */
+u32 DC2CALL Pos_Hidden(gptr pos);                                      /* 0x48F8C0 */
+void DC2CALL K2_UpdateHidden(gptr k);                                  /* 0x48F9B0 */
+void DC2CALL K2_Handler(gptr k);                                       /* 0x448900 */
+void DC2CALL K2_Init(gptr k);                                          /* 0x4489B0 */
+void DC2CALL K2_Move(gptr k);                                          /* 0x448B70 */
+void DC2CALL K2_FadeOut(gptr k);                                       /* 0x448BE0 */
+void DC2CALL K2_Handler2(gptr k);                                      /* 0x448C70 */
+void DC2CALL K2_SplashInit(gptr k);                                    /* 0x448CC0 */
+void DC2CALL K2_SplashFall(gptr k);                                    /* 0x448E10 */
+void DC2CALL K2_FloatA(gptr k);                                        /* 0x448EB0 */
+void DC2CALL K2_FloatB(gptr k);                                        /* 0x448FC0 */
+void DC2CALL K2_Splash(gptr k);                                        /* 0x4490D0 */
+void DC2CALL K2_Emitter(gptr k);                                       /* 0x449120 */
+void DC2CALL K2_EmitterStart(gptr k);                                  /* 0x449140 */
+void DC2CALL K2_EmitterStep(gptr k);                                   /* 0x449180 */
+void DC2CALL K2_Emitter2(gptr k);                                      /* 0x4494C0 */
+void DC2CALL K2_Emitter2Start(gptr k);                                 /* 0x449530 */
+void DC2CALL K2_StepNext(gptr k);                                      /* 0x449650 */
+void DC2CALL K2_Emitter2Step(gptr k);                                  /* 0x449660 */
+void DC2CALL K2Drops_Start(gptr k);                                     /* 0x44B4C0 */
+void DC2CALL K2Drops_Back(gptr k);                                      /* 0x44B540 */
+void DC2CALL K2Drops_Spawn(gptr pos, gptr col);                         /* 0x44B660 */
+void DC2CALL K2Drops_Init(gptr k);                                      /* 0x44B5A0 */
+void DC2CALL K2Drops_Drop(gptr k, gptr pos, gptr col, gptr ang);        /* 0x44B790 */
+void DC2CALL K2Drops_Run(gptr k);                                       /* 0x44B730 */
+void DC2CALL K2Bubbles_Start(gptr k);                                   /* 0x44B9E0 */
+void DC2CALL K2Bubbles_Keep(gptr k);                                    /* 0x44BA90 */
+void DC2CALL K2Bubble_Init(gptr k);                                     /* 0x44BB60 */
+void DC2CALL K2Bubble_Rise(gptr k);                                     /* 0x44BCE0 */
+void DC2CALL K2Bubble_Sink(gptr k);                                     /* 0x44BD70 */
+void DC2CALL K2Bubble_Wait(gptr k);                                     /* 0x44BE00 */
+void DC2CALL K2Bubble_Shrink(gptr k);                                   /* 0x44BE10 */
+void DC2CALL K2_Drops(gptr k);                                          /* 0x44B4A0 */
+void DC2CALL K2Stuck_Place(gptr k);                                     /* 0x44BEF0 */
+void DC2CALL K2Stuck_Init(gptr k);                                      /* 0x44BE30 */
+void DC2CALL K2Stuck_Run(gptr k);                                       /* 0x44BF30 */
+void DC2CALL K2_Stuck(gptr k);                                          /* 0x44BF80 */
+void DC2CALL EffSlots_Step(gptr e);                                     /* 0x40EF20 */
+void DC2CALL EffSlots_Start(gptr e);                                    /* 0x40EEF0 */
+void DC2CALL EffSlots_Wait(gptr e);                                     /* 0x40F210 */
+void DC2CALL EffSlots(gptr e);                                          /* 0x40EED0 */
+void DC2CALL EffArea_Start(gptr e);                                     /* 0x4140E0 */
+void DC2CALL EffArea_Run(gptr e);                                       /* 0x4141A0 */
+
 #endif

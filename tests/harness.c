@@ -3172,6 +3172,273 @@ static void test_obj_effects(void)
     g_ign_objpads = 0;
 }
 
+/* ---- effect slots (G+0x944): sprites, splashes, emitters ------------------------- */
+#define K2_RECS 0x6CF200u       /* emitter records, 0x28 each */
+static void k2_records(gptr r, int n, int t0)
+{
+    for (int i = 0; i < n; i++, r += 0x28) {
+        for (u32 a = 0; a < 0x28; a += 4) U32(r + a) = rnd();
+        U8(r) = rnd() % 4; U8(r + 0xF) = (u8)(t0 + i / 2); U8(r + 0x1E) = (u8)((rnd() % 3 ? 0 : rnd() % 2 ? 4 : 1) << 4);
+        U8(r + 0x1F) = rnd() % 2; U32(r + 0x18) = rnd() % 2 ? 0 : 0x6CF900;
+    }
+    U32(r) = 0xFFFFFFFF; U8(r + 0xF) = rnd() % 3 ? 0xFF : (u8)(t0 + rnd() % (n / 2 + 2));   /* the end's time, sometimes due */
+}
+
+static void test_k2(void)
+{
+    static const struct { u32 addr; void *fn; const char *name; int n; } k[] = {
+        {0x448100, K2_ToWorld, "K2_ToWorld", 2}, {0x448140, K2_OwnerObj, "K2_OwnerObj", 1}, {0x4481A0, K2_SyncParent, "K2_SyncParent", 1},
+        {0x4481E0, K2_PushFront, "K2_PushFront", 1}, {0x448240, K2_Light, "K2_Light", 2}, {0x4482B0, K2Step_SetAngles, "K2Step_SetAngles", 1},
+        {0x4482E0, K2Step_SetYaw, "K2Step_SetYaw", 1}, {0x448300, K2Step_Accel, "K2Step_Accel", 1}, {0x448330, K2Step_SpinAccel, "K2Step_SpinAccel", 1},
+        {0x448350, K2Step_Rise, "K2Step_Rise", 1}, {0x4483A0, K2Step_Grow, "K2Step_Grow", 1}, {0x448430, K2Step_GrowLaterInit, "K2Step_GrowLaterInit", 1},
+        {0x448470, K2Step_GrowLater, "K2Step_GrowLater", 1}, {0x448520, K2Step_Hold, "K2Step_Hold", 1}, {0x448760, K2_MatrixAngles, "K2_MatrixAngles", 2},
+        {0x48DD10, K2_AnimStep, "K2_AnimStep", 1}, {0x48DCE0, K2_SetAnim, "K2_SetAnim", 2}, {0x48F8C0, Pos_Hidden, "Pos_Hidden", 1},
+        {0x48F9B0, K2_UpdateHidden, "K2_UpdateHidden", 1}, {0x448900, K2_Handler, "K2_Handler", 1}, {0x4489B0, K2_Init, "K2_Init", 1},
+        {0x448B70, K2_Move, "K2_Move", 1}, {0x448BE0, K2_FadeOut, "K2_FadeOut", 1}, {0x448C70, K2_Handler2, "K2_Handler2", 1},
+        {0x448CC0, K2_SplashInit, "K2_SplashInit", 1}, {0x448E10, K2_SplashFall, "K2_SplashFall", 1}, {0x448EB0, K2_FloatA, "K2_FloatA", 1},
+        {0x448FC0, K2_FloatB, "K2_FloatB", 1}, {0x4490D0, K2_Splash, "K2_Splash", 1}, {0x449120, K2_Emitter, "K2_Emitter", 1},
+        {0x449140, K2_EmitterStart, "K2_EmitterStart", 1}, {0x449180, K2_EmitterStep, "K2_EmitterStep", 1}, {0x4494C0, K2_Emitter2, "K2_Emitter2", 1},
+        {0x449530, K2_Emitter2Start, "K2_Emitter2Start", 1}, {0x449650, K2_StepNext, "K2_StepNext", 1}, {0x449660, K2_Emitter2Step, "K2_Emitter2Step", 1}};
+    g_ign_objpads = 1;
+    stubs_install(1);
+    for (int i = 0; i < iters; i++) {
+        for (unsigned j = 0; j < sizeof k / sizeof k[0]; j++) {
+            game_state(); objects_setup(); world_setup();
+            for (u32 q = 0; q < 16; q++) U8(O_OBJ + q * 0x260 + 0xFD) &= 1;
+            U32(0x87F940) = 16;
+            gptr kk = O_K2 + 0xAC * (j >= 29 && j <= 31 ? 19 : j >= 32 || j == 23 ? rnd() % 14 : rnd() % 20);   /* emitters away from the slots they fill */
+            for (u32 a = 0x20; a < 0xAC; a += 4) U32(kk + a) = rnd() % 3 ? rnd() % 0x10000 : rnd();
+            U8(kk + 0x50) = (u8)(rnd() % 4 ? 1 | (rnd() & 6) : rnd() & 6);
+            U8(kk + 0x7B) = rnd() % 10; U8(kk + 0x54) = rnd() % 4; U8(kk + 0x55) = rnd() % 3; U8(kk + 0x7A) = rnd() % 0x10;
+            U8(kk + 0x46) = rnd() % 3; U8(kk + 0x87) = (u8)((kk - O_K2) / 0xAC); U8(kk + 0x86) = rnd() % 4 ? (u8)(rnd() % 20) : 0xFF;
+            gptr src = 0x6CF000 + 0x40 * (rnd() % 4);
+            U8(src) = (u8)rnd(); U8(src + 1) = rnd() % 2; U8(src + 0x18) = (u8)rnd();
+            U32(kk + 0x8C) = rnd() % 3 ? src : 0;
+            u32 pr = rnd() % 5;
+            U32(kk + 0x60) = pr == 0 ? 0 : pr == 1 ? kk : pr == 2 ? O_OBJ + 0x260 * (rnd() % 16) : pr == 3 ? O_K2 + 0xAC * (rnd() % 20) : U32(O_OBJ + 0x260 * (rnd() % 16) + 0x64);
+            if (pr == 4 && rnd() % 2) {                     /* a part of a part of an object */
+                gptr p1 = PART_POOL + 0xCC * (rnd() % 20), p2 = PART_POOL + 0xCC * (20 + rnd() % 20);
+                U32(p1 + 0x58) = rnd() % 2 ? p2 : O_OBJ + 0x260 * (rnd() % 16); U32(p2 + 0x58) = O_OBJ + 0x260 * (rnd() % 16);
+                U32(kk + 0x60) = p1;
+            }
+            for (u32 q = 0; q < 6; q++) U16(kk + 0x6C + 2 * (q & 1)) = rnd() % 2 ? rnd() % 0x120 : (u16)rnd();
+            U16(kk + 0x98) = rnd() % 4 ? rnd() % 4 : (u16)rnd(); U16(kk + 0x9C) = rnd() % 3 ? rnd() % 3 : (u16)rnd(); U16(kk + 0x9E) = rnd() % 3 ? rnd() % 3 : (u16)rnd();
+            U8(kk + 0x64) = rnd() % 3 ? 2 : (u8)rnd();
+            /* the sprite animation list, sometimes at its end or jumping */
+            gptr an = 0x6CF900;
+            for (u32 a = 0; a < 0x80; a += 4) U32(an + a) = rnd();
+            for (u32 q = 0; q < 16; q++) { U8(an + 8 * q + 4) = (u8)((rnd() % 4 == 0 ? 0x20 * (rnd() % 8) : 0) | (rnd() % 16)); U8(an + 8 * q + 5) = rnd() % 3; }
+            U32(kk + 0x90) = an; U32(kk + 0x94) = an + 8 * (rnd() % 8); U16(kk + 0x82) = rnd() % 3;
+            /* emitters */
+            if (j >= 29 && j <= 31) {
+                k2_records(K2_RECS, 2 + rnd() % 8, rnd() % 3);
+                u32 at = rnd() % 3;
+                U32(kk + 0x9C) = K2_RECS + 0x28 * at; U32(kk + 0x98) = rnd();
+                for (u32 q = 0; q < 20; q++) if (O_K2 + 0xAC * q != kk) U8(O_K2 + 0xAC * q + 0x50) &= ~1;   /* the slots it fills are free */
+                U8(kk + 0x50) |= 1;                         /* itself in use */
+                U8(kk + 0xA0) = rnd() % 12; U8(kk + 0xA1) = rnd() % 6; U8(kk + 0xA2) = (u8)(U8(K2_RECS + 0x28 * at + 0xF) - rnd() % 2); U8(kk + 0xA3) = (u8)(U8(kk + 0xA1) + at);   /* as far on as its list */
+                U8(kk + 0xA4) = (u8)rnd(); U16(kk + 0xA8) = rnd() % 2 ? 0 : (u16)rnd();
+                U32(0x87DC88) = 20;
+                for (u32 q = 0; q < 24; q++) U8(O_EFF + q * 0x70 + 0x50) = rnd() % 2;
+                U32(G() + 0x93C) = O_EFF;
+            }
+            if (j == 23) U8(kk + 0x54) = (u8[]){0, 1, 2, 3, 4, 5, 9, 10, 11}[rnd() % 9];
+            if ((j == 23 && U8(kk + 0x54) >= 9) || j == 32) U8(kk + 0x7B) = 0;   /* emitters do not move (+0x98.. are their list) */
+            if (j == 32) U8(kk + 0x54) = rnd() % 4;
+            if (j >= 32 || j == 23) {
+                int nrec = 2 + rnd() % 8;
+                k2_records(K2_RECS, nrec, rnd() % 3);
+                u32 c = rnd() % 3, start = j == 33 || (j == 32 && U8(kk + 0x54) == 0) || (j == 23 && U8(kk + 0x54) == 9);
+                U8(kk + 0x9C) = (u8)(rnd() % (c + 1)); U8(kk + 0x9D) = rnd() % 2 ? 0xFF : (u8)(rnd() % 8);
+                U32(kk + 0x98) = start ? K2_RECS : K2_RECS + 0x28 * c;   /* where it is in its list, counted in +0x9F */
+                U8(kk + 0x50) |= 1;
+                U8(kk + 0x9F) = (u8)c; U8(kk + 0x9E) = (u8)(U8(K2_RECS + 0x28 * c + 0xF) + rnd() % 2);
+                gptr par = rnd() % 2 ? O_OBJ + 0x260 * (1 + rnd() % 15) : O_K2 + 0xAC * (rnd() % 20);
+                if (par == kk) par = O_OBJ + 0x260;
+                U32(kk + 0xA0) = par; U32(par + 0x6C) = rnd() % 0x2000; U8(par + 0x50) = (u8)((U8(par + 0x50) & ~1) | (rnd() % 4 != 0));
+                U32(kk + 0xA4) = (u32[]){0, 2, 4, 0x20, 0x200}[rnd() % 5] | (rnd() & 0xC8) | (u32[]){0, 1, 0x100}[rnd() % 3];   /* one way to follow */
+                U32(kk + 0xA8) = rnd() % 2 ? 0 : rnd();
+                if (j == 33) U32(kk + 0xA4) &= rnd() % 2 ? ~0x221u : ~0u;
+                if (!(U32(kk + 0xA4) & 0x226)) {                /* follows an object's part */
+                    par = O_OBJ + 0x260 * (1 + rnd() % 15);
+                    U32(kk + 0xA0) = par; U32(par + 0x6C) = rnd() % 0x2000; U8(par + 0x50) = (u8)((U8(par + 0x50) & ~1) | (rnd() % 4 != 0));
+                }
+                U8(kk + 0x50) |= 1;                         /* itself in use */
+                U32(G() + 0xA70) = rnd() % 4 ? 0 : rnd() % 14;   /* where slots from the back may be taken: */
+                for (u32 q = 14; q < 20; q++) U8(O_K2 + 0xAC * q + 0x50) &= ~1;   /* free ones there (no slot stolen) */
+            }
+            if (j == 29) U8(kk + 0x54) = rnd() % 3;
+            if (j == 24) U8(kk + 0xA2) = rnd() % 2;
+            if (j == 24 || j == 23) U8(kk + 0x7A) = rnd() % 2;   /* the splash kinds (0x7216F8) */
+            if (j == 26 || j == 27) S16(kk + 0x42) = (s16)(S16(kk + 0xA4) + (s32)(rnd() % 3) - 1);
+            if (j == 25) S16(kk + 0x7E) = (s16)(0x27 + rnd() % 3);
+            U8(G() + 0x852) = rnd() % 4 ? (u8)(rnd() % 20) : 0xFF;
+            Flag_Set(3, 0xA, rnd() % 4 == 0);
+            U32(G() + 0x7BC) = rnd() % 2 ? 0 : O_ZONE;
+            {   /* the camera zone's mask: a rectangle about the middle */
+                s32 l = (s32)(rnd() % 0x4000) - 0x3000, b = (s32)(rnd() % 0x4000) - 0x3000, r = l + 0x800 + (s32)(rnd() % 0x2000), t = b + 0x800 + (s32)(rnd() % 0x2000);
+                s16 q[8] = {(s16)l, (s16)t, (s16)r, (s16)t, (s16)r, (s16)b, (s16)l, (s16)b};
+                for (int c = 0; c < 8; c++) S16(O_ZONE + 0x1C + 2 * c) = q[c];
+            }
+            if (j == 10 && rnd() % 2) {                     /* Grow: the edges 0x100, 0 */
+                if (rnd() % 2) U16(kk + 0x6E) = (u16)(0x100 - U16(kk + 0x9E) + rnd() % 3 - 1);
+                else { U16(kk + 0x6E) = (u16)(rnd() % 0x80); U16(kk + 0x6C) = (u16)(-(s32)U16(kk + 0x9E) + (s32)(rnd() % 3) - 1); }
+            }
+            if (j == 12 && rnd() % 2) { S16(kk + 0x98) = -1; U16(kk + 0x6E) = (u16)(rnd() % 0x80); U16(kk + 0x9A) = 0; U16(kk + 0x6C) = (u16)(0xFF - U16(kk + 0x9C) + rnd() % 3 - 1); }
+            if (j == 22 && rnd() % 2) { U16(kk + 0x6E) = rnd() % 2; U8(kk + 0x70) = (u8)rnd(); }
+            if ((j == 26 || j == 27) && rnd() % 2) U16(kk + 0x48) = (u16)((j == 26 ? 0x500 : 0xD00) - U16(kk + 0x98) + rnd() % 3 - 1);
+            u32 a[2] = {kk, rnd()};
+            if (j == 0 || j == 14) a[1] = 0x6DE100;
+            if (j == 14) { a[0] = kk + 0x20; for (int q = 0; q < 3; q++) U16(0x6DE100 + 2 * q) = (u16)rnd(); }
+            if (j == 16) a[1] = an + 8 * (rnd() % 8);
+            if (j == 17) { a[0] = 0x6DE100; U16(0x6DE100) = (u16)(rnd() % 4000 - 2000); U16(0x6DE104) = (u16)(rnd() % 4000 - 2000); }
+            U32(LOG_BASE) = 0;
+            sprintf(g_what, "slot %X step %u/%u motion %u kind %02X parent %X", kk, U8(kk + 0x54), U8(kk + 0x55), U8(kk + 0x7B), U8(kk + 0x7A), U32(kk + 0x60));
+            check(k[j].addr, k[j].fn, k[j].name, k[j].n, a, j == 1 || j == 15 || j == 17 ? 0xFFFFFFFF : 0);
+        }
+    }
+    stubs_install(0);
+    g_ign_objpads = 0;
+}
+
+/* ---- effect slots: falling drops, bubbles, a sprite stuck to an effect ------------- */
+static void test_k2_drops(void)
+{
+    static const struct { u32 addr; void *fn; const char *name; int n; } k[] = {
+        {0x44B4C0, K2Drops_Start, "K2Drops_Start", 1}, {0x44B540, K2Drops_Back, "K2Drops_Back", 1}, {0x44B660, K2Drops_Spawn, "K2Drops_Spawn", 2},
+        {0x44B5A0, K2Drops_Init, "K2Drops_Init", 1}, {0x44B790, K2Drops_Drop, "K2Drops_Drop", 4}, {0x44B730, K2Drops_Run, "K2Drops_Run", 1},
+        {0x44B9E0, K2Bubbles_Start, "K2Bubbles_Start", 1}, {0x44BA90, K2Bubbles_Keep, "K2Bubbles_Keep", 1}, {0x44BB60, K2Bubble_Init, "K2Bubble_Init", 1},
+        {0x44BCE0, K2Bubble_Rise, "K2Bubble_Rise", 1}, {0x44BD70, K2Bubble_Sink, "K2Bubble_Sink", 1}, {0x44BE00, K2Bubble_Wait, "K2Bubble_Wait", 1},
+        {0x44BE10, K2Bubble_Shrink, "K2Bubble_Shrink", 1}, {0x44B4A0, K2_Drops, "K2_Drops", 1}, {0x44BEF0, K2Stuck_Place, "K2Stuck_Place", 1},
+        {0x44BE30, K2Stuck_Init, "K2Stuck_Init", 1}, {0x44BF30, K2Stuck_Run, "K2Stuck_Run", 1}, {0x44BF80, K2_Stuck, "K2_Stuck", 1}};
+    g_ign_objpads = 1;
+    stubs_install(1);
+    for (int i = 0; i < iters; i++) {
+        for (unsigned j = 0; j < sizeof k / sizeof k[0]; j++) {
+            game_state(); objects_setup(); world_setup();
+            gptr g = G(), pl = O_OBJ;
+            U32(0x87DC88) = 22;
+            gptr kk = O_K2 + 0xAC * (rnd() % 20);
+            for (u32 a = 0x20; a < 0xAC; a += 4) U32(kk + a) = rnd() % 3 ? rnd() % 0x10000 : rnd();
+            U8(kk + 0x50) |= 1; U8(kk + 0x87) = (u8)((kk - O_K2) / 0xAC); U8(kk + 0x86) = rnd() % 4 ? (u8)(rnd() % 20) : 0xFF;
+            U8(g + 0x852) = rnd() % 4 ? (u8)(rnd() % 20) : 0xFF;
+            U32(kk + 0x8C) = 0; U32(kk + 0x60) = rnd() % 2 ? kk : 0;
+            /* the sprite animation lists */
+            gptr an = 0x6CF900;
+            for (u32 a = 0; a < 0x80; a += 4) U32(an + a) = rnd();
+            for (u32 q = 0; q < 16; q++) { U8(an + 8 * q + 4) = (u8)((rnd() % 4 == 0 ? 0x20 * (rnd() % 8) : 0) | (rnd() % 16)); U8(an + 8 * q + 5) = rnd() % 3; }
+            U32(kk + 0x90) = an; U32(kk + 0x94) = an + 8 * (rnd() % 8); U16(kk + 0x82) = rnd() % 3;
+            U32(kk + 0x70) = an + 8 * (rnd() % 8);
+            /* the camera, the screen and the drawing */
+            for (int q = 0; q < 3; q++) {
+                U16(g + 0x798 + 2 * q) = (u16)rnd(); U16(g + 0x7A0 + 2 * q) = (u16)(rnd() % 8000 - 4000);
+                U16(g + 0x7A8 + 2 * q) = (u16)(rnd() % 4000 - 2000);
+            }
+            for (int q = 0; q < 9; q++) S16(g + 0x778 + 2 * q) = (s16)((q % 4 == 0 ? 0x1000 : 0) + (s32)(rnd() % 0x400) - 0x200);
+            for (int q = 0; q < 3; q++) S32(g + 0x78C + 4 * q) = (s32)(rnd() % 600) - 300;
+            gptr tr = 0x6DE200; S32(tr + 0x14) = (s32)(rnd() % 400) - 200; S32(tr + 0x18) = (s32)(rnd() % 400) - 200; S32(tr + 0x1C) = (s32)(rnd() % 2400);
+            SetTransMatrix(tr); SetGeomScreen(0x100 + rnd() % 0x100); SetGeomOffset(160, 120);
+            U8(g + 0xB4B) = rnd() % 4 ? 2 + rnd() % 2 : (u8)rnd();
+            U32(0x87DC98) = 0x6D0000; U32(0x87F94C) = 0x6CF800; U32(0x87DE0C) = rnd() & 1;
+            S16(pl + 0x42) = (s16)(rnd() % 1000 - 500); S16(pl + 0x40) = (s16)(rnd() % 4000 - 0x3CF0 - 2000); S16(pl + 0x44) = (s16)(rnd() % 4000 + 0x36B0 - 2000);
+            if (rnd() % 4 == 0) { S16(pl + 0x40) = (s16)rnd(); S16(pl + 0x44) = (s16)rnd(); }
+            /* the drops near the player's height, colours about to run out */
+            gptr ps[4] = {kk + 0x40, kk + 0x48, kk + 0x7C, kk + 0x6C}, cs[4] = {kk + 0x64, kk + 0x54, kk + 0x68, kk + 0x70};
+            for (int q = 0; q < 4; q++) {
+                S16(ps[q]) = (s16)(rnd() % 600 - 300); S16(ps[q] + 4) = (s16)(rnd() % 600 - 300);
+                S16(ps[q] + 2) = (s16)(S16(pl + 0x42) + (s32)(rnd() % 5) - 2 - (rnd() % 2 ? (s32)(rnd() % 300) : 0));
+                if (q != 1) U8(cs[q]) = rnd() % 2 ? (u8)(6 + rnd() % 12) : (u8)rnd();
+            }
+            /* bubbles: type 10 slots, some on */
+            for (u32 q = 0; q < 22; q++) {
+                gptr e = O_K2 + 0xAC * q;
+                if (e == kk) continue;
+                U8(e + 0x58) = rnd() % 2 ? 0xA : (u8)rnd(); U32(e + 0x50) = rnd() % 3 == 0;
+            }
+            if (j == 6) { for (u32 q = 0; q < 22; q++) if (O_K2 + 0xAC * q != kk) U8(O_K2 + 0xAC * q + 0x50) &= ~1; U32(g + 0xA70) = 0; }
+            S16(kk + 0x7E) = (s16)(rnd() % 2 ? (s32)(rnd() % 7) - 3 - (s32)U16(kk + 0xA2) * 0 : (s32)(rnd() % 2000) - 1000);
+            if (j == 9 && rnd() % 2) S16(kk + 0xA2) = (s16)(-S16(kk + 0x7E) + (s32)(rnd() % 3) - 1);
+            if (j == 10) { S16(kk + 0xA0) = (s16)(S16(kk + 0x42) + (s32)(rnd() % 130) - 64); U16(kk + 0x46) = rnd() % 2 ? 0 : (u16)rnd(); }
+            if (j == 11) U16(kk + 0x46) = (u16)(rnd() % 3 - 1);
+            if (j == 12) { U8(kk + 0x55) = rnd() % 2 ? 0 : (u8)rnd(); U16(kk + 0x6C) = rnd() % 3; }
+            if (j == 0) { U16(kk + 0xA2) = rnd() % 0x40; Flag_Set(8, U16(kk + 0xA2), rnd() % 2); U32(kk + 0x98) = an + 8 * (rnd() % 8); }
+            if (j == 1) U32(kk + 0x9C) = an + 8 * (rnd() % 8);
+            if (j == 13) {
+                U8(kk + 0x54) = rnd() % 15;
+                if (U8(kk + 0x54) == 0) { U16(kk + 0xA2) = rnd() % 0x40; U32(kk + 0x98) = an + 8 * (rnd() % 8); }
+                if (U8(kk + 0x54) == 2) U32(kk + 0x9C) = an + 8 * (rnd() % 8);
+                if (U8(kk + 0x54) == 7) { for (u32 q = 0; q < 22; q++) if (O_K2 + 0xAC * q != kk) U8(O_K2 + 0xAC * q + 0x50) &= ~1; U32(g + 0xA70) = 0; }
+            }
+            if (j >= 14) {                                  /* the effects: some of kind 0x14 */
+                U32(g + 0x948) = O_K3; U32(0x87DE14) = rnd() % 12;
+                for (u32 q = 0; q < 12; q++) { U8(O_K3 + q * 0x34) = (u8)rnd(); U8(O_K3 + q * 0x34 + 1) = rnd() % 3 ? 0x14 : (u8)rnd(); }
+                U8(g + 0x1091) = rnd() % 4; U8(kk + 0x7A) = rnd() % 3 ? (u8)(rnd() % 3) : (u8)rnd();
+                U32(kk + 0x98) = rnd() % 3 == 0 ? 0 : O_K3 + 0x34 * (rnd() % 12);
+                if (j == 17) U8(kk + 0x54) = rnd() % 2;
+            }
+            if (j == 16 || (j == 17 && U8(kk + 0x54) == 1)) U32(kk + 0x94) = an + 8 * (rnd() % 16);
+            u32 a[4] = {kk, ps[0], cs[0], kk + 0x98};
+            if (j == 2) { u32 q = rnd() % 4; a[0] = ps[q]; a[1] = cs[q]; }
+            if (j == 4) { u32 q = rnd() % 4; a[1] = ps[q]; a[2] = cs[q]; a[3] = kk + (q & 1 ? 0x9A : 0x98); }
+            if (j == 4 && rnd() % 3 == 0) {                 /* lands at the screen's edges, x 0 and 320 */
+                for (int q = 0; q < 9; q++) S16(g + 0x778 + 2 * q) = q % 4 == 0 ? 0x1000 : 0;
+                S32(tr + 0x14) = 0; S32(tr + 0x18) = 0; S32(tr + 0x1C) = 0x200;
+                SetTransMatrix(tr); SetGeomScreen(0x100); U8(g + 0xB4B) = 2;
+                S16(a[1]) = (s16)((rnd() % 2 ? 320 : -320) + (s32)(rnd() % 5) - 2); S16(a[1] + 2) = (s16)(S16(pl + 0x42) + 1); S16(a[1] + 4) = 0;
+                U8(a[2]) = 0x80;
+            }
+            U32(LOG_BASE) = 0;
+            sprintf(g_what, "slot %X step %u player y %d tz %d", kk, U8(kk + 0x54), S16(pl + 0x42), S32(tr + 0x1C));
+            check(k[j].addr, k[j].fn, k[j].name, k[j].n, a, 0);
+        }
+    }
+    stubs_install(0);
+    g_ign_objpads = 0;
+}
+
+/* ---- effects that fill effect slots (0x40EED0, 0x4140E0) --------------------------- */
+static void test_eff_slots(void)
+{
+    static const struct { u32 addr; void *fn; const char *name; } k[] = {
+        {0x40EF20, EffSlots_Step, "EffSlots_Step"}, {0x40EEF0, EffSlots_Start, "EffSlots_Start"}, {0x40F210, EffSlots_Wait, "EffSlots_Wait"},
+        {0x40EED0, EffSlots, "EffSlots"}, {0x4140E0, EffArea_Start, "EffArea_Start"}, {0x4141A0, EffArea_Run, "EffArea_Run"}};
+    g_ign_objpads = 1;
+    stubs_install(1);
+    for (int i = 0; i < iters; i++) {
+        for (unsigned j = 0; j < sizeof k / sizeof k[0]; j++) {
+            game_state(); objects_setup(); world_setup();
+            gptr g = G();
+            for (int q = 0; q < 256; q++) U32(TYPE_TAB + 4 * q) = (u32)(uintptr_t)g_recs[STUB_TYPE];
+            U32(0x87DC88) = 20 + rnd() % 3;
+            for (u32 q = 0; q < 22; q++) U8(O_K2 + 0xAC * q + 0x50) = (u8)(rnd() % 3 == 0 ? 1 | (rnd() & 6) : rnd() & 6);
+            U32(g + 0xA70) = rnd() % 4 ? 0 : rnd() % 20;
+            for (u32 q = 0; q < 36 * 0x70; q += 4) U32(O_EFF + q) = rnd();
+            for (u32 q = 0; q < 36; q++) U8(O_EFF + q * 0x70 + 0x50) = rnd() % 2;
+            gptr e = O_K3 + 0x34 * (rnd() % 12);
+            for (u32 a = 0; a < 0x34; a += 4) U32(e + a) = rnd();
+            int nrec = 2 + rnd() % 8;
+            k2_records(K2_RECS, nrec, rnd() % 3);
+            u32 at = rnd() % 3;
+            U32(e + 0x10) = K2_RECS + 0x28 * at; U32(e + 0xC) = 0x6CF900 + 8 * (rnd() % 4);
+            U8(e + 2) = (u8)(rnd() & 0xF); U8(e + 3) = rnd() % 3;
+            S8(e + 0x14) = (s8)(rnd() % 16); U8(e + 0x15) = rnd() % 20; U8(e + 0x17) = rnd() % 2 ? U8(e + 0x15) + (u8)(rnd() % 4) : (u8)(rnd() % 22);
+            S8(e + 0x16) = (s8)(U8(K2_RECS + 0x28 * at + 0xF) - rnd() % 2); U8(e + 0x18) = rnd() % 3 ? (u8)(rnd() % 4) : 0;
+            if (rnd() % 3 == 0) U16(e + 0x1C) = 0;
+            if (rnd() % 4 == 0) S8(e + 0x16) = (s8)(nrec / 2 + 4);   /* past the list's end */
+            if (j >= 4) {
+                U16(g + 0x67C) = rnd() % 10; U8(e + 3) = rnd() % 3 ? 0 : (u8)rnd();
+                U8(e + 0xD) = rnd() % 6; U8(e + 0xC) = (u8)(rnd() % (21 - U8(e + 0xD)));
+            }
+            U32(LOG_BASE) = 0;
+            u32 a[1] = {e};
+            sprintf(g_what, "effect %X step %u flags %X time %d next %u/%u", e, U8(e + 3), U8(e + 2), S8(e + 0x16), U8(e + 0x17), U8(e + 0x15));
+            check(k[j].addr, k[j].fn, k[j].name, 1, a, 0);
+        }
+    }
+    stubs_install(0);
+    g_ign_objpads = 0;
+}
+
 /* ---- the trigger areas' kinds (table 0x738B68) ----------------------------------- */
 static void test_aot_kinds(void)
 {
@@ -3725,7 +3992,7 @@ __declspec(dllexport) void harness_main(int argc, char **argv)
     struct { const char *name; void (*fn)(void); } T[] = {
         {"flags", test_flags}, {"geometry", test_geom}, {"script values", test_script_values},
         {"script opcodes", test_script_ops}, {"script objects", test_objects},
-        {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"objects 2", test_object}, {"collision", test_collision}, {"player", test_player}, {"player states", test_player2}, {"zones", test_zones}, {"loading", test_room}, {"title", test_title}, {"game task", test_game}, {"doors", test_doors}, {"frame", test_frame}, {"enemy sets", test_enemyset}, {"enemies", test_enemies}, {"raptor", test_raptor}, {"aot kinds", test_aot_kinds}, {"object effects", test_obj_effects},
+        {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"objects 2", test_object}, {"collision", test_collision}, {"player", test_player}, {"player states", test_player2}, {"zones", test_zones}, {"loading", test_room}, {"title", test_title}, {"game task", test_game}, {"doors", test_doors}, {"frame", test_frame}, {"enemy sets", test_enemyset}, {"enemies", test_enemies}, {"raptor", test_raptor}, {"aot kinds", test_aot_kinds}, {"object effects", test_obj_effects}, {"effect slots", test_k2}, {"effect drops", test_k2_drops}, {"effect emitters", test_eff_slots},
     };
     for (unsigned i = 0; i < sizeof T / sizeof T[0]; i++) {
         int f0 = g_fail, t0 = g_tests;
