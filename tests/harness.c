@@ -727,6 +727,9 @@ static void ops2_args(u8 op, gptr t)
     case 0x23: A(1) = rnd() % 2 ? 0x6DC000 + rnd() % 0x100 : rnd() % 64;
                U16(g + 0x680) = rnd() % 16; U16(g + 0x682) = rnd() % 12; U16(0x87FFEA) = rnd() % 2; break;
     case 0x24: U8(g + 0xB4A) = rnd() % 3 ? (u8)rnd() : 0xFF; break;
+    case 0x57: U32(0x87DC98) = 0x6D0000; U16(g + 0x664) = rnd() % 5; break;   /* GameOver_Start's prims */
+    case 0x4C: A(0) = 0x6DC000 + rnd() % 0x80;               /* Flash_Play: flash data (n, loops, fades) */
+               U8(A(0)) = 4 + rnd() % 8; break;
     case 0x28: A(2) = rnd() % 12; A(1) = rnd() % 64; A(0) = rnd() % 2; break;
     case 0x29: { s32 v[4] = {-1, -2, -3, (s32)(rnd() % 16 | (rnd() % 8) << 8)}; A(0) = (u32)v[rnd() % 4];
                U8(g + 0x108F) = rnd() % 4; U16(g + 0x10B4) = (u16)(rnd() % 16 | (rnd() % 8) << 8);   /* weapon, sub-weapon */
@@ -1812,6 +1815,7 @@ static void test_player2(void)
         do anim_setup_at(o); while (0);
         U32(o + 0x64) = AN_PART; U8(o + 0x55) = rnd() % 3; U8(G() + 0x108F) = rnd() % 2 ? 2 : rnd() % 10;
         a[0] = o;
+        U32(0x87DC98) = 0x6D0000; stub_at(0x4C08A0)->ret = rnd();   /* GameOver_Start's prims */
         sprintf(g_what, "die %u char %u", U8(o + 0x55), U8(G() + 0x108F));
         check(0x47DAB0, Player_Die, "Player_Die", 1, a, 0);
         U8(o + 0x55) = rnd() % 8;
