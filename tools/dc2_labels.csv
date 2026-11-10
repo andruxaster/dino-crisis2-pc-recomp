@@ -133,7 +133,7 @@ address,kind,name,category,confidence,notes
 0x4BF2A0,func,Input_SetJoyBind,input,low,table 0x8660FE
 0x4BF140,func,Input_KeyLookup,input,low,pairs @0x73BB98
 0x4BD480,func,PC_SetBuffer,pc-only,low,"free old, store 0x865EE4"
-0x4D2990,func,JPEG_Decode,libjpeg,high,"(dst, src, size, mode): IJG libjpeg wrapper; DBS backgrounds 320x240 -> 16-bit RGB"
+0x4D2990,func,JPEG_Decode,libjpeg,high,"(dst, src, size, mode): IJG libjpeg 6b wrapper, mode 2 = colour space 6 (15-bit, blue high), JDCT_FLOAT; DBS backgrounds 320x240; rewritten: src/pc/jpeg.c"
 0x4D7290,func,Stub_Return0,pc-only,high,returns 0; PS1 call stubbed (CdSync/VSync-like?)
 0x4C2900,func,Task_RunAll,scheduler,high,
 0x4C2967,func,Task_InitStackBase,scheduler,high,

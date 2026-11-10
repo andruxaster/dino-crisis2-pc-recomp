@@ -44,6 +44,22 @@ void DC2CALL Masks_ShiftDepth(u32 d);                   /* 0x4BE6A0: all masks d
 u32  DC2CALL Masks_FillMarker(u32 i, gptr p);           /* 0x4BEC40: mask i into the marker p; its z */
 void DC2CALL SetMaskMarker(gptr p);                     /* 0x4C06B0: code 0x88 */
 
+/* the GPU layer (DirectDraw/Direct3D): the original in-process, src/pc/gpu.c
+   standalone (include/dc2/gpu.h) */
+void DC2CALL Gpu_AddPrim(gptr ot, gptr p);                  /* 0x4C05D0 */
+void DC2CALL Gpu_DrawOT(gptr ot, gptr a, gptr b);           /* 0x4C0600: AddPrims, the chain a..b into ot */
+void DC2CALL Gpu_SetSprt(gptr p);                           /* 0x4C0690 */
+void DC2CALL Gpu_SetTile(gptr p);                           /* 0x4C06A0 */
+void DC2CALL Gpu_SetSemiTrans(gptr p, u32 on);              /* 0x4C06C0 */
+void DC2CALL Gpu_SetDrawArea(gptr p, gptr r);               /* 0x4C06E0 */
+void DC2CALL Gpu_SetDrawMode(gptr p, u32 dfe, u32 dtd, u32 tpage, u32 tw); /* 0x4C06F0 */
+u32  DC2CALL Gpu_GetTPage(u32 tp, u32 abr, u32 x, u32 y);   /* 0x4C08A0 */
+void DC2CALL Gpu_LoadImage(gptr rect, gptr p);              /* 0x4B4D20 */
+void DC2CALL Gpu_LoadImageIfChanged(gptr rect, gptr p);     /* 0x4B4DB0 */
+void DC2CALL Gpu_StoreImage(gptr rect, gptr p);             /* 0x4B49F0 */
+/* a JPEG (size bytes) to dst; mode 2: 15-bit RGB, width*2 bytes a row */
+void DC2CALL JPEG_Decode(gptr dst, gptr src, u32 size, u32 mode); /* 0x4D2990 */
+
 /* the pads (DirectInput): raw buttons into 0x87DC42 + 0x24 * pad */
 void DC2CALL Input_ReadPad(u32 pad);                    /* 0x4BEF40 */
 #ifndef DC2_IN_PROCESS

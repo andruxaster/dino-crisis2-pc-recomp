@@ -2,6 +2,7 @@
 #include "dc2/pcio.h"
 #include "dc2/game.h"
 #include "dc2/gte.h"
+#include "dc2/gpu.h"
 
 #ifdef DC2_IN_PROCESS
 #define ORIG(addr, type) ((type)(uintptr_t)(addr))
@@ -26,6 +27,18 @@ void DC2CALL Strm_SetVolume(u32 h, s32 v)       { ORIG(0x4BFF20, void (DC2CALL *
 void DC2CALL Strm_Play(u32 h)                   { ORIG(0x4BFEE0, void (DC2CALL *)(u32))(h); }
 void DC2CALL Strm_Stop(u32 h)                   { ORIG(0x4BFFA0, void (DC2CALL *)(u32))(h); }
 void DC2CALL Input_ReadPad(u32 p)               { ORIG(0x4BEF40, void (DC2CALL *)(u32))(p); }
+void DC2CALL Gpu_AddPrim(gptr o, gptr p)        { ORIG(0x4C05D0, void (DC2CALL *)(gptr, gptr))(o, p); }
+void DC2CALL Gpu_DrawOT(gptr o, gptr a, gptr b) { ORIG(0x4C0600, void (DC2CALL *)(gptr, gptr, gptr))(o, a, b); }
+void DC2CALL Gpu_SetSprt(gptr p)                { ORIG(0x4C0690, void (DC2CALL *)(gptr))(p); }
+void DC2CALL Gpu_SetTile(gptr p)                { ORIG(0x4C06A0, void (DC2CALL *)(gptr))(p); }
+void DC2CALL Gpu_SetSemiTrans(gptr p, u32 on)   { ORIG(0x4C06C0, void (DC2CALL *)(gptr, u32))(p, on); }
+void DC2CALL Gpu_SetDrawArea(gptr p, gptr r)    { ORIG(0x4C06E0, void (DC2CALL *)(gptr, gptr))(p, r); }
+void DC2CALL Gpu_SetDrawMode(gptr p, u32 a, u32 b, u32 t, u32 w) { ORIG(0x4C06F0, void (DC2CALL *)(gptr, u32, u32, u32, u32))(p, a, b, t, w); }
+u32  DC2CALL Gpu_GetTPage(u32 t, u32 a, u32 x, u32 y) { return ORIG(0x4C08A0, u32 (DC2CALL *)(u32, u32, u32, u32))(t, a, x, y); }
+void DC2CALL Gpu_LoadImage(gptr r, gptr p)      { ORIG(0x4B4D20, void (DC2CALL *)(gptr, gptr))(r, p); }
+void DC2CALL Gpu_LoadImageIfChanged(gptr r, gptr p) { ORIG(0x4B4DB0, void (DC2CALL *)(gptr, gptr))(r, p); }
+void DC2CALL Gpu_StoreImage(gptr r, gptr p)     { ORIG(0x4B49F0, void (DC2CALL *)(gptr, gptr))(r, p); }
+void DC2CALL JPEG_Decode(gptr d, gptr s, u32 n, u32 m) { ORIG(0x4D2990, void (DC2CALL *)(gptr, gptr, u32, u32))(d, s, n, m); }
 void DC2CALL Snd_SetPan(u32 h, u32 p)           { ORIG(0x4BFA60, void (DC2CALL *)(u32, u32))(h, p); }
 void DC2CALL Strm_Close(u32 h)                  { ORIG(0x4C0050, void (DC2CALL *)(u32))(h); }
 u32  DC2CALL Movie_Open(gptr n, u32 w, u32 h)   { return ORIG(0x4BF3A0, u32 (DC2CALL *)(gptr, u32, u32))(n, w, h); }
@@ -182,5 +195,17 @@ u32 DC2CALL Masks_FillMarker(u32 i, gptr p)
     U16(p + 0xE) = U16(t + 0x54); U16(p + 0xC) = U16(t + 0x94);
     return U32(t + 0x74);
 }
-void DC2CALL SetMaskMarker(gptr p) { U32(p + 4) = 0x88000000; }
+void DC2CALL SetMaskMarker(gptr p) { PcGpu_SetMaskMarker(p); }
+void DC2CALL Gpu_AddPrim(gptr o, gptr p) { PcGpu_AddPrim(o, p); }
+void DC2CALL Gpu_DrawOT(gptr o, gptr a, gptr b) { PcGpu_AddPrims(o, a, b); }
+void DC2CALL Gpu_SetSprt(gptr p) { PcGpu_SetSprt(p); }
+void DC2CALL Gpu_SetTile(gptr p) { PcGpu_SetTile(p); }
+void DC2CALL Gpu_SetSemiTrans(gptr p, u32 on) { PcGpu_SetSemiTrans(p, on); }
+void DC2CALL Gpu_SetDrawArea(gptr p, gptr r) { PcGpu_SetDrawArea(p, r); }
+void DC2CALL Gpu_SetDrawMode(gptr p, u32 a, u32 b, u32 t, u32 w) { PcGpu_SetDrawMode(p, a, b, t, w); }
+u32  DC2CALL Gpu_GetTPage(u32 t, u32 a, u32 x, u32 y) { return PcGpu_GetTPage(t, a, x, y); }
+void DC2CALL Gpu_LoadImage(gptr r, gptr p) { PcGpu_LoadImage(r, p); }
+void DC2CALL Gpu_LoadImageIfChanged(gptr r, gptr p) { PcGpu_LoadImageIfChanged(r, p); }
+void DC2CALL Gpu_StoreImage(gptr r, gptr p) { PcGpu_StoreImage(r, p); }
+void DC2CALL JPEG_Decode(gptr d, gptr s, u32 n, u32 m) { PcJpeg_Decode(d, s, n, m); }
 #endif

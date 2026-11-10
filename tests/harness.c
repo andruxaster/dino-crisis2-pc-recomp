@@ -11,10 +11,12 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include <float.h>
 #include "dc2/game.h"
 #include "../src/hook/hooks.h"
 #include "dc2/orig.h"
 #include "dc2/gte.h"
+#include "dc2/gpu.h"
 #include "dc2/task.h"
 
 u8 *g_membase = (u8 *)IMAGE_BASE;
@@ -71,6 +73,7 @@ static void restore(u8 **src) { for (int i = 0; i < 2; i++) memcpy(MEM(RW[i].lo)
 
 static int g_fail, g_tests;
 static u32 g_ign_addr, g_ign_len;    /* bytes the original fills with stack garbage */
+static u32 g_ign2_addr, g_ign2_len;  /* a second such range */
 static int g_ign_objpads;            /* matrix pads (+0x32) of test objects and parts */
 static int g_ign_door;               /* door scene: matrix pads */
 static int g_ign_campad;             /* the camera matrix's pad (G+0x78A) */
@@ -144,6 +147,10 @@ static int compare(const char *name, u32 r_orig, u32 r_new, u32 rmask)
         for (int i = 0; i < 2; i++)
             if (g_ign_addr + k >= RW[i].lo && g_ign_addr + k < RW[i].hi)
                 snap1[i][g_ign_addr + k - RW[i].lo] = U8(g_ign_addr + k);
+    for (u32 k = 0; k < g_ign2_len; k++)
+        for (int i = 0; i < 2; i++)
+            if (g_ign2_addr + k >= RW[i].lo && g_ign2_addr + k < RW[i].hi)
+                snap1[i][g_ign2_addr + k - RW[i].lo] = U8(g_ign2_addr + k);
     for (int i = 0; i < 2; i++) {
         u8 *cur = MEM(RW[i].lo);
         u32 n = RW[i].hi - RW[i].lo;
@@ -4279,6 +4286,116 @@ static void test_draw(void)
     stubs_install(0);
 }
 
+
+/* ---- the PC port's GPU layer (src/pc/gpu.c) ----------------------------------------- */
+static void test_pcgpu(void)
+{
+    gptr ot = 0x5B0000, pr = 0x5B0100, buf = 0x5B1000, rect = 0x5B0F00;
+    for (int i = 0; i < iters; i++) {
+        for (u32 k = 0; k < 0x100; k += 4) { U32(ot + k) = rnd(); U32(pr + k) = rnd(); }
+        if (rnd() % 3 == 0) U8(pr + 7) = 0;                 /* no code: a plain link */
+        u32 a[6] = {ot + 4 * (rnd() % 4), pr, pr + 0x40, 0, 0, 0};
+        if (rnd() % 3 == 0) U8(pr + 0x47) = 0;
+        sprintf(g_what, "ot %X prim %X code %02X", a[0], a[1], U8(pr + 7));
+        check(0x4C05D0, PcGpu_AddPrim, "PcGpu_AddPrim", 2, a, 0);
+        check(0x4C0600, PcGpu_AddPrims, "PcGpu_AddPrims", 3, a, 0);
+        u32 b[6] = {pr, rnd() % 3 ? rnd() % 2 : rnd(), 0, 0, 0, 0};
+        check(0x4C0690, PcGpu_SetSprt, "PcGpu_SetSprt", 1, b, 0);
+        check(0x4C06A0, PcGpu_SetTile, "PcGpu_SetTile", 1, b, 0);
+        check(0x4C06B0, PcGpu_SetMaskMarker, "PcGpu_SetMaskMarker", 1, b, 0);
+        check(0x4C06C0, PcGpu_SetSemiTrans, "PcGpu_SetSemiTrans", 2, b, 0);
+        check(0x4C06E0, PcGpu_SetDrawArea, "PcGpu_SetDrawArea", 2, b, 0);
+        u32 d[6] = {pr, rnd() % 3 ? rnd() % 2 : rnd(), rnd() % 3 ? rnd() % 2 : rnd(), rnd(), rnd(), 0};
+        check(0x4C06F0, PcGpu_SetDrawMode, "PcGpu_SetDrawMode", 5, d, 0);
+        u32 t[6] = {rnd() % 2 ? rnd() % 4 : rnd(), rnd() % 2 ? rnd() % 4 : rnd(), rnd() % 2 ? rnd() % 0x400 : rnd(), rnd() % 2 ? rnd() % 0x200 : rnd(), 0, 0};
+        check(0x4C08A0, PcGpu_GetTPage, "PcGpu_GetTPage", 4, t, 0xFFFFFFFF);
+        /* VRAM: a rect in (or past) 1024 x 512, data from buf */
+        s16 w = (s16)(1 + rnd() % 64), h = (s16)(rnd() % 16), x = (s16)(rnd() % 4 ? rnd() % (0x401 - w) : 0x400 - w + 1 + rnd() % 8),
+            y = (s16)(rnd() % 4 ? rnd() % (0x201 - h) : 0x200 - h + 1 + rnd() % 8);
+        if (rnd() % 4 == 0) x = (s16)(0x400 - w + (s32)(rnd() % 2));   /* at the right edge (and one past) */
+        if (rnd() % 4 == 0) y = (s16)(0x200 - h + (s32)(rnd() % 2));
+        S16(rect) = x; S16(rect + 2) = y; S16(rect + 4) = w; S16(rect + 6) = h;
+        for (u32 k = 0; k < 0x1000; k += 4) U32(buf + k) = rnd();
+        u32 v[6] = {rect, buf, 0, 0, 0, 0};
+        sprintf(g_what, "rect %d,%d %dx%d", x, y, w, h);
+        check(0x4B4D20, PcGpu_LoadImage, "PcGpu_LoadImage", 2, v, 0);
+        if (x + w <= 0x400 && y + h <= 0x200) {
+            for (u32 k = 0; k < 0x1000; k += 4) U32(buf + k) = rnd();
+            check(0x4B49F0, PcGpu_StoreImage, "PcGpu_StoreImage", 2, v, 0);
+            /* CLUT rows: some the same as VRAM already */
+            for (s32 r = 0; r < h; r++)
+                if (rnd() % 2) memcpy(MEM(buf + 2 * w * r), MEM(VRAM_BASE + 2 * ((u32)(y + r) * 0x400 + x)), 2 * w);
+                else if (rnd() % 2) U16(buf + 2 * w * r + 2 * (rnd() % w)) ^= (u16)(1u << (rnd() % 16));
+            /* the original's palettes converted to its D3D texture format: row stamps and buffers */
+            for (u32 r = 0; r < 0x200; r++) U32(0x75CEEC + 8 * r) = 0x5B8000;
+            g_ign_addr = 0x75CEE8; g_ign_len = 0x1000; g_ign2_addr = 0x5B8000; g_ign2_len = 0x2000;
+            check(0x4B4DB0, PcGpu_LoadImageIfChanged, "PcGpu_LoadImageIfChanged", 2, v, 0);
+            g_ign_len = 0; g_ign2_len = 0;
+        }
+    }
+}
+
+/* ---- the rooms' JPEG backgrounds (libjpeg 6b, 0x4D2990) --------------------------- */
+static u32 __cdecl host_malloc(u32 n) { return (u32)(uintptr_t)malloc(n); }
+static u32 __cdecl host_free(u32 p) { free((void *)(uintptr_t)p); return 0; }
+static u32 __cdecl host_getenv(u32 name) { (void)name; return 0; }   /* (libjpeg asks for JPEGMEM) */
+static u32 __cdecl host_jerr(u32 f, u32 fmt, u32 msg) { (void)f; (void)fmt; (void)msg; return 0; }
+
+/* every camera picture of the DBS files (record: JPEG at +0x1000, its size at
+   +0x24), decoded by the original and by PcJpeg_Decode into 0x6C1500; a few
+   also cut short or with bytes changed (libjpeg's own recovery) */
+static void test_jpeg(const char *dir)
+{
+    static const u32 fn[4] = {0x4DD711, 0x4DD628, 0x4DE357, 0x4DE4F3};
+    void *impl[4] = {host_malloc, host_free, host_jerr, host_getenv};
+    u8 saved[4][5];
+    for (int k = 0; k < 4; k++) {                   /* the CRT's malloc, free, fprintf, getenv: the host's */
+        u8 *c = MEM(fn[k]); memcpy(saved[k], c, 5);
+        c[0] = 0xE9; *(u32 *)(c + 1) = (u32)(uintptr_t)impl[k] - (fn[k] + 5);
+    }
+    unsigned fpu = _controlfp(0, 0);
+    _controlfp(_PC_24, _MCW_PC);                    /* the x87 as Direct3D leaves it in the game */
+    char pat[MAX_PATH]; snprintf(pat, sizeof pat, "%s\\*.DBS", dir);
+    WIN32_FIND_DATAA fd; HANDLE h = FindFirstFileA(pat, &fd);
+    u8 *src = malloc(0x40000 + 16);                 /* (+ 2 fill bytes) */
+    int n = 0;
+    if (h != INVALID_HANDLE_VALUE) {
+        do {
+            char path[MAX_PATH]; snprintf(path, sizeof path, "%s\\%s", dir, fd.cFileName);
+            if (!load_host(path)) continue;
+            for (u32 o = 0; o + 0x1004 < g_fake_len; o += 0x800) {
+                const u8 *j = (u8 *)g_fake + o + 0x1000;
+                u32 size = *(u32 *)((u8 *)g_fake + o + 0x24);
+                if (j[0] != 0xFF || j[1] != 0xD8 || j[2] != 0xFF || !size || size > 0x40000 || o + 0x1000 + size > g_fake_len) continue;
+                memcpy(src, j, size);
+                u32 sz = size;
+                if (n % 8 == 3) {                   /* fill bytes before a stuffed FF (FF FF 00: legal, same picture) */
+                    u32 at = size / 2;
+                    while (at + 1 < size && !(src[at] == 0xFF && src[at + 1] == 0)) at++;
+                    if (at + 1 < size) { memmove(src + at + 2, src + at, size - at); src[at] = src[at + 1] = 0xFF; sz = size + 2; }
+                }
+                if (n % 8 == 7) {                   /* damaged: bytes changed in the scan, or the end cut off */
+                    if (rnd() % 2) sz = size / 2 + rnd() % (size / 2);
+                    else for (int k = 0; k < 4; k++) {     /* (no new markers: libjpeg's fatal errors exit) */
+                        u32 at = size / 2 + rnd() % (size / 2 - 2); u8 v = (u8)(src[at] ^ (1 + rnd() % 255));
+                        if (src[at] != 0xFF && src[at - 1] != 0xFF && v != 0xFF) src[at] = v;
+                    }
+                }
+                memset(MEM(0x6C1500), 0, 320 * 240 * 2);
+                U16(0x87B728) = 0;                  /* (the source's fake EOI buffer: written when the data runs out) */
+                u32 a[4] = {0x6C1500, (u32)(uintptr_t)src, sz, 2};
+                sprintf(g_what, "%s +%X size %X of %X", fd.cFileName, o, sz, size);
+                check(0x4D2990, PcJpeg_Decode, "PcJpeg_Decode", 4, a, 0);
+                n++;
+            }
+        } while (FindNextFileA(h, &fd) && n < iters);
+        FindClose(h);
+    }
+    free(src);
+    for (int k = 0; k < 4; k++) memcpy(MEM(fn[k]), saved[k], 5);
+    _controlfp(fpu, _MCW_PC);
+}
+
 /* ---- the trigger areas' kinds (table 0x738B68) ----------------------------------- */
 static void test_aot_kinds(void)
 {
@@ -4834,7 +4951,7 @@ __declspec(dllexport) void harness_main(int argc, char **argv)
     struct { const char *name; void (*fn)(void); } T[] = {
         {"flags", test_flags}, {"geometry", test_geom}, {"script values", test_script_values},
         {"script opcodes", test_script_ops}, {"script objects", test_objects},
-        {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"objects 2", test_object}, {"collision", test_collision}, {"player", test_player}, {"player states", test_player2}, {"zones", test_zones}, {"loading", test_room}, {"title", test_title}, {"game task", test_game}, {"doors", test_doors}, {"frame", test_frame}, {"enemy sets", test_enemyset}, {"enemies", test_enemies}, {"raptor", test_raptor}, {"aot kinds", test_aot_kinds}, {"object effects", test_obj_effects}, {"effect slots", test_k2}, {"effect drops", test_k2_drops}, {"effect emitters", test_eff_slots}, {"effect slots 3", test_k2_more}, {"helpers", test_helpers}, {"draw", test_draw},
+        {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"objects 2", test_object}, {"collision", test_collision}, {"player", test_player}, {"player states", test_player2}, {"zones", test_zones}, {"loading", test_room}, {"title", test_title}, {"game task", test_game}, {"doors", test_doors}, {"frame", test_frame}, {"enemy sets", test_enemyset}, {"enemies", test_enemies}, {"raptor", test_raptor}, {"aot kinds", test_aot_kinds}, {"object effects", test_obj_effects}, {"effect slots", test_k2}, {"effect drops", test_k2_drops}, {"effect emitters", test_eff_slots}, {"effect slots 3", test_k2_more}, {"helpers", test_helpers}, {"draw", test_draw}, {"pc gpu", test_pcgpu},
     };
     for (unsigned i = 0; i < sizeof T / sizeof T[0]; i++) {
         int f0 = g_fail, t0 = g_tests;
@@ -4848,6 +4965,8 @@ __declspec(dllexport) void harness_main(int argc, char **argv)
                 printf("%-16s %6d checks, %d failed\n", "files", g_tests - t0, g_fail - f0);
                 f0 = g_fail; t0 = g_tests; test_root();
                 printf("%-16s %6d checks, %d failed\n", "root", g_tests - t0, g_fail - f0); }
+    if (data && (!only || !strcmp(only, "data") || !strcmp(only, "jpeg"))) { int f0 = g_fail, t0 = g_tests; test_jpeg(data);
+                printf("%-16s %6d checks, %d failed\n", "jpeg", g_tests - t0, g_fail - f0); }
     printf("hook table: %d functions; total %d checks, %d failed\n", g_nhooks, g_tests, g_fail);
     fflush(stdout);
     TerminateProcess(GetCurrentProcess(), g_fail != 0);

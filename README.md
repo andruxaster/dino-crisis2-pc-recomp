@@ -25,7 +25,7 @@ One source tree, three builds:
 | build | what | status |
 |---|---|---|
 | `build/dinput.dll` | hook DLL: put next to `Dino2.exe`, redirects the original functions to the C ones | runs inside the game |
-| `build/harness_stub.exe` + `harness.dll` | checks every C function against the original code | 858 functions, ~2 140 000 checks, 0 differences |
+| `build/harness_stub.exe` + `harness.dll` | checks every C function against the original code | 858 functions + the PC layer (GPU memory side, JPEG), ~2 166 000 checks, 0 differences |
 | `build/dc2` (Linux) | the game started like WinMain: task system, root task, per-frame work; headless, prints a trace | boots: CORE.DAT, warning and Capcom screens, save scan, title (menu, opening movie / attract demo in turn); buttons can be given on the command line; New Game runs the opening and the game task into room ST101 (file loads, room set-up, room script start); sets up the player; its first state loads the weapon set and stops at the model set-up (Model_Setup 0x48D8B0, not rewritten yet) |
 | `build/smoke` (Linux) | the C game code without any exe code, on an emulated memory image | rooms loaded and set up by the game's own code (File_Process, Room_SetPointers, Script_Init), script VM, animation: 80 of 89 room scripts run 600 frames; 9 stop on cutscene data (SCxx.DAT) that is not loaded yet |
 
@@ -110,6 +110,8 @@ The authoritative list is `src/hook/hooks.c`. By area:
 | velociraptor | handler (damage, movement, collisions), init by level, the choice of the next state, normal sub-states (wait, walk, cry, back off, eat, entrance, feint), jumps and climbs, the attacks (pounce, lunge, side bite, leap, tail) and their hits on the player, the hits it takes (flinch, knock-back, blown back, thrown in the air, burnt, drowned), death | src/game/raptor.c |
 | doors (room change) | Door_Task and its modes (set-up: the stand-in, door models, camera, light, room name; run: area switch, room and music loads; end), all door types' handlers: hinged, shutter, sliding and double doors, lifts, stairs, camera drop, waits, message, walk; the score panel after a fight | src/game/door.c |
 | PC layer: GTE | all 80 libgte functions of the port (0x4C08E0..0x4C24C0): rsin/rcos/ratan2, roots, geometry state, Apply/Mul/Rot/Scale/Transpose matrix, RotTransPers 1/3/4 and the float projection, depth cue, normal colour, register loads/stores, rtps/rtpt/nclip/ncct, PC depth stores | src/game/gte.c, include/dc2/gte.h |
+| PC layer: GPU, memory side | primitives linked into the ordering tables, sprite/tile/mode/area packets, texture page words, the software VRAM (1024x512 at 0x76448C: LoadImage, StoreImage, the CLUT rows load); the renderer is told which rects changed. Tested in the harness, called by the standalone builds (the DLL keeps the originals: they also drop the Direct3D texture cache) | src/pc/gpu.c, include/dc2/gpu.h |
+| PC layer: JPEG | the rooms' backgrounds (0x4D2990): a baseline decoder that gives libjpeg 6b's pixels as the port set it up (float IDCT, fancy upsampling, 15-bit output with blue high); checked on every camera picture of the DBS files, also cut short and damaged | src/pc/jpeg.c |
 
 The game runs as cooperative tasks (4 slots, `Task_Sleep(n)` gives up the
 CPU for n frames). In-process the original scheduler switches stacks; the
@@ -142,6 +144,13 @@ the original stores a float; with `-fexcess-precision=standard` on the
 word in the harness and in the DLL). Other compilers/CPUs (the Dreamcast)
 get the same formulas with their own rounding: screen positions may differ
 in the last bit, which only matters for drawing.
+
+The JPEG decoder is the exception that must be exact everywhere: its float
+IDCT runs with the x87 at single precision in the game (Direct3D sets it),
+so `jpeg.c` uses plain `float` arithmetic, float constants as objects and a
+quantization table rounded in integers. That gives the same bits with SSE,
+on the SH-4 and on the x87 at single precision (the harness sets it for
+that test).
 
 The original leaves stack garbage in a few padding words (MATRIX +0x12
 after MulMatrix0/RotMatrix*, OuterProduct12 out +12); the C code leaves them
