@@ -13,6 +13,30 @@ void DC2CALL PcGpu_AddPrim(gptr ot, gptr p)                         /* 0x4C05D0 
     U32(ot) = p;
 }
 
+/* an order table of n entries cleared, linked from the last to the first,
+   the first ending at the terminator 0x73C04C */
+void DC2CALL PcGpu_ClearOTagR(gptr ot, s32 n)                       /* 0x4C0870 */
+{
+    gptr e = ot + (u32)n * 4 - 4;
+    for (s32 i = n - 1; i > 0; i--, e -= 4) U32(e) = e - 4;
+    U32(e) = 0x73C04C;
+}
+
+/* a display environment: the area shown */
+void DC2CALL PcGpu_SetDefDispEnv(gptr env, s32 x, s32 y, s32 w, s32 h)   /* 0x4C07F0 */
+{
+    U16(env) = (u16)x; U16(env + 2) = (u16)y; U16(env + 4) = (u16)w; U16(env + 6) = (u16)h;
+}
+
+/* a drawing environment: the clip area, texture window 256 x 256, dithered,
+   drawing to the shown area, no background clear (the offset left as it is) */
+void DC2CALL PcGpu_SetDefDrawEnv(gptr env, s32 x, s32 y, s32 w, s32 h)   /* 0x4C0820 */
+{
+    U16(env) = (u16)x; U16(env + 2) = (u16)y; U16(env + 4) = (u16)w; U16(env + 6) = (u16)h;
+    U16(env + 0xC) = 0; U16(env + 0xE) = 0; U16(env + 0x10) = 0x100; U16(env + 0x12) = 0x100;
+    U8(env + 0x16) = 1; U8(env + 0x17) = 1; U32(env + 0x18) = 0;
+}
+
 /* the chain p0 .. p1 linked at the head of ot */
 void DC2CALL PcGpu_AddPrims(gptr ot, gptr p0, gptr p1)              /* 0x4C0600 */
 {

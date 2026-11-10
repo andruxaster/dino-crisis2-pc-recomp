@@ -4,6 +4,7 @@
  * Record: u32 type, u32 size, u32 arg (destination / slot), u32 arg2, ...;
  * data is sector (0x800) aligned after the header. */
 #include "dc2/game.h"
+#include "dc2/pcdraw.h"
 #include "dc2/orig.h"
 #include "dc2/pcio.h"
 
@@ -171,7 +172,7 @@ void DC2CALL File_PcBuffer(gptr rec, gptr src)                      /* 0x4048F0 
     if (U32(A_PC_BUFFER)) return;
     U32(A_PC_BUFFER) = Crt_malloc(U32(rec + 4));
     memmove(MEM(U32(A_PC_BUFFER)), MEM(src), U32(rec + 4));
-    Pc_SetBuffer(U32(A_PC_BUFFER));
+    PcDraw_SetFont(U32(A_PC_BUFFER));
 }
 
 static void (DC2CALL *const g_file_handlers[8])(gptr, gptr) = {

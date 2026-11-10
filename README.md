@@ -49,7 +49,17 @@ whole game logic is in C.
 
     make            # needs i686-w64-mingw32-gcc
     make check      # harness under wine (DINO2=.../Dino2.exe DATA=.../Data)
-    make linux      # native static library + build/smoke
+    make linux      # native static library + build/smoke + build/dc2
+    make dc2gl      # build/dc2gl: dc2 in a window (SDL2 + OpenGL)
+
+`dc2gl Dino2.exe ROOT/Data [FRAMES] [presses]` takes the pad from the
+keyboard as well (arrows, Z confirm, X back, C action, Enter start; Escape
+quits). `DC2_STATS=1` prints each frame in numbers (draws, vertices, texture
+uploads, mean colour, share of lit pixels), `DC2_DRAWLOG=F` (and
+`DC2_DRAWLOG_N`) every draw of frames F.., `DC2_FAST=1` runs without frame
+pacing, `DC2_SCALE=n` enlarges the window. `src/port/dc/render_pvr.c` needs
+KallistiOS; without a KOS toolchain it can be syntax-checked with
+`sh4-linux-gnu-gcc -fsyntax-only` against KOS's headers.
 
 The harness exe is based at 0x400000 with a large .bss, so that the range of
 the game image is free; `harness.dll` copies the game sections there, calls
@@ -112,7 +122,8 @@ The authoritative list is `src/hook/hooks.c`. By area:
 | PC layer: GTE | all 80 libgte functions of the port (0x4C08E0..0x4C24C0): rsin/rcos/ratan2, roots, geometry state, Apply/Mul/Rot/Scale/Transpose matrix, RotTransPers 1/3/4 and the float projection, depth cue, normal colour, register loads/stores, rtps/rtpt/nclip/ncct, PC depth stores | src/game/gte.c, include/dc2/gte.h |
 | PC layer: GPU, memory side | primitives linked into the ordering tables, sprite/tile/mode/area packets, texture page words, the software VRAM (1024x512 at 0x76448C: LoadImage, StoreImage, the CLUT rows load, with the texture cache invalidation and palette conversion of the drawing layer). Tested in the harness, called by the standalone builds (the DLL keeps the originals) | src/pc/gpu.c, include/dc2/gpu.h |
 | PC layer: JPEG | the rooms' backgrounds (0x4D2990): a baseline decoder that gives libjpeg 6b's pixels as the port set it up (float IDCT, fancy upsampling, 15-bit output with blue high); checked on every camera picture of the DBS files, also cut short and damaged | src/pc/jpeg.c |
-| PC layer: drawing | DrawOTag (0x4B50F0) and all it draws with: the packet drawers (polygons flat/gouraud/textured, lines, tiles, sprites, the font's text quads, the frame copy, background mask groups), vertex colour, fog, blending, depth and shading states, the texture cache (VRAM pages and palettes converted into 256x256 textures, found again by palette and window, reloaded when VRAM or a palette changes, released or marked when VRAM is written), the glyph cache, the pixel converters, VRAM copies, the frame grab. Copied call for call onto the Direct3D 6 calls of `include/dc2/gpudev.h` (COM in-process, a renderer standalone); the harness runs the original and the copy against a fake Direct3D that logs every call. Not yet: code 0x84 (a sprite composed from parts; not seen in the game's frames so far) | src/pc/drawot.c, src/pc/gpudev.c, include/dc2/pcdraw.h, include/dc2/gpudev.h |
+| PC layer: drawing | DrawOTag (0x4B50F0) and all it draws with: the packet drawers (polygons flat/gouraud/textured, lines, tiles, sprites, the font's text quads, the frame copy, background mask groups), vertex colour, fog, blending, depth and shading states, the texture cache (VRAM pages and palettes converted into 256x256 textures, found again by palette and window, reloaded when VRAM or a palette changes, released or marked when VRAM is written), the glyph cache, the pixel converters, VRAM copies, the frame grab. Copied call for call onto the Direct3D 6 calls of `include/dc2/gpudev.h` (COM in-process, a renderer standalone); the harness runs the original and the copy against a fake Direct3D that logs every call. The frame around it: the background image (0x4BDC90 and its upload), present and clear, fog colour and switch, the viewport's background colour, PutDispEnv/PutDrawEnv, the font buffer. Not yet: code 0x84 (a sprite composed from parts; not seen in the game's frames so far), the background masks module (0x4BE3C0..) | src/pc/drawot.c, src/pc/gpudev.c, include/dc2/pcdraw.h, include/dc2/gpudev.h |
+| PC layer: renderers | standalone only, not compared with the original: `src/pc/gpusoft.c` stands in for Direct3D 6 / DirectDraw 4 (surfaces as pixel buffers, render and texture-stage states, Blt/Lock/Flip, the PC layer's globals as its initialisation leaves them, fog per vertex) and hands draws to a `Renderer` (`include/dc2/render.h`): OpenGL 1.4 + SDL2 on the PC (`src/port/render_gl.c`), the PowerVR2 through KOS on the Dreamcast (`src/port/dc/render_pvr.c`: one translucent list in submission order, depth on 1/w, twiddled ARGB1555 textures; no alpha test, no read-back yet). `dc2` runs the main loop's graphics part (0x47053E) and its start (0x470980) | src/pc/gpusoft.c, src/port/render_gl.c, src/port/dc/render_pvr.c, src/port/dc2.c |
 
 The game runs as cooperative tasks (4 slots, `Task_Sleep(n)` gives up the
 CPU for n frames). In-process the original scheduler switches stacks; the
@@ -164,9 +175,11 @@ walks the player through its door into room 102 (`dc2 Dino2.exe ROOT/Data 3300 4
 2900-2932:2000 2940-2955:1000 2960-3010:20`; ROOT also holds `Speech`). The DirectSound buffers have a
 silent stand-in there that only keeps time. Next: the enemies' type handlers (Enemy_LoadModel 0x482070), the object
 type handlers (*0x87DCA0), sound/BGM (0x48C9C0..0x48CE60), messages
-(0x4718F0), fades and menus. Then the libgpu side
-of the PC layer (primitives, DrawOTag, texture cache) — rewritten for
-SDL/GL rather than copied, since it talks to Direct3D. Then the file loader (File_Process 0x404290 and record
+(0x4718F0), fades and menus. The PC layer's drawing is copied onto
+Direct3D-shaped calls and drawn by a renderer (OpenGL, the Dreamcast's PVR);
+still missing there: the background masks module (0x4BE3C0..), code 0x84,
+the PVR's read-back. The title screen stays faded out in the standalone
+build (it has no movies; the cause is not traced yet), the menu works blind. Then the file loader (File_Process 0x404290 and record
 handlers), rooms and cameras, objects and their per-type handlers; the
 PC layer (0x4B4000.., PsyQ on DirectX) is rewritten for SDL/GL rather than
 decompiled.

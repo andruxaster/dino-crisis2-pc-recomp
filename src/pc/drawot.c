@@ -818,3 +818,211 @@ void PcDraw_DrawOTag(gptr ot)                                        /* 0x4B50F0
     U16(0x865DAC) = 0;
     if (U16(0x865D4A)) { grab(); U16(0x865D48) = 1; } else U16(0x865D48) = 0;
 }
+
+/* ---- the frame: the room's background, present, clear, fog, the draw and display environments ---- */
+
+static const float k_256 = 256.0f, k_320 = 320.0f, k_64 = 64.0f, k_240 = 240.0f, k_0_1 = 0.1f, k_1_255 = 0.003921568859368563f;
+
+/* a plain surface (w, h rounded up to 4) */
+static int surface_create(u32 w, u32 h, gptr surf, u32 fmt)          /* 0x4B6960 */
+{
+    u8 desc[SD_SIZE];
+    memset(desc, 0, sizeof desc); *(u32 *)desc = SD_SIZE; *(u32 *)(desc + SD_PIXFMT) = 0x20;
+    *(u32 *)(desc + SD_FLAGS) = 0x1007;
+    *(u32 *)(desc + SD_HEIGHT) = (h + 3) & ~3u; *(u32 *)(desc + SD_WIDTH) = (w + 3) & ~3u;
+    memcpy(desc + SD_PIXFMT, MEM(0x87BB60 + fmt * 0x40), 0x20);
+    *(u32 *)(desc + SD_CAPS) = U8(0x75DEF0) & 1 ? 0x840 : 0x1800;
+    *(u32 *)(desc + SD_CAPS + 0x10) = 0;
+    return DD_CreateSurface(desc, (u32 *)MEM(surf)) == 0;
+}
+
+/* the 320 x 240 background image (15-bit, blue high) into the plain surface and its
+   textures, when it changed (a sum of some of its words) */
+static void bg_upload(gptr img)                                      /* 0x4BE120 */
+{
+    u32 sum = 0;
+    for (u32 r = 0; r < 15; r++)
+        for (u32 k = 0; k < 20; k++) sum += U32(img + r * 0x2800 + k * 0x20);
+    if (sum == U32(0x75CEA0)) return;
+    U32(0x75CEA0) = sum;
+    u8 desc[SD_SIZE];
+    memset(desc, 0, sizeof desc); *(u32 *)desc = SD_SIZE; *(u32 *)(desc + SD_PIXFMT) = 0x20;
+    if (Surf_Lock(U32(0x75CEA4), 0, desc, 1)) return;
+    u8 *d = *(u8 **)(desc + SD_SURFACE);
+    for (u32 n = 0; n < 320 * 240; n++, img += 2) {
+        u32 p = U16(img);
+        u32 c = ((p & 0x3E0) << 14 >> U32(0x87BBC8) & U32(0x87BBD4)) | ((p & 0x1F) << 19 >> U32(0x87BBC4) & U32(0x87BBD0))
+              | ((p & 0x7C00) << 9 >> U32(0x87BBCC) & U32(0x87BBD8)) | U32(0x87BBDC);
+        if (U8(0x87BBC3) == 2) *(u16 *)d = (u16)c; else *(u32 *)d = c;
+        d += U8(0x87BBC3);
+    }
+    Surf_Unlock(U32(0x75CEA4), 0);
+    if (U8(0x75DEF0) & 1) return;
+    if (U32(0x75CEB4)) {
+        u32 a[4] = {0, 0, 0x100, 0xF0}, b[4] = {0, 0, 0x40, 0xF0}, c[4] = {0x100, 0, 0x140, 0xF0};
+        Surf_Blt(U32(0x75CEA8), a, U32(0x75CEA4), a, 0x1000000, 0);
+        Surf_Blt(U32(0x75CEAC), b, U32(0x75CEA4), c, 0x1000000, 0);
+    } else {
+        u32 a[4] = {0, 0, 0x140, 0xF0};
+        Surf_Blt(U32(0x75CEA8), a, U32(0x75CEA4), a, 0x1000000, 0);
+    }
+}
+
+#define BGV 0x73B798u              /* two strips of 4 vertices: the 256- and the 64-wide part */
+
+/* the room's background drawn behind everything: the camera's JPEG (img),
+   `scroll` lines from its top, on the textures made on first use */
+void PcDraw_Background(gptr img, u32 scroll)                         /* 0x4BDC90 */
+{
+    if (!U32(0x75CE9C)) {
+        surface_create(0x140, 0xF0, 0x75CEA4, 2);
+        if (!(U8(0x75DEF0) & 1)) {
+            tex_size(0x140, 0xF0, 0x75CE90, 0x75CE98);
+            if (!tex_create_surface(U32(0x75CE90), U32(0x75CE98), 0x75CEA8, 0x75CEB0, 2)) return;
+            if (U32(0x75CE90) < 0x140) {
+                tex_size(0x140 - U32(0x75CE90), 0xF0, 0x75CE94, 0x75CE98);
+                tex_create_surface(U32(0x75CE94), U32(0x75CE98), 0x75CEAC, 0x75CEB4, 2);
+                float x = F32(G_SCALE_X) * k_256, x2 = F32(G_SCALE_X) * k_320;
+                F32(BGV + 0x20) = F32(BGV + 0x60) = F32(BGV + 0x80) = F32(BGV + 0xC0) = x;
+                F32(BGV + 0xA0) = F32(BGV + 0xE0) = x2;
+                U32(BGV) = U32(BGV + 0x40) = 0;
+                U32(BGV + 0x18) = U32(BGV + 0x58) = U32(BGV + 0x98) = U32(BGV + 0xD8) = 0;
+                U32(BGV + 0x1C) = U32(BGV + 0x3C) = U32(BGV + 0x9C) = U32(BGV + 0xBC) = 0;
+                F32(BGV + 0x38) = F32(BGV + 0x78) = 1.0f;
+                F32(BGV + 0xB8) = F32(BGV + 0xF8) = k_64 / (float)U32(0x75CE94);
+                float v = k_240 / (float)U32(0x75CE98);
+                F32(BGV + 0xFC) = F32(BGV + 0xDC) = v;
+                F32(BGV + 0x7C) = F32(BGV + 0x5C) = v;
+            } else {
+                float x = F32(G_SCALE_X) * k_320;
+                U32(BGV + 0x40) = U32(BGV) = 0;
+                F32(BGV + 0x60) = F32(BGV + 0x20) = x;
+                U32(BGV + 0x3C) = U32(BGV + 0x1C) = 0;
+                U32(BGV + 0x58) = U32(BGV + 0x18) = 0;
+                F32(BGV + 0x78) = F32(BGV + 0x38) = k_320 / (float)U32(0x75CE90);
+                F32(BGV + 0x7C) = F32(BGV + 0x5C) = k_240 / (float)U32(0x75CE98);
+            }
+        }
+        U32(0x75CE9C) = 1;
+    }
+    bg_upload(img);
+    if (U8(0x75DEF0) & 1) {                     /* (no 3D device: the plain surface copied to the back buffer) */
+        u32 sr[4] = {0, scroll, 0x140, 0xF0};
+        u32 dr[4] = {0, 0, (u32)(s32)(F32(G_SCALE_X) * k_320), (u32)(s32)((float)(s32)(0xF0 - scroll) * F32(G_SCALE_Y))};
+        Surf_Blt(U32(A_BACK), dr, U32(0x75CEA4), sr, 0x1000000, 0);
+        return;
+    }
+    float s = (float)(s32)scroll, rest = (float)(s32)(0xF0 - scroll);
+    F32(BGV + 0x3C) = F32(BGV + 0x1C) = s / (float)U32(0x75CE98);
+    F32(BGV + 0x64) = F32(BGV + 0x44) = rest * F32(G_SCALE_Y);
+    Dev_SetRenderState(0x1B, 0);
+    Dev_SetRenderState(0xF, 0);
+    depth(0x400);
+    fog(0);
+    shade(1);
+    Dev_BeginScene();
+    if (U32(0x75CEB4)) {
+        F32(BGV + 0xBC) = F32(BGV + 0x9C) = s / (float)U32(0x75CE98);
+        F32(BGV + 0xE4) = F32(BGV + 0xC4) = rest * F32(G_SCALE_Y);
+        Dev_SetTexture(0, U32(0x75CEB0)); Dev_DrawPrimitive(5, FVF_TL, BGV, 4, 1);
+        Dev_SetTexture(0, U32(0x75CEB4)); Dev_DrawPrimitive(5, FVF_TL, BGV + 0x80, 4, 1);
+    } else {
+        Dev_SetTexture(0, U32(0x75CEB0)); Dev_DrawPrimitive(5, FVF_TL, BGV, 4, 1);
+    }
+    Dev_EndScene();
+    Dev_SetRenderState(0x1B, 1);
+    Dev_SetRenderState(0xF, 1);
+}
+
+/* fog: colour, start and end (float bits), by the fog mode 0x865EE8 */
+void PcDraw_SetFarColor(u32 rgb, u32 start, u32 end)                 /* 0x4B4E60 */
+{
+    if (U8(0x75DEF0) & 1) return;
+    U32(0x73B674) = start; U32(0x865EF0) = rgb; U32(0x73B678) = end;
+    Dev_SetRenderState(0x22, rgb);
+    switch (U32(0x865EE8)) {
+    case 0: Dev_SetRenderState(0x23, 3); Dev_SetRenderState(0x24, U32(0x73B674)); Dev_SetRenderState(0x25, U32(0x73B678)); break;
+    case 1: {
+        Dev_SetRenderState(0x23, 3);
+        float a = F32(0x73B674) * k_0_1, b = F32(0x73B678) * k_0_1;
+        u32 ua, ub; memcpy(&ua, &a, 4); memcpy(&ub, &b, 4);
+        Dev_SetRenderState(0x24, ua); Dev_SetRenderState(0x25, ub);
+        break; }
+    case 2: Dev_SetRenderState(0x23, 0); break;
+    }
+}
+
+void PcDraw_SetFont(gptr font)                                       /* 0x4BD480 */
+{
+    if (U32(0x865EE4)) Crt_free(U32(0x865EE4));
+    U32(0x865EE4) = font;
+}
+
+void PcDraw_SetFogEnable(u32 on)                                     /* 0x4B4F50 */
+{
+    if (U8(0x75DEF0) & 1) return;
+    Dev_SetRenderState(0x1C, on ? 1 : 0);
+    U32(0x865EEC) = on ? 1 : 0;
+}
+
+/* bit 0: the back buffer cleared (colour and depth); bit 1: the front buffer
+   (copied from the back buffer when windowed) */
+void PcDraw_Clear(u32 mode)                                          /* 0x4B4F90 */
+{
+    u8 fx[0x64];
+    if (mode & 1) {
+        if (U8(0x75DEF0) & 1) {
+            memset(fx, 0, sizeof fx); *(u32 *)fx = 0x64;
+            Surf_Blt(U32(A_BACK), 0, 0, 0, 0x1000400, fx);
+        } else Vp_Clear(U32(A_VIEWPORT), 1, 0x73B660, 3);
+    }
+    if (mode & 2) {
+        if (U32(0x75DEF0) & 0x200) { Surf_Blt(U32(A_PRIMARY), MEM(0x75BE58), U32(A_BACK), MEM(0x73B660), 0x1000000, 0); return; }
+        memset(fx, 0, sizeof fx); *(u32 *)fx = 0x64;
+        Surf_Blt(U32(A_PRIMARY), 0, 0, 0, 0x1000400, fx);
+    }
+}
+
+/* the frame shown (flip, or a copy when windowed), then the back buffer cleared */
+void PcDraw_Present(void)                                            /* 0x4B5070 */
+{
+    u32 hr;
+    if (U32(0x75DEF0) & 0x200) hr = Surf_Blt(U32(A_PRIMARY), MEM(0x75BE58), U32(A_BACK), MEM(0x73B660), 0x1000000, 0);
+    else hr = Surf_Flip(U32(A_PRIMARY), U32(A_BACK), 1);
+    if (hr == 0x887601C2) Surf_Restore(U32(A_PRIMARY));
+    if (U8(0x87BAF8)) { PcDraw_Clear(1); return; }
+    if (!(U8(0x75DEF0) & 1)) Vp_Clear(U32(A_VIEWPORT), 1, 0x73B660, 2);
+}
+
+/* the viewport's background colour */
+void PcDraw_SetBackground(u32 r, u32 g, u32 b)                       /* 0x4BB7C0 */
+{
+    if (!U32(A_MATERIAL) || !U32(A_VIEWPORT)) return;
+    u8 m[0x50];
+    memset(m, 0, sizeof m);
+    *(u32 *)m = 0x50;
+    for (int k = 0; k < 2; k++) {               /* diffuse and ambient: r, g, b, 1 */
+        *(float *)(m + 4 + 0x10 * k) = (float)(s32)(r & 0xFF) * k_1_255;
+        *(float *)(m + 8 + 0x10 * k) = (float)(s32)(g & 0xFF) * k_1_255;
+        *(float *)(m + 0xC + 0x10 * k) = (float)(s32)(b & 0xFF) * k_1_255;
+        *(u32 *)(m + 0x10 + 0x10 * k) = 0x3F800000;
+    }
+    *(u32 *)(m + 0x4C) = 0x20;
+    Mat_SetMaterial(U32(A_MATERIAL), m);
+    Vp_SetBackground(U32(A_VIEWPORT), U32(0x75DEE8));
+}
+
+/* PutDispEnv: a new display area shows the frame first */
+void PcDraw_PutDispEnv(gptr env)                                     /* 0x4C0770 */
+{
+    if (U16(0x87BAC2) != U16(env + 2)) PcDraw_Present();
+    memcpy(MEM(0x87BAC0), MEM(env), 0x14);
+}
+
+/* PutDrawEnv: the background colour when it changes; the environment kept (draw mode, window) */
+void PcDraw_PutDrawEnv(gptr env)                                     /* 0x4C07A0 */
+{
+    if (U8(0x87BAF9) != U8(env + 0x19) || U8(0x87BAFA) != U8(env + 0x1A) || U8(0x87BAFB) != U8(env + 0x1B))
+        PcDraw_SetBackground(U8(env + 0x19), U8(env + 0x1A), U8(env + 0x1B));
+    memcpy(MEM(0x87BAE0), MEM(env), 0x5C);
+}

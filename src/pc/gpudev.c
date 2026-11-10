@@ -21,6 +21,8 @@ u32 Dev_DrawPrimitiveVB(u32 t, u32 vb, u32 s, u32 n, u32 f)
 u32 Dev_SetTexture(u32 st, u32 tex) { u32 d = DEV; return COM(d, 0x98, (u32, u32, u32), st, tex); }
 u32 Dev_SetTextureStageState(u32 st, u32 ty, u32 v) { u32 d = DEV; return COM(d, 0xA0, (u32, u32, u32, u32), st, ty, v); }
 u32 Vp_Clear(u32 vp, u32 n, gptr r, u32 f) { return COM(vp, 0x30, (u32, u32, void *, u32), n, MEM(r), f); }
+u32 Vp_SetBackground(u32 vp, u32 h) { return COM(vp, 0x20, (u32, u32), h); }
+u32 Mat_SetMaterial(u32 m, const void *d) { return COM(m, 0x0C, (u32, const void *), d); }
 u32 DD_CreateSurface(void *desc, u32 *surf)
 { u32 dd = U32(A_DDRAW); return COM(dd, 0x18, (u32, void *, u32 *, u32), desc, surf, 0); }
 u32 Obj_QueryInterface(u32 o, const void *iid, u32 *out) { return COM(o, 0x00, (u32, const void *, u32 *), iid, out); }
@@ -47,6 +49,8 @@ u32 Dev_DrawPrimitiveVB(u32 t, u32 vb, u32 s, u32 n, u32 f) { return CALL(draw_v
 u32 Dev_SetTexture(u32 st, u32 tex) { return CALL(set_texture, st, tex); }
 u32 Dev_SetTextureStageState(u32 st, u32 ty, u32 v) { return CALL(set_tss, st, ty, v); }
 u32 Vp_Clear(u32 vp, u32 n, gptr r, u32 f) { (void)vp; return CALL(vp_clear, n, MEM(r), f); }
+u32 Vp_SetBackground(u32 vp, u32 h) { (void)vp; return CALL(vp_set_background, h); }
+u32 Mat_SetMaterial(u32 m, const void *d) { return CALL(set_material, m, d); }
 u32 DD_CreateSurface(void *desc, u32 *surf) { if (!g_gpudev || !g_gpudev->create_surface) { *surf = 0; return 1; } return g_gpudev->create_surface(desc, surf); }
 u32 Obj_QueryInterface(u32 o, const void *iid, u32 *out) { *out = 0; return CALL(query_interface, o, iid, out); }
 u32 Obj_Release(u32 o) { return CALL(release, o); }

@@ -631,7 +631,7 @@ static Stub g_stubs[] = {
     /* file loading: 36.. (impl set below: a fake file system) */
     {0x4C03F0, "sdd"}, {0x4C04E0, "ddd"}, {0x4C0540, "d"}, {0x4C0580, "ddd"}, {0x4C05A0, "d"},
     {0x4DD711, "d"}, {0x4DD628, "d"}, {0x4DD5D6, ""},
-    {0, ""}, {0, ""}, {0x4B49F0, "pd", {8}}, {0x4BD480, "d"}, {0x4BF720, "dd"},
+    {0, ""}, {0, ""}, {0x4B49F0, "pd", {8}}, {0, ""} /* (0x4BD480: rewritten) */, {0x4BF720, "dd"},
     {0x4BFC10, "ddd"},
     /* 50..: loading and room set-up */
     {0x4C29A9, "dd"}, {0, ""}, {0, ""}, {0, ""}, {0, ""}, {0, ""},
@@ -4300,6 +4300,11 @@ static void test_pcgpu(void)
         sprintf(g_what, "ot %X prim %X code %02X", a[0], a[1], U8(pr + 7));
         check(0x4C05D0, PcGpu_AddPrim, "PcGpu_AddPrim", 2, a, 0);
         check(0x4C0600, PcGpu_AddPrims, "PcGpu_AddPrims", 3, a, 0);
+        u32 o[6] = {ot + 4 * (rnd() % 4), rnd() % 4 ? rnd() % 0x3C : rnd() % 3 ? (u32)-(s32)(rnd() % 3) : 0, 0, 0, 0, 0};
+        check(0x4C0870, PcGpu_ClearOTagR, "PcGpu_ClearOTagR", 2, o, 0);
+        u32 e[6] = {pr + rnd() % 4, rnd() % 2 ? rnd() % 0x400 : rnd(), rnd() % 2 ? rnd() % 0x200 : rnd(), rnd(), rnd(), 0};
+        check(0x4C07F0, PcGpu_SetDefDispEnv, "PcGpu_SetDefDispEnv", 5, e, 0);
+        check(0x4C0820, PcGpu_SetDefDrawEnv, "PcGpu_SetDefDrawEnv", 5, e, 0);
         u32 b[6] = {pr, rnd() % 3 ? rnd() % 2 : rnd(), 0, 0, 0, 0};
         check(0x4C0690, PcGpu_SetSprt, "PcGpu_SetSprt", 1, b, 0);
         check(0x4C06A0, PcGpu_SetTile, "PcGpu_SetTile", 1, b, 0);
@@ -4348,7 +4353,7 @@ typedef struct Fake { void **vt; u32 kind, id, w, h, bpp; u8 *pix; } Fake;
 static Fake g_fo[512];
 static u8 *g_fpix[512];
 static u32 g_fcap[512];
-static void *g_fvt[6][48];
+static void *g_fvt[6][48];   /* kinds: 0 material, 1 device, 2 DirectDraw, 3 surface, 4 texture, 5 viewport (and others) */
 
 static void fk_log(u32 v) { u32 n = U32(FK_LOGN); if (n < FK_LOGMAX) { U32(FK_LOG + n) = v; U32(FK_LOGN) = n + 4; } }
 static void fk_logmem(const void *p, u32 n) { for (u32 i = 0; i < n; i += 4) { u32 v = 0; memcpy(&v, (const u8 *)p + i, n - i < 4 ? n - i : 4); fk_log(v); } }
@@ -4423,7 +4428,8 @@ static u32 ST s_blt(Fake *t, const u32 *dr, u32 src, const u32 *sr, u32 fl, cons
     if (s && s->pix && t->pix && s->w == t->w && s->h == t->h) memcpy(t->pix, s->pix, t->w * t->h * t->bpp);
     return 0;
 }
-static u32 ST s_flip(Fake *t, u32 tg, u32 fl) { fk_log(0x3002C); fk_log(t->id); fk_log(fk_id(tg)); fk_log(fl); return 0; }
+static u32 g_fk_flip_hr;
+static u32 ST s_flip(Fake *t, u32 tg, u32 fl) { fk_log(0x3002C); fk_log(t->id); fk_log(fk_id(tg)); fk_log(fl); return g_fk_flip_hr; }
 static u32 ST s_lock(Fake *t, const u32 *r, u8 *desc, u32 fl, u32 ev)
 {
     fk_log(0x30064); fk_log(t->id); fk_logract(r); fk_log(fl); fk_log(ev);
@@ -4434,8 +4440,10 @@ static u32 ST s_lock(Fake *t, const u32 *r, u8 *desc, u32 fl, u32 ev)
 static u32 ST s_restore(Fake *t) { fk_log(0x3006C); fk_log(t->id); return 0; }
 static u32 ST s_colorkey(Fake *t, u32 fl, const u32 *k) { fk_log(0x30074); fk_log(t->id); fk_log(fl); fk_logmem(k, 8); return 0; }
 static u32 ST s_unlock(Fake *t, const u32 *r) { fk_log(0x30080); fk_log(t->id); fk_logract(r); fk_log(fk_hash(t->pix, t->w * t->h * t->bpp)); return 0; }
-/* the viewport */
+/* the viewport, the material */
 static u32 ST vp_clear(Fake *t, u32 n, const u32 *r, u32 fl) { (void)t; fk_log(0x50030); fk_log(n); fk_logmem(r, 16 * n); fk_log(fl); return 0; }
+static u32 ST vp_setbg(Fake *t, u32 h) { (void)t; fk_log(0x50020); fk_log(h); return 0; }
+static u32 ST mat_set(Fake *t, const u8 *d) { fk_log(0x6000C); fk_log(t->id); fk_logmem(d, 0x50); return 0; }
 
 /* any other method: reported, then the harness stops (its arguments are unknown) */
 static u32 ST fk_trap(Fake *t)
@@ -4464,7 +4472,9 @@ static void fk_reset(void)
         s[0] = s_qi; s[2] = s_release; s[0x14 / 4] = s_blt; s[0x2C / 4] = s_flip; s[0x64 / 4] = s_lock;
         s[0x6C / 4] = s_restore; s[0x74 / 4] = s_colorkey; s[0x80 / 4] = s_unlock;
     }
-    g_fvt[5][0x30 / 4] = vp_clear;
+    g_fvt[5][0x30 / 4] = vp_clear; g_fvt[5][0x20 / 4] = vp_setbg;
+    for (int i = 0; i < 48; i++) g_fvt[0][i] = (void *)fk_trap;
+    g_fvt[0][0x0C / 4] = mat_set;
     U32(FK_NOBJ) = 0; U32(FK_LOGN) = 0; U32(FK_HEAPN) = 0;
     U32(0x865EBC) = (u32)(uintptr_t)fk_new(2, 0, 0);
     U32(0x865ED8) = (u32)(uintptr_t)fk_new(1, 0, 0);
@@ -4472,6 +4482,7 @@ static void fk_reset(void)
     U32(0x865EC4) = (u32)(uintptr_t)fk_new(3, 640, 480);
     U32(0x865ECC) = (u32)(uintptr_t)fk_new(3, 256, 256);
     U32(0x865EDC) = (u32)(uintptr_t)fk_new(5, 0, 0);
+    U32(0x865EE0) = (u32)(uintptr_t)fk_new(0, 0, 0);    /* the viewport's background material */
     U32(0x86449C) = (u32)(uintptr_t)fk_new(5, 0, 0);    /* the masks' vertex buffer */
     for (int k = 0; k < 4; k++) U32(0x8644AC + 4 * k) = (u32)(uintptr_t)fk_new(4, 0, 0);   /* their textures */
     U32(0x865D58) = 0;                                  /* the frame copy: made on first use */
@@ -4699,6 +4710,66 @@ static void test_pcdraw(void)
         }
     }
     memcpy(c, saved, 5);
+    _controlfp(fpu, _MCW_PC);
+}
+
+/* the frame-level functions of the PC layer against the fake Direct3D */
+static void test_pcframe(void)
+{
+    unsigned fpu = _controlfp(0, 0);
+    _controlfp(_PC_24, _MCW_PC);
+    gptr img = 0x660000, env = 0x5D8000;           /* (a 320 x 240 picture; environments) */
+    for (int i = 0; i < iters; i++) {
+        if (i % 16 == 0) {
+            fk_reset(); fk_pixfmt(i % 64 == 32); memcpy(MEM(0x87BBC0), MEM(0x87BB40), 0x40); memset(MEM(0x75CE90), 0, 0x28);
+            U32(0x75DEF0) = rnd() % 4 ? 0 : rnd() % 2 ? 0x200 : 1;     /* (windowed; no 3D device) */
+        }
+        U32(FK_LOGN) = 0;
+        U8(0x865E44) = (u8)(rnd() % 4 ? 2 : rnd() & 0x22); U32(0x865E6C) = rnd() % 2 ? 0 : 8; U32(0x865E70) = rnd() % 2 ? 0 : 8;
+        U32(0x865E74) = rnd() % 3 ? 256 : 1024; U32(0x865E78) = rnd() % 2 ? 1024 : 256;
+        F32(0x8644BC) = rnd() % 2 ? 2.0f : rndf(0.5f, 3.0f); F32(0x8644B8) = rnd() % 2 ? 2.0f : rndf(0.5f, 3.0f);
+        for (u32 k = 0; k < 5; k++) if (rnd() % 4 == 0) U32(0x73B680 + 4 * k) = rnd() % 3 ? rnd() % 4 : 0xFFFFFFFF;
+        U32(0x865EEC) = rnd() % 2; U32(0x865EE8) = rnd() % 3; U8(0x87BAF8) = (u8)(rnd() % 4 == 0);
+        g_fk_flip_hr = rnd() % 8 ? 0 : 0x887601C2;
+        if (rnd() % 16 == 0) U32(0x75CE9C) = 0;     /* (the background's surfaces made again) */
+        u32 kind = rnd() % 8;
+        if (kind < 3) {
+            if (rnd() % 2) for (u32 k = 0; k < 320 * 240 * 2; k += 4) U32(img + k) = rnd();
+            else if (rnd() % 2) U32(img + 0x2800 * (rnd() % 15) + 0x20 * (rnd() % 20)) ^= 1 + rnd() % 255;   /* (a word of the sum) */
+            u32 a[2] = {img, rnd() % 4 ? 0 : rnd() % 241};
+            sprintf(g_what, "iteration %d: background, scroll %u", i, a[1]);
+            check_fk(0x4BDC90, PcDraw_Background, "PcDraw_Background", 2, a);
+        } else if (kind == 3) {
+            float st = rndf(0.0f, 3000.0f), en = st + rndf(1.0f, 30000.0f);
+            u32 a[3] = {rnd() & 0xFFFFFF, 0, 0}; memcpy(&a[1], &st, 4); memcpy(&a[2], &en, 4);
+            sprintf(g_what, "iteration %d: far colour, mode %u", i, U32(0x865EE8));
+            check_fk(0x4B4E60, PcDraw_SetFarColor, "PcDraw_SetFarColor", 3, a);
+            u32 b[1] = {rnd() % 3 ? rnd() % 2 : rnd()};
+            check_fk(0x4B4F50, PcDraw_SetFogEnable, "PcDraw_SetFogEnable", 1, b);
+            u32 font = U32(0x865EE4), c[1] = {rnd() % 4 ? rnd() : 0};
+            U32(0x865EE4) = 0;                          /* (no font yet: none freed) */
+            check_fk(0x4BD480, PcDraw_SetFont, "PcDraw_SetFont", 1, c);
+            U32(0x865EE4) = font;
+        } else if (kind == 4) {
+            u32 a[1] = {rnd() % 4};
+            sprintf(g_what, "iteration %d: clear %u", i, a[0]);
+            check_fk(0x4B4F90, PcDraw_Clear, "PcDraw_Clear", 1, a);
+            check_fk(0x4B5070, PcDraw_Present, "PcDraw_Present", 0, a);
+        } else if (kind == 5) {
+            u32 a[3] = {rnd(), rnd(), rnd()};
+            if (rnd() % 8 == 0) U32(0x865EE0) = 0;
+            sprintf(g_what, "iteration %d: background colour", i);
+            check_fk(0x4BB7C0, PcDraw_SetBackground, "PcDraw_SetBackground", 3, a);
+        } else {
+            for (u32 k = 0; k < 0x60; k += 4) U32(env + k) = rnd();
+            if (rnd() % 2) U16(env + 2) = U16(0x87BAC2);
+            if (rnd() % 2) { U8(env + 0x19) = U8(0x87BAF9); U8(env + 0x1A) = U8(0x87BAFA); U8(env + 0x1B) = U8(0x87BAFB); }
+            u32 a[1] = {env};
+            sprintf(g_what, "iteration %d: environments", i);
+            check_fk(0x4C0770, PcDraw_PutDispEnv, "PcDraw_PutDispEnv", 1, a);
+            check_fk(0x4C07A0, PcDraw_PutDrawEnv, "PcDraw_PutDrawEnv", 1, a);
+        }
+    }
     _controlfp(fpu, _MCW_PC);
 }
 
@@ -5318,7 +5389,7 @@ __declspec(dllexport) void harness_main(int argc, char **argv)
     struct { const char *name; void (*fn)(void); } T[] = {
         {"flags", test_flags}, {"geometry", test_geom}, {"script values", test_script_values},
         {"script opcodes", test_script_ops}, {"script objects", test_objects},
-        {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"objects 2", test_object}, {"collision", test_collision}, {"player", test_player}, {"player states", test_player2}, {"zones", test_zones}, {"loading", test_room}, {"title", test_title}, {"game task", test_game}, {"doors", test_doors}, {"frame", test_frame}, {"enemy sets", test_enemyset}, {"enemies", test_enemies}, {"raptor", test_raptor}, {"aot kinds", test_aot_kinds}, {"object effects", test_obj_effects}, {"effect slots", test_k2}, {"effect drops", test_k2_drops}, {"effect emitters", test_eff_slots}, {"effect slots 3", test_k2_more}, {"helpers", test_helpers}, {"draw", test_draw}, {"pc gpu", test_pcgpu}, {"pc draw", test_pcdraw},
+        {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"objects 2", test_object}, {"collision", test_collision}, {"player", test_player}, {"player states", test_player2}, {"zones", test_zones}, {"loading", test_room}, {"title", test_title}, {"game task", test_game}, {"doors", test_doors}, {"frame", test_frame}, {"enemy sets", test_enemyset}, {"enemies", test_enemies}, {"raptor", test_raptor}, {"aot kinds", test_aot_kinds}, {"object effects", test_obj_effects}, {"effect slots", test_k2}, {"effect drops", test_k2_drops}, {"effect emitters", test_eff_slots}, {"effect slots 3", test_k2_more}, {"helpers", test_helpers}, {"draw", test_draw}, {"pc gpu", test_pcgpu}, {"pc draw", test_pcdraw}, {"pc frame", test_pcframe},
     };
     for (unsigned i = 0; i < sizeof T / sizeof T[0]; i++) {
         int f0 = g_fail, t0 = g_tests;

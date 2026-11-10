@@ -14,6 +14,7 @@
 #define A_STAGING   0x865ECCu      /* the 256x256 system-memory surface textures are filled through */
 #define A_DEVICE    0x865ED8u      /* IDirect3DDevice3 */
 #define A_VIEWPORT  0x865EDCu      /* IDirect3DViewport3 */
+#define A_MATERIAL  0x865EE0u      /* IDirect3DMaterial3 (the viewport's background; its handle 0x75DEE8) */
 
 /* the device */
 u32 Dev_BeginScene(void);                                           /* +0x24 */
@@ -23,8 +24,10 @@ u32 Dev_DrawPrimitive(u32 type, u32 fvf, gptr verts, u32 n, u32 flags);  /* +0x7
 u32 Dev_DrawPrimitiveVB(u32 type, u32 vb, u32 start, u32 n, u32 flags);  /* +0x88 */
 u32 Dev_SetTexture(u32 stage, u32 tex);                             /* +0x98 */
 u32 Dev_SetTextureStageState(u32 stage, u32 type, u32 v);           /* +0xA0 */
-/* the viewport */
+/* the viewport and its background material */
 u32 Vp_Clear(u32 vp, u32 n, gptr rects, u32 flags);                /* +0x30 */
+u32 Vp_SetBackground(u32 vp, u32 mat_handle);                       /* +0x20 */
+u32 Mat_SetMaterial(u32 mat, const void *desc);                     /* +0x0C (D3DMATERIAL, 0x50) */
 /* DirectDraw */
 u32 DD_CreateSurface(void *desc, u32 *surf);                        /* +0x18 (no outer) */
 /* surfaces (and the textures' Release) */
@@ -58,6 +61,8 @@ struct GpuDev {
     u32 (*set_texture)(u32 stage, u32 tex);
     u32 (*set_tss)(u32 stage, u32 type, u32 v);
     u32 (*vp_clear)(u32 n, const void *rects, u32 flags);
+    u32 (*vp_set_background)(u32 mat_handle);
+    u32 (*set_material)(u32 mat, const void *desc);
     u32 (*create_surface)(void *desc, u32 *surf);
     u32 (*query_interface)(u32 o, const void *iid, u32 *out);
     u32 (*release)(u32 o);

@@ -89,9 +89,9 @@ address,kind,name,category,confidence,notes
 0x4B4B30,func,MoveImage,libgpu-vram,high,"(RECT*, x, y); rewritten: src/pc/drawot.c"
 0x4B4A60,func,PC_VramOpClipped,libgpu-vram,low,"clips RECT to 1024x512, then 0x4C3BE6 + dirty mark; rewritten: src/pc/drawot.c"
 0x4B49F0,func,PC_VramRectHelper,libgpu-vram,low,
-0x4B4E60,func,SetFarColor,d3d,medium,"stores rgb, D3D3 SetRenderState(FOGCOLOR=0x22)"
-0x4B4F50,func,PC_SetFogEnable,d3d,high,"SetRenderState(FOGENABLE=0x1C, on/off)"
-0x4B4F90,func,PC_DDrawClear,d3d,low,DDBLTFX fill; called from 0x473210/0x4732C0
+0x4B4E60,func,SetFarColor,d3d,medium,"stores rgb, D3D3 SetRenderState(FOGCOLOR=0x22); rewritten: src/pc/drawot.c"
+0x4B4F50,func,PC_SetFogEnable,d3d,high,"SetRenderState(FOGENABLE=0x1C, on/off); rewritten: src/pc/drawot.c"
+0x4B4F90,func,PC_DDrawClear,d3d,low,"DDBLTFX fill; called from 0x473210/0x4732C0; rewritten: src/pc/drawot.c"
 0x4BEAC0,func,Masks_Upload,masks,low,called after build / depth shift
 0x4BB8D0,func,PC_TexSlot,d3d,low,"slot table 0x75DEFC, stride 0x164"
 0x4C24C0,func,PC_DrawSpecial,d3d,low,768 bytes x87; called once from 0x410710
@@ -132,7 +132,7 @@ address,kind,name,category,confidence,notes
 0x4BF210,func,Input_SetKeyBind,input,low,
 0x4BF2A0,func,Input_SetJoyBind,input,low,table 0x8660FE
 0x4BF140,func,Input_KeyLookup,input,low,pairs @0x73BB98
-0x4BD480,func,PC_SetBuffer,pc-only,low,"free old, store 0x865EE4"
+0x4BD480,func,PC_SetBuffer,pc-only,low,"free old, store 0x865EE4; rewritten: src/pc/drawot.c"
 0x4D2990,func,JPEG_Decode,libjpeg,high,"(dst, src, size, mode): IJG libjpeg 6b wrapper, mode 2 = colour space 6 (15-bit, blue high), JDCT_FLOAT; DBS backgrounds 320x240; rewritten: src/pc/jpeg.c"
 0x4D7290,func,Stub_Return0,pc-only,high,returns 0; PS1 call stubbed (CdSync/VSync-like?)
 0x4C2900,func,Task_RunAll,scheduler,high,
@@ -257,9 +257,9 @@ address,kind,name,category,confidence,notes
 0x703598,data,g_kof_files,data,medium,KOF_P*.DAT: playable-dinosaur models (KOF_P00P shares rig+mesh with E00)
 0x703EE8,data,g_menu_files,data,medium,
 0x403AC0,func,Camera_Load,game,high,"DBS record of camera G+0x84A: masks 0x6B9500, JPEG 0x6C1500, CLUT or mask pixels; eye/target/projection; clears flags 2/0x18, 2/2"
-0x4BDC90,func,PC_DrawBackground,d3d,high,"(rgb16*, dirty): 256+64 textures, screen quad before DrawOTag"
-0x4C0770,func,PutDispEnv,libgpu,medium,copies 20 bytes to 0x87BAC0
-0x4C07A0,func,PutDrawEnv,libgpu,medium,compares isbg/r0g0b0 at +0x19..
+0x4BDC90,func,PC_DrawBackground,d3d,high,"(rgb16*, dirty): 256+64 textures, screen quad before DrawOTag; rewritten: src/pc/drawot.c"
+0x4C0770,func,PutDispEnv,libgpu,medium,"copies 20 bytes to 0x87BAC0; rewritten: src/pc/drawot.c"
+0x4C07A0,func,PutDrawEnv,libgpu,medium,"compares isbg/r0g0b0 at +0x19..; rewritten: src/pc/drawot.c"
 0x403480,func,Camera_Reset,game,medium,
 0x4035F0,func,CamZones_Check,game,high,"player (or followed obj) x/z + level obj+0x5A vs 0x2C-byte zones {flags,cam,level,extra,quad}; PointInQuad"
 0x4035B0,func,CamZones_FindForCamera,game,high,"(cam, zones) -> first zone whose camera == CAM+0x4C -> CAM+0x44"
@@ -1097,3 +1097,11 @@ address,kind,name,category,confidence,notes
 0x4B91E0,func,Glyph_Make,pc-draw,high,rewritten: src/pc/drawot.c
 0x4C2E4E,func,Conv_Glyph,pc-draw,high,rewritten: src/pc/drawot.c
 0x4C3BE6,func,Vram_CopyRect,pc-draw,high,rewritten: src/pc/drawot.c
+0x4B6960,func,Surface_Create,pc-draw,high,"(w, h, out, fmt): a system-memory surface; rewritten: src/pc/drawot.c"
+0x4BE120,func,Background_Upload,pc-draw,high,"the 320x240 image into the background textures; rewritten: src/pc/drawot.c"
+0x4B5070,func,PC_Present,d3d,high,"flip (or copy when windowed), then the back buffer cleared; rewritten: src/pc/drawot.c"
+0x4BB7C0,func,PC_SetBackground,d3d,high,"(r, g, b): the viewport material's colour; rewritten: src/pc/drawot.c"
+0x4C0870,func,ClearOTagR,libgpu,high,"(ot, n): entries linked last to first, the first to 0x73C04C; rewritten: src/pc/gpu.c"
+0x4C07F0,func,SetDefDispEnv,libgpu,high,"(env, x, y, w, h); rewritten: src/pc/gpu.c"
+0x4C0820,func,SetDefDrawEnv,libgpu,high,"(env, x, y, w, h): window 256x256, dtd/dfe 1; rewritten: src/pc/gpu.c"
+0x470980,func,Game_ResetFrame,game,high,"geometry screen, G cleared, the two display/draw environments; src/port/dc2.c (standalone)"

@@ -11,6 +11,7 @@
  *   usage: dc2 Dino2.exe DATA_DIR [FRAMES] [FRAME:MASK | FROM-TO:MASK ...] */
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <libgen.h>
 #include <setjmp.h>
 #include <signal.h>
@@ -18,6 +19,14 @@
 #include "dc2/orig.h"
 #include "dc2/pcio.h"
 #include "dc2/task.h"
+#include "dc2/gpu.h"
+#include "dc2/gte.h"
+#include "dc2/pcdraw.h"
+#include "dc2/render.h"
+#ifdef DC2_GL
+#include <SDL2/SDL.h>
+#include "render_gl.h"
+#endif
 
 u8 *g_membase;
 
@@ -46,6 +55,24 @@ static sigjmp_buf g_fault;
 static volatile int g_fault_sig;
 static void on_fault(int sig) { g_fault_sig = sig; siglongjmp(g_fault, 1); }
 
+#ifdef DC2_GL
+/* DC2_STATS: per frame, the draws and what the frame looks like in numbers
+   (mean colour, share of non-black pixels) */
+static const Renderer *g_rend;
+static void gl_stats(RenderGlStats *s)
+{
+    static u16 px[640 * 480];
+    g_rend->read_back(px, 640, 480, 1280);
+    unsigned long long sr = 0, sg = 0, sb = 0; u32 lit = 0;
+    for (u32 i = 0; i < 640 * 480; i++) {
+        u16 c = px[i]; u32 r5 = c >> 10 & 31, g5 = c >> 5 & 31, b5 = c & 31;
+        sr += r5; sg += g5; sb += b5; if (r5 | g5 | b5) lit++;
+    }
+    printf("gl frame %u: %u draws, %u vertices, %u uploads; mean rgb %u,%u,%u (of 31), %u%% lit\n", s->frames, s->draws, s->verts,
+           s->uploads, (u32)(sr / (640 * 480)), (u32)(sg / (640 * 480)), (u32)(sb / (640 * 480)), lit * 100 / (640 * 480));
+}
+#endif
+
 /* the game part of one frame of WinMain's loop (graphics and timing left out) */
 static void game_frame(void)
 {
@@ -53,6 +80,10 @@ static void game_frame(void)
     U32(g + 4)++;
     U32(0x87F94C) = 0x87DCC0 + U32(0x87DE0C) * 0x90;
     U32(0x87DC98) = U32(0x87DE0C) ? 0x500000 : 0x550000;
+    PcGpu_ClearOTagR(U32(0x87F94C) + 0x70, 8);
+    PcGpu_ClearOTagR(0x87BC00 + (U32(0x87DE0C) << 12), 0x400);
+    PcGpu_ClearOTagR(0x87DDE0 + U32(0x87DE0C) * 12, 3);
+    PcGpu_ClearOTagR(0x87F960 + (U32(0x87DE0C) << 4), 4);
     Snd_Tick();
     if (!Flag_Check(2, 0x17)) File_Tick();
     if (!Flag_Check(2, 0x22)) {
@@ -67,6 +98,38 @@ static void game_frame(void)
         Fade_Tick();
         Msg_Flush();
     }
+}
+
+/* the start of a run (0x470980, also after a reset): the geometry screen,
+   the game state cleared, the two display/drawing buffers (0,256 and 0,0) */
+static void game_reset(void)
+{
+    SetGeomOffset(160, 120);
+    SetGeomScreen(320);
+    memset(MEM(G()), 0, 0x53B * 4);
+    PcGpu_SetDefDrawEnv(0x87DCD4, 0, 0, 320, 240);
+    PcGpu_SetDefDispEnv(0x87DCC0, 0, 256, 320, 240);
+    PcGpu_SetDefDrawEnv(0x87DD64, 0, 256, 320, 240);
+    PcGpu_SetDefDispEnv(0x87DD50, 0, 0, 320, 240);
+    U32(0x87DE00) = 2;
+    U8(0x87DD7C) = 1; U8(0x87DCEC) = 1;
+    Light_SetFar(0);
+    PcDraw_SetFogEnable(0);
+    U32(0x866140) = 0;                          /* Input_SetParam 0x4BF130 */
+}
+
+/* the graphics part of the main loop (0x47053E): the last frame shown, this
+   one's background and order table drawn, the buffers swapped */
+static void draw_frame(void)
+{
+    PcDraw_PutDispEnv(U32(0x87F94C));
+    PcDraw_PutDrawEnv(U32(0x87F94C) + 0x14);
+    if (Flag_Check(3, 0) && !U8(0x74D749)) {
+        gptr g = G();
+        PcDraw_Background(U32(g + 8), U8(g + 0xC26));
+        if (U8(g + 0xB73)) { U8(g + 0xB73) = 0; U8(g + 0xC26) = 0; }
+    }
+    PcDraw_DrawOTag(U32(0x87F94C) + 0x8C);
     U32(0x87DE0C) ^= 1;
 }
 
@@ -85,8 +148,19 @@ int main(int argc, char **argv)
         else if (npress < 32 && sscanf(argv[i], "%d:%x", &press_at[npress], &press_mask[npress]) == 2) npress++;
     }
     int trace = getenv("DC2_TRACE") != NULL;
+    const Renderer *rend = NULL;
+#ifdef DC2_GL
+    rend = RenderGl_Open(640, 480, getenv("DC2_SCALE") ? atoi(getenv("DC2_SCALE")) : 1);
+    if (!rend) return 1;
+    g_rend = rend;
+    int quit = 0;
+    if (getenv("DC2_STATS")) RenderGl_Stats()->on_present = gl_stats;
+    int log_from = getenv("DC2_DRAWLOG") ? atoi(getenv("DC2_DRAWLOG")) : -1;
+#endif
+    PcDraw_InitStandalone(rend, 640, 480);
 
     U32(A_G_PTR) = A_G_STATIC;
+    game_reset();
     Task_InitStackBase();
     Fade_Set(1, 1, 1);
     Snd_ReleaseAll();
@@ -112,8 +186,19 @@ int main(int argc, char **argv)
             held |= hold_mask[k];
             if (f == hold_from[k]) printf("frame %4d: hold %X until %d\n", f, hold_mask[k], hold_to[k]);
         }
+#ifdef DC2_GL
+        u32 t0 = SDL_GetTicks();
+        held |= RenderGl_Pad(&quit);
+        RenderGl_Stats()->log = log_from >= 0 && f >= log_from && f < log_from + (getenv("DC2_DRAWLOG_N") ? atoi(getenv("DC2_DRAWLOG_N")) : 2);
+        if (quit) break;
+#endif
         g_pad_raw[0] = (u16)held;                   /* read by Input_Frame (0x478BF0) */
         game_frame();
+        draw_frame();
+#ifdef DC2_GL
+        u32 want = 1000 * (U32(0x87DE00) ? U32(0x87DE00) : 1) / 60, dt = SDL_GetTicks() - t0;
+        if (!getenv("DC2_FAST") && dt < want) SDL_Delay(want - dt);
+#endif
         u32 mode = U8(0x74D608) | U8(0x74D60A) << 8;
         if (mode != last_mode) { printf("frame %4d: root mode %u step %u\n", f, mode & 0xFF, mode >> 8); last_mode = mode; }
         static u32 last_title = 0xFFFFFFFF;
