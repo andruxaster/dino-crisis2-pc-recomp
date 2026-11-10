@@ -39,6 +39,9 @@ void DC2CALL Masks_CreateVB(u32 nverts, gptr pixels);   /* 0x4BE3C0 */
 void DC2CALL Masks_SetQuad(u32 i, u32 x, u32 y, u32 z); /* 0x4BE430 */
 void DC2CALL Masks_BuildTexture(void);                  /* 0x4BE6E0 */
 void DC2CALL Masks_Upload(u32 a);                       /* 0x4BEAC0 */
+void DC2CALL Masks_ShiftDepth(u32 d);                   /* 0x4BE6A0: all masks d deeper */
+u32  DC2CALL Masks_FillMarker(u32 i, gptr p);           /* 0x4BEC40: mask i into the marker p; its z */
+void DC2CALL SetMaskMarker(gptr p);                     /* 0x4C06B0: code 0x88 */
 
 /* the pads (DirectInput): raw buttons into 0x87DC42 + 0x24 * pad */
 void DC2CALL Input_ReadPad(u32 pad);                    /* 0x4BEF40 */

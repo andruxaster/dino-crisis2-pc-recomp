@@ -25,7 +25,7 @@ One source tree, three builds:
 | build | what | status |
 |---|---|---|
 | `build/dinput.dll` | hook DLL: put next to `Dino2.exe`, redirects the original functions to the C ones | runs inside the game |
-| `build/harness_stub.exe` + `harness.dll` | checks every C function against the original code | 803 functions, ~2 030 000 checks, 0 differences |
+| `build/harness_stub.exe` + `harness.dll` | checks every C function against the original code | 841 functions, ~2 110 000 checks, 0 differences |
 | `build/dc2` (Linux) | the game started like WinMain: task system, root task, per-frame work; headless, prints a trace | boots: CORE.DAT, warning and Capcom screens, save scan, title (menu, opening movie / attract demo in turn); buttons can be given on the command line; New Game runs the opening and the game task into room ST101 (file loads, room set-up, room script start); sets up the player; its first state loads the weapon set and stops at the model set-up (Model_Setup 0x48D8B0, not rewritten yet) |
 | `build/smoke` (Linux) | the C game code without any exe code, on an emulated memory image | rooms loaded and set up by the game's own code (File_Process, Room_SetPointers, Script_Init), script VM, animation: 80 of 89 room scripts run 600 frames; 9 stop on cutscene data (SCxx.DAT) that is not loaded yet |
 
@@ -78,7 +78,7 @@ Checked under wine 9 (32-bit prefix): all 26 hooks installed; after one
 minute Lzss_Decode 23 calls, Flag_Check 62 000, Script_Run every frame,
 PointInQuad 5 000.
 
-## Reimplemented (803)
+## Reimplemented (841)
 
 The authoritative list is `src/hook/hooks.c`. By area:
 
@@ -105,7 +105,8 @@ The authoritative list is `src/hook/hooks.c`. By area:
 | enemies (shared) | attack spheres against the player (Enemy_AttackHit, Sphere_Hit), kill and event scores with the combo, bleeding, hit directions, death fade, flashes and props they leave, the game over start | src/game/enemy.c |
 | object effects | turning, blinking (polygon shade), thrown and debris pieces, the item in the player's hand | src/game/effect.c |
 | effect slots | the slots G+0x944: motion steps, sprite animation, hidden test; sprites (init, move, fade), splashes and floating bits, both emitter kinds and their record lists; falling drops, bubbles, a sprite stuck to an effect, puffs, a glow, lone sprites, screen sparkles and bursts; the effects that fill slots from a record list or with the area's own type | src/game/k2.c |
-| frame helpers | camera reset and zone check, background masks, the damage gauge block, screen shake, fades (set, tick, draw), effect 0's trail, hidden flags of objects and effects, lights picked per model part (camera sets, nearest lights, room light) and marked lights run, pads read each frame; message slots and the message box (typing, pages, prompts, yes/no, choices); text drawing and centring; sound effects (table, pan and volume by distance, sound areas, slots, groups) and stream slots; movies started (standalone: skipped) | src/game/misc.c |
+| frame helpers | camera reset and zone check, background masks, the damage gauge block, screen shake, fades (set, tick, draw), effect 0's trail, hidden flags of objects and effects, lights picked per model part (camera sets, nearest lights, room light) and marked lights run, pads read each frame; message slots and the message box (typing, pages, prompts, yes/no, choices); text drawing and centring; the HUD: the health gauge, the weapon change boxes, the ammo pop-up and its numbers; the starting stock by difficulty; sound effects (table, pan and volume by distance, sound areas, slots, groups) and stream slots; movies started (standalone: skipped) | src/game/misc.c |
+| frame drawing | Frame_Draw (0x4A7250): the view matrices of objects, parts, effects and props; models (vertices projected and lit per part, then indexed triangles and quads with depth), effect meshes and their depth rules, shadows on the floor, prop sprites and quads, background mask markers, dim bars, the rope, the text layer (message slots, the sentence and its cursor), the per-frame handlers | src/game/draw.c |
 | velociraptor | handler (damage, movement, collisions), init by level, the choice of the next state, normal sub-states (wait, walk, cry, back off, eat, entrance, feint), jumps and climbs, the attacks (pounce, lunge, side bite, leap, tail) and their hits on the player, the hits it takes (flinch, knock-back, blown back, thrown in the air, burnt, drowned), death | src/game/raptor.c |
 | doors (room change) | Door_Task and its modes (set-up: the stand-in, door models, camera, light, room name; run: area switch, room and music loads; end), all door types' handlers: hinged, shutter, sliding and double doors, lifts, stairs, camera drop, waits, message, walk; the score panel after a fight | src/game/door.c |
 | PC layer: GTE | all 80 libgte functions of the port (0x4C08E0..0x4C24C0): rsin/rcos/ratan2, roots, geometry state, Apply/Mul/Rot/Scale/Transpose matrix, RotTransPers 1/3/4 and the float projection, depth cue, normal colour, register loads/stores, rtps/rtpt/nclip/ncct, PC depth stores | src/game/gte.c, include/dc2/gte.h |

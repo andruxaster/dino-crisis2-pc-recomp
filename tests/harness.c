@@ -74,6 +74,7 @@ static u32 g_ign_addr, g_ign_len;    /* bytes the original fills with stack garb
 static int g_ign_objpads;            /* matrix pads (+0x32) of test objects and parts */
 static int g_ign_door;               /* door scene: matrix pads */
 static int g_ign_campad;             /* the camera matrix's pad (G+0x78A) */
+static int g_ign_draw;              /* the frame's drawing (see compare) */
 static int g_ign_throw;              /* thrown sub-weapons: stack pointers / bytes kept (see below) */
 static char g_what[256];
 
@@ -88,6 +89,20 @@ static int compare(const char *name, u32 r_orig, u32 r_new, u32 rmask)
     if (g_ign_objpads) {        /* ... and the RT pad, copied from a parent matrix */
         snap1[1][GTE_RT + 0x12 - RW[1].lo] = U8(GTE_RT + 0x12);
         snap1[1][GTE_RT + 0x13 - RW[1].lo] = U8(GTE_RT + 0x13);
+    }
+    for (u32 k = 0; k < 36; k++) {             /* matrix pads (+0x12: MulMatrix0's stack bytes) of objects, parts, effects, props */
+        u32 ad[5] = {0x690000 + (k % 16) * 0x260 + 0x12, 0x693000 + k * 0x80 + 0x12, 0x694000 + k * 0x70 + 0x12, 0x695000 + (k % 20) * 0xAC + 0x12,
+                     k < 17 ? 0x6C8400 + k * 0x80 + 0x12 : 0x6C8000 + 0x12};   /* (and the animation test's object and parts) */
+        for (int j = 0; j < 5; j++) { snap1[0][ad[j] - RW[0].lo] = U8(ad[j]); snap1[0][ad[j] + 1 - RW[0].lo] = U8(ad[j] + 1); }
+    }
+    if (g_ign_draw) {           /* the drawing tests: matrix pads (MulMatrix0's stack bytes), the GTE vectors' pads */
+        u32 ad[128]; int n = 0;
+        for (u32 i = 0; i < 16; i++) { ad[n++] = 0x690000 + i * 0x260 + 0x12; ad[n++] = 0x693000 + i * 0x100 + 0x12; }
+        for (u32 i = 0; i < 8; i++) { ad[n++] = 0x694000 + i * 0x70 + 0x12; ad[n++] = 0x694000 + i * 0x70 + 0x32; }
+        for (u32 i = 0; i < 20; i++) { ad[n++] = 0x695000 + i * 0xAC + 0x12; ad[n++] = 0x695000 + i * 0xAC + 0x32; }
+        ad[n++] = GTE_V0 + 6; ad[n++] = GTE_V1 + 6; ad[n++] = GTE_V2 + 6; ad[n++] = 0x6ED112;
+        for (int k = 0; k < n; k++)
+            for (u32 a = ad[k]; a < ad[k] + 2; a++) { int i = a < 0x703000 ? 0 : 1; snap1[i][a - RW[i].lo] = U8(a); }
     }
     if (g_ign_objpads)
         for (int i = 0; i < 16; i++) {
@@ -164,13 +179,29 @@ static u32 call(void *f, int n, const u32 *a)
     }
 }
 
+static void __attribute__((noinline)) clear_stack(void) { volatile u32 b[0x1000]; for (int i = 0; i < 0x1000; i++) b[i] = 0; (void)b[0]; }
+/* a function without arguments called with the 4 KB under its return address zeroed
+   (its own frame then holds zeros where the original copies unwritten stack bytes) */
+u32 g_save_edi __asm__("g_save_edi_");
+u32 __cdecl call0z(void *f) __asm__("call0z_");
+__asm__(".text\n"
+        "call0z_:\n\t"
+        "movl 4(%esp), %edx\n\t"
+        "movl %edi, g_save_edi_\n\t"
+        "leal -0x1000(%esp), %edi\n\t"
+        "movl $0x400, %ecx\n\t"
+        "xorl %eax, %eax\n\t"
+        "rep stosl\n\t"
+        "movl g_save_edi_, %edi\n\t"
+        "jmp *%edx\n");
 static const char *g_cur_name;
 static int g_cur_orig;
 static int check(u32 addr, void *fn, const char *name, int nargs, const u32 *args, u32 rmask)
 {
     g_cur_name = name; g_cur_orig = 1;
     snap(snap0);
-    u32 r0 = call((void *)(uintptr_t)addr, nargs, args);
+    clear_stack();                      /* (stack bytes the original copies are 0 then) */
+    u32 r0 = nargs ? call((void *)(uintptr_t)addr, nargs, args) : call0z((void *)(uintptr_t)addr);
     snap(snap1);
     restore(snap0);
     g_cur_orig = 0;
@@ -238,6 +269,7 @@ static void test_geom(void)
 #define GL_BASE  0x6E3000u     /* globals */
 
 static void snd_setup(void);
+static void draw_safe(void);
 static void script_setup(void)
 {
     snd_setup();
@@ -601,9 +633,9 @@ static Stub g_stubs[] = {
     {0, ""}, {0, ""}, {0, ""}, {0, ""}, {0, ""}, {0, ""},
     {0, ""}, {0x4C0600, "ddd"}, {0x4C0690, "d"}, {0x4C05D0, "dd"}, {0x4C06F0, "ddddd"},
     /* 71..: game task */
-    {0x496410, ""}, {0, "d"}, {0, ""}, {0, ""}, {0x452450, ""}, {0, ""},
+    {0, ""}, {0, "d"}, {0, ""}, {0, ""}, {0x452450, ""}, {0, ""},
     {0, ""}, {0x4BF130, "d"}, {0, ""}, {0, ""}, {0, ""}, {0, ""},
-    {0, ""}, {0, ""}, {0x4A7250, ""}, {0x405E40, ""}, {0, ""}, {0, ""},
+    {0, ""}, {0, ""}, {0, ""}, {0x405E40, ""}, {0, ""}, {0, ""},
     /* 89..: object handlers (collision) */
     {0, ""}, {0, ""},
     /* 91..: player */
@@ -611,8 +643,8 @@ static Stub g_stubs[] = {
     /* 94..: doors */
     {0, ""}, {0, ""}, {0x41F080, "dddddd"}, {0, ""}, {0x41F3E0, "d"}, {0x41F390, "d"}, {0x41F170, "d"}, {0, ""},
     /* 102..: the frame of play */
-    {0, ""}, {0, ""}, {0, ""}, {0, ""}, {0x4D2990, "dddd"}, {0x404CC0, ""},
-    {0x406050, "dd"}, {0x406520, "dd"}, {0, ""},
+    {0, ""}, {0, ""}, {0, ""}, {0, ""}, {0x4D2990, "dddd"}, {0, ""},
+    {0, ""}, {0x406520, "dd"}, {0, ""},
     /* 111..: the PC sound buffers */
     {0x4BF970, "ddd"}, {0x4BFA20, "dd"}, {0x4BFAA0, "d"}, {0x4BFAE0, "d"}, {0x4BFBD0, "d"}, {0x4BFF20, "dd"},
     {0x495D70, "dd"}, {0x495DF0, ""},
@@ -622,6 +654,7 @@ static Stub g_stubs[] = {
     {0, ""},                   /* 129: steps called without an argument (movie, message tables) */
     {0x4BFA60, "dd"}, {0x4BFFA0, "d"},           /* 130: Snd_SetPan, Strm_Stop */
     {0x4BEF40, "d"},                             /* 132: Input_ReadPad */
+    {0x4C06E0, "dp", {8}},                       /* 133: Gpu_SetDrawArea */
 };
 #define STUB_GAME 71
 #define STUB_LOAD 50
@@ -679,7 +712,7 @@ REC(82) REC(83) REC(84) REC(85) REC(86) REC(87) REC(88) REC(89) REC(90) REC(91) 
 REC(94) REC(95) REC(96) REC(97) REC(98) REC(99) REC(100) REC(101)
 REC(102) REC(103) REC(104) REC(105) REC(106) REC(107) REC(108) REC(109) REC(110)
 REC(111) REC(112) REC(113) REC(114) REC(115) REC(116) REC(117) REC(118) REC(119) REC(120) REC(121)
-REC(122) REC(123) REC(124) REC(125) REC(126) REC(127) REC(128) REC(129) REC(130) REC(131) REC(132)
+REC(122) REC(123) REC(124) REC(125) REC(126) REC(127) REC(128) REC(129) REC(130) REC(131) REC(132) REC(133)
 static void *const g_recs[] = {rec0, rec1, rec2, rec3, rec4, rec5, rec6, rec7, rec8, rec9, rec10,
     rec11, rec12, rec13, rec14, rec15, rec16, rec17, rec18, rec19, rec20, rec21, rec22, rec23,
     rec24, rec25, rec26, rec27, rec28, rec29, rec30, rec31, rec32, rec33, rec34, rec35, rec36, rec37,
@@ -689,7 +722,7 @@ static void *const g_recs[] = {rec0, rec1, rec2, rec3, rec4, rec5, rec6, rec7, r
     rec78, rec79, rec80, rec81, rec82, rec83, rec84, rec85, rec86, rec87, rec88, rec89, rec90, rec91, rec92, rec93,
     rec94, rec95, rec96, rec97, rec98, rec99, rec100, rec101, rec102, rec103, rec104, rec105,
     rec106, rec107, rec108, rec109, rec110, rec111, rec112, rec113, rec114, rec115, rec116, rec117, rec118, rec119, rec120, rec121,
-    rec122, rec123, rec124, rec125, rec126, rec127, rec128, rec129, rec130, rec131, rec132};
+    rec122, rec123, rec124, rec125, rec126, rec127, rec128, rec129, rec130, rec131, rec132, rec133};
 _Static_assert(sizeof g_recs / sizeof g_recs[0] >= sizeof g_stubs / sizeof g_stubs[0], "a recorder per stub");
 /* Task_Sleep: the file loader "runs" while the task sleeps */
 static u32 __cdecl ts_sleep(u32 n)
@@ -742,7 +775,7 @@ static void ops2_args(u8 op, gptr t)
     case 0x23: A(1) = rnd() % 2 ? 0x6DC000 + rnd() % 0x100 : rnd() % 64;
                U16(g + 0x680) = rnd() % 16; U16(g + 0x682) = rnd() % 12; U16(0x87FFEA) = rnd() % 2; break;
     case 0x24: U8(g + 0xB4A) = rnd() % 3 ? (u8)rnd() : 0xFF; break;
-    case 0x57: U32(0x87DC98) = 0x6D0000; U16(g + 0x664) = rnd() % 5; break;   /* GameOver_Start's prims */
+    case 0x57: draw_safe(); U16(g + 0x664) = rnd() % 5; break;   /* GameOver_Start's prims, the frame it draws */
     case 0x4C: A(0) = 0x6DC000 + rnd() % 0x80;               /* Flash_Play: flash data (n, loops, fades) */
                U8(A(0)) = 4 + rnd() % 8; break;
     case 0x28: A(2) = rnd() % 12; A(1) = rnd() % 64; A(0) = rnd() % 2; break;
@@ -800,6 +833,20 @@ static void ops2_args(u8 op, gptr t)
     case 0x49: case 0x55: break;
     }
 #undef A
+}
+
+/* a frame that may be drawn (Frame_Draw from the code under test): a primitive buffer,
+   no glyphs (their quads carry stack bytes), effects without parents, the drawing flags off */
+static void draw_safe(void)
+{
+    U32(0x87DC98) = 0x6D0000; U32(0x87F94C) = 0x6CF800;
+    gptr pl = U32(G() + 0x940);
+    if (pl >= 0x690000 && pl < 0x693000 && !S16(pl + 0x10A)) S16(pl + 0x10A) = 1;   /* the gauge divides by the maximum health */
+    for (gptr q = 0x74D980; q < 0x74DB80; q += 0x10) U8(q) &= ~1;
+    for (u32 q = 0; q < 0x8C; q++) U8(0x74D750 + 4 * q + 3) = 0;
+    for (u32 k = 0; k < 36; k++) U32(0x694000 + k * 0x70 + 0x54) = 0;
+    static const u32 fl[] = {1, 2, 3, 4, 5, 8};
+    for (unsigned k = 0; k < sizeof fl / sizeof fl[0]; k++) Flag_Set(3, fl[k], 0);
 }
 
 static void test_ops2(void)
@@ -2513,6 +2560,7 @@ static void obj_part_counts(void)
         if (!n) { gptr q = O_PART + i * 0x100; U32(o + 0x64) = q; U32(q + 0x54) = 0; U32(q + 0x58) = o; n = 1; }   /* (objects in use have parts) */
         if (U8(o + 0xFE) & 1) U32(o + 0x68) = 1;     /* (the frame may unlink its later parts) */
     }
+    if (!S16(U32(G() + 0x940) + 0x10A)) S16(U32(G() + 0x940) + 0x10A) = 1;   /* the gauge divides by the maximum health */
     gptr ls = 0x6ED400;                             /* the camera's light set (G+0xA3C, 0x298 a camera) */
     U32(G() + 0xA3C) = ls - 8 - 0x298 * U8(G() + 0x7C4);
     for (u32 q = 0; q < 0x100; q += 4) U32(ls + q) = rnd();
@@ -2797,6 +2845,7 @@ static void test_title(void)
     for (int i = 0; i < iters; i++) {
         for (unsigned k = 0; k < sizeof F / sizeof F[0]; k++) {
             title_state(); U32(LOG_BASE) = 0;
+            { u32 pb = U32(0x87DC98), ob = U32(0x87F94C); draw_safe(); U32(0x87DC98) = pb; U32(0x87F94C) = ob; }   /* the demo draws a frame */
             u32 a[1] = {0x759EF0};
             sprintf(g_what, "screen %u step %u/%u cursor %d btn %X", U16(G() + 0x76E), U16(G() + 0x770),
                     U16(G() + 0x772), S8(0x759EF2), U32(0x87DC00));
@@ -3122,6 +3171,7 @@ static void enemy_state(void)
     Flag_Set(9, 0x36, rnd() % 2); Flag_Set(2, 0x18, rnd() % 2); Flag_Set(2, 0xB, rnd() % 2);
     U32(0x87DC98) = 0x6D0000;
     stub_at(0x4C08A0)->ret = rnd();
+    draw_safe();                                /* (game over draws a frame) */
 }
 
 
@@ -3178,6 +3228,7 @@ static void test_enemies(void)
             check(0x452FF0, Sphere_Hit, "Sphere_Hit", 4, c, 0xFFFFFFFF);
         }
         b[0] = rnd() % 2 ? 0 : rnd() % 0x40;
+        draw_safe();
         check(0x4529C0, GameOver_Start, "GameOver_Start", 1, b, 0);
     }
     type_tables_stub(0);
@@ -3634,7 +3685,15 @@ static void test_helpers(void)
         {0x48C4F0, Se_Start, "Se_Start", 6}, {0x48C0B0, Se_Play, "Se_Play", 2}, {0x48C640, Se_PlayFlat, "Se_PlayFlat", 3},
         {0x48C600, Se_StopGroup, "Se_StopGroup", 1}, {0x48CE60, Strm_Halt, "Strm_Halt", 1}, {0x494BA0, Text_Draw, "Text_Draw", 7, 0xFFFFFFFF},
         {0x478CF0, Lights_Run, "Lights_Run", 0}, {0x478DF0, Pad_Map, "Pad_Map", 2}, {0x478BF0, Input_Frame, "Input_Frame", 0},
-        {0x46BC20, Light_Try, "Light_Try", 3, 0xFFFFFFFF}, {0x46BAC0, Part_Lights, "Part_Lights", 2}, {0x46BA00, Obj_PickLights, "Obj_PickLights", 1}};
+        {0x46BC20, Light_Try, "Light_Try", 3, 0xFFFFFFFF}, {0x46BAC0, Part_Lights, "Part_Lights", 2}, {0x46BA00, Obj_PickLights, "Obj_PickLights", 1},
+        {0x48FAE0, Color_Pulse, "Color_Pulse", 3, 0xFFFFFFFF}, {0x406810, Hud_DrawArea, "Hud_DrawArea", 4}, {0x406C90, Hud_Tile, "Hud_Tile", 3},
+        {0x406E30, Hud_Sprite, "Hud_Sprite", 6}, {0x406D50, Hud_Picture, "Hud_Picture", 6}, {0x4062C0, Gauge_Bar, "Gauge_Bar", 2, 0xFFFFFFFF},
+        {0x406050, Gauge_Draw, "Gauge_Draw", 2},
+        {0x496410, Game_InitStock, "Game_InitStock", 0},
+        {0x406F10, Hud_Glyph, "Hud_Glyph", 6}, {0x4070A0, Hud_Line, "Hud_Line", 6},
+        {0x406890, Hud_Number, "Hud_Number", 6}, {0x406A10, Hud_SmallNum, "Hud_SmallNum", 6},
+        {0x406B50, Hud_GlyphNum, "Hud_GlyphNum", 6}, {0x404CC0, Hud_Weapon, "Hud_Weapon", 0},
+        {0x404CC0, Hud_Weapon, "Hud_Weapon", 0}, {0x404CC0, Hud_Weapon, "Hud_Weapon", 0}, {0x404CC0, Hud_Weapon, "Hud_Weapon", 0}};
     g_ign_objpads = 1;
     stubs_install(1);
     for (int i = 0; i < iters; i++) {
@@ -3809,6 +3868,68 @@ static void test_helpers(void)
                 }
                 if (j == 61 && rnd() % 4 == 0) a[1] = g + 0xC;
             }
+            if (j >= 64) {                              /* the health gauge */
+                gptr pl = U32(g + 0x940), b = g + 0x68C;
+                S16(pl + 0x10A) = (s16)(rnd() % 4 ? 1200 : 1 + rnd() % 3000);
+                S16(pl + 0x108) = (s16)(rnd() % 4 ? (s32)(rnd() % (S16(pl + 0x10A) + 1)) : (s32)(rnd() % 2 ? S16(pl + 0x10A) / 4 + (s32)(rnd() % 3) - 1 : S16(pl + 0x10A) / 2 + (s32)(rnd() % 3) - 1));
+                if (rnd() % 8 == 0) S16(pl + 0x108) = (s16)(rnd() % 2 ? -(s32)(rnd() % 100) : S16(pl + 0x10A) + (s32)(rnd() % 100));
+                U16(pl + 0x17E) = rnd() % 3 == 0 ? (u16)(1 + rnd() % 3) : 0; U16(pl + 0x174) = rnd() % 3 == 0;
+                U16(b + 0xBC) = (u16)(S16(pl + 0x108) + (rnd() % 2 ? (s32)(rnd() % 400) : (s32)(rnd() % 13) - 6));
+                U8(b + 0xC8) = rnd() % 6; U16(b + 0xB8) = rnd() % 3 ? (u16)(rnd() % 10) : (u16)(rnd() % 0x80);
+                U32(g + 4) = rnd(); U8(g + 0x108E) = rnd() % 3;
+                Flag_Set(2, 7, rnd() % 6 == 0); Flag_Set(2, 0xF, rnd() % 6 == 0); Flag_Set(3, 7, rnd() % 6 != 0);
+                for (u32 q = 0; q < 0x40; q++) U8(HB + 0x100 + q) = (u8)rnd();
+                U8(HB + 0x106) = rnd() % 5;            /* a picture of up to 4 pieces */
+                a[0] = rnd(); a[1] = rnd(); a[2] = rnd() % 13; a[3] = rnd(); a[4] = rnd(); a[5] = rnd() % 3 ? rnd() % 2 : rnd();
+                switch (j) {
+                case 64: a[0] = rnd(); a[1] = rnd(); a[2] = rnd() % 13; break;
+                case 65: case 69: case 70: a[0] = rnd() % 0x140; a[1] = rnd() % 0xF0; break;
+                case 66: a[0] = HB + 0x100; a[1] = rnd() & 0xFFFFFF; break;
+                case 67: a[0] = HB + 0x100; a[3] = rnd() & 0xFFFF; break;
+                case 68: a[0] = HB + 0x100; a[1] = rnd() % 0x140; a[2] = rnd() % 0xF0; a[3] = rnd() % 0x20; a[4] = rnd() & 0xFFFF; break;
+                case 72: a[0] = HB + 0x100; U16(a[0]) = (u16)rnd(); U16(a[0] + 2) = (u16)rnd(); a[1] = rnd(); a[2] = rnd(); a[3] = rnd(); a[4] = rnd(); a[5] = rnd() % 3 ? rnd() % 2 : rnd() % 2 ? 0x100u << rnd() % 8 : rnd(); break;
+                case 73: for (int q = 0; q < 4; q++) a[q] = rnd() % 3 ? rnd() % 0x200 : rnd(); a[4] = rnd(); a[5] = rnd() % 3 ? rnd() % 2 : rnd() % 2 ? 0x100u << rnd() % 8 : rnd(); break;
+                case 74: case 75: case 76: {
+                         static const u32 p10[] = {1, 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000, 1000000000};
+                         a[0] = rnd() % 4 ? rnd() % 0x140 : rnd(); a[1] = rnd() % 4 ? rnd() % 0xF0 : rnd();
+                         a[2] = rnd() % 11 | (rnd() % 4 ? 0 : rnd() & 0xFFFF0000u);
+                         a[3] = rnd() % 3 ? rnd() % 2 : (u32[]){0x10000, 0x100, 0x200, 0}[rnd() % 4] | (rnd() % 8 ? 0 : rnd());
+                         a[4] = rnd();
+                         switch (rnd() % 5) {                /* zeros, a power of ten (and next to it), too big, any */
+                         case 0: a[5] = rnd() % 100; break;
+                         case 1: a[5] = p10[rnd() % 10] * (rnd() % 10) + rnd() % 3; break;
+                         case 2: a[5] = p10[rnd() % 10] - rnd() % 2; break;
+                         case 3: a[5] = p10[(u16)a[2] ? ((u16)a[2] - 1) % 10 : 0] * (rnd() % 2 ? 10 + rnd() % 60000 : (rnd() % 2 ? 0x100 : 0x10000) * (1 + rnd() % 8)); break;
+                         default: a[5] = rnd(); break;
+                         }
+                         break; }
+                case 77: case 78: case 79: case 80: {   /* the weapon boxes and the ammo pop-up (often: many states) */
+                         gptr pl2 = U32(g + 0x940);
+                         U8(g + 0x108F) = rnd() % 4 ? (u8[]){0, 1, 2, 5, 6}[rnd() % 5] : rnd() % 8;
+                         U8(b + 0xCE) = rnd() % 2 ? 0 : 1 + rnd() % 3; U8(b + 0xCF) = rnd() % 2 ? 0 : 1 + rnd() % 3;
+                         U8(g + 0x10B4) = rnd() % 0x20; U8(g + 0x10B5) = rnd() % 4 ? 9 : rnd() % 0x10;
+                         for (u32 q = 0; q < 0x14; q++) { gptr it = g + 0x10BC + 12 * q; U8(it) = rnd() % 3 != 0; U8(it + 1) = rnd() % 0x20; U16(it + 8) = (u16)rnd(); }
+                         if (rnd() % 2) { gptr it = g + 0x10BC + 12 * (rnd() % 0x14); U8(it) = 1; U8(it + 1) = rnd() % 2 ? U8(g + 0x10B4) : (u8)(U8(g + 0x10B5) + 0x10); }
+                         U8(g + 0x1094) = (u8)rnd();
+                         U16(pl2 + 0x54) = rnd() % 4 ? (u16[]){0x501, 0x901, 1, 0x101, 0x201}[rnd() % 5] : (u16[]){0x500, 0x900, 0, 0x102}[rnd() % 4];
+                         U8(0x87DC08) = (u8)rnd();
+                         Flag_Set(9, 0x34, rnd() % 3 == 0); Flag_Set(3, 0xB, rnd() % 2); Flag_Set(9, 0x39, rnd() % 2);
+                         U16(g + 0x928) = (u16)rnd(); U16(b + 0xBE) = rnd() % 3 ? U16(g + 0x928) : (u16)(U16(g + 0x928) ^ (rnd() % 2 ? 0x100 : 1));
+                         U8(b + 0xCA) = rnd() % 8 ? 1 + rnd() % 7 : rnd() % 2 ? 0 : (u8)rnd();
+                         { static const s16 th[8][3] = {{0, 1, -1}, {0, 1, 2}, {0x7F, 0x80, 0}, {0x1E, 0x1F, 0x20}, {0, 1, 2},
+                                                        {0, 1, 2}, {0x15, 0x16, 0x17}, {0, 1, -1}};   /* each state's turns */
+                           U16(b + 0xC0) = rnd() % 4 ? (u16)th[U8(b + 0xCA) & 7][rnd() % 3] : (u16)(rnd() % 0x200); }
+                         U16(b + 0xC4) = rnd() % 4 ? (u16)(rnd() % 4) : (u16[]){0xFFFF, 0x101, 0x8000, 99}[rnd() % 4];
+                         U32(b + 0xB4) = rnd() % 2 ? rnd() % 10000000 : rnd();
+                         U8(b + 0xCB) = rnd() % 4 ? rnd() % 6 : (u8)rnd();
+                         { s16 th[] = {0, 1, -1, 0xB8, 0xC0, 0xB9, 0x1E, 0x20, 0x7C, 0x84, 0x94};
+                           U16(b + 0xC2) = rnd() % 3 ? (u16)th[rnd() % 11] : (u16)(rnd() % 0x100); }
+                         U8(g + 0x108E) = rnd() % 3;
+                         break; }
+                case 71: for (u32 q = 0x10B8; q < 0x1200; q += 4) U32(g + q) = rnd();   /* stock tables (and around) */
+                         U8(g + 0x108E) = rnd() % 4 ? rnd() % 3 : (u8)rnd(); Flag_Set(9, 0x74, rnd() % 2); break;
+                }
+            }
             g_ign_addr = 0x74AFC2; g_ign_len = j == 15 ? 2 : 0;   /* MulMatrix0's pad (original: stack bytes) */
             U32(LOG_BASE) = 0;
             sprintf(g_what, "args %X %X %X %X %X %X %X", a[0], a[1], a[2], a[3], a[4], a[5], a[6]);
@@ -3818,6 +3939,254 @@ static void test_helpers(void)
     g_ign_len = 0;
     stubs_install(0);
     g_ign_objpads = 0;
+}
+
+/* ---- the frame's drawing (draw.c) --------------------------------------------------- */
+#define DS_MODEL 0x5B0000u      /* models of the objects, 0x100 each */
+#define DS_VERT  0x5B1000u      /* their vertices and normals */
+#define DS_POLY  0x5B4000u      /* their triangles and quads */
+#define DS_MESH  0x5B8000u      /* the effects' meshes */
+#define DS_SPR   0x5BC000u      /* the props' sprite lists */
+#define DS_TEXT  0x5BD000u      /* text of the message slots */
+#define DS_MASK  0x5BE000u      /* the mask table (0x864490) */
+#define DS_PRIM  0x5C0000u      /* the primitive buffer */
+
+static s16 ds_coord(s32 r) { return (s16)((s32)(rnd() % (2 * r + 1)) - r); }
+static void ds_matrix(gptr m, int rot)          /* a rotation (or any matrix) and a translation */
+{
+    if (rot) { gptr a = HB + 0x1F0; for (int k = 0; k < 3; k++) U16(a + 2 * k) = (u16)rnd(); RotMatrix(a, m); }
+    else for (int k = 0; k < 9; k++) U16(m + 2 * k) = (u16)ds_coord(0x1000);
+    for (int k = 0; k < 3; k++) U32(m + 0x14 + 4 * k) = (u32)(s32)ds_coord(k == 2 ? 0x400 : 0x200) + (k == 2 ? 0x800 : 0);
+}
+static void ds_svecs(gptr v, u32 n, s32 r)
+{
+    for (u32 k = 0; k < n; k++) { for (int c = 0; c < 3; c++) U16(v + 8 * k + 2 * c) = (u16)ds_coord(r); U16(v + 8 * k + 6) = (u16)rnd(); }
+}
+/* a mesh list of n entries of size sz (vertices, then uv/tp/colours at random) */
+static void ds_mesh(gptr e, u32 n, u32 sz, u32 nv)
+{
+    for (u32 k = 0; k < n * sz; k += 4) U32(e + k) = rnd();
+    for (u32 k = 0; k < n; k++) {
+        ds_svecs(e + k * sz, nv, rnd() % 4 ? 0x180 : 0x2000);
+        if (rnd() % 4) {                        /* mostly a square (either way round) */
+            s32 h = 0x40 + rnd() % 0xC0, sx = rnd() % 2 ? h : -h;
+            static const s32 cx[4] = {-1, 1, -1, 1}, cy[4] = {-1, -1, 1, 1};
+            for (u32 v = 0; v < nv; v++) {
+                U16(e + k * sz + 8 * v) = (u16)(cx[v] * sx + (s32)(rnd() % 9) - 4);
+                U16(e + k * sz + 8 * v + 2) = (u16)(cy[v] * h + (s32)(rnd() % 9) - 4);
+                U16(e + k * sz + 8 * v + 4) = (u16)((s32)(rnd() % 9) - 4);
+            }
+        }
+    }
+}
+
+static void draw_scene(void)
+{
+    gptr g = G();
+    coll_setup();
+    SetGeomOffset(160, 120); SetGeomScreen(rnd() % 4 ? 0x200 : 0x100 + rnd() % 0x300);
+    gptr c = g + 0x778;
+    int ahead = rnd() % 2;                      /* a camera looking along z, the scene in front of it */
+    ds_matrix(c, rnd() % 4 != 0);
+    if (ahead) { for (int k = 0; k < 9; k++) U16(c + 2 * k) = k % 4 ? 0 : 0x1000; }
+    for (int k = 0; k < 3; k++) U16(c + 0x28 + 2 * k) = (u16)ds_coord(0x800);
+    for (int k = 0; k < 3; k++) U16(c + 0x30 + 2 * k) = (u16)ds_coord(0x200);
+    U8(g + 0xB4B) = rnd() % 4 ? rnd() % 3 : rnd() % 8;
+    U32(0x87DE0C) = rnd() % 2; U32(0x87DC98) = DS_PRIM; U32(0x87F94C) = 0x6CF800;
+    /* objects (and their parts): 0x87E760 and G+0x940 */
+    u32 no = 1 + rnd() % 4, nvt = 0;
+    U32(0x87E760) = O_OBJ; U32(g + 0x940) = O_OBJ; U32(0x87F940) = no;
+    gptr vb = DS_VERT;
+    for (u32 i = 0; i < no; i++) {
+        gptr o = O_OBJ + i * 0x260, m = DS_MODEL + i * 0x100;
+        U32(o + 0x50) = rnd() % 5 ? 3 | (rnd() & 0x1000) : rnd() & 0x1003;
+        ds_matrix(o + 0x20, 1); for (int k = 0; k < 3; k++) U16(o + 0x40 + 2 * k) = (u16)(S16(c + 0x28 + 2 * k) + ds_coord(0x600));
+        if (ahead) U16(o + 0x44) = (u16)(S16(c + 0x2C) + 0x300 + rnd() % 0x900);
+        U16(o + 0x4A) = (u16)rnd(); U8(o + 0xFE) = (u8)rnd(); U16(o + 0x104) = (u16)rnd(); U16(o + 0x106) = (u16)rnd();
+        U16(o + 0x110) = (u16)(rnd() % 0x2000); U16(o + 0x112) = (u16)(rnd() % 0x2000); U16(o + 0x5A) = rnd() % 4;
+        u32 np = 1 + rnd() % 3;
+        U8(o + 0x118) = (u8)((rnd() % 3 ? 0x80 : 0) | (rnd() % 4) << 4 | rnd() % np);
+        U32(o + 0x60) = m; U32(m) = vb; U32(m + 4) = vb + 0x800;
+        U32(o + 0x64) = O_PART + i * 0x400;
+        u32 vtot = 0;
+        for (u32 j = 0; j < np; j++) {
+            gptr q = O_PART + i * 0x400 + j * 0x100;
+            for (u32 k = 0; k < 0x100; k += 4) U32(q + k) = rnd();
+            ds_matrix(q, 1); ds_matrix(q + 0x20, rnd() % 2);
+            for (int k = 0; k < 3; k++) U16(q + 0x40 + 2 * k) = (u16)(S16(o + 0x40 + 2 * k) + ds_coord(0x200));
+            U32(q + 0x50) = rnd() % 4 ? 3 : rnd();
+            U32(q + 0x54) = j + 1 < np ? q + 0x100 : 0; U32(q + 0x58) = o;
+            u32 nt = rnd() % 4 ? 1 + rnd() % 3 : 0;
+            if (vtot + nt > 8) nt = 0;
+            U8(q + 0x62) = (u8)nt; vtot += nt;
+            ds_svecs(q + 0x74, 3, 0x1000);
+            for (u32 k = 0; k < 0x20; k += 2) U16(q + 0xAC + k) = (u16)ds_coord(0x1000);
+        }
+        ds_svecs(vb, vtot * 3, rnd() % 4 ? 0x100 : 0x1000);
+        ds_svecs(vb + 0x800, vtot * 3, 0x1000);
+        u32 nv = vtot * 3; if (!nv) nv = 1;
+        nvt = nvt > nv ? nvt : nv;
+        /* groups: triangles and quads over the model's vertices */
+        u32 ng = rnd() % 4 ? 1 + rnd() % 4 : (u32)(rnd() % 2 ? 0 : -1);
+        U32(m + 0x14) = ng;
+        for (u32 k = 0; k < 4; k++) {
+            gptr gr = m + 0x24 + k * 0x14, tl = DS_POLY + i * 0x1000 + k * 0x400, ql = tl + 0x200;
+            u32 nt = rnd() % 8, nq = rnd() % 6;
+            U32(gr) = tl; U32(gr + 4) = ql; U16(gr + 8) = (u16)nt; U16(gr + 0xA) = (u16)nq;
+            for (u32 t = 0; t < nt; t++) { for (int v = 0; v < 3; v++) U16(tl + t * 0xC + 2 * v) = (u16)(rnd() % nv); for (int v = 6; v < 0xC; v += 2) U16(tl + t * 0xC + v) = (u16)rnd(); }
+            for (u32 t = 0; t < nq; t++) { for (int v = 0; v < 4; v++) U16(ql + t * 0x10 + 2 * v) = (u16)(rnd() % nv); for (int v = 8; v < 0x10; v += 2) U16(ql + t * 0x10 + v) = (u16)rnd(); }
+        }
+        vb += 0x1000;
+    }
+    /* the projected vertices (for the polygon drawers alone) */
+    for (u32 k = 0; k < 24; k++) {
+        U32(0x759F70 + 4 * k) = rnd() % 8 ? rnd() % 0x8000 : rnd() % 2 ? 0 : rnd();
+        U32(0x75A61C + 4 * k) = rnd();
+        U16(0x75ACAC + 2 * k) = (u16)(rnd() % 0x400);
+        static const float ex[] = {0.0f, -0.5f, 320.0f, 320.5f, 240.0f, 240.5f, -1.0f};   /* (the screen's edges) */
+        F32(0x75B028 + 8 * k) = rnd() % 4 ? (float)((s32)(rnd() % 400) - 40) : ex[rnd() % 7];
+        F32(0x75B028 + 8 * k + 4) = rnd() % 4 ? (float)((s32)(rnd() % 300) - 30) : ex[rnd() % 7];
+    }
+    /* effects: G+0x93C */
+    u32 ne = rnd() % 6;
+    U32(g + 0x93C) = O_EFF; U32(0x87DE04) = ne;
+    for (u32 i = 0; i < 8; i++) {
+        gptr e = O_EFF + i * 0x70, m = DS_MESH + i * 0x800;
+        for (u32 k = 0; k < 0x70; k += 4) U32(e + k) = rnd();
+        U32(e + 0x50) = rnd() % 5 ? 3 | (rnd() % 3 ? 0 : 0x8000) : rnd();
+        U32(e + 0x54) = rnd() % 3 ? 0 : O_OBJ + 0x260 * (rnd() % no);
+        ds_matrix(e + 0x20, 1); ds_matrix(e, 1);
+        for (int k = 0; k < 3; k++) U16(e + 0x40 + 2 * k) = (u16)(S16(c + 0x28 + 2 * k) + ds_coord(0x600));
+        if (ahead) U16(e + 0x44) = (u16)(S16(c + 0x2C) + 0x300 + rnd() % 0x900);
+        U16(e + 0x6C) = rnd() % 6; U16(e + 0x6E) = rnd() % 3 ? (u16)(rnd() % 0x400) : (u16)rnd();
+        U32(e + 0x68) = m;
+        u32 nt = rnd() % 6, nq = rnd() % 7;
+        U32(m) = m + 0x10; U32(m + 4) = m + 0x400; U16(m + 8) = (u16)nt; U16(m + 0xA) = (u16)nq;
+        ds_mesh(m + 0x10, nt, 0x28, 3); ds_mesh(m + 0x400, nq, 0x34, 4);
+        U8(e + 0x4F) = rnd() % 2; U16(e + 0x5E) = rnd() % 2; U16(e + 0x66) = rnd() % 4 ? (u16)(rnd() % 4) : 0;
+    }
+    for (u32 k = 0; k < 5 * 0x20; k += 0x20) ds_matrix(0x74AFB0 + k, 1);
+    /* props: G+0x944 */
+    u32 nk = rnd() % 6;
+    U32(g + 0x944) = O_K2; U32(0x87DC88) = nk;
+    for (u32 i = 0; i < 8; i++) {
+        gptr p = O_K2 + i * 0xAC, s = DS_SPR + i * 0x100;
+        for (u32 k = 0; k < 0xAC; k += 4) U32(p + k) = rnd();
+        U32(p + 0x50) = rnd() % 5 ? 3 : rnd();
+        U32(p + 0x60) = rnd() % 3 ? 0 : O_OBJ + 0x260 * (rnd() % no);
+        U8(p + 0x84) = (u8)((rnd() % 3 ? 0 : 0x80) | (rnd() & 5));
+        for (int k = 0; k < 3; k++) U16(p + 0x40 + 2 * k) = (u16)(S16(c + 0x28 + 2 * k) + ds_coord(0x600));
+        if (ahead) U16(p + 0x44) = (u16)(S16(c + 0x2C) + 0x300 + rnd() % 0x900);
+        ds_matrix(p + 0x20, 1);
+        for (int k = 0; k < 3; k++) U32(p + 0x34 + 4 * k) = (u32)(s32)ds_coord(0x100);
+        U32(p + 0x64) = rnd() % 4 ? rnd() : (rnd() & 0xFF000000) | 0xD00000;
+        U16(p + 0x6C) = rnd() % 4 ? 1 + rnd() % 8 : (u16)rnd(); U16(p + 0x6E) = rnd() % 4 ? 1 + rnd() % 8 : (u16)rnd();
+        U16(p + 0x44) = rnd() % 4 ? (u16)(rnd() % 0x400) : (u16)rnd() % 0x3FF;
+        U32(p + 0x94) = s;
+        for (u32 k = 0; k < 0x100; k += 4) U32(s + k) = rnd();
+        U8(s + 4) = (u8)(rnd() % 6 | (rnd() & 0xE0));
+    }
+    /* the handlers at G+0x948 (recorders) */
+    U32(g + 0x948) = O_K3; U32(0x87DE14) = rnd() % 6;
+    for (u32 k = 0; k < 8; k++) { U8(O_K3 + k * 0x34) = (u8)rnd(); U32(O_K3 + k * 0x34 + 4) = rnd() % 4 ? (u32)(uintptr_t)g_recs[STUB_TYPE] : 0; }
+    /* text: the slots and the sentence */
+    for (gptr s = 0x74D980; s < 0x74DB80; s += 0x10) {
+        U8(s) = rnd() % 3 == 0; U8(s + 1) = rnd() % 4 ? (u8)(rnd() % 4) : 4;
+        gptr t = DS_TEXT + (s - 0x74D980) * 8;
+        U32(s + 4) = t; U32(s + 8) = rnd(); U16(s + 0xC) = (u16)ds_coord(300); U16(s + 0xE) = (u16)ds_coord(200);
+        u32 n = rnd() % 12;
+        for (u32 q = 0; q < n; q++) U16(t + 2 * q) = (u16)((u32[]){0, 0, 0, 1, 4, 2, 3, 0}[rnd() % 8] << 12 | (rnd() % 4 ? rnd() % 0x80 : rnd() & 0xFFF));
+        U16(t + 2 * n) = (u16)(0xF000 | (rnd() & 0xFFF));
+    }
+    for (u32 q = 0; q < 0x8C; q++)
+        U32(0x74D750 + 4 * q) = (u32)(rnd() % 4 ? 1 : rnd() % 3) << 24 | (rnd() % 0x100) << 16 | (rnd() % 2 ? rnd() % 4 : rnd() % 4 ? rnd() % 0x100 : rnd() & 0xFFF);
+    U32(0x87FF90) = rnd(); U16(0x87FF8C) = rnd() % 3 ? rnd() % 10 : (u16)rnd(); U8(0x87FF8F) = rnd() % 4;
+    /* masks */
+    U16(c + 0x50) = rnd() % 3 ? (u16)(rnd() % 4) : 0;
+    U8(g + 0xC27) = (u8)rnd(); U32(0x746C9C) = rnd() % 2 ? U8(g + 0xC27) : (u32)(rnd() % 0x100);
+    U32(0x864490) = DS_MASK; U32(0x864494) = 32; F32(0x8644B8) = 1.0f / (1 + rnd() % 64);
+    for (u32 k = 0; k < 0x20 * 0x24; k += 4) U32(DS_MASK + k) = rnd();
+    for (u32 k = 0; k < 0x24; k++) U32(DS_MASK + k * 0x20 + 0x14) = 1 + rnd() % 6;
+    U16(g + 0xB10) = rnd() % 2 ? 0 : (u16)rnd();
+    for (u32 k = 0; k < U8(CL_ROOM); k++) U8(CL_ROOM + U32(CL_ROOM + 8 + 4 * k) + 3) = (u8[]){0, 0x40, 0x80, 0x20}[rnd() % 4];   /* floors under some marks */
+    stub_at(0x4C08A0)->ret = rnd();
+    static const u32 fl[][2] = {{2, 0x12}, {3, 1}, {3, 2}, {3, 3}, {3, 4}, {3, 5}, {3, 8}};
+    for (unsigned k = 0; k < sizeof fl / sizeof fl[0]; k++) Flag_Set(fl[k][0], fl[k][1], rnd() % 3 != 0);
+}
+
+static void test_draw(void)
+{
+    static const struct { u32 addr; void *fn; const char *name; int n; } F[] = {
+        {0x4A6DF0, World_Matrices, "World_Matrices", 0}, {0x4A71B0, Obj_ToView, "Obj_ToView", 2},
+        {0x4460A0, Mat_ToView, "Mat_ToView", 2}, {0x4A7510, Obj_DrawAll, "Obj_DrawAll", 0},
+        {0x4A8BA0, Model_DrawGroups, "Model_DrawGroups", 3}, {0x4A8C00, Model_Tris, "Model_Tris", 3},
+        {0x4A8F40, Model_Quads, "Model_Quads", 3}, {0x4A8470, Mesh_TriTex, "Mesh_TriTex", 3},
+        {0x4A8690, Mesh_QuadTex, "Mesh_QuadTex", 3}, {0x4A8930, Mesh_QuadFlat, "Mesh_QuadFlat", 3},
+        {0x4A82F0, Z_Fixed, "Z_Fixed", 0}, {0x4A8310, Z_Min3, "Z_Min3", 0}, {0x4A8360, Z_Min4, "Z_Min4", 0},
+        {0x4A83C0, Z_Max3, "Z_Max3", 0}, {0x4A8410, Z_Max4, "Z_Max4", 0},
+        {0x4A7840, Eff_DrawAll, "Eff_DrawAll", 0}, {0x4A7ED0, Obj_DrawShadows, "Obj_DrawShadows", 0},
+        {0x4A7A20, Prop_DrawAll, "Prop_DrawAll", 0}, {0x4A7330, Draw_Handlers, "Draw_Handlers", 0},
+        {0x4A7390, Dim_Bars, "Dim_Bars", 0}, {0x403760, Masks_Draw, "Masks_Draw", 1},
+        {0x445E10, Rope_Draw, "Rope_Draw", 0}, {0x471440, Text_DrawAll, "Text_DrawAll", 0},
+        {0x4A7250, Frame_Draw, "Frame_Draw", 0},
+    };
+    static const u32 zf[] = {0x4A82F0, 0x4A8310, 0x4A8360, 0x4A83C0, 0x4A8410};
+    stubs_install(1);
+    g_ign_objpads = 1; g_ign_draw = 1;
+    for (int i = 0; i < iters; i++) {
+        for (unsigned k = 0; k < sizeof F / sizeof F[0]; k++) {
+            game_state();
+            draw_scene();
+            u32 a[7] = {0};
+            gptr o = O_OBJ + 0x260 * (rnd() % U32(0x87F940));
+            switch (F[k].addr) {
+            case 0x4A71B0: a[0] = rnd() % 2 ? o : O_EFF + 0x70 * (rnd() % 8); a[1] = a[0] + 0x20; break;
+            case 0x4460A0: a[0] = 0x74AFB0 + 0x20 * (rnd() % 4); a[1] = HB + 0x100; break;
+            case 0x4A7250:              /* no glyphs: their quads carry stack bytes the earlier steps left (Text_DrawAll has its own test) */
+                for (gptr q = 0x74D980; q < 0x74DB80; q += 0x10) if (U8(q + 1) != 4) U8(q) &= ~1;
+                for (u32 q = 0; q < 0x8C; q++) U8(0x74D750 + 4 * q + 3) = 0;   /* (nor the cursor: placed by the last glyph's width) */
+                World_Matrices(); break;
+            case 0x4A7ED0:
+                if (rnd() % 2) {                /* one floor under everything, its kind against the shadow's mask */
+                    gptr w = CL_ROOM + 0x40;
+                    U8(CL_ROOM) = 1; U32(CL_ROOM + 8) = 0x40; U32(G() + 0xA4C) = CL_ROOM;
+                    U8(w) = 1; U8(w + 1) = 4; U8(w + 3) = (u8[]){0, 0x40, 0x80, 0x20}[rnd() % 4]; U16(w + 4) = 1; U8(w + 6) = rnd() % 4;
+                    for (u32 k = 0; k < 4; k++) { U32(w + 8 + 4 * k) = 0; U16(w + 0x18 + 4 * k) = (u16)(k == 1 || k == 2 ? 0x7000 : -0x7000);
+                                                   U16(w + 0x1A + 4 * k) = (u16)(k >= 2 ? 0x7000 : -0x7000); }
+                    for (u32 k = 0; k < 16 * 0x100; k += 0x100) U16(O_PART + k + 0x42) = (u16)(-1000 - (s32)(rnd() % 3000));
+                    for (u32 k = 0; k < 4; k++) U8(O_OBJ + 0x260 * k + 0x118) = (u8)((U8(O_OBJ + 0x260 * k + 0x118) & 0x8F) | 0x20);
+                }
+                World_Matrices(); break;
+            case 0x4A7510: World_Matrices(); break;
+            case 0x4A8BA0: a[0] = U32(o + 0x60); a[1] = rnd() % 4 ? rnd() : 0xFFFFFFFF; a[2] = rnd(); break;
+            case 0x4A8C00: case 0x4A8F40: {
+                gptr gr = U32(o + 0x60) + 0x24 + 0x14 * (rnd() % 4);
+                a[0] = U32(gr + (F[k].addr == 0x4A8C00 ? 0 : 4)); a[1] = U16(gr + (F[k].addr == 0x4A8C00 ? 8 : 0xA)); a[2] = rnd();
+                break; }
+            case 0x4A8470: case 0x4A8690: case 0x4A8930: {
+                gptr e = O_EFF + 0x70 * (rnd() % 8), m = U32(e + 0x68);
+                World_Matrices(); SetRotMatrix(e); SetTransMatrix(e);
+                a[0] = U32(m + (F[k].addr == 0x4A8470 ? 0 : 4)); a[1] = U16(m + (F[k].addr == 0x4A8470 ? 8 : 0xA)); a[2] = zf[rnd() % 5];
+                U32(0x75A618) = rnd() % 0x500;     /* (a u16 in the game: never negative) */
+                break; }
+            case 0x4A82F0: case 0x4A8310: case 0x4A8360: case 0x4A83C0: case 0x4A8410:
+                for (u32 q = 0; q < 4; q++) U32(0x75BD48 + 4 * q) = rnd() % 4 ? rnd() % 0x2000 : rnd();
+                U32(0x75A618) = rnd() % 2 ? rnd() % 0x500 : rnd();
+                break;
+            case 0x4A7840: World_Matrices(); break;
+            case 0x4A7A20: World_Matrices(); break;
+            case 0x403760: a[0] = G() + 0x778; break;
+            case 0x445E10: Flag_Set(3, 2, rnd() % 4 != 0); U32(U32(G() + 0x93C) + 0x50) |= rnd() % 2 ? 0x8003 : 0;
+                           U32(U32(G() + 0x940) + 0x50) |= 2; if (rnd() % 4) U32(0x87DE04) |= 1; break;
+            }
+            U32(LOG_BASE) = 0;
+            sprintf(g_what, "objects %u effects %u props %u shift %u args %X %X %X", U32(0x87F940), U32(0x87DE04), U32(0x87DC88),
+                    U8(G() + 0xB4B), a[0], a[1], a[2]);
+            check(F[k].addr, F[k].fn, F[k].name, F[k].n, a, 0);
+        }
+    }
+    g_ign_objpads = 0; g_ign_draw = 0;
+    stubs_install(0);
 }
 
 /* ---- the trigger areas' kinds (table 0x738B68) ----------------------------------- */
@@ -3927,6 +4296,7 @@ static gptr raptor_setup(void)
     }
     U32(0x87F948) = TYPE_TAB;                                           /* effect slot handlers: recorders */
     for (int k = 0; k < 256; k++) U32(TYPE_TAB + 4 * k) = (u32)(uintptr_t)g_recs[STUB_TYPE];
+    { u32 pb = U32(0x87DC98), ob = U32(0x87F94C); draw_safe(); U32(0x87DC98) = pb; U32(0x87F94C) = ob; }   /* (game over draws a frame) */
     return o;
 }
 
@@ -4234,7 +4604,7 @@ static void test_game(void)
     for (int i = 0; i < iters; i++) {
         for (unsigned k = 0; k < sizeof F / sizeof F[0]; k++) {
             game_state();
-            fake_room_block();
+            fake_room_block(); draw_safe();
             U32(LOG_BASE) = 0;
             u32 a[1];
             switch (k) {
@@ -4373,7 +4743,7 @@ __declspec(dllexport) void harness_main(int argc, char **argv)
     struct { const char *name; void (*fn)(void); } T[] = {
         {"flags", test_flags}, {"geometry", test_geom}, {"script values", test_script_values},
         {"script opcodes", test_script_ops}, {"script objects", test_objects},
-        {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"objects 2", test_object}, {"collision", test_collision}, {"player", test_player}, {"player states", test_player2}, {"zones", test_zones}, {"loading", test_room}, {"title", test_title}, {"game task", test_game}, {"doors", test_doors}, {"frame", test_frame}, {"enemy sets", test_enemyset}, {"enemies", test_enemies}, {"raptor", test_raptor}, {"aot kinds", test_aot_kinds}, {"object effects", test_obj_effects}, {"effect slots", test_k2}, {"effect drops", test_k2_drops}, {"effect emitters", test_eff_slots}, {"effect slots 3", test_k2_more}, {"helpers", test_helpers},
+        {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"objects 2", test_object}, {"collision", test_collision}, {"player", test_player}, {"player states", test_player2}, {"zones", test_zones}, {"loading", test_room}, {"title", test_title}, {"game task", test_game}, {"doors", test_doors}, {"frame", test_frame}, {"enemy sets", test_enemyset}, {"enemies", test_enemies}, {"raptor", test_raptor}, {"aot kinds", test_aot_kinds}, {"object effects", test_obj_effects}, {"effect slots", test_k2}, {"effect drops", test_k2_drops}, {"effect emitters", test_eff_slots}, {"effect slots 3", test_k2_more}, {"helpers", test_helpers}, {"draw", test_draw},
     };
     for (unsigned i = 0; i < sizeof T / sizeof T[0]; i++) {
         int f0 = g_fail, t0 = g_tests;

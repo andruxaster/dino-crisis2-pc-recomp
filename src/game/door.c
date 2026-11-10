@@ -1068,7 +1068,7 @@ void DC2CALL Door_Task(void)                                       /* 0x41E2D0 *
     memset(MEM(DOOR), 0, 0x928 * 4);
     for (;;) {
         Orig_Call1(U32(0x71FFC4 + U8(DOOR + 0x2474) * 4), DOOR);
-        Fn_4A7250();
+        Frame_Draw();
         Task_Sleep(1);
     }
 }

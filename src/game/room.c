@@ -319,7 +319,7 @@ void DC2CALL AOT_Door(gptr e)                                       /* 0x48B390 
     U32(0x7593B4) = e + 0x14;
     for (u32 k = 0; k < 0x500; k += 0x28) U8(U32(G() + 0xA5C) + k) = 0;
     Shake_Set(0xFFFFFFFF, 0, 0);
-    Fn_4A7250();
+    Frame_Draw();
     Task_Chain(0x41E2D0);
 }
 

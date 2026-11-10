@@ -1,6 +1,7 @@
 /* See include/dc2/pcio.h. */
 #include "dc2/pcio.h"
 #include "dc2/game.h"
+#include "dc2/gte.h"
 
 #ifdef DC2_IN_PROCESS
 #define ORIG(addr, type) ((type)(uintptr_t)(addr))
@@ -31,6 +32,9 @@ void DC2CALL Masks_CreateVB(u32 n, gptr p)      { ORIG(0x4BE3C0, void (DC2CALL *
 void DC2CALL Masks_SetQuad(u32 i, u32 x, u32 y, u32 z) { ORIG(0x4BE430, void (DC2CALL *)(u32, u32, u32, u32))(i, x, y, z); }
 void DC2CALL Masks_BuildTexture(void)           { ORIG(0x4BE6E0, void (DC2CALL *)(void))(); }
 void DC2CALL Masks_Upload(u32 a)                { ORIG(0x4BEAC0, void (DC2CALL *)(u32))(a); }
+void DC2CALL Masks_ShiftDepth(u32 d)            { ORIG(0x4BE6A0, void (DC2CALL *)(u32))(d); }
+u32  DC2CALL Masks_FillMarker(u32 i, gptr p)    { return ORIG(0x4BEC40, u32 (DC2CALL *)(u32, gptr))(i, p); }
+void DC2CALL SetMaskMarker(gptr p)              { ORIG(0x4C06B0, void (DC2CALL *)(gptr))(p); }
 #else
 #include <stdio.h>
 #include <stdlib.h>
@@ -158,4 +162,19 @@ void DC2CALL Masks_CreateVB(u32 n, gptr p) { (void)n; (void)p; }
 void DC2CALL Masks_SetQuad(u32 i, u32 x, u32 y, u32 z) { (void)i; (void)x; (void)y; (void)z; }
 void DC2CALL Masks_BuildTexture(void) {}
 void DC2CALL Masks_Upload(u32 a) { (void)a; }
+/* the mask table 0x864490 (0x20 a mask, count 0x864494; none while the masks are not built) */
+void DC2CALL Masks_ShiftDepth(u32 d)
+{
+    float f = (float)((long double)(s32)d * F32(0x8644B8));
+    for (s32 i = 0; i < S32(0x864494); i++) { gptr z = U32(0x864490) + 0x20 * i + 4; F32(z) = (float)((long double)F32(z) - f); }
+}
+u32 DC2CALL Masks_FillMarker(u32 i, gptr p)
+{
+    gptr t = U32(0x864490) + 0x20 * i;
+    U32(p + 8) = i;
+    if (!U32(0x864490)) { U16(p + 0xE) = 0; U16(p + 0xC) = 0x7FFF; return 0; }
+    U16(p + 0xE) = U16(t + 0x54); U16(p + 0xC) = U16(t + 0x94);
+    return U32(t + 0x74);
+}
+void DC2CALL SetMaskMarker(gptr p) { U32(p + 4) = 0x88000000; }
 #endif

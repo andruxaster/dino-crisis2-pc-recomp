@@ -143,7 +143,7 @@ void DC2CALL Game_NewState(void)                                     /* 0x450E00
     G16(0x11F8) = 0x4B0; G16(0x11FC) = 0x4B0;
     G8(0x10AA) = 1;
     U32(G() + 0x1204) = parts[Rand8() & 7] & 0x0F0F0F0F;
-    Fn_496410();
+    Game_InitStock();
     switch ((s8)G8(0x108E)) {                     /* difficulty: starting items */
     case 1: {
         static const u8 f[10] = {0x55, 0x6D, 0x4B, 0x59, 0x4F, 0x6E, 0x65, 0x66, 0x67, 0x68};
@@ -316,21 +316,21 @@ void DC2CALL Game_Play(void)                                         /* 0x451790
     if (!Flag_Check(2, 6)) {
         if (Flag_Check(2, 8)) {
             Flag_Set(2, 0x25, 1);
-            Fn_4A7250();
+            Frame_Draw();
             Task_Chain(0x491950);
         } else if (Flag_Check(2, 0x11)) {
-            Fn_4A7250();
+            Frame_Draw();
             G16(0x76C) = 0;
             Task_Chain(0x451660);
             return;
         } else if (Flag_Check(2, 0x10) && !Flag_Check(2, 0xF)) {
-            Fn_4A7250();
+            Frame_Draw();
             Task_Chain(0x478F40);
         }
     }
     if (Flag_Check(3, 9)) Fn_405E40();
     Game_Frame();
-    Fn_4A7250();
+    Frame_Draw();
     Flag_Set(2, 0x25, 0);
     Shake_Tick();
 }
@@ -427,8 +427,8 @@ void DC2CALL Game_Frame(void)                                       /* 0x472FD0 
         Camera_Load();
         U8(G() + 0x84B) = U8(G() + 0x84A);
     }
-    if (!Flag_Check(1, 0xC)) Fn_404CC0();
-    Fn_406050(0xC0, 0x10);
+    if (!Flag_Check(1, 0xC)) Hud_Weapon();
+    Gauge_Draw(0xC0, 0x10);
     if (Flag_Check(3, 0xB)) Fn_406520(0xC8, 0xD0);
     Hidden_UpdateAll();
     if (!Flag_Check(1, 5)) Obj_PickLights(G() + 0x778);
@@ -523,7 +523,7 @@ void DC2CALL Game_Continue(void)                                    /* 0x451990 
         U8(G() + 0xB58) = 0x80; U8(G() + 0xB59) = 0x80; U8(G() + 0xB5A) = 0x80;
         U8(G() + 0xB5B) = 0; U8(G() + 0xB5C) = 0;
         DrawSync(0);
-        if (Flag_Check(2, 6)) { Game_Frame(); Fn_4A7250(); return; }
+        if (Flag_Check(2, 6)) { Game_Frame(); Frame_Draw(); return; }
         Gauge_Reset();
         Room_Reset();
         U32(0x87DE00) = 2;

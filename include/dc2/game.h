@@ -789,5 +789,43 @@ void DC2CALL Input_Frame(void);                                         /* 0x478
 u32 DC2CALL Light_Try(gptr p, gptr l, u32 slot);                        /* 0x46BC20 */
 void DC2CALL Part_Lights(gptr p, u32 keep);                             /* 0x46BAC0 */
 void DC2CALL Obj_PickLights(gptr unused);                               /* 0x46BA00 */
+u32 DC2CALL Color_Pulse(u32 a, u32 b, u32 sh);                          /* 0x48FAE0 */
+void DC2CALL Hud_DrawArea(u32 x, u32 y, u32 w, u32 h);                  /* 0x406810 */
+void DC2CALL Hud_Tile(gptr r, u32 col, u32 semi);                       /* 0x406C90 */
+void DC2CALL Hud_Sprite(gptr r, u32 u, u32 v, u32 clut, u32 col, u32 semi);/* 0x406E30 */
+void DC2CALL Hud_Picture(gptr list, u32 x, u32 y, u32 tp, u32 clut, u32 col);/* 0x406D50 */
+gptr DC2CALL Gauge_Bar(u32 x, u32 y);                                   /* 0x4062C0 */
+void DC2CALL Gauge_Draw(u32 x, u32 y);                                  /* 0x406050 */
+void DC2CALL Game_InitStock(void);                                      /* 0x496410 */
+void DC2CALL Hud_Glyph(gptr r, u32 u, u32 v, u32 clut, u32 col, u32 semi); /* 0x406F10 */
+void DC2CALL Hud_Line(u32 x0, u32 y0, u32 x1, u32 y1, u32 col, u32 semi); /* 0x4070A0 */
+void DC2CALL Hud_Number(u32 x, u32 y, u32 n, u32 lead, u32 col, u32 v);  /* 0x406890 */
+void DC2CALL Hud_SmallNum(u32 x, u32 y, u32 n, u32 lead, u32 col, u32 v);/* 0x406A10 */
+void DC2CALL Hud_GlyphNum(u32 x, u32 y, u32 n, u32 lead, u32 col, u32 v);/* 0x406B50 */
+void DC2CALL Hud_Weapon(void);                                          /* 0x404CC0 */
+void DC2CALL Obj_ToView(gptr o, gptr m);                                /* 0x4A71B0 */
+void DC2CALL World_Matrices(void);                                      /* 0x4A6DF0 */
+void DC2CALL Mat_ToView(gptr src, gptr dst);                            /* 0x4460A0 */
+void DC2CALL Z_Fixed(void);                                             /* 0x4A82F0 */
+void DC2CALL Z_Min3(void);                                              /* 0x4A8310 */
+void DC2CALL Z_Min4(void);                                              /* 0x4A8360 */
+void DC2CALL Z_Max3(void);                                              /* 0x4A83C0 */
+void DC2CALL Z_Max4(void);                                              /* 0x4A8410 */
+void DC2CALL Mesh_TriTex(gptr e, u32 n, gptr zfn);                      /* 0x4A8470 */
+void DC2CALL Mesh_QuadTex(gptr e, u32 n, gptr zfn);                     /* 0x4A8690 */
+void DC2CALL Mesh_QuadFlat(gptr e, u32 n, gptr zfn);                    /* 0x4A8930 */
+void DC2CALL Eff_DrawAll(void);                                         /* 0x4A7840 */
+void DC2CALL Model_Tris(gptr e, u32 n, u32 tp);                         /* 0x4A8C00 */
+void DC2CALL Model_Quads(gptr e, u32 n, u32 tp);                        /* 0x4A8F40 */
+void DC2CALL Model_DrawGroups(gptr m, u32 mask, u32 tp);                /* 0x4A8BA0 */
+void DC2CALL Obj_DrawAll(void);                                         /* 0x4A7510 */
+void DC2CALL Obj_DrawShadows(void);                                     /* 0x4A7ED0 */
+void DC2CALL Prop_DrawAll(void);                                        /* 0x4A7A20 */
+void DC2CALL Draw_Handlers(void);                                       /* 0x4A7330 */
+void DC2CALL Dim_Bars(void);                                            /* 0x4A7390 */
+void DC2CALL Masks_Draw(gptr c);                                        /* 0x403760 */
+void DC2CALL Rope_Draw(void);                                           /* 0x445E10 */
+void DC2CALL Text_DrawAll(void);                                        /* 0x471440 */
+void DC2CALL Frame_Draw(void);                                          /* 0x4A7250 */
 
 #endif

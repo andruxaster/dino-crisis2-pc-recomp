@@ -1009,3 +1009,441 @@ void DC2CALL Obj_PickLights(gptr unused)                            /* 0x46BA00 
         for (u32 n = (U8(o + 0xFE) & 1) ? U32(o + 0x68) : 1; n; n--) { Part_Lights(p, keep); p = U32(p + 0x54); }
     }
 }
+
+/* ---- the health gauge (G+0x68C: +0xB8 timer, +0xBC the health shown, +0xC8 its
+   step); drawn in the top layer (*0x87F94C + 0x7C) ------------------------------- */
+
+/* a colour between a and b that goes back and forth over 2 << sh frames */
+u32 DC2CALL Color_Pulse(u32 a, u32 b, u32 sh)                       /* 0x48FAE0 */
+{
+    u32 m = 1u << (sh & 31), t = U32(G() + 4), f = (m - 1) & t;
+    if (t & m) f = m - f;
+    u32 w = f << ((12 - sh) & 31);
+    gptr v = Tmp_Push(8);
+    U32(v) = a; U32(v + 4) = b;
+    LoadAverageCol(v, v + 4, (s32)w, (s32)(0x1000 - w), v);
+    u32 r = U32(v);
+    Tmp_Pop(8);
+    return r;
+}
+
+/* the drawing area (x, y [+0x100 on the second buffer], w, h) */
+void DC2CALL Hud_DrawArea(u32 x, u32 y, u32 w, u32 h)               /* 0x406810 */
+{
+    gptr r = Tmp_Push(8);
+    U16(r) = (u16)x;
+    U16(r + 2) = (u16)(U32(0x87DE0C) ? y + 0x100 : y);
+    U16(r + 4) = (u16)w; U16(r + 6) = (u16)h;
+    Gpu_SetDrawArea(U32(0x87DC98), r);
+    Tmp_Pop(8);
+    Gpu_AddPrim(U32(0x87F94C) + 0x7C, U32(0x87DC98));
+    U32(0x87DC98) += 0xC;
+}
+
+static void hud_link(u32 len)
+{
+    gptr p = U32(0x87DC98), ot = U32(0x87F94C) + 0x7C;
+    U32(p) = U32(ot) | len << 24; U32(ot) = p & 0xFFFFFF;
+}
+
+/* a tile over rect (x, y, w, h) */
+void DC2CALL Hud_Tile(gptr r, u32 col, u32 semi)                    /* 0x406C90 */
+{
+    gptr p = U32(0x87DC98);
+    F32(p + 8) = (float)S16(r); F32(p + 0xC) = (float)S16(r + 2);
+    U32(p + 0x10) = 0x3C23D70A;
+    U16(p + 0x14) = U16(r + 4); U16(p + 0x16) = U16(r + 6);
+    U32(p + 4) = col | ((u16)semi ? 0x62000000 : 0x60000000);
+    hud_link(3);
+    U32(0x87DC98) += 0x18;
+}
+
+/* a sprite at rect from (u, v) of clut */
+void DC2CALL Hud_Sprite(gptr r, u32 u, u32 v, u32 clut, u32 col, u32 semi) /* 0x406E30 */
+{
+    gptr p = U32(0x87DC98);
+    F32(p + 8) = (float)S16(r); F32(p + 0xC) = (float)S16(r + 2);
+    U32(p + 0x10) = 0x3C23D70A;
+    U16(p + 0x18) = U16(r + 4); U16(p + 0x1A) = U16(r + 6);
+    U8(p + 0x14) = (u8)u; U8(p + 0x15) = (u8)v; U16(p + 0x16) = (u16)clut;
+    U32(p + 4) = col | ((u16)semi ? 0x66000000 : 0x64000000);
+    hud_link(4);
+    U32(0x87DC98) += 0x1C;
+}
+
+/* a picture of 8-byte pieces (u, v, w, h, dx, dy, count in the first) at x, y;
+   col bit 31 semi-transparent; then the texture page tp */
+void DC2CALL Hud_Picture(gptr list, u32 x, u32 y, u32 tp, u32 clut, u32 col) /* 0x406D50 */
+{
+    u32 n = U8(list + 6), semi = col >> 31, c24 = col & 0xFFFFFF;
+    gptr r = Tmp_Push(8);
+    for (gptr e = list; n; n--, e += 8) {
+        U16(r) = (u16)(x + (s32)S8(e + 4)); U16(r + 2) = (u16)(y + (s32)S8(e + 5));
+        U16(r + 4) = U8(e + 2); U16(r + 6) = U8(e + 3);
+        Hud_Sprite(r, U8(e), U8(e + 1), clut, c24, semi);
+    }
+    Tmp_Pop(8);
+    gptr p = U32(0x87DC98);
+    U32(p + 4) = tp | 0xE1000400; U32(p + 8) = 0;
+    hud_link(2);
+    U32(0x87DC98) += 0xC;
+}
+
+/* the gauge: frame (blinking when low), bar by health (green, yellow, red;
+   pulsing when poisoned), the health lost going down behind it */
+gptr DC2CALL Gauge_Bar(u32 x, u32 y)                                /* 0x4062C0 */
+{
+    gptr pl = U32(G() + 0x940), b = G() + 0x68C;
+    s32 mx = S16(pl + 0x10A), hp = S16(pl + 0x108);
+    if (!(hp > mx / 4) && (U8(G() + 4) & 0x10)) Hud_Picture(0x685020, x - 2, y - 2, 0xC, 0x7C8F, 0x80);
+    u32 col = U16(pl + 0x17E) ? Color_Pulse(0x80, 0x30, 3) | 0x2000000 : 0x808080;
+    Hud_Picture(0x6850A8, x + 0x40, y + 8, 0xC, 0x7C8F, col);
+    Hud_Picture(0x683620, x, y, 0xD, 0x7C8F, col);
+    hp = S16(pl + 0x108); mx = S16(pl + 0x10A);
+    s16 len = (s16)(hp * 0x70 / mx);
+    if (len < 0) len = 0;
+    else if (len > 0x70) len = 0x70;
+    u32 c;
+    if (hp > mx / 4 && !U16(pl + 0x17E)) c = hp > mx / 2 ? Color_Pulse(0x8000, 0x4000, 5) : Color_Pulse(0x8080, 0x4040, 4);
+    else c = Color_Pulse(0x80, 0x40, 3);
+    gptr r = Tmp_Push(8);
+    U16(r) = (u16)x; U16(r + 2) = (u16)y; U16(r + 4) = (u16)len; U16(r + 6) = 0x10;
+    Hud_Sprite(r, 0x70, 0x50, 0x7C8F, c, 0);
+    U16(b + 0xBC) -= 6;
+    if (S16(pl + 0x108) >= S16(b + 0xBC)) U16(b + 0xBC) = U16(pl + 0x108);
+    else {
+        s16 l2 = (s16)(S16(b + 0xBC) * 0x70 / S16(pl + 0x10A));
+        if (l2 < 0) l2 = 0;
+        else if (l2 > 0x70) l2 = 0x70;
+        U16(r) = (u16)x; U16(r + 2) = (u16)y; U16(r + 4) = (u16)l2; U16(r + 6) = 0x10;
+        Hud_Sprite(r, 0x70, 0x50, 0x7C8F, c >> 1, 0);
+    }
+    Tmp_Pop(8);
+    gptr p = U32(0x87DC98);
+    U32(p + 4) = 0xE100040C; U32(p + 8) = 0;
+    hud_link(2);
+    U32(0x87DC98) += 0xC;
+    return U32(0x87DC98);
+}
+
+/* the gauge's steps (+0xC8): 1 shown, 2 closing, 3/4 a line shrinking; shown
+   again when the health is low, poisoned, in the extra mode or just hit */
+void DC2CALL Gauge_Draw(u32 x, u32 y)                               /* 0x406050 */
+{
+    gptr pl = U32(G() + 0x940), b = G() + 0x68C;
+    if (Flag_Check(2, 7) || Flag_Check(2, 0xF) || !Flag_Check(3, 7)) return;
+    u8 st = U8(b + 0xC8);
+    switch ((s32)(s8)st) {
+    case 1:
+        U16(b + 0xB8)--;
+        if (S16(b + 0xB8) < 0) { U8(b + 0xC8) = (u8)(st + 1); U16(b + 0xB8) = 8; }
+        Gauge_Bar(x, y);
+        break;
+    case 2: {
+        U16(b + 0xB8)--;
+        if (S16(b + 0xB8) < 0) { U8(b + 0xC8) = (u8)(st + 1); U16(b + 0xB8) = 0; }
+        gptr p = U32(0x87DC98);
+        U32(p + 4) = 0xE100040C; U32(p + 8) = 0;
+        hud_link(2);
+        U32(0x87DC98) += 0xC;
+        Hud_DrawArea(0, 0, 0x140, 0xF0);
+        Gauge_Bar(x, y);
+        u16 t = U16(b + 0xB8);
+        Hud_DrawArea(x, y - t + 8, 0x70, (u32)t * 2);
+        break; }
+    case 3:
+        U8(b + 0xC8) = (u8)(st + 1);
+        U16(b + 0xB8) = 0x38;
+        /* fall through */
+    case 4: {
+        U16(b + 0xB8) -= 5;
+        if (S16(b + 0xB8) < 0) { U8(b + 0xC8) = 0; U16(b + 0xB8) = 0; }
+        u16 t = U16(b + 0xB8);
+        gptr r = Tmp_Push(8);
+        U16(r) = (u16)(x - t + 0x38); U16(r + 2) = (u16)(y + 8); U16(r + 4) = (u16)(t * 2); U16(r + 6) = 1;
+        Hud_Tile(r, 0x80F080, 0);
+        Tmp_Pop(8);
+        break; }
+    }
+    if (S16(pl + 0x108) < S16(pl + 0x10A) / 4 || U16(pl + 0x17E) || U8(G() + 0x108E) == 2) {
+        U8(b + 0xC8) = 1; U16(b + 0xB8) = 0x78;
+    }
+    if (U16(pl + 0x174) && U16(pl + 0x108) != U16(b + 0xBC)) {
+        U8(b + 0xC8) = 1; U16(b + 0xB8) = 0x78; U8(b + 0xCC) = 1;
+        U16(G() + 0xC20) = 0; U16(G() + 0xC22) = 0;
+    }
+}
+
+/* ---- starting inventory / shop tables ---------------------------------- */
+
+static void stock_fill(gptr dst, const u8 *ids, const u16 *ab, int n)
+{
+    for (int i = 0; i < n; i++, dst += 12) {
+        U8(dst) = 1; U8(dst + 1) = ids[i]; U16(dst + 2) = 0; U32(dst + 4) = 0;
+        U16(dst + 8) = ab[i * 2]; U16(dst + 10) = ab[i * 2 + 1];
+    }
+}
+
+/* 0x496410: fills the two 12-byte-record tables at G+0x10BC (0x3C dwords)
+   and G+0x11AC (0x12 dwords) by difficulty G+0x108E, sets flag 9:0x74. */
+void DC2CALL Game_InitStock(void)                                    /* 0x496410 */
+{
+    static const u8  i0[] = {1, 2, 6, 0xA, 0x11, 0x12, 0x15};
+    static const u16 a0[] = {200,200, 200,200, 1000,1000, 9999,9999, 9999,9999, 9999,9999, 9999,9999};
+    static const u8  i1[] = {1, 2, 0xA, 0x11, 0x12, 0x15};
+    static const u16 a1[] = {100,100, 200,200, 9999,9999, 9999,9999, 9999,9999, 9999,9999};
+    static const u16 a2[] = {100,100, 100,100, 9999,9999, 9999,9999, 9999,9999, 9999,9999};
+    static const u8  j0[] = {0x1B, 0x1C, 0x1D};
+    static const u16 b0[] = {3,5, 3,5, 3,5};
+    static const u8  j1[] = {0x1A, 0x1B, 0x1C, 0x1E};
+    static const u16 b1[] = {1,2, 1,2, 1,2, 1,2};
+    static const u16 b2[] = {1,1, 1,1, 1,1, 1,1};
+    gptr g = G();
+    for (u32 i = 0; i < 0x3C; i++) U32(g + 0x10BC + i * 4) = 0;
+    u8 m = U8(g + 0x108E);
+    if (m == 0)      stock_fill(g + 0x10BC, i0, a0, 7);
+    else if (m == 1) stock_fill(g + 0x10BC, i1, a1, 6);
+    else             stock_fill(g + 0x10BC, i1, a2, 6);
+    for (u32 i = 0; i < 0x12; i++) U32(g + 0x11AC + i * 4) = 0;
+    if (m == 0)      stock_fill(g + 0x11AC, j0, b0, 3);
+    else if (m == 1) stock_fill(g + 0x11AC, j1, b1, 4);
+    else             stock_fill(g + 0x11AC, j1, b2, 4);
+    Flag_Set(9, 0x74, 1);
+}
+
+/* ---- weapon change and ammo pop-ups --------------------------------------- */
+
+/* the draw-mode primitive closing a HUD group */
+static void hud_mode(void)
+{
+    gptr p = U32(0x87DC98);
+    U32(p + 4) = 0xE100040C; U32(p + 8) = 0;
+    hud_link(2);
+    U32(0x87DC98) += 0xC;
+}
+
+/* an 8x11 textured quad at the rect's corner (its size unused) */
+void DC2CALL Hud_Glyph(gptr r, u32 u, u32 v, u32 clut, u32 col, u32 semi) /* 0x406F10 */
+{
+    gptr p = U32(0x87DC98);
+    s32 x = S16(r), y = S16(r + 2);
+    F32(p + 0x28) = (float)x;       U32(p + 8) = U32(p + 0x28);
+    F32(p + 0x38) = (float)(x + 8); U32(p + 0x18) = U32(p + 0x38);
+    F32(p + 0x1C) = (float)y;       U32(p + 0xC) = U32(p + 0x1C);
+    F32(p + 0x3C) = (float)(y + 0xB); U32(p + 0x2C) = U32(p + 0x3C);
+    U32(p + 0x40) = U32(p + 0x30) = U32(p + 0x20) = U32(p + 0x10) = 0x3C23D70A;
+    U8(p + 0x34) = U8(p + 0x14) = (u8)u; U8(p + 0x44) = U8(p + 0x24) = (u8)(u + 8);
+    U8(p + 0x25) = U8(p + 0x15) = (u8)v; U8(p + 0x45) = U8(p + 0x35) = (u8)(v + 0xB);
+    U16(p + 0x16) = (u16)clut; U16(p + 0x26) = 0xC;
+    U32(p + 4) = col | ((u16)semi ? 0x2E000000 : 0x2C000000);
+    hud_link(9);
+    U32(0x87DC98) += 0x48;
+}
+
+/* a line (x0, y0) - (x1, y1) */
+void DC2CALL Hud_Line(u32 x0, u32 y0, u32 x1, u32 y1, u32 col, u32 semi) /* 0x4070A0 */
+{
+    gptr p = U32(0x87DC98);
+    F32(p + 8) = (float)(s16)x0; F32(p + 0xC) = (float)(s16)y0;
+    F32(p + 0x14) = (float)(s16)x1; F32(p + 0x18) = (float)(s16)y1;
+    U32(p + 0x1C) = U32(p + 0x10) = 0x3C23D70A;
+    U32(p + 4) = col | ((u16)semi ? 0x42000000 : 0x40000000);
+    hud_link(3);
+    U32(0x87DC98) += 0x20;
+}
+
+/* n digits of v at x, y (leading zeros shown once lead is set or a digit is
+   nonzero; the last always), col bit 31 semi-transparent */
+static void hud_digits(u32 x, u32 y, u32 n, u32 lead, u32 col, u32 v, u32 dx, int kind)
+{
+    u32 rgb = col & 0xFFFFFF, semi = col >> 31, p10 = 1, x0 = x;
+    if ((u16)n > 1) for (u32 i = (u16)n - 1; i; i--) p10 *= 10;
+    gptr r = Tmp_Push(8);
+    for (u32 i = (u16)n; i; i--, x += dx) {
+        u32 q = v / p10;
+        if ((u16)q) lead = 1;
+        v -= (q & 0xFFFF) * p10;
+        p10 /= 10;
+        if (!p10) lead = 1;
+        else if (!(u16)lead && !(u16)q) continue;
+        U16(r) = (u16)x; U16(r + 2) = (u16)y;
+        if (kind == 0) { U16(r + 4) = 0x10; U16(r + 6) = 0xB; Hud_Sprite(r, (q + 6) << 4, 0xB0, 0x7C8F, rgb, semi); }
+        else if (kind == 1) { U16(r + 4) = 8; U16(r + 6) = 0xC; Hud_Sprite(r, q << 3, 0x18, 0x7C8F, rgb, semi); }
+        else { U16(r + 4) = 0x10; U16(r + 6) = 0x14; Hud_Glyph(r, q << 3, 0, 0x7C8F, rgb, semi); }
+    }
+    if (kind == 0) {                                 /* the unit after them */
+        U16(r) = (u16)(x0 + 0x68); U16(r + 2) = (u16)y; U16(r + 4) = 0x18; U16(r + 6) = 0xB;
+        Hud_Sprite(r, 0x48, 0xB0, 0x7C8F, rgb, semi);
+    }
+    Tmp_Pop(8);
+    hud_mode();
+}
+
+void DC2CALL Hud_Number(u32 x, u32 y, u32 n, u32 lead, u32 col, u32 v)     /* 0x406890 */
+{ hud_digits(x, y, n, lead, col, v, 0xF, 0); }
+void DC2CALL Hud_SmallNum(u32 x, u32 y, u32 n, u32 lead, u32 col, u32 v)   /* 0x406A10 */
+{ hud_digits(x, y, n, lead, col, v, 7, 1); }
+void DC2CALL Hud_GlyphNum(u32 x, u32 y, u32 n, u32 lead, u32 col, u32 v)   /* 0x406B50 */
+{ hud_digits(x, y, n, lead, col, v, 7, 2); }
+
+/* the frame, count and picture of a weapon (id) changed to */
+static void weapon_box(u32 id, u32 lcol, int sub)
+{
+    gptr g = G();
+    s8 idx = (s8)Item_Find(g + 0x10BC, 0x14, id);
+    Hud_Line(0xC, 0xC0, 0x4C, 0xC0, lcol, 0);
+    Hud_Line(0xC, 0xC0, 0xC, 0xD8, lcol, 0);
+    Hud_Line(0x4C, 0xC0, 0x4C, 0xD8, lcol, 0);
+    Hud_Line(0xC, 0xD8, 0x4C, 0xD8, lcol, 0);
+    gptr t = 0x704268 + 12 * (id & 0xFF);
+    if (U8(g + 0x1094) & 1) Hud_Picture(0x685CC8, 0x30, 0xCC, 0xC, 0x7C8F, 0x707070);
+    else if (!(U8(t + 2) & 0x80)) Hud_SmallNum(0x28, 0xC8, 4, 0, 0x707070, (u32)(s32)S16(g + idx * 12 + 0x10C4));
+    gptr p = U32(0x87DC98);
+    u32 x0 = 0x41A00000, x1 = 0x42880000;                    /* 20, 68 */
+    if (!sub && (U8(t + 2) & 0x20)) { x0 = 0xC0800000; x1 = 0x42B80000; }   /* -4, 92 */
+    U32(p + 0x28) = U32(p + 8) = x0; U32(p + 0x38) = U32(p + 0x18) = x1;
+    U32(p + 0x1C) = U32(p + 0xC) = 0x43400000; U32(p + 0x3C) = U32(p + 0x2C) = 0x43580000;   /* 192, 216 */
+    U32(p + 0x40) = U32(p + 0x30) = U32(p + 0x20) = U32(p + 0x10) = 0x3C23D70A;
+    if (sub && (u8)id == 0x19) {
+        U8(p + 0x34) = U8(p + 0x14) = 0x40; U8(p + 0x44) = U8(p + 0x24) = 0x7F;
+        U8(p + 0x25) = U8(p + 0x15) = 0x40; U8(p + 0x45) = U8(p + 0x35) = 0x5F;
+        U16(p + 0x16) = 0x7F00; U16(p + 0x26) = 0x9B;
+    } else {
+        U8(p + 0x34) = U8(p + 0x14) = U8(t);
+        U8(p + 0x44) = U8(p + 0x24) = (u8)(U8(t) + (!sub && (U8(t + 2) & 0x20) ? 0x7F : 0x3F));
+        U8(p + 0x25) = U8(p + 0x15) = U8(t + 1); U8(p + 0x45) = U8(p + 0x35) = (u8)(U8(t + 1) + 0x1F);
+        U16(p + 0x16) = 0x7C80; U16(p + 0x26) = 0x8D;
+    }
+    U32(p + 4) = sub ? 0x2CC02000 : 0x2C208020;
+    hud_link(9);
+    U32(0x87DC98) += 0x48;
+    gptr r = Tmp_Push(8);
+    U16(r) = 0xC; U16(r + 2) = 0xC0; U16(r + 4) = 0x40; U16(r + 6) = 0x18;
+    Hud_Tile(r, 0, 1);
+    Tmp_Pop(8);
+    hud_mode();
+}
+
+/* the two pop-up bars at y 0x1C: picture (0x7C, w 0x40) and tile (0x84, w 0x30) */
+static void ammo_bars(u32 y, u32 scol, u32 tcol)
+{
+    gptr r = Tmp_Push(0x10), a = r + 8;
+    U16(a) = 0x7C; U16(a + 2) = (u16)y; U16(a + 4) = 0x40; U16(a + 6) = 8;
+    U16(r) = 0x84; U16(r + 2) = (u16)y; U16(r + 4) = 0x30; U16(r + 6) = 8;
+    Hud_Sprite(a, 0x98, 0xA8, 0x7C8F, scol, 0);
+    Hud_Tile(r, tcol, 0);
+    Tmp_Pop(0x10);
+    hud_mode();
+}
+
+/* the weapon change boxes (main and sub weapon), the ammo pop-up (count,
+   rounds) and the bar fading in under the gauge */
+void DC2CALL Hud_Weapon(void)                                         /* 0x404CC0 */
+{
+    gptr g = G(), b = g + 0x68C, pl = U32(g + 0x940);
+    u8 md = U8(g + 0x108F);
+    if (md <= 2 || md == 5 || md == 6) {
+        if (U8(b + 0xCE)) {
+            weapon_box(U8(g + 0x10B4), 0x108020, 0);
+            U8(b + 0xCE)--;
+        }
+        g = G();
+        if (U8(b + 0xCF)) {
+            weapon_box((u8)(U8(g + 0x10B5) + 0x10), 0x802010, 1);
+            U8(b + 0xCF)--;
+            gptr q = U32(G() + 0x940);
+            u16 s = U16(q + 0x54);
+            if (s == 0x501 || (s == 0x901 && (U8(0x87DC08) & 8))) { U8(b + 0xCF) = 0; U8(b + 0xCE) = 1; }
+            else if (U8(q + 0x54) != 1) { U8(b + 0xCF) = 0; U8(b + 0xCE) = 0; }
+            g = G();
+        }
+        u16 s = U16(U32(g + 0x940) + 0x54);
+        if (s == 0x501 || (s == 0x901 && (U8(0x87DC08) & 8))) { U8(b + 0xCF) = 0; U8(b + 0xCE) = 1; }
+    }
+    if (Flag_Check(9, 0x34)) U16(pl + 0x17E) = 0;
+    if (U8(pl + 0x54) != 1 || (Flag_Check(3, 0xB) && U16(G() + 0x928) != U16(b + 0xBE))) {
+        U8(b + 0xCA) = 0; U16(b + 0xC0) = 0; U8(b + 0xCD) = 0;
+    }
+    switch (S8(b + 0xCA)) {
+    case 1:
+        if (S16(b + 0xC4) > 1) { U8(b + 0xCA) = 3; U16(b + 0xC0) = 0; break; }
+        { u32 t = Flag_Check(9, 0x39) ? 0x60 : 0x20;
+          if (!U8(G() + 0x108E)) t *= 3;
+          U8(b + 0xCA) = 2; U16(b + 0xC0) = (u16)(t + 0xB4); }
+        break;
+    case 2: {
+        u32 col = 0x808080;
+        if (S16(b + 0xC0) < 0x80) { u32 c = (u32)(s32)S16(b + 0xC0); col = ((((c | 0xFFFF8000u) << 8) | c) << 8) | c; }
+        Hud_Number(0x50, 0x1C, 7, 0, col, U32(b + 0xB4));
+        if (--U16(b + 0xC0), S16(b + 0xC0) < 0) goto done;
+        break; }
+    case 3: case 4: {
+        u32 e = (u16)(U16(b + 0xC0) * 3);
+        ammo_bars(0x1C, (e + 0x30) | (e + 0x30) << 8 | (e + 0x60) << 16,
+                  (0xD000 - (e << 9)) | (0xD0 - 2 * e) | (0xD00000 - (e << 17)));
+        Hud_GlyphNum(0x94, 0x25, 2, 1, (e + 0x80) << 16 | (e + 0x60) << 8 | (e + 0x60), (u32)(s32)S16(b + 0xC4));
+        if (S8(b + 0xCA) == 3) {
+            if (++U16(b + 0xC0), S16(b + 0xC0) >= 0x20) { U8(b + 0xCA) = 4; U16(b + 0xC0) = 0x20; }
+        } else if (--U16(b + 0xC0), S16(b + 0xC0) <= 0) {
+            U8(b + 0xCA) = 5; U16(b + 0xC0) = 0x20;
+            if (Flag_Check(9, 0x39)) U16(b + 0xC0) = (u16)(U16(b + 0xC0) * 3);
+            if (!U8(G() + 0x108E)) U16(b + 0xC0) = (u16)(U16(b + 0xC0) * 3);
+        }
+        break; }
+    case 5:
+        ammo_bars(0x1C, 0x603030, 0xD0D0D0);
+        Hud_GlyphNum(0x94, 0x25, 2, 1, 0x806060, (u32)(s32)S16(b + 0xC4));
+        if (--U16(b + 0xC0), S16(b + 0xC0) <= 0) { U8(b + 0xCA) = 6; U16(b + 0xC0) = 0; }
+        break;
+    case 6: {
+        Hud_DrawArea(0, 0, 0x140, 0xF0);
+        s32 c = S16(b + 0xC0);
+        ammo_bars((u16)(0x1C - U16(b + 0xC0)), 0x603030, 0x808080);
+        Hud_GlyphNum(0x94, (u32)(0x25 - c), 2, 1, 0x806060, (u32)(s32)S16(b + 0xC4));
+        Hud_Number(0x50, (u32)(0x32 - S16(b + 0xC0)), 7, 0, 0x808080, U32(b + 0xB4));
+        Hud_DrawArea(0, 0x1C, 0x140, 0x16);
+        if (++U16(b + 0xC0), S16(b + 0xC0) > 0x16) { U8(b + 0xCA) = 7; U16(b + 0xC0) = 0x50; }
+        break; }
+    case 7: {
+        u32 c = (u32)(s32)S16(b + 0xC0);
+        Hud_Number(0x50, 0x1C, 7, 0, c << 9 | c << 17 | (c + c) | 0x80000000u, U32(b + 0xB4));
+        if (--U16(b + 0xC0), S16(b + 0xC0) < 0) goto done;
+        break; }
+    }
+    goto bar;
+done:
+    U8(b + 0xCA) = 0; U16(b + 0xC0) = 0; U8(b + 0xCD) = 0;
+bar:
+    switch (S8(b + 0xCB)) {
+    case 1:
+        U8(b + 0xCB) = 2; U16(b + 0xC2) = 0;
+        /* fall through */
+    case 2: {
+        gptr r = Tmp_Push(8);
+        for (u32 i = 0; i < 8; i++) {
+            s16 x = (s16)(U16(b + 0xC2) - 8 * i - 0x64);
+            U16(r) = (u16)(x > 0x18 ? 0x18 : x); U16(r + 2) = (u16)(0x1C + i); U16(r + 4) = 0x40; U16(r + 6) = 1;
+            Hud_Sprite(r, 0x98, 0xA0 + i, 0x7C8F, 0xA0E0, 0);
+        }
+        Tmp_Pop(8);
+        hud_mode();
+        U16(b + 0xC2) += 8;
+        if (S16(b + 0xC2) > 0xC0) { U8(b + 0xCB) = 3; U16(b + 0xC2) = 0x20; }
+        break; }
+    case 3: case 4: {
+        gptr r = Tmp_Push(8);
+        u32 e = (u16)(U16(b + 0xC2) * 3);
+        U16(r) = 0x18; U16(r + 2) = 0x1C; U16(r + 4) = 0x40; U16(r + 6) = 8;
+        Hud_Sprite(r, 0x98, 0xA0, 0x7C8F, S8(b + 0xCB) == 3 ? (e + 0x40) << 8 | (e + 0x80) : 0x4080, 0);
+        U16(r) = 0x20; U16(r + 4) = 0x30;
+        u32 c = (u16)(0xE0 - (u16)(U16(b + 0xC2) * 7)), tc = ((c << 8 | c) << 8) | c;
+        Hud_Tile(r, S8(b + 0xCB) == 3 ? tc : 0xFFFFFF, 0);
+        Tmp_Pop(8);
+        hud_mode();
+        if (--U16(b + 0xC2), S16(b + 0xC2) < 0) {
+            if (S8(b + 0xCB) == 3) { U16(b + 0xC2) = 0x1E; U8(b + 0xCB)++; }
+            else { U8(b + 0xCB) = 0; U16(b + 0xC2) = 0; }
+        }
+        break; }
+    }
+}

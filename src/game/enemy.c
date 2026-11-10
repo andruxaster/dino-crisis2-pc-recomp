@@ -275,7 +275,7 @@ void DC2CALL GameOver_Start(u32 fade)                               /* 0x4529C0 
     Gpu_SetDrawMode(U32(0x87DC98), 1, 1, tp, 0);
     Gpu_AddPrim(U32(0x87F94C) + 0x74, U32(0x87DC98));
     U32(0x87DC98) += 0xC;
-    Fn_4A7250();
+    Frame_Draw();
     Task_Sleep(1);
     U8(G() + 0xB58) = 0x80; U8(G() + 0xB59) = 0x80; U8(G() + 0xB5A) = 0x80;
     U8(G() + 0xB5B) = 0; U8(G() + 0xB5C) = 0;
