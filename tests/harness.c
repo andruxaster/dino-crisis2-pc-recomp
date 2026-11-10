@@ -270,6 +270,7 @@ static void test_geom(void)
 
 static void snd_setup(void);
 static void draw_safe(void);
+static void draw_quiet(void);
 static void script_setup(void)
 {
     snd_setup();
@@ -578,7 +579,7 @@ static void anim_setup_at(gptr o)
     for (int k = 0; k < 0x40; k++) U32(AN_TAB + 4 * k) = AN_DATA + 0x1000 * (k & 1);   /* the player uses up to 0x3C */
     U32(o + 0x88) = AN_TAB;
     U32(AN_EVT) = rnd() % 4;
-    for (int i = 0; i < 4; i++) { U16(AN_EVT + 4 + 4 * i) = rnd() % 16; U16(AN_EVT + 6 + 4 * i) = (u16)(rnd() % 0x120); }   /* sound ids */
+    for (int i = 0; i < 4; i++) { U16(AN_EVT + 4 + 4 * i) = rnd() % 16; U16(AN_EVT + 6 + 4 * i) = (u16)(rnd() % 0x100); }   /* sound ids (Se_Remap may add 0x20: still in the 0x120 table) */
     u32 stride = (u8)(((n * 6 + 0x13) >> 2) << 2);
     gptr fr = AN_DATA + 0x14;
     U32(o + 0x8C) = fr; U8(o + 0xAC) = (u8)stride; U16(o + 0x90) = (u16)nfr;
@@ -610,13 +611,13 @@ static void anim_setup(void) { anim_setup_at(AN_OBJ); }
 typedef struct { u32 addr; const char *spec; u8 plen[2]; u32 ret; u8 saved[5]; void *impl; } Stub;
 #pragma GCC diagnostic ignored "-Wmissing-field-initializers"
 static Stub g_stubs[] = {
-    {0x405DE0, "dd"}, {0, ""}, {0, ""}, {0, ""}, {0, ""},
-    {0, ""}, {0, ""}, {0, ""}, {0, ""}, {0, ""},
-    {0, ""}, {0, ""}, {0x474B20, "d"}, {0x48FDA0, ""}, {0x47A8C0, "ddpp", {16, 8}},
     {0, ""}, {0, ""}, {0, ""}, {0, ""}, {0, ""},
     {0, ""}, {0, ""}, {0, ""}, {0, ""}, {0, ""},
     {0, ""}, {0, ""}, {0, ""}, {0, ""}, {0, ""},
-    {0x495E90, "wwwww"}, {0x4B4D20, "pd", {8}}, {0x4B4DB0, "pd", {8}}, {0x4DDDA2, ""},
+    {0, ""}, {0, ""}, {0, ""}, {0, ""}, {0, ""},
+    {0, ""}, {0, ""}, {0, ""}, {0, ""}, {0, ""},
+    {0, ""}, {0, ""}, {0, ""}, {0, ""}, {0, ""},
+    {0, ""}, {0x4B4D20, "pd", {8}}, {0x4B4DB0, "pd", {8}}, {0x4DDDA2, ""},
     {0, "d"},                   /* 34: object type handlers (*0x87DCA0) */
     {0, "d"},                   /* 35: AOT kind handlers (0x738B68) */
     /* file loading: 36.. (impl set below: a fake file system) */
@@ -633,21 +634,21 @@ static Stub g_stubs[] = {
     {0, ""}, {0, ""}, {0, ""}, {0, ""}, {0, ""}, {0, ""},
     {0, ""}, {0x4C0600, "ddd"}, {0x4C0690, "d"}, {0x4C05D0, "dd"}, {0x4C06F0, "ddddd"},
     /* 71..: game task */
-    {0, ""}, {0, "d"}, {0, ""}, {0, ""}, {0x452450, ""}, {0, ""},
+    {0, ""}, {0, "d"}, {0, ""}, {0, ""}, {0, ""}, {0, ""},
     {0, ""}, {0x4BF130, "d"}, {0, ""}, {0, ""}, {0, ""}, {0, ""},
-    {0, ""}, {0, ""}, {0, ""}, {0x405E40, ""}, {0, ""}, {0, ""},
+    {0, ""}, {0, ""}, {0, ""}, {0, ""}, {0, ""}, {0, ""},
     /* 89..: object handlers (collision) */
     {0, ""}, {0, ""},
     /* 91..: player */
-    {0, ""}, {0x4542F0, "pdpd", {6, 6}}, {0x4BF330, ""},
+    {0, ""}, {0, ""}, {0x4BF330, ""},
     /* 94..: doors */
-    {0, ""}, {0, ""}, {0x41F080, "dddddd"}, {0, ""}, {0x41F3E0, "d"}, {0x41F390, "d"}, {0x41F170, "d"}, {0, ""},
+    {0, ""}, {0, ""}, {0, ""}, {0, ""}, {0, ""}, {0, ""}, {0, ""}, {0, ""},
     /* 102..: the frame of play */
     {0, ""}, {0, ""}, {0, ""}, {0, ""}, {0x4D2990, "dddd"}, {0, ""},
-    {0, ""}, {0x406520, "dd"}, {0, ""},
+    {0, ""}, {0, ""}, {0, ""},
     /* 111..: the PC sound buffers */
     {0x4BF970, "ddd"}, {0x4BFA20, "dd"}, {0x4BFAA0, "d"}, {0x4BFAE0, "d"}, {0x4BFBD0, "d"}, {0x4BFF20, "dd"},
-    {0x495D70, "dd"}, {0x495DF0, ""},
+    {0, ""}, {0, ""},
     {0x4C06A0, "d"}, {0x4C06C0, "dd"}, {0x4C08A0, "dddd"},
     /* 122..: PC layer under the helpers (misc.c) */
     {0x4BE3C0, "dd"}, {0x4BE430, "dddd"}, {0x4BE6E0, ""}, {0x4BEAC0, "d"}, {0x4BFEE0, "d"}, {0x4C0050, "d"}, {0x4BF3A0, "sdd"},
@@ -730,7 +731,7 @@ static u32 __cdecl ts_sleep(u32 n)
 #define TYPE_TAB 0x6DD000u      /* fake *0x87DCA0: 256 entries */
 static u32 g_aot_saved[12], g_wep_saved[24], g_tab_saved[20];
 
-static u32 __cdecl fk_sprintf(u32 buf, u32 fmt, u32 name);
+static u32 __cdecl fk_sprintf(u32 buf, u32 fmt, u32 name, u32 b, u32 c);
 static void stubs_install(int on)
 {
     g_stubs[STUB_LOAD].impl = ts_sleep;
@@ -824,7 +825,9 @@ static void ops2_args(u8 op, gptr t)
     case 0x4F: A(0) = rnd() % 4 ? 0x6DC000 + 0x10 * (rnd() % 4) : 0; U32(g + 0xA68) = rnd() % 4 ? 0 : A(0);
                U8(g + 0x1091) = rnd() % 10; U8(g + 0x1090) = rnd() % 32; break;
     case 0x50: case 0x51: Flag_Set(2, 0x17, rnd() & 1); A(0) = rnd() % 10; stub_at(0x4BF3A0)->ret = rnd() % 4 == 0; break;
-    case 0x52: U8(t + T_SEL0) = rnd() % 4; break;
+    case 0x52: U8(t + T_SEL0) = rnd() % 4;
+        for (u32 k = 0; k < 28; k++) U32(U32(G() + 0x93C) + k * 0x70 + 0x54) = rnd() % 3 ? 0 : O_OBJ + 0x260 * (rnd() % 16);   /* Eff_Detach: parents */
+        break;
     case 0x54: U32(g + 0xA7C) = rnd() % 16; A(0) = rnd() % 3; break;
     case 0x58: { gptr part = U32(O_OBJ + SEL(t) * 0x260 + 0x64);
                A(1) = U32(part + 0x54) && rnd() % 2; A(0) = rnd() % 3; break; }
@@ -837,16 +840,22 @@ static void ops2_args(u8 op, gptr t)
 
 /* a frame that may be drawn (Frame_Draw from the code under test): a primitive buffer,
    no glyphs (their quads carry stack bytes), effects without parents, the drawing flags off */
+static void draw_quiet(void)
+{
+    for (gptr q = 0x74D980; q < 0x74DB80; q += 0x10) U8(q) &= ~1;
+    for (u32 q = 0; q < 0x8C; q++) U8(0x74D750 + 4 * q + 3) = 0;
+    static const u32 fl[] = {1, 2, 3, 4, 5, 8};
+    for (unsigned k = 0; k < sizeof fl / sizeof fl[0]; k++) Flag_Set(3, fl[k], 0);
+    Flag_Set(3, 9, 0);                          /* no event timer: its glyph quads carry stack bytes too (Timer_Draw has its own test) */
+    if (!S16(G() + 0x92A)) S16(G() + 0x92A) = 1;   /* the boss gauge divides by the boss's maximum */
+}
 static void draw_safe(void)
 {
     U32(0x87DC98) = 0x6D0000; U32(0x87F94C) = 0x6CF800;
     gptr pl = U32(G() + 0x940);
     if (pl >= 0x690000 && pl < 0x693000 && !S16(pl + 0x10A)) S16(pl + 0x10A) = 1;   /* the gauge divides by the maximum health */
-    for (gptr q = 0x74D980; q < 0x74DB80; q += 0x10) U8(q) &= ~1;
-    for (u32 q = 0; q < 0x8C; q++) U8(0x74D750 + 4 * q + 3) = 0;
     for (u32 k = 0; k < 36; k++) U32(0x694000 + k * 0x70 + 0x54) = 0;
-    static const u32 fl[] = {1, 2, 3, 4, 5, 8};
-    for (unsigned k = 0; k < sizeof fl / sizeof fl[0]; k++) Flag_Set(3, fl[k], 0);
+    draw_quiet();
 }
 
 static void test_ops2(void)
@@ -1485,6 +1494,50 @@ static void test_collision(void)
                 U8(CL_ROOM), U8(a[0] + 0x184));
         check(0x453430, Obj_CollideWalls, "Obj_CollideWalls", 1, a, 0xFFFFFFFF);
         }
+        /* floors (Floor_Height, Floor_Cross, Poly_RayCount) */
+        coll_setup(); U32(LOG_BASE) = 0;
+        for (u32 k = 0; k < U8(CL_ROOM); k++) {
+            gptr w = CL_ROOM + U32(CL_ROOM + 8 + 4 * k);
+            U8(w) = rnd() % 5 ? (u8)((rnd() % 3 == 0 ? 0x80 : rnd() % 3 == 0 ? 0x40 : 0) | (rnd() & 0x30) | 1) : 0;
+            U16(w + 4) = rnd() % 4 ? (u16)(1u << (rnd() % 3)) | (u16)(rnd() % 2 ? 1u << (rnd() % 3) : 0)
+                       : rnd() % 2 ? (u16)(rnd() % 2 ? 0x8000 : 0) : (u16)rnd();
+            U8(w + 6) = (u8)rnd();
+            U8(w + 3) = (u8)(2 * k + 2);                    /* tells which polygon was taken */
+            gptr w0 = CL_ROOM + U32(CL_ROOM + 8);
+            u32 n = U8(w + 1);
+            if (k && U8(w0 + 1) == n && rnd() % 4)          /* same place as polygon 0 */
+                memcpy(MEM(w + 8 + 4 * n), MEM(w0 + 8 + 4 * n), 4 * (n + 1));
+        }
+        gptr pa = G_SCR, pb = G_SCR + 8;
+        gptr w0 = CL_ROOM + U32(CL_ROOM + 8);
+        gptr v0 = w0 + 8 + 4 * U8(w0 + 1);
+        S16(pb) = cl_coord((S16(v0) + S16(v0 + 4)) / 2, 600); S16(pb + 4) = cl_coord((S16(v0 + 2) + S16(v0 + 6)) / 2, 600);
+        S16(pb + 2) = (s16)(-(s32)(rnd() % 6000) + 500);
+        S16(pa) = rnd() % 2 ? S16(pb) : cl_coord(S16(pb), 300); S16(pa + 4) = rnd() % 2 ? S16(pb + 4) : cl_coord(S16(pb + 4), 300);
+        S16(pa + 2) = rnd() % 3 ? (rnd() % 2 ? 10000 : -10000) : S16(pb + 2) + (s16)(rnd() % 3 - 1) * (s16)(rnd() % 2000);
+        if (rnd() % 8 == 0) S16(pa + 2) = S16(pb + 2);
+        if (rnd() % 3 == 0) { S16(pb) = S16(v0 + 4 * (rnd() % U8(w0 + 1))); S16(pa) = S16(pb); }   /* on a vertex */
+        U32(G_SCR + 0x20) = rnd();
+        a[0] = pa; a[1] = pb; a[2] = rnd() % 3 ? 0x80 : (u32)rnd(); a[3] = rnd() % 2 ? G_SCR + 0x20 : 0;
+        sprintf(g_what, "a %d %d %d b %d %d %d polys %u", S16(pa), S16(pa + 2), S16(pa + 4), S16(pb), S16(pb + 2), S16(pb + 4), U8(CL_ROOM));
+        check(0x454420, Floor_Height, "Floor_Height", 4, a, 0xFFFF);
+        {   /* where a -> b meets the floor: into a third point, or over a itself */
+            u32 c[4] = {pa, pb, rnd() % 3 ? G_SCR + 0x40 : pa, a[2]};
+            if (rnd() % 4 == 0) S16(pa + 2) = (s16)(S16(pb + 2) + (s32)(rnd() % 200) - 100);   /* the same band of 100, or next to it */
+            if (rnd() % 3 == 0) S16(pa + 2) = (s16)(-1000 * (s32)(rnd() % 4) + 100 * (s32)(rnd() % 16) + (s32)(rnd() % 3) - 1);   /* at a floor's height (and next to it) */
+            if (rnd() % 3 == 0) {                   /* looking up from b to exactly polygon 0's underside */
+                u16 ly = U16(w0 + 4); s32 lo = 0; while (!(ly & (1u << lo)) && ++lo < 15) ;
+                S16(pa) = S16(pb); S16(pa + 4) = S16(pb + 4); S16(pa + 2) = (s16)(-1000 * lo + (s32)(rnd() % 3) - 1);
+                if (S16(pb + 2) <= S16(pa + 2) + 100) S16(pb + 2) = (s16)(S16(pa + 2) + 100 + rnd() % 2000);
+            }
+            for (u32 q = 0; q < 6; q += 2) U16(G_SCR + 0x40 + q) = (u16)rnd();
+            u32 keep[2] = {U32(pa), U32(pa + 4)};
+            check(0x4542F0, Floor_Cross, "Floor_Cross", 4, c, 0xFFFF);   /* (the "no" carries Floor_Height's upper bits: stack bytes for slopes; the callers use 16) */
+            U32(pa) = keep[0]; U32(pa + 4) = keep[1];
+        }
+        U16(pa) = U16(pb); U16(pa + 4) = U16(pa); U16(pa + 2) = U16(pb + 4); U16(pa + 6) = 0x7CFF;
+        a[0] = w0; a[1] = pa;
+        check(0x454870, Poly_RayCount, "Poly_RayCount", 2, a, 0xFFFF);
     }
     stubs_install(0);
 }
@@ -1557,36 +1610,6 @@ static void test_player(void)
         check(0x48DA00, Effect_Attach, "Effect_Attach", 2, a, 0xFFFFFFFF);
         a[1] = rnd() % 4 == 0 ? 0 : rnd() % 3 ? rnd() % 20 : (u32)rnd(); a[2] = rnd();
         check(0x48DC80, Effect_Drops, "Effect_Drops", 3, a, 0xFFFFFFFF);
-        /* floors */
-        coll_setup(); U32(LOG_BASE) = 0;
-        for (u32 k = 0; k < U8(CL_ROOM); k++) {
-            gptr w = CL_ROOM + U32(CL_ROOM + 8 + 4 * k);
-            U8(w) = rnd() % 5 ? (u8)((rnd() % 3 == 0 ? 0x80 : rnd() % 3 == 0 ? 0x40 : 0) | (rnd() & 0x30) | 1) : 0;
-            U16(w + 4) = rnd() % 4 ? (u16)(1u << (rnd() % 3)) | (u16)(rnd() % 2 ? 1u << (rnd() % 3) : 0)
-                       : rnd() % 2 ? (u16)(rnd() % 2 ? 0x8000 : 0) : (u16)rnd();
-            U8(w + 6) = (u8)rnd();
-            U8(w + 3) = (u8)(2 * k + 2);                    /* tells which polygon was taken */
-            gptr w0 = CL_ROOM + U32(CL_ROOM + 8);
-            u32 n = U8(w + 1);
-            if (k && U8(w0 + 1) == n && rnd() % 4)          /* same place as polygon 0 */
-                memcpy(MEM(w + 8 + 4 * n), MEM(w0 + 8 + 4 * n), 4 * (n + 1));
-        }
-        gptr pa = G_SCR, pb = G_SCR + 8;
-        gptr w0 = CL_ROOM + U32(CL_ROOM + 8);
-        gptr v0 = w0 + 8 + 4 * U8(w0 + 1);
-        S16(pb) = cl_coord((S16(v0) + S16(v0 + 4)) / 2, 600); S16(pb + 4) = cl_coord((S16(v0 + 2) + S16(v0 + 6)) / 2, 600);
-        S16(pb + 2) = (s16)(-(s32)(rnd() % 6000) + 500);
-        S16(pa) = rnd() % 2 ? S16(pb) : cl_coord(S16(pb), 300); S16(pa + 4) = rnd() % 2 ? S16(pb + 4) : cl_coord(S16(pb + 4), 300);
-        S16(pa + 2) = rnd() % 3 ? (rnd() % 2 ? 10000 : -10000) : S16(pb + 2) + (s16)(rnd() % 3 - 1) * (s16)(rnd() % 2000);
-        if (rnd() % 8 == 0) S16(pa + 2) = S16(pb + 2);
-        if (rnd() % 3 == 0) { S16(pb) = S16(v0 + 4 * (rnd() % U8(w0 + 1))); S16(pa) = S16(pb); }   /* on a vertex */
-        U32(G_SCR + 0x20) = rnd();
-        a[0] = pa; a[1] = pb; a[2] = rnd() % 3 ? 0x80 : (u32)rnd(); a[3] = rnd() % 2 ? G_SCR + 0x20 : 0;
-        sprintf(g_what, "a %d %d %d b %d %d %d polys %u", S16(pa), S16(pa + 2), S16(pa + 4), S16(pb), S16(pb + 2), S16(pb + 4), U8(CL_ROOM));
-        check(0x454420, Floor_Height, "Floor_Height", 4, a, 0xFFFF);
-        U16(pa) = U16(pb); U16(pa + 4) = U16(pa); U16(pa + 2) = U16(pb + 4); U16(pa + 6) = 0x7CFF;
-        a[0] = w0; a[1] = pa;
-        check(0x454870, Poly_RayCount, "Poly_RayCount", 2, a, 0xFFFF);
         /* the player */
         gptr o = player_setup_obj(); U32(LOG_BASE) = 0;
         U32(A_PLAYER_EXT_H) = o + 0x1C0;
@@ -1804,9 +1827,8 @@ static void test_player2(void)
             s16 ti = S16(0x87FD80 + 4 * k);
             if (ti > 0 && !U32(U32(O_OBJ + ti * 0x260 + 0x64) + 0x54)) S16(0x87FD82 + 4 * k) = 0;
         }
-        stub_at(0x4542F0)->ret = rnd() % 4 != 0;
         a[0] = o;
-        { char *w = g_what + sprintf(g_what, "objs %u floor %u:", U32(0x87F940), stub_at(0x4542F0)->ret);
+        { char *w = g_what + sprintf(g_what, "objs %u:", U32(0x87F940));
           for (u32 k = 0; k < 12; k++) {
               gptr e = O_EFF + k * 0x70;
               w += sprintf(w, " %X%s/%u", U8(e + 0x4F), (U8(e + 0x50) & 1) && U8(e + 0x4E) == 3 ? "" : "x", U8(e + 0x46));
@@ -1823,7 +1845,6 @@ static void test_player2(void)
         a[0] = rnd(); a[1] = rnd(); a[2] = rnd();
         U8(G() + 0x10B4) = rnd() % 3 ? (u8)(rnd() % 12) : 0xB; U8(G() + 0x10B5) = (u8)(rnd() % 10);
         check(0x48B830, Noise_Make, "Noise_Make", 3, a, 0);
-        stub_at(0x4542F0)->ret = 0;
         targets_setup();                                /* the arms' target needs its descriptors */
         /* arms: the player is the animated object (enough parts) */
         do { anim_setup(); } while (U32(AN_OBJ + 0x68) < 5);
@@ -2096,7 +2117,6 @@ static void test_player2(void)
                       for (u32 f = 0; f < 3; f++) S16(an + 0x14 + f * stride + 2) = 1 + rnd() % 8;
                   }
                   if (rnd() % 3 == 0) { anim_long(o, 5 + rnd() % 2); U8(o + 0x56) = rnd() % 3 ? 1 : 2; }   /* the landing frame */
-                  stub_at(0x4542F0)->ret = rnd() % 3 == 0;
                   for (u32 j = 0; j < 12; j++) U32(O_EFF + j * 0x70 + 0x50) = rnd() % 3 ? 0 : 1;
                   if (rnd() % 3 == 0) {                               /* few free effect slots */
                       for (u32 j = 0; j < 12; j++) U32(O_EFF + j * 0x70 + 0x50) = 1;
@@ -2106,7 +2126,6 @@ static void test_player2(void)
                   check(SW[k].addr, SW[k].fn, SW[k].name, 1, a, 0);
                   g_ign_throw = 0;
               }
-              stub_at(0x4542F0)->ret = 0;
               a[1] = O_OBJ + 0x260 * (rnd() % 16); U16(0x6DDA00u) = (u16)rnd(); U16(0x6DDA00u + 2) = (u16)rnd(); U16(0x6DDA00u + 4) = (u16)rnd();
               a[2] = 0x6DDA00u;
               for (u32 j = 0; j < 12; j++) U32(O_EFF + j * 0x70 + 0x50) = rnd() % 3 ? 0 : 1;
@@ -2128,7 +2147,6 @@ static void test_player2(void)
                 S16(px + 0x3C) = (s16)(rnd() % 0x14);
                 U32(0x87DC08) = rnd() % 3 ? (rnd() & 0xF0FE) : rnd() % 2 ? 0x28 : 0x28 | (rnd() % 2 ? 0x1000 : 0x4000) | (rnd() % 2 ? 0x2000 : 0x8000);
                 U32(0x87DC94) = rnd() % 2 ? 0 : rnd() % 3 ? 1u << rnd() % 8 : 2;
-                stub_at(0x4542F0)->ret = rnd() % 2 ? 0 : 0xFFFF;
                 stub_at(0x4BF330)->ret = rnd() % 2;
                 U16(o + 0x42) = (u16)(rnd() % 3 ? -(s16)(rnd() % 0x1800) : (s16)(rnd() % 0x400));
                 sprintf(g_what, "crouch %u px42 %04X 4C %04X 7D %u held %08X press %08X", U8(o + 0x56), U16(px + 0x42), U16(px + 0x4C),
@@ -2138,7 +2156,6 @@ static void test_player2(void)
                 U32(0x87DC94) = rnd() % 2 ? 0x20 : 0;
                 check(0x47FA80, Crouch_Fire, "Crouch_Fire", 1, a, 0xFFFFFFFF);
             }
-            stub_at(0x4542F0)->ret = 0;
               a[1] = rnd() % 4;
               check(0x496350, Sub_AmmoUse, "Sub_AmmoUse", 1, a + 1, 0);
               check(0x48D410, Light_Alloc, "Light_Alloc", 0, a, 0xFFFFFFFF);
@@ -2200,12 +2217,12 @@ static u32 __cdecl fk_malloc(u32 n)
     return p;
 }
 static u32 __cdecl fk_free(u32 p) { u32 v[5] = {p}; rec_common(STUB_FILE + 6, v); return 0; }
-static u32 __cdecl fk_sprintf(u32 buf, u32 fmt, u32 name)
+static u32 __cdecl fk_sprintf(u32 buf, u32 fmt, u32 name, u32 b, u32 c)   /* (b, c: the timer's minutes, seconds, frames) */
 {
     char t[64];
     const char *f = (const char *)MEM(fmt);
     if (strstr(f, "%s")) snprintf(t, sizeof t, f, (char *)MEM(name));
-    else snprintf(t, sizeof t, f, (int)name);
+    else snprintf(t, sizeof t, f, (int)name, (int)b, (int)c);
     memcpy(MEM(buf), t, strlen(t) + 1);
     return 0;
 }
@@ -2424,6 +2441,8 @@ static void test_room(void)
         anim_setup(); world_setup(); U32(LOG_BASE) = 0;
         U32(g + 0x940) = AN_OBJ; U32(0x87F940) = 1;      /* the only object (Obj_PickGroup counts them) */
         U8(g + 0x108F) = rnd() % 13;                  /* 13 CORE files */
+        U32(0x662514) = U32(AN_OBJ + 0x68);           /* the player's model: as many parts as its animation's frames (else a stride off: durations of 0) */
+        for (u32 i = 0; i < U32(0x662514); i++) { gptr r = 0x66251C + i * 0x14; S8(r + 6) = (s8)(i == 0 || rnd() % 3 == 0 ? -1 : (s32)(rnd() % i)); }
         U16(g + 0x67A) = rnd() % 2 ? 0x16 + U8(g + 0x108F) : 0; U16(g + 0x674) = rnd() % 3 ? (u16)rnd() : 0x1FF;
         U16(g + 0x676) = rnd() % 2 ? (u16)rnd() : 0x214; Flag_Set(9, 0x33, rnd() & 1);
         a[0] = rnd() % 6; a[1] = rnd() % 4;
@@ -2557,7 +2576,7 @@ static void obj_part_counts(void)
     for (u32 i = 0; i < 16; i++, o += 0x260) {
         u32 n = 0;
         for (gptr q = U32(o + 0x64); q && n < 16; q = U32(q + 0x54)) n++;
-        if (!n) { gptr q = O_PART + i * 0x100; U32(o + 0x64) = q; U32(q + 0x54) = 0; U32(q + 0x58) = o; n = 1; }   /* (objects in use have parts) */
+        if (!n) { gptr q = O_PART + 0x800 + i * 0x80; U32(o + 0x64) = q;   /* (past the player's chain of 12: camera_state) */ U32(q + 0x54) = 0; U32(q + 0x58) = o; n = 1; }   /* (objects in use have parts) */
         if (U8(o + 0xFE) & 1) U32(o + 0x68) = 1;     /* (the frame may unlink its later parts) */
     }
     if (!S16(U32(G() + 0x940) + 0x10A)) S16(U32(G() + 0x940) + 0x10A) = 1;   /* the gauge divides by the maximum health */
@@ -2738,6 +2757,7 @@ static void test_doors(void)
             U16(o + 0xAA) = (u16)(rnd() % 8 * 2); U32(o + 0x9C) = rnd() % 4 ? AN_EVT : 0;
             if (rnd() % 2) U16(AN_EVT + 4 + 4 * (rnd() % 4)) = (u16)((S16(o + 0xAA) + U16(o + 0x92) * 2) / 2);
             U32(o + 0x60) = MODEL_DATA; U32(g + 0x938) = d + 0xC50; U32(0x87DC0C) = 0x1E;
+            U32(0x87DC98) = 0x6D0000; U32(0x87F94C) = 0x6CF800;          /* the score panel's sprites */
             for (u32 j = 0; j < 0x1E; j++) U32(d + 0xC50 + j * 0xCC + 0x50) = 0;
             U16(0x87FFEA) = rnd() % 2;
             Flag_Set(2, 0x1F, rnd() % 2);
@@ -2889,6 +2909,7 @@ static void frame_state(void)
                                 {1, 0xC}, {3, 0xB}, {1, 5}, {1, 0}, {2, 1}, {2, 0xD}, {2, 0xA}};
     for (unsigned k = 0; k < sizeof fl / sizeof fl[0]; k++) Flag_Set(fl[k][0], fl[k][1], rnd() % 3 == 0);
     Flag_Set(1, 6, 1);                                      /* Script_Tick has its own tests */
+    draw_quiet();                                           /* the frame drawn on the way (camera, events): nothing drawn but matrices */
     camera_state();
     enemyset_state();
 }
@@ -3693,7 +3714,13 @@ static void test_helpers(void)
         {0x406F10, Hud_Glyph, "Hud_Glyph", 6}, {0x4070A0, Hud_Line, "Hud_Line", 6},
         {0x406890, Hud_Number, "Hud_Number", 6}, {0x406A10, Hud_SmallNum, "Hud_SmallNum", 6},
         {0x406B50, Hud_GlyphNum, "Hud_GlyphNum", 6}, {0x404CC0, Hud_Weapon, "Hud_Weapon", 0},
-        {0x404CC0, Hud_Weapon, "Hud_Weapon", 0}, {0x404CC0, Hud_Weapon, "Hud_Weapon", 0}, {0x404CC0, Hud_Weapon, "Hud_Weapon", 0}};
+        {0x404CC0, Hud_Weapon, "Hud_Weapon", 0}, {0x404CC0, Hud_Weapon, "Hud_Weapon", 0}, {0x404CC0, Hud_Weapon, "Hud_Weapon", 0},
+        {0x405DE0, Timer_Set, "Timer_Set", 1}, {0x474B20, Eff_Detach, "Eff_Detach", 1}, {0x47A8C0, Obj_MoveReset, "Obj_MoveReset", 2},
+        {0x48FDA0, Room_CountUp, "Room_CountUp", 0, 0xFF}, {0x495D70, Item_Compact, "Item_Compact", 2}, {0x495DF0, Item_Merge, "Item_Merge", 0},
+        {0x41F080, Panel_Sprite, "Panel_Sprite", 6}, {0x41F1C0, Panel_Digits, "Panel_Digits", 5}, {0x41F170, Panel_Bonus, "Panel_Bonus", 1},
+        {0x41F390, Panel_Kills, "Panel_Kills", 1}, {0x41F3E0, Panel_Points, "Panel_Points", 1},
+        {0x405E40, Timer_Draw, "Timer_Draw", 0}, {0x4065A0, Boss_Bar, "Boss_Bar", 2}, {0x406520, Boss_Gauge, "Boss_Gauge", 2},
+        {0x495E90, Menu_Open, "Menu_Open", 5}, {0x452450, Game_ModeStock, "Game_ModeStock", 0}};
     g_ign_objpads = 1;
     stubs_install(1);
     for (int i = 0; i < iters; i++) {
@@ -3926,6 +3953,69 @@ static void test_helpers(void)
                            U16(b + 0xC2) = rnd() % 3 ? (u16)th[rnd() % 11] : (u16)(rnd() % 0x100); }
                          U8(g + 0x108E) = rnd() % 3;
                          break; }
+                case 81: a[0] = rnd() % 3 ? 0 : rnd() % 2 ? rnd() % 1000 : rnd(); Flag_Set(3, 9, rnd() % 2); Flag_Set(2, 0xB, rnd() % 2); break;
+                case 82: {
+                    gptr e = O_EFF + 0x70 * (rnd() % 8);
+                    for (u32 q = 0; q < 0x70; q += 4) U32(e + q) = rnd();
+                    U32(e + 0x54) = rnd() % 4 ? O_OBJ + 0x260 * (rnd() % 16) : 0;
+                    if (U32(e + 0x54)) for (int q = 0; q < 9; q++) U16(U32(e + 0x54) + 0x20 + 2 * q) = (u16)((s32)(rnd() % 8193) - 4096);
+                    a[0] = e; break; }
+                case 83: a[0] = O_OBJ + 0x260 * (rnd() % 16); a[1] = rnd() % 3 ? rnd() % 8 : rnd(); break;
+                case 84: U8(g + 0x1090) = rnd() % 24; U8(g + 0x1091) = rnd() % 10; break;
+                case 85: case 86: {
+                    gptr l = rnd() % 2 || j == 86 ? g + 0x11AC : HB;
+                    for (u32 q = 0; q < 0x60; q += 4) U32(l + q) = rnd() % 2 ? 0 : rnd();
+                    for (u32 q = 0; q < 8; q++) {
+                        gptr e = l + 12 * q;
+                        U8(e) = rnd() % 3 != 0 ? 0 : (u8)(1 + rnd() % 2); if (rnd() % 2) U8(e) = (u8)(rnd() % 2 ? 1 : 0x100 - 1);
+                        U8(e + 1) = rnd() % 4; U16(e + 8) = (u16)(rnd() % 4 ? rnd() % 6 : rnd() % 2 ? 0xFFFF : 0x8000); U16(e + 0xA) = (u16)(rnd() % 6);
+                    }
+                    a[0] = l; a[1] = rnd() % 4 ? 1 + rnd() % 8 : (u32[]){0, 0x100, 0x108, 1}[rnd() % 4];
+                    break; }
+                case 87: a[0] = rnd() % 4 ? rnd() % 0x140 : rnd(); a[1] = rnd() % 4 ? rnd() % 0xF0 : rnd(); a[2] = rnd(); a[3] = rnd();
+                         a[4] = rnd() % 3 ? rnd() % 2 : (u32)(rnd() % 2 ? 0x100 : rnd()); a[5] = rnd(); break;
+                case 88: {
+                    static const u32 p10[] = {1, 10, 100, 1000, 10000, 100000, 1000000, 10000000, 100000000, 1000000000};
+                    a[3] = rnd() % 4 ? rnd() % 9 : (u32[]){0x107, 0x100, 0x10A, 7}[rnd() % 4];
+                    a[0] = rnd() % 3 ? rnd() % 1000000 : rnd() % 2 ? p10[rnd() % 10] * (rnd() % 10) + rnd() % 2 : rnd();
+                    if ((a[3] & 0xFF) < 10 && rnd() % 4 == 0) a[0] = p10[(a[3] & 0xFF) ? (a[3] & 0xFF) - 1 : 0] * (10 + rnd() % 100);
+                    a[1] = rnd() % 4 ? rnd() % 0x140 : rnd(); a[2] = rnd() % 4 ? rnd() % 0xF0 : rnd(); a[4] = rnd();
+                    break; }
+                case 92: {                              /* the event timer: colour bands, minutes, seconds, frames */
+                    u32 tot = rnd() % 4 ? 30 * (1 + rnd() % 600) : rnd() % 100;
+                    U32(g + 0x12CC) = tot;
+                    U32(g + 0x12C8) = rnd() % 4 ? rnd() % (tot + 2) : (u32[]){tot / 10, tot / 10 + 1, tot / 2, tot / 2 + 1, 0, 1, 2, 1800 * 100}[rnd() % 8];
+                    Flag_Set(1, 0xE, rnd() % 3 == 0); Flag_Set(3, 9, 1); Flag_Set(2, 0xB, rnd() % 2);
+                    break; }
+                case 93: case 94: {                     /* the boss gauge: bands by quarter and half, the lost health behind */
+                    s16 mx = (s16)(rnd() % 4 ? 1 + rnd() % 3000 : (rnd() % 2 ? 1 : 4 + 4 * (rnd() % 100)));
+                    U16(g + 0x92A) = (u16)mx;
+                    static const s16 fr[] = {0, 1, -1};
+                    s16 hp = rnd() % 3 ? (s16)(rnd() % (mx + 1)) : (s16)((rnd() % 2 ? mx / 4 : mx / 2) + fr[rnd() % 3]);
+                    if (rnd() % 8 == 0) hp = (s16)(rnd() % 2 ? -(s32)(rnd() % 100) : mx + (s32)(rnd() % 100));
+                    U16(g + 0x928) = (u16)hp;
+                    U16(b + 0xBE) = (u16)(hp + (rnd() % 2 ? (s32)(rnd() % 13) - 3 : (s32)(rnd() % (mx + 1))));
+                    if (rnd() % 4 == 0) U16(b + 0xBE) = rnd() % 2 ? (u16)(mx + 6 + (s32)(rnd() % 3) - 1) : (u16)(hp + 0x106);   /* full width; the same low byte */
+                    Flag_Set(2, 7, rnd() % 4 == 0); Flag_Set(3, 7, rnd() % 4 != 0);
+                    a[0] = rnd() % 0x140; a[1] = rnd() % 0xF0; break; }
+                case 95: {                              /* the menus by kind, their four arguments */
+                    a[0] = rnd() % 4 ? (rnd() % 3 ? 1 + rnd() % 6 : 5) : (u32[]){0, 7, 0x10001, 0x10003, rnd()}[rnd() % 5];
+                    a[1] = rnd() % 2 ? (rnd() % 10) << 8 | rnd() % 24 : rnd(); if (rnd() % 4 == 0) a[1] = (a[1] & ~0xFFFFu) | 0x1E;
+                    a[2] = rnd(); a[3] = rnd(); a[4] = rnd();
+                    U8(g + 0x108E) = rnd() % 3; U32(g + 0xB14) = rnd();
+                    for (u32 q = 0x10B0; q < 0x10BC; q += 4) U32(g + q) = rnd();   /* (the entry before the list: the key not found) */
+                    for (u32 q = 0; q < 0x14; q++) { gptr it = g + 0x10BC + 12 * q; U8(it) = rnd() % 2; U8(it + 1) = rnd() % 4 ? (u8)(0x17 + rnd() % 4) : (u8)rnd(); }
+                    if (rnd() % 2) for (u32 q = 0; q < 0x14; q++) if (U8(g + 0x10BC + 12 * q + 1) == 0x19) U8(g + 0x10BC + 12 * q + 1) = 0x18;   /* no key */
+                    U16(g + 0x10B4) = (u16)((rnd() % 3 ? 0x900 : (rnd() % 16) << 8) | (rnd() & 0xFF));
+                    U16(g + 0x10B8) = (u16)((rnd() % 3 ? 0x900 : (rnd() % 16) << 8) | (rnd() & 0xFF));
+                    Flag_Set(9, 0x38, rnd() % 2); Flag_Set(9, 0x37, rnd() % 2); Flag_Set(2, 8, rnd() % 2); Flag_Set(2, 0x11, rnd() % 2);
+                    break; }
+                case 96: for (u32 q = 0x10B8; q < 0x1200; q += 4) U32(g + q) = rnd();
+                         U8(g + 0x108F) = rnd() % 4 ? rnd() % 13 : (u8)rnd(); break;
+                case 89: case 90: case 91:
+                    a[0] = HB - 0x2480;
+                    U32(HB + 4) = rnd() % 3 ? rnd() % 10000000 : rnd(); U16(HB + 0xA) = (u16)(rnd() % 3 ? rnd() % 100 : rnd());
+                    U32(HB + 0xC) = rnd() % 3 ? rnd() % 10000000 : rnd(); break;
                 case 71: for (u32 q = 0x10B8; q < 0x1200; q += 4) U32(g + q) = rnd();   /* stock tables (and around) */
                          U8(g + 0x108E) = rnd() % 4 ? rnd() % 3 : (u8)rnd(); Flag_Set(9, 0x74, rnd() % 2); break;
                 }
@@ -4297,6 +4387,7 @@ static gptr raptor_setup(void)
     U32(0x87F948) = TYPE_TAB;                                           /* effect slot handlers: recorders */
     for (int k = 0; k < 256; k++) U32(TYPE_TAB + 4 * k) = (u32)(uintptr_t)g_recs[STUB_TYPE];
     { u32 pb = U32(0x87DC98), ob = U32(0x87F94C); draw_safe(); U32(0x87DC98) = pb; U32(0x87F94C) = ob; }   /* (game over draws a frame) */
+    for (u32 k = 0; k < 16; k++) { gptr q = O_OBJ + k * 0x260; if (U32(q + 0x9C) != AN_EVT) U32(q + 0x9C) = 0; }   /* animation events: the test table (sound ids in range) or none */
     return o;
 }
 

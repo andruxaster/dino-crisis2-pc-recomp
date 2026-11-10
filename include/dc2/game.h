@@ -827,5 +827,22 @@ void DC2CALL Masks_Draw(gptr c);                                        /* 0x403
 void DC2CALL Rope_Draw(void);                                           /* 0x445E10 */
 void DC2CALL Text_DrawAll(void);                                        /* 0x471440 */
 void DC2CALL Frame_Draw(void);                                          /* 0x4A7250 */
+void DC2CALL Timer_Set(u32 frames);                                     /* 0x405DE0 */
+void DC2CALL Eff_Detach(gptr e);                                        /* 0x474B20 */
+void DC2CALL Obj_MoveReset(gptr o, u32 n);                              /* 0x47A8C0 */
+u32 DC2CALL Room_CountUp(void);                                         /* 0x48FDA0 */
+void DC2CALL Item_Compact(gptr list, u32 n);                            /* 0x495D70 */
+void DC2CALL Item_Merge(void);                                          /* 0x495DF0 */
+void DC2CALL Panel_Sprite(u32 x, u32 y, u32 u, u32 v, u32 small, u32 col);/* 0x41F080 */
+void DC2CALL Panel_Digits(u32 v, u32 x, u32 y, u32 n, u32 col);         /* 0x41F1C0 */
+void DC2CALL Panel_Bonus(gptr d);                                       /* 0x41F170 */
+void DC2CALL Panel_Kills(gptr d);                                       /* 0x41F390 */
+void DC2CALL Panel_Points(gptr d);                                      /* 0x41F3E0 */
+u32 DC2CALL Floor_Cross(gptr a, gptr b, gptr seg, u32 who);             /* 0x4542F0 */
+void DC2CALL Timer_Draw(void);                                          /* 0x405E40 */
+void DC2CALL Boss_Bar(u32 x, u32 y);                                    /* 0x4065A0 */
+void DC2CALL Boss_Gauge(u32 x, u32 y);                                  /* 0x406520 */
+void DC2CALL Menu_Open(u32 a, u32 b, u32 c, u32 d, u32 e);              /* 0x495E90 */
+void DC2CALL Game_ModeStock(void);                                      /* 0x452450 */
 
 #endif

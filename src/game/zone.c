@@ -112,7 +112,7 @@ u32 DC2CALL Line_Blocked(gptr o, gptr a, gptr b, u32 low)          /* 0x486FB0 *
         }
         if (!k) break;
     }
-    if ((U8(o + 0x184) & 0x10) && (u16)Fn_4542F0(b, a, seg, who) != 0xFFFF && U16(seg + 2) != U16(b + 2)) r = 1;
+    if ((U8(o + 0x184) & 0x10) && (u16)Floor_Cross(b, a, seg, who) != 0xFFFF && U16(seg + 2) != U16(b + 2)) r = 1;
 done:
     Tmp_Pop(8);
     return r;

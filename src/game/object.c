@@ -767,6 +767,32 @@ u32 DC2CALL Floor_Height(gptr a, gptr b, u32 mask, gptr kind)      /* 0x454420 *
     return best == 0x7D00 ? 0 : best;
 }
 
+/* where the line a -> b meets the floor (Floor_Height) into seg: 0xFFFF when a
+   and b are in the same 100 band of height or the floor is beyond a, else
+   -2 for a floor of kind bit 1, 0 for any other */
+u32 DC2CALL Floor_Cross(gptr a, gptr b, gptr seg, u32 who)            /* 0x4542F0 */
+{
+    if (S16(a + 2) / 100 == S16(b + 2) / 100) return 0xFFFF;
+    gptr k = Tmp_Push(4);
+    u32 h = Floor_Height(a, b, who, k);
+    u32 kind = U32(k);
+    Tmp_Pop(4);
+    s16 ya = S16(a + 2), yb = S16(b + 2);
+    if (ya < yb ? (s16)h < ya : (s16)h > ya) return h | 0xFFFF;
+    s32 dy = ya - yb;
+    if (!dy) {
+        if ((u16)h != (u16)yb) return h | 0xFFFF;
+        U16(seg) = U16(b); U16(seg + 2) = U16(b + 2); U16(seg + 4) = U16(b + 4);
+        return kind & 2 ? 0xFFFFFFFE : 0;
+    }
+    s32 dh = (s16)h - yb;
+    u16 x = (u16)((S16(a) - S16(b)) * dh / dy + U16(b));
+    U16(seg) = x;
+    s32 z = (S16(a + 4) - S16(b + 4)) * dh / (S16(a + 2) - S16(b + 2)) + U16(b + 4);
+    U16(seg + 2) = (u16)h; U16(seg + 4) = (u16)z;
+    return kind & 2 ? 0xFFFFFFFE : 0;
+}
+
 /* ---- effect slots G+0x944 (0xAC bytes; *0x87DC88 of them) ------------------ */
 #define K2_SIZE 0xACu
 static gptr k2_at(u32 i) { return U32(G() + 0x944) + i * K2_SIZE; }

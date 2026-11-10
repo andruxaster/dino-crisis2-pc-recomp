@@ -16,6 +16,7 @@ void DC2CALL Pc_Close(s32 fd);                          /* 0x4C05A0 */
 gptr DC2CALL Crt_malloc(u32 n);                         /* 0x4DD711 */
 void DC2CALL Crt_free(gptr p);                          /* 0x4DD628 */
 void DC2CALL Crt_sprintf1(gptr buf, gptr fmt, u32 a);   /* 0x4DD5D6: sprintf with one argument */
+void DC2CALL Crt_sprintf3(gptr buf, gptr fmt, u32 a, u32 b, u32 c);   /* ... with three numbers */
 
 /* DirectSound buffers (0x4BF720..): in the standalone builds a silent
  * stand-in that only keeps time, so the game sees sounds start and end */

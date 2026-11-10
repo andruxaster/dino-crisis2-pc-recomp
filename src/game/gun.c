@@ -1368,7 +1368,7 @@ void DC2CALL Player_Crouch(gptr o)                                  /* 0x47F0F0 
         U16(o + 0x5A) = (u16)(h / -1000);
         U16(PX() + 0x42) += 2; U16(PX() + 0x4A) += 2;
         if (S16(o + 0x42) >= S16(o + 0x5A) * -1000) {       /* on the floor: stand up */
-            if ((s16)Fn_4542F0(o + 0x40, o + 0xE0, d, 0x80) >= 0) {
+            if ((s16)Floor_Cross(o + 0x40, o + 0xE0, d, 0x80) >= 0) {
                 U16(o + 0x40) = U16(d); U16(o + 0x42) = U16(d + 2); U16(o + 0x44) = U16(d + 4);
             }
             Anim_Start(o, 0x3D, 0, 0, 0);

@@ -228,7 +228,7 @@ void DC2CALL Game_Init(void)                                         /* 0x451120
         G8(0x108F) = G8(0x850);
         u32 i = Room_GlobalIndex(G8(0x1091), G8(0x1090)) & 0xFF;
         U8(G() + 0x12D0 + i) = 0;
-        Fn_452450();
+        Game_ModeStock();
         for (u32 f = 0x50; f < 0x80; f++) Flag_Set(9, f, 0);
     } else if (G8(0x1094) & 1) {
         Flag_Set(9, 0x35, 1);
@@ -328,7 +328,7 @@ void DC2CALL Game_Play(void)                                         /* 0x451790
             Task_Chain(0x478F40);
         }
     }
-    if (Flag_Check(3, 9)) Fn_405E40();
+    if (Flag_Check(3, 9)) Timer_Draw();
     Game_Frame();
     Frame_Draw();
     Flag_Set(2, 0x25, 0);
@@ -429,7 +429,7 @@ void DC2CALL Game_Frame(void)                                       /* 0x472FD0 
     }
     if (!Flag_Check(1, 0xC)) Hud_Weapon();
     Gauge_Draw(0xC0, 0x10);
-    if (Flag_Check(3, 0xB)) Fn_406520(0xC8, 0xD0);
+    if (Flag_Check(3, 0xB)) Boss_Gauge(0xC8, 0xD0);
     Hidden_UpdateAll();
     if (!Flag_Check(1, 5)) Obj_PickLights(G() + 0x778);
 }
@@ -604,11 +604,11 @@ void DC2CALL Game_Continue(void)                                    /* 0x451990 
                 U16(e + 8)--;
                 if (S16(e + 8) <= 0) {
                     U32(e) = 0; U32(e + 4) = 0; U32(e + 8) = 0;
-                    Fn_495D70(G() + 0x11AC, 6);
+                    Item_Compact(G() + 0x11AC, 6);
                 }
             }
             U32(G() + 0x1098) = t;
-            Fn_495DF0();
+            Item_Merge();
             U16(G() + 0x11F8) = 0x4B0; U16(G() + 0x11FC) = 0x4B0; U16(G() + 0x1200) = 0;
             G16(0x664) = 1; G16(0x66A) = 0; G16(0x668) = 0; G16(0x666) = 0;
             Fade_Set(1, 0xA, 1);

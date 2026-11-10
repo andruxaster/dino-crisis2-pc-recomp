@@ -15,6 +15,7 @@ gptr DC2CALL Crt_malloc(u32 n)                  { return ORIG(0x4DD711, gptr (DC
 void DC2CALL Crt_free(gptr p)                   { ORIG(0x4DD628, void (DC2CALL *)(gptr))(p); }
 void DC2CALL Task_Sleep(u32 n)                  { ORIG(0x4C29A9, void (DC2CALL *)(u32))(n); }
 void DC2CALL Crt_sprintf1(gptr b, gptr f, u32 a) { ORIG(0x4DD5D6, int (__cdecl *)(gptr, gptr, u32))(b, f, a); }
+void DC2CALL Crt_sprintf3(gptr b, gptr f, u32 x, u32 y, u32 z) { ORIG(0x4DD5D6, int (__cdecl *)(gptr, gptr, u32, u32, u32))(b, f, x, y, z); }
 u32  DC2CALL Snd_CreateBuffer(gptr w, u32 v)    { return ORIG(0x4BF720, u32 (DC2CALL *)(gptr, u32))(w, v); }
 void DC2CALL Snd_Play(u32 h, u32 a, u32 l)      { ORIG(0x4BF970, void (DC2CALL *)(u32, u32, u32))(h, a, l); }
 void DC2CALL Snd_SetVolume(u32 h, s32 v)        { ORIG(0x4BFA20, void (DC2CALL *)(u32, s32))(h, v); }
@@ -113,6 +114,11 @@ gptr DC2CALL Crt_malloc(u32 n)
     return 0;
 }
 void DC2CALL Crt_free(gptr p) { if (p) U32(p - 4) &= ~1u; }
+void DC2CALL Crt_sprintf3(gptr b, gptr f, u32 x, u32 y, u32 z)
+{
+    sprintf((char *)MEM(b), (const char *)MEM(f), (int)x, (int)y, (int)z);
+}
+
 void DC2CALL Crt_sprintf1(gptr b, gptr f, u32 a)
 {
     if (strstr((const char *)MEM(f), "%s")) sprintf((char *)MEM(b), (const char *)MEM(f), (const char *)MEM(a));

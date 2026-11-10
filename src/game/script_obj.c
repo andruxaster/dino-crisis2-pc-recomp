@@ -264,7 +264,7 @@ static void set_global(gptr t)                                      /* 0x4883B0 
     case 28: U16(g + 0x1388) = U16(v); break;
     case 32: U8(g + 0x10AA) = U8(v); break;
     case 35: U16(0x87FC4A) = U16(v); break;                       /* script frame counter */
-    case 36: Timer_Set(U32(v), 0); break;
+    case 36: Timer_Set(U32(v)); break;
     case 37: U8(g + 0x850) = U8(v); break;
     case 38: U8(g + 0x851) = U8(v); break;
     case 39: U16(g + 0x138A) = U16(v); break;

@@ -89,7 +89,7 @@ void DC2CALL Score_Kill(gptr o)                                     /* 0x404AF0 
     if (c > 100) U8(o + 0x11D) = 100;
     else if (c < -100) U8(o + 0x11D) = 0x9C;
     s = (u32)((S8(o + 0x11D) + 100) * s) / 100;
-    Fn_48FDA0();
+    Room_CountUp();
     if (!U8(r + 0xCD)) { U16(r + 0xC4) = 0; U32(r + 0xB4) = 0; }
     if (!U8(r + 0xCC)) {
         U16(G() + 0xC20)++;

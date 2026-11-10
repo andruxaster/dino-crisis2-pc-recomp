@@ -655,7 +655,7 @@ void DC2CALL Thrown_Update(gptr o)                                 /* 0x47AFA0 *
             U32(PROBE + 0x40) = U32(p40); U16(PROBE + 0x44) = U16(e + 0x44);
             U32(PROBE + 0x74) = U32(e + 0x58); U16(PROBE + 0x78) = U16(e + 0x5C);
             if (Weapon_Hit(e + 0x20, e + 0x58, (u32)(s32)S8(e + 0x4F) + 0x10)) goto hit;
-            if ((u16)Fn_4542F0(p40, e + 0x58, v, 8)) {
+            if ((u16)Floor_Cross(p40, e + 0x58, v, 8)) {
                 u32 h = Eff_WallHit(PROBE);
                 if (!h) continue;                               /* still flying */
                 gptr c = U32(G() + 0xA4C), blk = c + U32(c + 8 + (h >> 24) * 4);
@@ -779,7 +779,7 @@ static void throw_sub(gptr o, const struct throw_sub *s)
     U16(v) = 0; U16(v + 2) = 0x2710; U16(v + 4) = 0;
     ApplyMatrixSV(p + 0x20, v, v);
     U16(v) += U16(p + 0x40); U16(v + 2) += U16(p + 0x42); U16(v + 4) += U16(p + 0x44);
-    if (!(u16)Fn_4542F0(v, p + 0x40, v, 0x80)) {
+    if (!(u16)Floor_Cross(v, p + 0x40, v, 0x80)) {
         if (s->kind == 3) {                                 /* a grenade: the effect takes the spot */
             Effect_SpawnAt(o, 0x67D80C, 0);
             Sub_AmmoUse(1);

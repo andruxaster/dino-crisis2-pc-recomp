@@ -989,11 +989,78 @@ void DC2CALL Door_StairsUp(gptr d)                                 /* 0x41E050 *
     } else Door_CamTarget(U16(pl + 0x40), (u16)(U16(pl + 0x42) - 0xC0), (u16)(U16(pl + 0x44) + 0x40));
 }
 
+/* a panel sprite (u, v at x, y; 8x8 when small, else 0x60x0x10) on the HUD list */
+void DC2CALL Panel_Sprite(u32 x, u32 y, u32 u, u32 v, u32 small, u32 col)  /* 0x41F080 */
+{
+    gptr p = U32(0x87DC98), ot = U32(0x87F94C) + 0x7C;
+    U32(p + 4) = (col & 0xFFFFFF) | 0x64000000;
+    F32(p + 8) = (float)(s16)x; F32(p + 0xC) = (float)(s16)y; U32(p + 0x10) = 0x3C23D70A;
+    U8(p + 0x14) = (u8)u; U8(p + 0x15) = (u8)v; U16(p + 0x16) = 0x7DCB;
+    if ((u8)small) { U16(p + 0x18) = 8; U16(p + 0x1A) = 8; } else { U16(p + 0x18) = 0x60; U16(p + 0x1A) = 0x10; }
+    U32(p) = U32(ot) | 0x4000000; U32(ot) = p & 0xFFFFFF;
+    U32(0x87DC98) += 0x1C;
+    Gpu_SetDrawMode(U32(0x87DC98), 1, 0, 0x29, 0);
+    Gpu_AddPrim(ot, U32(0x87DC98));
+    U32(0x87DC98) += 0xC;
+}
+
+/* n digits of v (leading zeros left out, the last always), 8 apart from x;
+   7 digits get the points sign after them */
+void DC2CALL Panel_Digits(u32 v, u32 x, u32 y, u32 n, u32 col)       /* 0x41F1C0 */
+{
+    u32 p10 = 1, k = n & 0xFF, lead = 1;
+    if ((s32)k > 1) for (u32 i = k - 1; i; i--) p10 *= 10;
+    u32 cx = x - 8;
+    gptr T = Tmp_Push(0x1C);                    /* the sprite (a stack block of the original) */
+    U32(T + 4) = (col & 0xFFFFFF) | 0x64000000; F32(T + 0xC) = (float)(s16)y; U32(T + 0x10) = 0x3C23D70A;
+    U8(T + 0x15) = 0; U16(T + 0x16) = 0x7C8F; U16(T + 0x18) = 8; U16(T + 0x1A) = 0x10;
+    for (u32 i = (s32)k > 0 ? k : 0; i; i--, p10 /= 10) {
+        u32 q = v / p10;
+        cx += 8;
+        if (p10 == 1) lead = 0;
+        if (!q && lead) continue;
+        v -= q * p10; lead = 0;
+        F32(T + 8) = (float)(s16)cx; U8(T + 0x14) = (u8)(q << 3);
+        gptr p = U32(0x87DC98), ot = U32(0x87F94C) + 0x7C;
+        memcpy(MEM(p + 4), MEM(T + 4), 0x18);
+        U32(p) = U32(ot) | 0x4000000; U32(ot) = p & 0xFFFFFF;
+        U32(0x87DC98) += 0x1C;
+    }
+    if ((u8)n == 7) {
+        F32(T + 8) = (float)((s16)cx + 8); U16(T + 0x18) = 0x10; U8(T + 0x14) = 0x50;
+        gptr p = U32(0x87DC98), ot = U32(0x87F94C) + 0x7C;
+        memcpy(MEM(p + 4), MEM(T + 4), 0x18);
+        U32(p) = U32(ot) | 0x4000000; U32(ot) = p & 0xFFFFFF;
+        U32(0x87DC98) += 0x1C;
+    }
+    Tmp_Pop(0x1C);
+    Gpu_SetDrawMode(U32(0x87DC98), 1, 0, 0x2C, 0);
+    Gpu_AddPrim(U32(0x87F94C) + 0x7C, U32(0x87DC98));
+    U32(0x87DC98) += 0xC;
+}
+
+/* the score panel's lines: the combo bonus, the kills, the points */
+void DC2CALL Panel_Bonus(gptr d)                                     /* 0x41F170 */
+{
+    Panel_Sprite(0xBE, 0xA4, 0, 0xD0, 0, 0x8000);
+    Panel_Digits(U32(d + 0x2484), 0xF6, 0xAE, 7, 0x8000);
+}
+void DC2CALL Panel_Kills(gptr d)                                     /* 0x41F390 */
+{
+    Panel_Sprite(0xBE, 0xBB, 0x80, 0xC0, 0, 0x808080);
+    Panel_Digits(U16(d + 0x248A), 0x11E, 0xBB, 2, 0x808080);
+}
+void DC2CALL Panel_Points(gptr d)                                    /* 0x41F3E0 */
+{
+    Panel_Sprite(0xBE, 0xC8, 0x80, 0xD0, 0, 0x808080);
+    Panel_Digits(U32(d + 0x248C), 0xF6, 0xD2, 7, 0x808080);
+}
+
 /* the score panel's box */
 void DC2CALL Door_ScoreBox(gptr d)                                 /* 0x41F040 */
 {
     (void)d;
-    Fn_41F080(0xCD, U16(G() + 0xC20) ? 0x96 : 0xAE, 0, 0xC0, 0, 0x808080);
+    Panel_Sprite(0xCD, U16(G() + 0xC20) ? 0x96 : 0xAE, 0, 0xC0, 0, 0x808080);
 }
 
 /* the score panel after a fight (D+0x2491 counts down from 5): the combo
@@ -1052,13 +1119,13 @@ void DC2CALL Door_Score(gptr d)                                    /* 0x41ED70 *
     Door_ScoreBox(d);
     switch (S8(d + 0x2491)) {
     case 0: case 1:
-        Fn_41F3E0(d);
+        Panel_Points(d);
         /* fall through */
     case 2:
-        Fn_41F390(d);
+        Panel_Kills(d);
         /* fall through */
     case 3:
-        if (U16(g + 0xC20)) Fn_41F170(d);
+        if (U16(g + 0xC20)) Panel_Bonus(d);
         break;
     }
 }

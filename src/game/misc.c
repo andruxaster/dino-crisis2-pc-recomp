@@ -1447,3 +1447,242 @@ bar:
         break; }
     }
 }
+
+/* ---- small steps the script, the game task and enemies call ------------------------ */
+
+/* the event timer: G+0x12C8/0x12CC = frames (flag 3:9 while it runs) */
+void DC2CALL Timer_Set(u32 frames)                                    /* 0x405DE0 */
+{
+    gptr g = G();
+    U32(g + 0x12CC) = frames; U32(g + 0x12C8) = frames;
+    Flag_Set(3, 9, frames != 0);
+    Flag_Set(2, 0xB, 0);
+}
+
+/* an effect let go of its parent (+0x54): position, angles and the +0x60
+   vector carried into the world */
+void DC2CALL Eff_Detach(gptr e)                                       /* 0x474B20 */
+{
+    gptr par = U32(e + 0x54);
+    if (!par) return;
+    gptr t = Tmp_Push(8);
+    ApplyMatrixSV(par + 0x20, e + 0x40, t);
+    U16(e + 0x40) = (u16)(U16(par + 0x40) + U16(t));
+    U16(e + 0x42) = (u16)(U16(par + 0x42) + U16(t + 2));
+    U16(e + 0x44) = (u16)(U16(par + 0x44) + U16(t + 4));
+    U16(e + 0x48) += U16(par + 0x48); U16(e + 0x4A) += U16(par + 0x4A); U16(e + 0x4C) += U16(par + 0x4C);
+    ApplyMatrixSV(par + 0x20, e + 0x60, e + 0x60);
+    U32(e + 0x54) = 0;
+    Tmp_Pop(8);
+}
+
+/* an object's movement block reset with n + 1 steps */
+void DC2CALL Obj_MoveReset(gptr o, u32 n)                             /* 0x47A8C0 */
+{
+    U32(o + 0x150) = 0; U32(o + 0x154) = 0; U32(o + 0x140) = 0; U32(o + 0x144) = 0;
+    U16(o + 0x168) = 0; U16(o + 0x16C) = 0; U8(o + 0x160) = 0;
+    U32(o + 0x158) = (n & 0xFF) + 1; U8(o + 0x15F) = 7;
+    U16(o + 0x164) = 0x50; U16(o + 0x166) = 0x50; U16(o + 0x16A) = 0x200; U16(o + 0x16E) = 0x300;
+}
+
+/* the current room's counter (G+0x12D0 by the room's global index) + 1 */
+u32 DC2CALL Room_CountUp(void)                                        /* 0x48FDA0 */
+{
+    gptr a = G() + 0x12D0 + (Room_GlobalIndex(U8(G() + 0x1091), U8(G() + 0x1090)) & 0xFF);
+    return ++U8(a);
+}
+
+/* a 12-byte item list closed up: each empty entry takes the next used one */
+void DC2CALL Item_Compact(gptr list, u32 n)                           /* 0x495D70 */
+{
+    s32 last = (s32)(n & 0xFF) - 1;
+    for (u32 i = 0; (s32)i < last; i++) {
+        gptr e = list + 12 * i;
+        if (U8(e)) continue;
+        for (u8 j = (u8)(i + 1); j < (u8)n; j++) {
+            gptr f = list + 12 * j;
+            if (!U8(f)) continue;
+            U32(e) = U32(f); U32(e + 4) = U32(f + 4); U32(e + 8) = U32(f + 8);
+            U32(f) = 0; U32(f + 4) = 0; U32(f + 8) = 0;
+            break;
+        }
+    }
+}
+
+/* the 6 carried items (G+0x11AC): one unit of a later stack of the same item
+   moved onto an earlier one that is not full; an emptied stack removed */
+void DC2CALL Item_Merge(void)                                         /* 0x495DF0 */
+{
+    for (u16 i = 0; i < 5; i++) {
+        gptr e = G() + 0x11AC + 12 * i;
+        if (!U8(e)) continue;
+        for (u16 k = 5; k > i; k--) {
+            gptr t = G() + 0x11AC + 12 * k;
+            if (!U8(t) || U8(t + 1) != U8(e + 1) || S16(e + 8) >= S16(e + 0xA)) continue;
+            U16(e + 8)++; U16(t + 8)--;
+            if (S16(t + 8) <= 0) {
+                U32(t) = 0; U32(t + 4) = 0; U32(t + 8) = 0;
+                Item_Compact(G() + 0x11AC, 6);
+            }
+            break;
+        }
+    }
+}
+
+/* the event timer on screen (8 glyphs "mm:ss:ff" at 0x64.., y 50), counting
+   down unless flag 1:E; red under a tenth, yellow under half; at 0 flag 3:9
+   off, 2:B on */
+void DC2CALL Timer_Draw(void)                                         /* 0x405E40 */
+{
+    gptr g = G();
+    if (!Flag_Check(1, 0xE)) U32(g + 0x12C8)--;
+    u32 t = U32(g + 0x12C8);
+    s32 tot = S32(g + 0x12CC);
+    u32 col = tot / 10 > (s32)t ? 0x101080 : tot / 2 <= (s32)t ? 0x108000 : 0x108080;
+    gptr T = Tmp_Push(0x34), buf = Tmp_Push(0x40);    /* the glyph quad and the text (stack blocks of the original) */
+    memset(MEM(T), 0, 0x34);
+    U32(T) = col | 0x6C000000;
+    U32(T + 8) = 0x42480000; U32(T + 0x14) = 0x42480000; U32(T + 0x20) = 0x42800000; U32(T + 0x2C) = 0x42800000;   /* 50, 64 */
+    U16(T + 0xE) = 0x7DCC; U8(T + 0x18) = 0xE; U8(T + 0x25) = 0xE; U8(T + 0x30) = 0xE; U8(T + 0x31) = 0xE;
+    u32 m = t / 1800, r = t - m * 1800, s = r / 30;
+    Crt_sprintf3(buf, 0x71D5C4, m, s, (r - s * 30) * 3);
+    for (u32 i = 0, x = 0x72; x < 0xE2; i++, x += 0xE) {
+        U16(T + 0x1A) = U8(buf + i);
+        F32(T + 4) = (float)(x - 0xE); F32(T + 0x10) = (float)x; F32(T + 0x1C) = (float)(x - 0xE); F32(T + 0x28) = (float)x;
+        gptr p = U32(0x87DC98);
+        memcpy(MEM(p + 4), MEM(T), 0x34);
+        hud_link(2);
+        U32(0x87DC98) += 0x38;
+    }
+    Tmp_Pop(0x40); Tmp_Pop(0x34);
+    if (S32(G() + 0x12C8) <= 0) { Flag_Set(3, 9, 0); Flag_Set(2, 0xB, 1); }
+}
+
+/* the boss's gauge at x, y: frame, bar by G+0x928 of G+0x92A (pulsing green,
+   yellow, red) and the health lost going down behind it */
+void DC2CALL Boss_Bar(u32 x, u32 y)                                   /* 0x4065A0 */
+{
+    gptr g = G(), b = g + 0x68C;
+    s32 w = S16(g + 0x928) * 0x70 / S16(g + 0x92A);
+    if ((s16)w < 0) w = 0; else if ((s16)w > 0x70) w = 0x70;
+    gptr r = Tmp_Push(8);
+    U16(r) = (u16)x; U16(r + 2) = (u16)y; U16(r + 4) = 0x40; U16(r + 6) = 8;
+    Hud_Sprite(r, 0, 0xF8, 0x7E8F, 0x808080, 0);
+    gptr p = U32(0x87DC98);
+    U32(p + 4) = 0xE100041A; U32(p + 8) = 0;
+    hud_link(2);
+    U32(0x87DC98) += 0xC;
+    Hud_Picture(0x6850A8, x + 0x40, y + 8, 0xC, 0x7C8F, 0x808080);
+    Hud_Picture(0x683620, x, y, 0xD, 0x7C8F, 0x808080);
+    s32 hp = S16(G() + 0x928), mx = S16(G() + 0x92A);
+    u32 col = hp <= mx / 4 ? Color_Pulse(0x80, 0x40, 3) : hp <= mx / 2 ? Color_Pulse(0x8080, 0x4040, 4) : Color_Pulse(0x8000, 0x4000, 5);
+    U16(r) = (u16)x; U16(r + 2) = (u16)y; U16(r + 4) = (u16)w; U16(r + 6) = 0x10;
+    Hud_Sprite(r, 0x70, 0x50, 0x7C8F, col, 0);
+    U16(b + 0xBE) -= 6;
+    if (S16(G() + 0x928) >= S16(b + 0xBE)) U16(b + 0xBE) = U16(G() + 0x928);
+    else {
+        s32 w2 = S16(b + 0xBE) * 0x70 / S16(G() + 0x92A);
+        if ((s16)w2 >= 0 && (s16)w2 <= 0x70) {
+            U16(r) = (u16)x; U16(r + 2) = (u16)y; U16(r + 4) = (u16)w2; U16(r + 6) = 0x10;
+            Hud_Sprite(r, 0x70, 0x50, 0x7C8F, col >> 1, 0);
+        }
+    }
+    Tmp_Pop(8);
+    hud_mode();
+}
+
+/* the boss's gauge (flag 3:7, not while 2:7); a hit resets the combo */
+void DC2CALL Boss_Gauge(u32 x, u32 y)                                 /* 0x406520 */
+{
+    gptr b = G() + 0x68C;
+    if (Flag_Check(2, 7) || !Flag_Check(3, 7)) return;
+    Boss_Bar(x, y);
+    if (U16(G() + 0x928) != U16(b + 0xBE)) { U8(b + 0xCC) = 1; U16(G() + 0xC20) = 0; U16(G() + 0xC22) = 0; }
+}
+
+/* a menu or screen started from the game (flag 2:8; G+0x68C+0x38.. its four
+   arguments): 1 the item box, 2 the save / pause screen, 3 and 6 the map
+   (area, room in b), 4 the file, 5 the card key used up */
+void DC2CALL Menu_Open(u32 a, u32 b, u32 c, u32 d, u32 e)              /* 0x495E90 */
+{
+    gptr m = G() + 0x68C;
+    Flag_Set(2, 8, 1);
+    U16(m + 0x3A) = (u16)c; U16(m + 0x3E) = (u16)e; U16(m + 0x38) = (u16)b; U16(m + 0x3C) = (u16)d;
+    switch (a & 0xFFFF) {
+    case 1: {
+        static const u8 fl[] = {1, 2, 3, 4, 6, 7, 8, 0xA, 0xD, 0xE};
+        U32(m + 0x68) = U32(G() + 0xB14);
+        for (unsigned k = 0; k < sizeof fl; k++) Flag_Set(1, fl[k], 1);
+        U8(m + 0x64) = 1;
+        if (U16(m + 0x38) == 0x1E && !U8(G() + 0x108E)) U16(m + 0x38) = 0x1D;
+        break; }
+    case 2:
+        Flag_Set(2, 8, 0); Flag_Set(2, 0x11, 1);
+        U8(G() + 0x663) = 0;
+        break;
+    case 3: {
+        U8(m + 0x64) = 3; U8(m + 0x63) = (u8)b;
+        U8(G() + 0x1220) = (u8)b;
+        u8 s = (u8)Area_SoundArea((u8)(b >> 8), b);
+        U8(m + 0x62) = s;
+        U8(G() + 0x1221) = s; U8(G() + 0x1222) = (u8)c; U8(G() + 0x1223) = (u8)d;
+        Flag_Set(0xB, U8(m + 0x62) + 0x75, 1);
+        U8(m + 0x60) = (u8)(U8(m + 0x62) + 5);
+        break; }
+    case 4:
+        U8(m + 0x64) = 4;
+        break;
+    case 5: {
+        s8 i = (s8)Item_Find(G() + 0x10BC, 0x14, 0x19);
+        gptr it = G() + (i + 0x165) * 12;
+        U8(it) = 0; U8(it + 1) = 0; U16(it + 2) = 0; U32(it + 4) = 0; U16(it + 8) = 0; U16(it + 0xA) = 0;
+        Flag_Set(2, 8, 0);
+        U16(m + 0x38) = 0; U16(m + 0x3A) = 0; U16(m + 0x3C) = 0; U16(m + 0x3E) = 0;
+        gptr g = G();
+        if ((U16(g + 0x10B4) & 0xFF00) == 0x900) {
+            U16(g + 0x10B4) = (u16)(U8(g + 0x10B4) | (Flag_Check(9, 0x38) ? 0x800 : 0x200));
+            U16(g + 0x10B6) = U16(g + 0x10B4);
+        }
+        if ((U16(g + 0x10B8) & 0xFF00) == 0x900)
+            U16(g + 0x10B8) = (u16)(U8(g + 0x10B8) | (Flag_Check(9, 0x37) ? 0x700 : 0x100));
+        break; }
+    case 6: {
+        u32 area = (c & ~0xFFu) | ((b >> 8) & 0xFF);
+        Flag_Set(0xB, Room_GlobalIndex(area, b) & 0xFF, 1);
+        U8(m + 0x64) = 3; U8(m + 0x63) = (u8)b;
+        u8 s = (u8)Area_SoundArea(area, b);
+        U8(m + 0x62) = s; U8(m + 0x60) = (u8)(s + 5);
+        break; }
+    }
+}
+
+/* the stock by the game's mode G+0x108F (0, 1: the main game's two
+   characters, 3, 5, 6: the extra modes; 4, 7..12: one item) after both
+   tables are cleared */
+void DC2CALL Game_ModeStock(void)                                     /* 0x452450 */
+{
+    static const u8  i0[] = {6, 7, 0x12, 0x16};
+    static const u16 a0[] = {9999,9999, 300,300, 9999,9999, 20,20};
+    static const u8  i1[] = {1, 3, 0x11, 0x13, 0x16};
+    static const u16 a1[] = {9999,9999, 5,5, 9999,9999, 10,10, 10,10};
+    static const u8  i5[] = {4, 0x16, 0x13};
+    static const u16 a5[] = {9999,9999, 20,20, 10,10};
+    static const u8  i6[] = {5, 9, 0x16};
+    static const u16 a6[] = {9999,9999, 20,20, 10,10};
+    static const u8  j0[] = {0x1A, 0x1B, 0x1C};
+    static const u16 b0[] = {2,2, 2,2, 1,2};
+    static const u8  jk[] = {0x1F};
+    static const u16 bk[] = {1,2};
+    gptr g = G();
+    for (u32 i = 0; i < 0x3C; i++) U32(g + 0x10BC + i * 4) = 0;
+    for (u32 i = 0; i < 0x12; i++) U32(g + 0x11AC + i * 4) = 0;
+    switch (U8(g + 0x108F)) {
+    case 0: stock_fill(g + 0x10BC, i0, a0, 4); stock_fill(g + 0x11AC, j0, b0, 3); break;
+    case 1: stock_fill(g + 0x10BC, i1, a1, 5); stock_fill(g + 0x11AC, j0, b0, 3); break;
+    case 2: break;
+    case 3: stock_fill(g + 0x11AC, j0 + 1, b0 + 2, 2); break;
+    case 5: stock_fill(g + 0x10BC, i5, a5, 3); stock_fill(g + 0x11AC, j0, b0, 3); break;
+    case 6: stock_fill(g + 0x10BC, i6, a6, 3); stock_fill(g + 0x11AC, j0, b0, 3); break;
+    case 4: case 7: case 8: case 9: case 10: case 11: case 12: stock_fill(g + 0x11AC, jk, bk, 1); break;
+    }
+}

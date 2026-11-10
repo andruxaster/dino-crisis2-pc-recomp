@@ -168,7 +168,7 @@ u32 DC2CALL ScrOp_Call46FBC0(gptr t)                               /* 25 */
 
 u32 DC2CALL ScrOp_Timer(gptr t)                                    /* 26: timer(seconds) */
 {
-    Timer_Set(S(t, 0) * 30, 0);
+    Timer_Set(S(t, 0) * 30);
     ADV(t);
     return 0;
 }
@@ -417,7 +417,7 @@ u32 DC2CALL ScrOp_Op51(gptr t)                                     /* 51 */
 u32 DC2CALL ScrOp_Op52(gptr t)                                     /* 52: on the selected effect/k2 */
 {
     switch (U8(t + T_SEL0)) {
-    case 1: Fn_474B20(EFF(SEL(t) + 12)); break;
+    case 1: Eff_Detach(EFF(SEL(t) + 12)); break;
     case 2: K2_Detach(K2(SEL(t))); break;
     default: break;
     }
@@ -517,7 +517,7 @@ u32 DC2CALL ScrOp_CamMove(gptr t)                                  /* 40: camera
     U16(b + 6) = U16(sp + 4);
     U16(b + 0xE) = U16(sp);
 call:
-    Fn_47A8C0(o, mode, b, b + 8);
+    Obj_MoveReset(o, mode);                 /* (the original also passes b, b + 8: unused) */
     Tmp_Pop(16);
     ADV(t);
     return 0;
