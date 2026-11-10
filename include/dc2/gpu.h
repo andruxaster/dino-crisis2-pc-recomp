@@ -26,8 +26,4 @@ void DC2CALL PcGpu_StoreImage(gptr rect, gptr p);                   /* 0x4B49F0 
 /* the rooms' JPEG backgrounds (src/pc/jpeg.c; libjpeg 6b's pixels) */
 void DC2CALL PcJpeg_Decode(gptr dst, gptr src, u32 size, u32 mode); /* 0x4D2990 */
 
-/* what the renderer is told: VRAM changed under a rect (texture pages to
-   reload), a CLUT row changed (palettes to reconvert) */
-extern void (*g_vram_dirty)(s32 x, s32 y, s32 w, s32 h);
-extern void (*g_clut_dirty)(s32 x, s32 y, s32 n);
 #endif

@@ -86,8 +86,8 @@ address,kind,name,category,confidence,notes
 0x4C0740,func,SetDrawVramOp,libgpu,medium,"code 0xEC + RECT + a,b -> DrawOTag calls 0x4B4A60(&rect,a,b)"
 0x4B4D20,func,LoadImage,libgpu-vram,high,"(RECT*, u32*) -> software VRAM 0x76448C"
 0x4B4DB0,func,LoadImage_IfChanged,libgpu-vram,high,"compares with VRAM first, writes only on change (CLUT records)"
-0x4B4B30,func,MoveImage,libgpu-vram,high,"(RECT*, x, y)"
-0x4B4A60,func,PC_VramOpClipped,libgpu-vram,low,"clips RECT to 1024x512, then 0x4C3BE6 + dirty mark"
+0x4B4B30,func,MoveImage,libgpu-vram,high,"(RECT*, x, y); rewritten: src/pc/drawot.c"
+0x4B4A60,func,PC_VramOpClipped,libgpu-vram,low,"clips RECT to 1024x512, then 0x4C3BE6 + dirty mark; rewritten: src/pc/drawot.c"
 0x4B49F0,func,PC_VramRectHelper,libgpu-vram,low,
 0x4B4E60,func,SetFarColor,d3d,medium,"stores rgb, D3D3 SetRenderState(FOGCOLOR=0x22)"
 0x4B4F50,func,PC_SetFogEnable,d3d,high,"SetRenderState(FOGENABLE=0x1C, on/off)"
@@ -166,32 +166,32 @@ address,kind,name,category,confidence,notes
 0x73C870,data,task_slots,data,high,4 x 0x20
 0x878328,data,snd_slots,data,medium,
 0x866190,data,strm_slots,data,medium,
-0x4B50F0,func,DrawOTag,libgpu,high,"walks OT; flag 0x75DEF0 bit0 -> path A (no lines/fog), else D3D BeginScene..EndScene"
-0x4B5D00,func,PC_Draw_PolyF3,pc-draw,high,code 0x20
-0x4B6260,func,PC_Draw_PolyFT3,pc-draw,high,0x24
-0x4B6F50,func,PC_Draw_PolyF4,pc-draw,high,0x28
-0x4B70E0,func,PC_Draw_PolyFT4,pc-draw,high,0x2C
-0x4B7300,func,PC_Draw_PolyG3,pc-draw,high,0x30
-0x4B74D0,func,PC_Draw_PolyGT3,pc-draw,high,0x34
-0x4B76F0,func,PC_Draw_PolyG4,pc-draw,high,0x38
-0x4B7920,func,PC_Draw_PolyGT4,pc-draw,high,0x3C
-0x4B7BD0,func,PC_Draw_LineF2,pc-draw,high,0x40
-0x4B7E30,func,PC_Draw_LineF3,pc-draw,high,0x48
-0x4B8140,func,PC_Draw_LineF4,pc-draw,high,0x4C
-0x4B7CE0,func,PC_Draw_LineG2,pc-draw,high,0x50
-0x4B7F80,func,PC_Draw_LineG3,pc-draw,high,0x58
-0x4B82D0,func,PC_Draw_LineG4,pc-draw,high,0x5C
-0x4B8500,func,PC_Draw_Tile,pc-draw,high,0x60
-0x4B8740,func,PC_Draw_Sprt,pc-draw,high,0x64
-0x4B8660,func,PC_Draw_Tile1,pc-draw,high,0x68
-0x4B8EC0,func,PC_Draw_PolyFT4_2D,pc-draw,high,"0x6C PC-only, no z"
-0x4B8B20,func,PC_Draw_Sprt8,pc-draw,high,0x74
-0x4B8CF0,func,PC_Draw_Sprt16,pc-draw,high,0x7C
-0x4B8930,func,PC_Draw_SprtZ,pc-draw,medium,"0x80 PC-only, size / z"
+0x4B50F0,func,DrawOTag,libgpu,high,"walks OT; flag 0x75DEF0 bit0 -> path A (no lines/fog), else D3D BeginScene..EndScene; rewritten: src/pc/drawot.c"
+0x4B5D00,func,PC_Draw_PolyF3,pc-draw,high,code 0x20; rewritten: src/pc/drawot.c
+0x4B6260,func,PC_Draw_PolyFT3,pc-draw,high,0x24; rewritten: src/pc/drawot.c
+0x4B6F50,func,PC_Draw_PolyF4,pc-draw,high,0x28; rewritten: src/pc/drawot.c
+0x4B70E0,func,PC_Draw_PolyFT4,pc-draw,high,0x2C; rewritten: src/pc/drawot.c
+0x4B7300,func,PC_Draw_PolyG3,pc-draw,high,0x30; rewritten: src/pc/drawot.c
+0x4B74D0,func,PC_Draw_PolyGT3,pc-draw,high,0x34; rewritten: src/pc/drawot.c
+0x4B76F0,func,PC_Draw_PolyG4,pc-draw,high,0x38; rewritten: src/pc/drawot.c
+0x4B7920,func,PC_Draw_PolyGT4,pc-draw,high,0x3C; rewritten: src/pc/drawot.c
+0x4B7BD0,func,PC_Draw_LineF2,pc-draw,high,0x40; rewritten: src/pc/drawot.c
+0x4B7E30,func,PC_Draw_LineF3,pc-draw,high,0x48; rewritten: src/pc/drawot.c
+0x4B8140,func,PC_Draw_LineF4,pc-draw,high,0x4C; rewritten: src/pc/drawot.c
+0x4B7CE0,func,PC_Draw_LineG2,pc-draw,high,0x50; rewritten: src/pc/drawot.c
+0x4B7F80,func,PC_Draw_LineG3,pc-draw,high,0x58; rewritten: src/pc/drawot.c
+0x4B82D0,func,PC_Draw_LineG4,pc-draw,high,0x5C; rewritten: src/pc/drawot.c
+0x4B8500,func,PC_Draw_Tile,pc-draw,high,0x60; rewritten: src/pc/drawot.c
+0x4B8740,func,PC_Draw_Sprt,pc-draw,high,0x64; rewritten: src/pc/drawot.c
+0x4B8660,func,PC_Draw_Tile1,pc-draw,high,0x68; rewritten: src/pc/drawot.c
+0x4B8EC0,func,PC_Draw_PolyFT4_2D,pc-draw,high,"0x6C PC-only, no z; rewritten: src/pc/drawot.c"
+0x4B8B20,func,PC_Draw_Sprt8,pc-draw,high,0x74; rewritten: src/pc/drawot.c
+0x4B8CF0,func,PC_Draw_Sprt16,pc-draw,high,0x7C; rewritten: src/pc/drawot.c
+0x4B8930,func,PC_Draw_SprtZ,pc-draw,medium,"0x80 PC-only, size / z; rewritten: src/pc/drawot.c"
 0x4B9400,func,PC_Draw_SprtScaled,pc-draw,medium,0x84 PC-only
-0x4BA120,func,PC_Draw_MaskMarker,pc-draw,medium,0x88: draws mask group (reads via other reg)
-0x4B9EA0,func,PC_Draw_Sprt8C,pc-draw,low,0x8C PC-only
-0x4B5F20,func,PC_CalcVertexColour,pc-draw,high,"(r,g,b,code,tpage,&argb): alpha by abr (0x80/0xFF/0xFF/0x40); COLOROP MODULATE2X or MODULATE with x2 clamp"
+0x4BA120,func,PC_Draw_MaskMarker,pc-draw,medium,0x88: draws mask group (reads via other reg); rewritten: src/pc/drawot.c
+0x4B9EA0,func,PC_Draw_Sprt8C,pc-draw,low,0x8C PC-only; rewritten: src/pc/drawot.c
+0x4B5F20,func,PC_CalcVertexColour,pc-draw,high,"(r,g,b,code,tpage,&argb): alpha by abr (0x80/0xFF/0xFF/0x40); COLOROP MODULATE2X or MODULATE with x2 clamp; rewritten: src/pc/drawot.c"
 0x4BA1D0,func,PC_DrawA_PolyF3,pc-draw,medium,path A handlers 0x4BA1D0..0x4BB3B0 mirror path B
 0x402520,func,NullDraw,pc-draw,high,bare ret; path A handler for all lines
 0x87BAF4,data,g_drawmode_tpage,data,high,
@@ -200,20 +200,20 @@ address,kind,name,category,confidence,notes
 0x87BAEC,data,g_tex_window,data,medium,RECT
 0x75DEF0,data,g_render_flags,data,medium,bit0 selects DrawOTag path A
 0x865ED8,data,g_d3d_device3,data,high,IDirect3DDevice3*
-0x4B6470,func,Tex_Bind,pc-tex,high,"(tpage, clut): page=tpage&0x1F, mode=(tpage>>7)&3; find/create/reload; SetTexture(0)"
-0x4B6CD0,func,TexCache_Find,pc-tex,high,"(page, clut, mode) -> slot or 0x20; key = mode/clut + texture window; can mark dirty"
-0x4B6510,func,TexCache_Create,pc-tex,high,first free of 32 slots/page; 256x256; staging Lock->convert->Unlock->Blt
-0x4B6A00,func,TexCache_Reload,pc-tex,medium,"(page, slot) re-upload a dirty entry"
-0x4B6900,func,Clut_GetConverted,pc-tex,high,clut -> &g_vram_row[clut>>6].conv_palette[(clut&0x3F)*16]
-0x4B4BF0,func,ClutRow_Convert,pc-tex,high,"(x, row, n): BGR555 -> device format, 0x0000 -> alpha 0, stamp++"
-0x4B4790,func,TexCache_InvalidateRect,pc-tex,medium,"(rect, mark): mark=1 -> state 2, else Release + clear; also previous page (256-wide textures)"
-0x4B5A30,func,Tex_CreateSurface,pc-tex,medium,"DDSD 0x101007, DDSCAPS_TEXTURE, QI IDirect3DTexture2"
-0x4B5A10,func,Tex_GetPixelFormat,pc-tex,low,
-0x4C2A89,func,TexConv_4bpp,pc-tex,high,"asm, table 0x73C900[0]"
-0x4C2C2A,func,TexConv_8bpp,pc-tex,high,"asm, table 0x73C900[1]"
-0x4C2D5F,func,TexConv_15bpp,pc-tex,high,"asm, table 0x73C900[2]; 16-bit fast path when bpp==16"
+0x4B6470,func,Tex_Bind,pc-tex,high,"(tpage, clut): page=tpage&0x1F, mode=(tpage>>7)&3; find/create/reload; SetTexture(0); rewritten: src/pc/drawot.c"
+0x4B6CD0,func,TexCache_Find,pc-tex,high,"(page, clut, mode) -> slot or 0x20; key = mode/clut + texture window; can mark dirty; rewritten: src/pc/drawot.c"
+0x4B6510,func,TexCache_Create,pc-tex,high,first free of 32 slots/page; 256x256; staging Lock->convert->Unlock->Blt; rewritten: src/pc/drawot.c
+0x4B6A00,func,TexCache_Reload,pc-tex,medium,"(page, slot) re-upload a dirty entry; rewritten: src/pc/drawot.c"
+0x4B6900,func,Clut_GetConverted,pc-tex,high,clut -> &g_vram_row[clut>>6].conv_palette[(clut&0x3F)*16]; rewritten: src/pc/drawot.c
+0x4B4BF0,func,ClutRow_Convert,pc-tex,high,"(x, row, n): BGR555 -> device format, 0x0000 -> alpha 0, stamp++; rewritten: src/pc/drawot.c"
+0x4B4790,func,TexCache_InvalidateRect,pc-tex,medium,"(rect, mark): mark=1 -> state 2, else Release + clear; also previous page (256-wide textures); rewritten: src/pc/drawot.c"
+0x4B5A30,func,Tex_CreateSurface,pc-tex,medium,"DDSD 0x101007, DDSCAPS_TEXTURE, QI IDirect3DTexture2; rewritten: src/pc/drawot.c"
+0x4B5A10,func,Tex_GetPixelFormat,pc-tex,low,rewritten: src/pc/drawot.c
+0x4C2A89,func,TexConv_4bpp,pc-tex,high,"asm, table 0x73C900[0]; rewritten: src/pc/drawot.c"
+0x4C2C2A,func,TexConv_8bpp,pc-tex,high,"asm, table 0x73C900[1]; rewritten: src/pc/drawot.c"
+0x4C2D5F,func,TexConv_15bpp,pc-tex,high,"asm, table 0x73C900[2]; 16-bit fast path when bpp==16; rewritten: src/pc/drawot.c"
 0x4C3DAC,func,TexConv_PackRGB,pc-tex,low,helper used by converters
-0x4B9100,func,PC_ClutStaleCheck_A,pc-tex,low,compares entry stamp with g_vram_row stamp
+0x4B9100,func,PC_ClutStaleCheck_A,pc-tex,low,compares entry stamp with g_vram_row stamp; rewritten: src/pc/drawot.c
 0x4BA430,func,PC_ClutStaleCheck_B,pc-tex,low,checks entry state == 2
 0x75E488,data,g_tex_cache,data,high,PC_TEXCACHE_ENTRY[32][32]
 0x75CEE8,data,g_vram_row,data,high,PC_VRAM_ROW[512]
@@ -222,9 +222,9 @@ address,kind,name,category,confidence,notes
 0x87BB43,data,g_tex_bytespp,data,high,
 0x87BB5C,data,g_tex_alpha_mask,data,high,
 0x73C900,data,g_tex_converters,data,high,fn[3]
-0x4B60A0,func,PC_SetBlendMode,pc-draw,high,"(code,tpage): abr0 SRCALPHA/INVSRCALPHA, 1 ONE/ONE, 2 ZERO/INVSRCCOLOR, 3 SRCALPHA/ONE"
-0x4B61C0,func,PC_SetDepthMode,pc-draw,high,tpage&0x400 no depth; &0x800 ZFUNC ALWAYS
-0x4B5E60,func,PC_SetFogForPrim,pc-draw,medium,(on) per packet
+0x4B60A0,func,PC_SetBlendMode,pc-draw,high,"(code,tpage): abr0 SRCALPHA/INVSRCALPHA, 1 ONE/ONE, 2 ZERO/INVSRCCOLOR, 3 SRCALPHA/ONE; rewritten: src/pc/drawot.c"
+0x4B61C0,func,PC_SetDepthMode,pc-draw,high,tpage&0x400 no depth; &0x800 ZFUNC ALWAYS; rewritten: src/pc/drawot.c
+0x4B5E60,func,PC_SetFogForPrim,pc-draw,medium,(on) per packet; rewritten: src/pc/drawot.c
 0x4BBA30,func,D3D_InitRenderStates,d3d,high,"cull none, alpha test >8, bilinear, clamp, z lessequal"
 0x4BCB00,func,D3D_RestoreStates,d3d,low,re-applies alpha/fog/z states
 0x73B67C,data,g_semitrans_enable,data,medium,
@@ -1088,3 +1088,12 @@ address,kind,name,category,confidence,notes
 0x406520,func,Boss_Gauge,game,high,"src/game/misc.c"
 0x495E90,func,Menu_Open,game,high,"src/game/misc.c"
 0x452450,func,Game_ModeStock,game,high,"src/game/misc.c"
+0x4B5820,func,PC_GrabFrame,pc-draw,high,rewritten: src/pc/drawot.c
+0x4B5AE0,func,Tex_FitSize,pc-draw,high,rewritten: src/pc/drawot.c
+0x4B5B80,func,PC_GrabByHand,pc-draw,high,rewritten: src/pc/drawot.c
+0x4B6190,func,PC_SetShadeMode,pc-draw,high,rewritten: src/pc/drawot.c
+0x4B6DB0,func,PC_FlatFromTexel,pc-draw,high,rewritten: src/pc/drawot.c
+0x4B6EE0,func,PC_Texel4,pc-draw,high,rewritten: src/pc/drawot.c
+0x4B91E0,func,Glyph_Make,pc-draw,high,rewritten: src/pc/drawot.c
+0x4C2E4E,func,Conv_Glyph,pc-draw,high,rewritten: src/pc/drawot.c
+0x4C3BE6,func,Vram_CopyRect,pc-draw,high,rewritten: src/pc/drawot.c

@@ -1,9 +1,8 @@
 /* See include/dc2/gpu.h. */
 #include <string.h>
 #include "dc2/gpu.h"
+#include "dc2/pcdraw.h"
 
-void (*g_vram_dirty)(s32 x, s32 y, s32 w, s32 h);
-void (*g_clut_dirty)(s32 x, s32 y, s32 n);
 
 /* ---- primitives and order tables ------------------------------------------------- */
 
@@ -73,7 +72,7 @@ void DC2CALL PcGpu_LoadImage(gptr rect, gptr p)                     /* 0x4B4D20 
     gptr v = vram_at(x, y);
     for (s32 r = 0; r < S16(rect + 6); r++, v += 0x800, p += 2 * w)
         copy_fwd(v, p, (u32)(2 * w));
-    if (g_vram_dirty) g_vram_dirty(x, y, w, S16(rect + 6));
+    PcDraw_InvalidateRect(rect, 0);              /* (the textures over it released) */
 }
 
 /* CLUT rows: each row of rect written only when it differs (and then its
@@ -86,7 +85,7 @@ void DC2CALL PcGpu_LoadImageIfChanged(gptr rect, gptr p)            /* 0x4B4DB0 
     for (s32 y = S16(rect + 2); y < S16(rect + 2) + S16(rect + 6); y++, v += 0x800, p += n) {
         if (!memcmp(MEM(v), MEM(p), n)) continue;
         copy_fwd(v, p, n);
-        if (g_clut_dirty) g_clut_dirty(S16(rect), y, S16(rect + 4));
+        PcDraw_ClutRowConvert((u32)S16(rect), (u32)y, S16(rect + 4));
     }
 }
 

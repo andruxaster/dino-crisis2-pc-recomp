@@ -17,6 +17,7 @@
 #include "dc2/orig.h"
 #include "dc2/gte.h"
 #include "dc2/gpu.h"
+#include "dc2/pcdraw.h"
 #include "dc2/task.h"
 
 u8 *g_membase = (u8 *)IMAGE_BASE;
@@ -4328,11 +4329,377 @@ static void test_pcgpu(void)
                 else if (rnd() % 2) U16(buf + 2 * w * r + 2 * (rnd() % w)) ^= (u16)(1u << (rnd() % 16));
             /* the original's palettes converted to its D3D texture format: row stamps and buffers */
             for (u32 r = 0; r < 0x200; r++) U32(0x75CEEC + 8 * r) = 0x5B8000;
-            g_ign_addr = 0x75CEE8; g_ign_len = 0x1000; g_ign2_addr = 0x5B8000; g_ign2_len = 0x2000;
             check(0x4B4DB0, PcGpu_LoadImageIfChanged, "PcGpu_LoadImageIfChanged", 2, v, 0);
-            g_ign_len = 0; g_ign2_len = 0;
         }
     }
+}
+
+/* ---- the PC layer's drawing, against a fake Direct3D ------------------------------------
+ * Fake DirectDraw / Direct3D objects (deterministic addresses: a pool indexed by a
+ * counter in game memory) log every call into game memory, so the original's
+ * calls and the C copy's are compared with the rest of the memory. */
+#define FK_LOG    0x640000u     /* the call log */
+#define FK_LOGMAX 0x1E000u
+#define FK_LOGN   0x63F000u     /* bytes logged */
+#define FK_NOBJ   0x63F004u     /* objects made */
+#define FK_HEAPN  0x63F008u     /* the CRT malloc stand-in: bytes given */
+#define FK_ARENA  0x5E8000u     /* .. 0x600000 */
+typedef struct Fake { void **vt; u32 kind, id, w, h, bpp; u8 *pix; } Fake;
+static Fake g_fo[512];
+static u8 *g_fpix[512];
+static u32 g_fcap[512];
+static void *g_fvt[6][48];
+
+static void fk_log(u32 v) { u32 n = U32(FK_LOGN); if (n < FK_LOGMAX) { U32(FK_LOG + n) = v; U32(FK_LOGN) = n + 4; } }
+static void fk_logmem(const void *p, u32 n) { for (u32 i = 0; i < n; i += 4) { u32 v = 0; memcpy(&v, (const u8 *)p + i, n - i < 4 ? n - i : 4); fk_log(v); } }
+static u32 fk_id(u32 p)
+{
+    if (!p) return 0xFFFFFFFF;
+    if (p >= (u32)(uintptr_t)g_fo && p < (u32)(uintptr_t)(g_fo + 512)) return 0x0B000000 | (u32)(((Fake *)(uintptr_t)p) - g_fo);
+    return p;
+}
+static Fake *fk_new(u32 kind, u32 w, u32 h)
+{
+    u32 id = U32(FK_NOBJ)++;
+    if (id >= 512) { printf("fake COM: out of objects\n"); fflush(stdout); TerminateProcess(GetCurrentProcess(), 3); }
+    Fake *f = &g_fo[id];
+    u32 bpp = U8(0x87BB43) == 4 ? 4 : 2;
+    f->vt = g_fvt[kind]; f->kind = kind; f->id = id; f->w = w; f->h = h; f->bpp = bpp;
+    if (w) {
+        if (g_fcap[id] < w * h * 4) { free(g_fpix[id]); g_fcap[id] = w * h * 4; g_fpix[id] = malloc(g_fcap[id]); }
+        memset(g_fpix[id], 0xCD, w * h * bpp);
+    }
+    f->pix = g_fpix[id];
+    return f;
+}
+static u32 fk_hash(const u8 *p, u32 n) { u32 h = 0x811C9DC5; for (u32 i = 0; i < n; i++) h = (h ^ p[i]) * 0x01000193; return h; }
+
+#define ST __attribute__((stdcall))
+/* the device */
+static u32 ST d_begin(Fake *t) { (void)t; fk_log(0x10024); return 0; }
+static u32 ST d_end(Fake *t) { (void)t; fk_log(0x10028); return 0; }
+static u32 ST d_rs(Fake *t, u32 s, u32 v) { (void)t; fk_log(0x10058); fk_log(s); fk_log(v); return 0; }
+static int g_fk_nospec;
+static u32 g_fk_ssurf, g_fk_stex;
+static u32 ST d_dp(Fake *t, u32 type, u32 fvf, void *v, u32 n, u32 fl)
+{
+    (void)t;
+    if (g_fk_nospec && fvf == 0x1C4) for (u32 i = 0; i < n; i++) ((u32 *)v)[i * 8 + 5] = 0;
+    u32 st = (fvf & 0xE) == 4 ? 16 : 12;
+    if (fvf & 0x40) st += 4;
+    if (fvf & 0x80) st += 4;
+    st += 8 * (fvf >> 8 & 0xF);
+    fk_log(0x10070); fk_log(type); fk_log(fvf); fk_log(n); fk_log(fl); fk_logmem(v, n * st);
+    return 0;
+}
+static u32 ST d_dpvb(Fake *t, u32 type, u32 vb, u32 s, u32 n, u32 fl) { (void)t; fk_log(0x10088); fk_log(type); fk_log(fk_id(vb)); fk_log(s); fk_log(n); fk_log(fl); return 0; }
+static u32 ST d_st(Fake *t, u32 stage, u32 tex) { (void)t; fk_log(0x10098); fk_log(stage); fk_log(fk_id(tex)); return 0; }
+static u32 ST d_tss(Fake *t, u32 s, u32 ty, u32 v) { (void)t; fk_log(0x100A0); fk_log(s); fk_log(ty); fk_log(v); return 0; }
+/* DirectDraw */
+static u32 ST dd_cs(Fake *t, u8 *desc, u32 *pp, u32 outer)
+{
+    (void)t;
+    fk_log(0x20018); fk_logmem(desc + 4, 0xC); fk_logmem(desc + 0x48, 0x30); fk_log(outer);
+    Fake *f = fk_new(3, *(u32 *)(desc + 0xC), *(u32 *)(desc + 8));
+    *pp = (u32)(uintptr_t)f;
+    return 0;
+}
+/* surfaces and textures */
+static u32 ST s_qi(Fake *t, const u32 *iid, u32 *pp)
+{
+    fk_log(0x30000); fk_log(t->id); fk_log(iid[0]);
+    Fake *f = fk_new(4, 0, 0);
+    f->w = t->w; f->h = t->h; f->bpp = t->bpp; f->pix = t->pix;
+    *pp = (u32)(uintptr_t)f;
+    return 0;
+}
+static u32 ST s_release(Fake *t) { fk_log(0x30008); fk_log(t->id); return 0; }
+static void fk_logract(const u32 *r) { if (r) fk_logmem(r, 16); else fk_log(0xFFFFFFFF); }
+static u32 ST s_blt(Fake *t, const u32 *dr, u32 src, const u32 *sr, u32 fl, const u8 *fx)
+{
+    fk_log(0x30014); fk_log(t->id); fk_logract(dr); fk_log(fk_id(src)); fk_logract(sr); fk_log(fl);
+    fk_log(fx && (fl & 0x400) ? *(u32 *)(fx + 0x50) : 0);
+    Fake *s = (Fake *)(uintptr_t)src;
+    if (s && s->pix && t->pix && s->w == t->w && s->h == t->h) memcpy(t->pix, s->pix, t->w * t->h * t->bpp);
+    return 0;
+}
+static u32 ST s_flip(Fake *t, u32 tg, u32 fl) { fk_log(0x3002C); fk_log(t->id); fk_log(fk_id(tg)); fk_log(fl); return 0; }
+static u32 ST s_lock(Fake *t, const u32 *r, u8 *desc, u32 fl, u32 ev)
+{
+    fk_log(0x30064); fk_log(t->id); fk_logract(r); fk_log(fl); fk_log(ev);
+    *(u32 *)(desc + 8) = t->h; *(u32 *)(desc + 0xC) = t->w; *(u32 *)(desc + 0x10) = t->w * t->bpp;
+    *(u8 **)(desc + 0x24) = t->pix;
+    return 0;
+}
+static u32 ST s_restore(Fake *t) { fk_log(0x3006C); fk_log(t->id); return 0; }
+static u32 ST s_colorkey(Fake *t, u32 fl, const u32 *k) { fk_log(0x30074); fk_log(t->id); fk_log(fl); fk_logmem(k, 8); return 0; }
+static u32 ST s_unlock(Fake *t, const u32 *r) { fk_log(0x30080); fk_log(t->id); fk_logract(r); fk_log(fk_hash(t->pix, t->w * t->h * t->bpp)); return 0; }
+/* the viewport */
+static u32 ST vp_clear(Fake *t, u32 n, const u32 *r, u32 fl) { (void)t; fk_log(0x50030); fk_log(n); fk_logmem(r, 16 * n); fk_log(fl); return 0; }
+
+/* any other method: reported, then the harness stops (its arguments are unknown) */
+static u32 ST fk_trap(Fake *t)
+{
+    printf("fake COM: an unexpected method of a kind-%u object called\n", t->kind);
+    fflush(stdout); TerminateProcess(GetCurrentProcess(), 3); return 0;
+}
+static u32 __cdecl fk_det_malloc(u32 n)
+{
+    u32 a = FK_ARENA + U32(FK_HEAPN);
+    U32(FK_HEAPN) += (n + 15) & ~15u;
+    if (U32(FK_HEAPN) > 0x18000) { printf("fake malloc: arena full\n"); fflush(stdout); TerminateProcess(GetCurrentProcess(), 3); }
+    return a;
+}
+
+/* the objects of a fresh Direct3D, the texture cache and palettes empty */
+static void fk_reset(void)
+{
+    for (int k = 0; k < 6; k++) for (int i = 0; i < 48; i++) g_fvt[k][i] = (void *)fk_trap;
+    void **d = g_fvt[1];
+    d[0x24 / 4] = d_begin; d[0x28 / 4] = d_end; d[0x58 / 4] = d_rs; d[0x70 / 4] = d_dp; d[0x88 / 4] = d_dpvb;
+    d[0x98 / 4] = d_st; d[0xA0 / 4] = d_tss;
+    g_fvt[2][0x18 / 4] = dd_cs;
+    for (int k = 3; k <= 4; k++) {
+        void **s = g_fvt[k];
+        s[0] = s_qi; s[2] = s_release; s[0x14 / 4] = s_blt; s[0x2C / 4] = s_flip; s[0x64 / 4] = s_lock;
+        s[0x6C / 4] = s_restore; s[0x74 / 4] = s_colorkey; s[0x80 / 4] = s_unlock;
+    }
+    g_fvt[5][0x30 / 4] = vp_clear;
+    U32(FK_NOBJ) = 0; U32(FK_LOGN) = 0; U32(FK_HEAPN) = 0;
+    U32(0x865EBC) = (u32)(uintptr_t)fk_new(2, 0, 0);
+    U32(0x865ED8) = (u32)(uintptr_t)fk_new(1, 0, 0);
+    U32(0x865EC0) = (u32)(uintptr_t)fk_new(3, 640, 480);
+    U32(0x865EC4) = (u32)(uintptr_t)fk_new(3, 640, 480);
+    U32(0x865ECC) = (u32)(uintptr_t)fk_new(3, 256, 256);
+    U32(0x865EDC) = (u32)(uintptr_t)fk_new(5, 0, 0);
+    U32(0x86449C) = (u32)(uintptr_t)fk_new(5, 0, 0);    /* the masks' vertex buffer */
+    for (int k = 0; k < 4; k++) U32(0x8644AC + 4 * k) = (u32)(uintptr_t)fk_new(4, 0, 0);   /* their textures */
+    U32(0x865D58) = 0;                                  /* the frame copy: made on first use */
+    g_fk_ssurf = (u32)(uintptr_t)fk_new(3, 256, 256); g_fk_stex = (u32)(uintptr_t)fk_new(4, 0, 0);   /* (made-up slots' texture) */
+    g_fo[g_fk_stex ? ((Fake *)(uintptr_t)g_fk_stex)->id : 0].pix = ((Fake *)(uintptr_t)g_fk_ssurf)->pix;
+    memset(MEM(0x8644C0), 0, 256 * 0x14);               /* glyphs */
+    memset(MEM(0x75E488), 0, 32 * 32 * 0x18);          /* texture cache */
+    memset(MEM(0x75CEE8), 0, 512 * 8);                  /* converted palettes */
+}
+
+/* the texture format: 16-bit 1555 or 32-bit 8888 */
+static void fk_pixfmt(int b32)
+{
+    U8(0x87BB42) = b32 ? 0x20 : 0x10; U8(0x87BB43) = b32 ? 4 : 2;
+    u32 sh[3] = {b32 ? 0 : 9, b32 ? 8 : 14, b32 ? 16 : 19}, m[4] = {b32 ? 0xFF0000 : 0x7C00, b32 ? 0xFF00 : 0x3E0, b32 ? 0xFF : 0x1F, b32 ? 0xFF000000 : 0x8000};
+    for (int i = 0; i < 3; i++) U32(0x87BB44 + 4 * i) = sh[i];
+    for (int i = 0; i < 4; i++) U32(0x87BB50 + 4 * i) = m[i];
+    memset(MEM(0x87BB60), 0, 0x40);
+    U32(0x87BB60) = 0x20; U32(0x87BB64) = 0x41; U32(0x87BB6C) = b32 ? 32 : 16;
+    for (int i = 0; i < 4; i++) U32(0x87BB70 + 4 * i) = m[i];
+}
+
+#define DO_OT    0x5D0000u      /* the order table's packets */
+
+/* check() with the fake surfaces' pixels saved and restored as the memory is */
+static u8 *g_fkpix_save[2][512];
+static u32 g_fkcap[2][512];
+static void fk_pix(int to, int i)
+{
+    for (u32 k = 0; k < U32(FK_NOBJ) && k < 512; k++) {
+        if (!g_fpix[k]) continue;
+        u32 n = g_fcap[k];
+        if (!g_fkpix_save[i][k] || g_fkcap[i][k] < n) { free(g_fkpix_save[i][k]); g_fkpix_save[i][k] = malloc(n); g_fkcap[i][k] = n; }
+        if (to) memcpy(g_fkpix_save[i][k], g_fpix[k], n); else memcpy(g_fpix[k], g_fkpix_save[i][k], n);
+    }
+}
+static int check_fk(u32 addr, void *fn, const char *name, int nargs, const u32 *args)
+{
+    g_cur_name = name; g_cur_orig = 1;
+    snap(snap0); fk_pix(1, 0);
+    u32 nobj0 = U32(FK_NOBJ);
+    clear_stack();
+    u32 r0 = call((void *)(uintptr_t)addr, nargs, args);
+    snap(snap1); fk_pix(1, 1);
+    u32 nobj1 = U32(FK_NOBJ);
+    restore(snap0); U32(FK_NOBJ) = nobj0; fk_pix(0, 0);
+    g_cur_orig = 0;
+    u32 r1 = call(fn, nargs, args);
+    int ok = compare(name, r0, r1, 0);
+    restore(snap1); (void)nobj1; fk_pix(0, 1);
+    return ok;
+}
+
+/* (debugging: the two logs side by side around their first difference; the packets) */
+static void fk_dump(gptr ot)
+{
+
+    restore(snap0); PcDraw_DrawOTag(ot);
+    u32 n = U32(FK_LOGN), no = *(u32 *)(snap1[0] + FK_LOGN - RW[0].lo), k = 0;
+    const u32 *o = (const u32 *)(snap1[0] + FK_LOG - RW[0].lo), *c = (const u32 *)MEM(FK_LOG);
+    while (k < n / 4 && k < no / 4 && o[k] == c[k]) k++;
+    printf("logs: new %u bytes, original %u; first difference at dword %u\n", n, no, k);
+    for (u32 j = k > 40 ? k - 40 : 0; j < k + 24 && j < (n > no ? n : no) / 4; j++)
+        printf("  %4u: %08X %08X%s\n", j, j < n / 4 ? c[j] : 0, j < no / 4 ? o[j] : 0, c[j] != o[j] ? "  <" : "");
+    for (gptr p = 0x5D0000; p < 0x5D0000 + 13 * 0x60; p += 0x60) printf("  pkt %X: %08X %08X\n", p, U32(p), U32(p + 4));
+    restore(snap1);
+}
+
+static float rndf(float lo, float hi) { return lo + (hi - lo) * (float)(rnd() % 10001) / 10000.0f; }
+
+static void rnd_xyz(gptr v, int z)
+{
+    F32(v) = rndf(-200.0f, 520.0f); F32(v + 4) = rndf(-200.0f, 440.0f);
+    if (z) F32(v + 8) = rnd() % 8 ? rndf(1.0f, 4000.0f) : rnd() % 2 ? 0.0f : -rndf(0.0f, 50.0f);
+}
+static s16 rnd_size(void) { return (s16)(rnd() % 8 ? (s32)(1 + rnd() % 64) : rnd() % 4 ? 0 : -(s32)(rnd() % 8)); }
+
+/* a random packet of `code` at p */
+static void pkt_random(gptr p, u32 code)
+{
+    static const u16 cluts[4] = {0x7800, 0x7810, 0x7840, 0x7C00};          /* rows 480, 481, 496 */
+    for (u32 k = 4; k < 0x58; k += 4) U32(p + k) = rnd();
+    U8(p + 7) = (u8)(code | (rnd() % 4));
+    if (code < 0x40) {                                                       /* polygons */
+        int tex = code & 4, gour = code & 0x10, quad = code & 8;
+        u32 n = quad ? 4 : 3, step = gour ? (tex ? 0x14 : 0x10) : tex ? 0x10 : 0xC;
+        for (u32 i = 0; i < n; i++) rnd_xyz(p + 8 + step * i, 1);
+        if (tex) {
+            u32 tp = rnd() & 0x3FFF;
+            if (rnd() % 4) tp &= ~0x180u;                                    /* (mostly 4-bit) */
+            if (rnd() % 4) tp = (tp & ~0x1Fu) | (rnd() % 2 ? 5 : 0x17);       /* (mostly 2 pages: textures found again) */
+            U16(p + 0x16) = cluts[rnd() % 4];
+            U16(p + (gour ? 0x2A : 0x26)) = (u16)tp;
+            if (code == 0x24 && rnd() % 4 == 0) { U16(p + 0x24) = U16(p + 0x14); U16(p + 0x34) = U16(p + 0x14); }
+        }
+        return;
+    }
+    switch (code) {
+    case 0x40: case 0x48: case 0x4C: for (u32 i = 0; i < 4; i++) rnd_xyz(p + 8 + 0xC * i, 1); break;
+    case 0x50: case 0x58: case 0x5C: for (u32 i = 0; i < 4; i++) rnd_xyz(p + 8 + 0x10 * i, 1); break;
+    case 0x60: rnd_xyz(p + 8, 1); S16(p + 0x14) = rnd_size(); S16(p + 0x16) = rnd_size(); break;
+    case 0x68: rnd_xyz(p + 8, 1); break;
+    case 0x64: case 0x74: case 0x7C: case 0x80:
+        rnd_xyz(p + 8, 1); U16(p + 0x16) = cluts[rnd() % 4]; S16(p + 0x18) = rnd_size(); S16(p + 0x1A) = rnd_size(); break;
+    case 0x6C:
+        for (u32 i = 0; i < 4; i++) rnd_xyz(p + 8 + 0xC * i, 0);
+        U16(p + 0x12) = cluts[rnd() % 4]; U16(p + 0x1E) = (u16)(rnd() % 3 ? rnd() % 8 : rnd() % 64);
+        break;
+    case 0x88: U32(p + 8) = rnd() % 64; U16(p + 0xC) = (u16)(rnd() % 32); U16(p + 0xE) = (u16)(rnd() % 4); break;
+    case 0x8C:
+        rnd_xyz(p + 8, 0); U16(p + 0x14) = (u16)(rnd() % 320); U16(p + 0x16) = (u16)(rnd() % 240);
+        U16(p + 0x10) = (u16)(rnd() % 320); U16(p + 0x18) = (u16)(rnd() % 320); U16(p + 0x1A) = (u16)(rnd() % 240);
+        break;
+    case 0xEC: case 0xFC: {                                                  /* VRAM moves: small rects (palette rows for FC) */
+        s16 w = (s16)(1 + rnd() % 32), h = (s16)(1 + rnd() % (code == 0xFC ? 2 : 16));
+        /* (a rect partly left of or above VRAM is clipped; one wholly outside would copy 64K rows) */
+        S16(p + 8) = (s16)(rnd() % 8 == 0 && code == 0xEC ? -(s32)(rnd() % w) : (s32)(rnd() % (0x400 - 32)));
+        S16(p + 0xA) = (s16)(code == 0xFC ? (s32)(480 + rnd() % 14) : rnd() % 8 == 0 ? -(s32)(rnd() % h) : (s32)(rnd() % (0x200 - 16)));
+        if (code == 0xEC && rnd() % 8 == 0) S16(p + 8) = (s16)(0x400 - 1 - (s32)(rnd() % w));      /* (past the right edge) */
+        if (code == 0xEC && rnd() % 8 == 0) S16(p + 8) = (s16)(0x400 - w - (s32)(rnd() % 16));     /* (just inside) */
+        if (code == 0xEC && rnd() % 8 == 0) S16(p + 0xA) = (s16)(0x200 - 1 - (s32)(rnd() % h));    /* (past the bottom) */
+        S16(p + 0xC) = w; S16(p + 0xE) = h;
+        /* (the destination stays >= 0 after clipping: the port's copy keeps dx's top half in its row count) */
+        S32(p + 0x10) = (s32)(rnd() % (0x400 - 72)) + 32; S32(p + 0x14) = code == 0xFC ? 480 + (s32)(rnd() % 14) : (s32)(rnd() % (0x200 - 32)) + 16;
+        U32(p + 4) = code << 24; break; }
+    }
+}
+
+/* the texture window: x, y, w, h that the converters accept */
+static void twin_random(gptr a)
+{
+    static const s16 sz[6] = {8, 16, 32, 64, 128, 256};
+    s16 w = sz[rnd() % 6], h = sz[rnd() % 6];
+    if (rnd() % 4) { S32(a) = 0; S16(a + 4) = S16(a + 6) = 256; return; }   /* (mostly the whole page) */
+    if (rnd() % 2) w = h = 256;
+    S16(a) = (s16)(rnd() % 2 ? 0 : (rnd() % 4) * 8); S16(a + 2) = (s16)(rnd() % 2 ? 0 : rnd() % 32);
+    S16(a + 4) = w; S16(a + 6) = h;
+}
+
+static void test_pcdraw(void)
+{
+    static const u8 codes[] = {0x20, 0x24, 0x28, 0x2C, 0x30, 0x34, 0x38, 0x3C, 0x40, 0x48, 0x4C, 0x50, 0x58, 0x5C, 0x60, 0x64,
+                               0x68, 0x6C, 0x74, 0x7C, 0x80, 0x88, 0x8C, 0xEC, 0xFC, 0x2C, 0x3C, 0x64, 0x6C, 0x34};
+    unsigned fpu = _controlfp(0, 0);
+    _controlfp(_PC_24, _MCW_PC);                    /* the x87 as Direct3D leaves it in the game */
+    u8 saved[5]; u8 *c = MEM(0x4DD711); memcpy(saved, c, 5);
+    c[0] = 0xE9; *(u32 *)(c + 1) = (u32)(uintptr_t)fk_det_malloc - (0x4DD711 + 5);
+    for (u32 k = 0; k < 0x100000; k += 4) U32(VRAM_BASE + k) = rnd();
+    for (u32 i = 0; i < 256; i++) F32(0x865940 + 4 * i) = (float)((double)i * 0.00390625 + 0.002);
+    U32(0x75DEF0) = 0;
+    U32(0x865EE4) = 0x660000;                           /* the font: 64 glyphs */
+    for (u32 k = 0; k < 64 * 0x188; k += 4) U32(0x660000 + k) = rnd();
+    for (int i = 0; i < iters; i++) {
+        if (i % 16 == 0) { fk_reset(); fk_pixfmt(i % 64 == 32); }
+        U32(FK_LOGN) = 0;
+        /* VRAM: some palettes and texels changed */
+        for (int k = rnd() % 4; k; k--) U16(VRAM_BASE + 2 * (480 * 1024 + rnd() % 2048)) = (u16)(rnd() % 4 ? rnd() : 0x8000);   /* (0x8000: black, not transparent) */
+        for (int k = rnd() % 64; k; k--) U32(VRAM_BASE + 4 * (rnd() % 0x40000)) = rnd();
+        if (rnd() % 8 == 0) PcDraw_ClutRowConvert(0, 480 + rnd() % 2, 0x400);
+        /* the draw state and the shadowed render states */
+        U16(0x87BAF4) = (u16)(rnd() & 0x3FFF); U8(0x87BAF7) = rnd() % 16 != 0; U8(0x87BAF6) = (u8)(rnd() % 2);
+        twin_random(0x87BAEC);
+        F32(0x8644BC) = rnd() % 2 ? 2.0f : rndf(0.5f, 3.0f); F32(0x8644B8) = rnd() % 2 ? 2.0f : rndf(0.5f, 3.0f);
+        U32(0x73B67C) = rnd() % 4 != 0; U32(0x865EEC) = rnd() % 2; U32(0x865EE8) = rnd() % 3;
+        F32(0x73B674) = rndf(0.0f, 2000.0f); F32(0x73B678) = F32(0x73B674) + (rnd() % 8 ? rndf(1.0f, 30000.0f) : 0.0f);
+        for (u32 k = 0; k < 5; k++) if (rnd() % 4 == 0) U32(0x73B680 + 4 * k) = rnd() % 3 ? rnd() % 4 : 0xFFFFFFFF;
+        if (rnd() % 4 == 0) U32(0x73B690) = (rnd() % 4) << 10;
+        U16(0x865D4A) = 0;
+        U16(0x865D48) = rnd() % 4 != 0;             /* a frame copy there (code 0x8C) */
+        U16(0x865DAC) = (u16)(rnd() % 2);
+        if (rnd() % 8 == 0) U32(0x865D58) = 0;      /* (made again) */
+        U8(0x865E44) = (u8)(rnd() % 4 ? 2 : rnd() & 0x22); U32(0x865E6C) = rnd() % 2 ? 0 : 8; U32(0x865E70) = rnd() % 2 ? 0 : 8;
+        U32(0x865E74) = rnd() % 2 ? 1024 : 256; U32(0x865E78) = rnd() % 2 ? 1024 : 128;
+        for (int k = 0; k < 256; k++) if (rnd() % 16 == 0) U16(0x8644D0 + k * 0x14) = (u16)(rnd() % 2);
+        /* the order table: n packets, a few draw-mode packets between */
+        u32 n = 1 + rnd() % 12; gptr p = DO_OT, first = p; int spec = 0;
+        for (u32 k = 0; k < n; k++) {
+            gptr nx = p + 0x60;
+            if (rnd() % 6 == 0) {                   /* draw mode (E1), maybe with a texture window */
+                U32(p + 4) = 0xE1000000 | (rnd() & 0x30000) | (rnd() & 0x3FFF);
+                U32(p + 8) = rnd() % 2 ? 0 : p + 0x10;
+                twin_random(p + 0x10);
+            } else if (rnd() % 12 == 0) {           /* texture window (F0) */
+                U32(p + 4) = 0xF0000000; U32(p + 8) = p + 0x10; twin_random(p + 0x10);
+            } else {
+                u32 code = codes[rnd() % sizeof codes];
+                pkt_random(p, code);
+                if (code == 0x8C) spec = 1;
+            }
+            U32(p) = (rnd() % 8 ? 0x80000000u : 0) | nx;
+            p = nx;
+        }
+        U32(p) = 0xFFFFFFFF;
+        u32 a[1] = {first};
+        sprintf(g_what, "iteration %d, %u packets", i, n);
+        g_fk_nospec = spec;                         /* (code 0x8C leaves a stack word in the specular) */
+        if (spec) { g_ign2_addr = 0x8658C0; g_ign2_len = 0x80; }
+        if (!check_fk(0x4B50F0, PcDraw_DrawOTag, "PcDraw_DrawOTag", 1, a) && getenv("FKDUMP")) fk_dump(first);
+        g_fk_nospec = 0; g_ign2_len = 0;
+        /* the textures over a VRAM rect, marked or released; sometimes the page left of it full */
+        if (rnd() % 4 == 0) {
+            gptr r = DO_OT + 0x5F00;
+            S16(r) = (s16)(rnd() % 0x400); S16(r + 2) = (s16)(rnd() % 0x200);
+            if (rnd() % 4 == 0) {                   /* (32 slots of 8- or 15-bit textures in the page to the left) */
+                u32 pg = rnd() % 15;
+                for (u32 k = 0; k < 32; k++) {
+                    gptr e = 0x75E488 + (pg * 32 + k) * 0x18;
+                    U8(e) = 1; U8(e + 1) = (u8)(rnd() % 3); U16(e + 2) = (u16)rnd(); U32(e + 4) = rnd();
+                    U32(e + 8) = 0; U32(e + 0xC) = 0x01000100; U32(e + 0x10) = g_fk_ssurf; U32(e + 0x14) = g_fk_stex;
+                }
+                S16(r) = (s16)((pg + 1) * 64 + rnd() % 64); S16(r + 2) = (s16)(rnd() % 256);
+            }
+            S16(r + 4) = (s16)(rnd() % 4 ? 1 + rnd() % 300 : 1); S16(r + 6) = (s16)(1 + rnd() % 300);
+            if (S16(r) + S16(r + 4) > 0x400) S16(r + 4) = (s16)(0x400 - S16(r));
+            if (S16(r + 2) + S16(r + 6) > 0x200) S16(r + 6) = (s16)(0x200 - S16(r + 2));
+            u32 b[2] = {r, rnd() % 2};
+            sprintf(g_what, "iteration %d: rect %d,%d %dx%d mark %u", i, S16(r), S16(r + 2), S16(r + 4), S16(r + 6), b[1]);
+            check_fk(0x4B4790, PcDraw_InvalidateRect, "PcDraw_InvalidateRect", 2, b);
+        }
+        if (rnd() % 8 == 0) {
+            u32 b[3] = {rnd() % 0x400, 480 + rnd() % 14, rnd() % 0x40};
+            if (b[0] + b[2] > 0x400) b[2] = 0x400 - b[0];
+            sprintf(g_what, "iteration %d: palette row %u at %u, %u", i, b[1], b[0], b[2]);
+            check_fk(0x4B4BF0, PcDraw_ClutRowConvert, "PcDraw_ClutRowConvert", 3, b);
+        }
+    }
+    memcpy(c, saved, 5);
+    _controlfp(fpu, _MCW_PC);
 }
 
 /* ---- the rooms' JPEG backgrounds (libjpeg 6b, 0x4D2990) --------------------------- */
@@ -4951,7 +5318,7 @@ __declspec(dllexport) void harness_main(int argc, char **argv)
     struct { const char *name; void (*fn)(void); } T[] = {
         {"flags", test_flags}, {"geometry", test_geom}, {"script values", test_script_values},
         {"script opcodes", test_script_ops}, {"script objects", test_objects},
-        {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"objects 2", test_object}, {"collision", test_collision}, {"player", test_player}, {"player states", test_player2}, {"zones", test_zones}, {"loading", test_room}, {"title", test_title}, {"game task", test_game}, {"doors", test_doors}, {"frame", test_frame}, {"enemy sets", test_enemyset}, {"enemies", test_enemies}, {"raptor", test_raptor}, {"aot kinds", test_aot_kinds}, {"object effects", test_obj_effects}, {"effect slots", test_k2}, {"effect drops", test_k2_drops}, {"effect emitters", test_eff_slots}, {"effect slots 3", test_k2_more}, {"helpers", test_helpers}, {"draw", test_draw}, {"pc gpu", test_pcgpu},
+        {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"objects 2", test_object}, {"collision", test_collision}, {"player", test_player}, {"player states", test_player2}, {"zones", test_zones}, {"loading", test_room}, {"title", test_title}, {"game task", test_game}, {"doors", test_doors}, {"frame", test_frame}, {"enemy sets", test_enemyset}, {"enemies", test_enemies}, {"raptor", test_raptor}, {"aot kinds", test_aot_kinds}, {"object effects", test_obj_effects}, {"effect slots", test_k2}, {"effect drops", test_k2_drops}, {"effect emitters", test_eff_slots}, {"effect slots 3", test_k2_more}, {"helpers", test_helpers}, {"draw", test_draw}, {"pc gpu", test_pcgpu}, {"pc draw", test_pcdraw},
     };
     for (unsigned i = 0; i < sizeof T / sizeof T[0]; i++) {
         int f0 = g_fail, t0 = g_tests;

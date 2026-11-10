@@ -39,6 +39,7 @@ void DC2CALL Gpu_LoadImage(gptr r, gptr p)      { ORIG(0x4B4D20, void (DC2CALL *
 void DC2CALL Gpu_LoadImageIfChanged(gptr r, gptr p) { ORIG(0x4B4DB0, void (DC2CALL *)(gptr, gptr))(r, p); }
 void DC2CALL Gpu_StoreImage(gptr r, gptr p)     { ORIG(0x4B49F0, void (DC2CALL *)(gptr, gptr))(r, p); }
 void DC2CALL JPEG_Decode(gptr d, gptr s, u32 n, u32 m) { ORIG(0x4D2990, void (DC2CALL *)(gptr, gptr, u32, u32))(d, s, n, m); }
+void DC2CALL Pc_MasksUpload(u32 a)              { ORIG(0x4BEAC0, void (DC2CALL *)(u32))(a); }
 void DC2CALL Snd_SetPan(u32 h, u32 p)           { ORIG(0x4BFA60, void (DC2CALL *)(u32, u32))(h, p); }
 void DC2CALL Strm_Close(u32 h)                  { ORIG(0x4C0050, void (DC2CALL *)(u32))(h); }
 u32  DC2CALL Movie_Open(gptr n, u32 w, u32 h)   { return ORIG(0x4BF3A0, u32 (DC2CALL *)(gptr, u32, u32))(n, w, h); }
@@ -208,4 +209,5 @@ void DC2CALL Gpu_LoadImage(gptr r, gptr p) { PcGpu_LoadImage(r, p); }
 void DC2CALL Gpu_LoadImageIfChanged(gptr r, gptr p) { PcGpu_LoadImageIfChanged(r, p); }
 void DC2CALL Gpu_StoreImage(gptr r, gptr p) { PcGpu_StoreImage(r, p); }
 void DC2CALL JPEG_Decode(gptr d, gptr s, u32 n, u32 m) { PcJpeg_Decode(d, s, n, m); }
+void DC2CALL Pc_MasksUpload(u32 a) { (void)a; }   /* TODO: the masks module */
 #endif
