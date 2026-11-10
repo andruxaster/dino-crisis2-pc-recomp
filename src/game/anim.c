@@ -27,7 +27,7 @@ void DC2CALL Anim_Events(gptr o, s32 m)                             /* 0x48DE80 
     u32 n = U32(tab);
     for (gptr e = tab + n * 4; n; n--, e -= 4) {             /* last entry first */
         s32 cur = (s32)(U16(o + 0x92) * 2) / m + S16(o + 0xAA);
-        if ((s32)(U16(e) * 2) / m == cur) Fn_48C0B0(o, U16(e + 2));
+        if ((s32)(U16(e) * 2) / m == cur) Se_Play(o, U16(e + 2));
     }
 }
 

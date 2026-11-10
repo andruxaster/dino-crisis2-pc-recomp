@@ -93,8 +93,8 @@ void DC2CALL Player_Handler(gptr o)                                /* 0x47CE40 *
         }
         if (!Flag_Check(2, 0xF)) {
             u8 n = ++U8(PX() + 0x79);
-            if (n == 0x50) { Fn_48C0B0(o, 0x66); Effect_Attach(o, 0x6825D8); }
-            else if (n == 0xBE) { Fn_48C0B0(o, 0x67); Effect_Attach(o, 0x6825D8); U8(PX() + 0x79) = 0; }
+            if (n == 0x50) { Se_Play(o, 0x66); Effect_Attach(o, 0x6825D8); }
+            else if (n == 0xBE) { Se_Play(o, 0x67); Effect_Attach(o, 0x6825D8); U8(PX() + 0x79) = 0; }
         }
     }
     if (U16(o + 0x17E) && !Flag_Check(2, 0xF)) {   /* bleeding */
@@ -437,7 +437,7 @@ void DC2CALL Player_HitLight(gptr o)                               /* 0x47D6A0 *
         U16(o + 0x174) = 1;
         U8(o + 0x56)++;
         U8(PX() + 0x2E) = 0;
-        Fn_48C0B0(o, 3);
+        Se_Play(o, 3);
         arms_rest();
         if (S16(o + 0x108) < 0) U32(o + 0x54) = 3;
         break; }
@@ -461,7 +461,7 @@ void DC2CALL Player_HitDown(gptr o)                                /* 0x47D820 *
         U32(o + 0xF0) = 0;
         if (fwd) { U16(o + 0xF4) = 0xFF80; Anim_Start(o, 0xB, 0, 0, 4); }
         else { U16(o + 0xF4) = 0x80; Anim_Start(o, 0xA, 0, 0, 4); }
-        Fn_48C0B0(o, 3);
+        Se_Play(o, 3);
         U8(o + 0x11B) = 0;
         U16(o + 0x108) -= (u16)Damage_Scale(U16(o + 0x176));
         U32(o + 0x50) &= ~0x20u;

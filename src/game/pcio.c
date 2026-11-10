@@ -21,6 +21,16 @@ u32  DC2CALL Snd_IsPlaying(u32 h)               { return ORIG(0x4BFAA0, u32 (DC2
 void DC2CALL Snd_Stop(u32 h)                    { ORIG(0x4BFAE0, void (DC2CALL *)(u32))(h); }
 void DC2CALL Snd_Free(u32 h)                    { ORIG(0x4BFBD0, void (DC2CALL *)(u32))(h); }
 void DC2CALL Strm_SetVolume(u32 h, s32 v)       { ORIG(0x4BFF20, void (DC2CALL *)(u32, s32))(h, v); }
+void DC2CALL Strm_Play(u32 h)                   { ORIG(0x4BFEE0, void (DC2CALL *)(u32))(h); }
+void DC2CALL Strm_Stop(u32 h)                   { ORIG(0x4BFFA0, void (DC2CALL *)(u32))(h); }
+void DC2CALL Input_ReadPad(u32 p)               { ORIG(0x4BEF40, void (DC2CALL *)(u32))(p); }
+void DC2CALL Snd_SetPan(u32 h, u32 p)           { ORIG(0x4BFA60, void (DC2CALL *)(u32, u32))(h, p); }
+void DC2CALL Strm_Close(u32 h)                  { ORIG(0x4C0050, void (DC2CALL *)(u32))(h); }
+u32  DC2CALL Movie_Open(gptr n, u32 w, u32 h)   { return ORIG(0x4BF3A0, u32 (DC2CALL *)(gptr, u32, u32))(n, w, h); }
+void DC2CALL Masks_CreateVB(u32 n, gptr p)      { ORIG(0x4BE3C0, void (DC2CALL *)(u32, gptr))(n, p); }
+void DC2CALL Masks_SetQuad(u32 i, u32 x, u32 y, u32 z) { ORIG(0x4BE430, void (DC2CALL *)(u32, u32, u32, u32))(i, x, y, z); }
+void DC2CALL Masks_BuildTexture(void)           { ORIG(0x4BE6E0, void (DC2CALL *)(void))(); }
+void DC2CALL Masks_Upload(u32 a)                { ORIG(0x4BEAC0, void (DC2CALL *)(u32))(a); }
 #else
 #include <stdio.h>
 #include <stdlib.h>
@@ -137,4 +147,15 @@ u32 DC2CALL Snd_IsPlaying(u32 h)
 void DC2CALL Snd_Stop(u32 h) { if (h < 0x400) g_snd[h].playing = 0; }
 void DC2CALL Snd_Free(u32 h) { if (h < 0x400) g_snd[h].used = g_snd[h].playing = 0; }
 void DC2CALL Strm_SetVolume(u32 h, s32 v) { (void)h; (void)v; }
+void DC2CALL Strm_Play(u32 h) { (void)h; }
+void DC2CALL Strm_Stop(u32 h) { (void)h; }
+u16 g_pad_raw[2];
+void DC2CALL Input_ReadPad(u32 p) { if (p < 2) U16(0x87DC42 + p * 0x24) = g_pad_raw[p]; }
+void DC2CALL Snd_SetPan(u32 h, u32 p) { (void)h; (void)p; }
+void DC2CALL Strm_Close(u32 h) { (void)h; }
+u32 DC2CALL Movie_Open(gptr name, u32 w, u32 h) { (void)name; (void)w; (void)h; return 1; }
+void DC2CALL Masks_CreateVB(u32 n, gptr p) { (void)n; (void)p; }
+void DC2CALL Masks_SetQuad(u32 i, u32 x, u32 y, u32 z) { (void)i; (void)x; (void)y; (void)z; }
+void DC2CALL Masks_BuildTexture(void) {}
+void DC2CALL Masks_Upload(u32 a) { (void)a; }
 #endif

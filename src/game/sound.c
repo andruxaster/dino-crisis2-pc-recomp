@@ -18,7 +18,7 @@ void DC2CALL Snd_Tick(void)                                         /* 0x48C700 
             U16(s + 0xA) -= U8(s + 0x11);
             if (S16(s + 0xA) <= S16(s + 0xC)) {
                 U16(s + 0xA) = U16(s + 0xC);
-                if (U8(s + 0x10) & 0x80) Fn_48CE60(i);
+                if (U8(s + 0x10) & 0x80) Strm_Halt(i);
                 U8(s + 0x10) = 0;
             }
         } else if (S16(s + 0xA) < S16(s + 0xC)) {

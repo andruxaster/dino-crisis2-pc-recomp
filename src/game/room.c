@@ -184,17 +184,17 @@ void DC2CALL Aot_Reset(void)                                        /* 0x48AFD0 
 void DC2CALL Script_Skip(void)                                      /* 0x48BCB0 */
 {
     Cutscene_End();
-    Fn_46FBC0(0xFFFFFFFF, 0, 0);
+    Shake_Set(0xFFFFFFFF, 0, 0);
     Flag_Set(2, 0xC, 0);
     for (u32 i = 0; i < 10; i++) Script_KillThread(i);
-    Fn_471A30();
-    Fn_471A50();
+    Msg_Clear();
+    Msg_ClearBox();
     Flag_Set(2, 0x1F, 0);
     for (u32 i = 0; i < U32(0x87DE14); i++) {
         gptr e = U32(G() + 0x948) + i * 0x34;
-        if ((U8(e) & 1) && U8(e + 1) == 1) Fn_48D470(e);
+        if ((U8(e) & 1) && U8(e + 1) == 1) Eff_Off(e);
     }
-    Fn_478790();
+    Lights_Unmark();
     Fade_Set(1, 5, 1);
     U8(0x87FC44)++;
 }
@@ -318,7 +318,7 @@ void DC2CALL AOT_Door(gptr e)                                       /* 0x48B390 
     }
     U32(0x7593B4) = e + 0x14;
     for (u32 k = 0; k < 0x500; k += 0x28) U8(U32(G() + 0xA5C) + k) = 0;
-    Fn_46FBC0(0xFFFFFFFF, 0, 0);
+    Shake_Set(0xFFFFFFFF, 0, 0);
     Fn_4A7250();
     Task_Chain(0x41E2D0);
 }
@@ -405,7 +405,7 @@ void DC2CALL AOT_Kind10(gptr e)                                     /* 0x48B620 
     u16 ch = U8(G() + 0x10B5);
     if (ch == 1 || ch == 7) {
         if (U8(e + 0x14) != 2) return;
-        Fn_48C0B0(U32(G() + 0x940), 0x26);
+        Se_Play(U32(G() + 0x940), 0x26);
         gptr t = 0x738C28 - U8(e + 0x16) * 0x30;
         for (int k = 0; k < 8; k++, t += 6) {
             gptr f = Eff_AllocBack();
@@ -429,7 +429,7 @@ void DC2CALL AOT_Kind10(gptr e)                                     /* 0x48B620 
         if (U8(e + 0x14) != 1) return;
         gptr k2 = U32(G() + 0x944) + U32(e + 0x18) * 0xAC;
         U8(k2 + 0x64) = 0; U8(k2 + 0x65) = 0xFF; U8(k2 + 0x66) = 0;
-        Fn_48C0B0(U32(G() + 0x940), 0x27);
+        Se_Play(U32(G() + 0x940), 0x27);
         Flag_Set(8, U8(e + 0x15), 1);
         U8(e) = 0;
     }

@@ -106,10 +106,10 @@ u32 DC2CALL ScrOp_ObjCall(gptr t)                                  /* 1B: fn(sel
         gptr c = Tmp_Push(0x60);
         memcpy(MEM(c), MEM(p), 0x60);           /* object header with the root part's position */
         if (e) { U16(c + 0x40) = U16(e + 0x40); U16(c + 0x42) = U16(e + 0x42); U16(c + 0x44) = U16(e + 0x44); }
-        Fn_48C0B0(c, S(t, 0));
+        Se_Play(c, S(t, 0));
         Tmp_Pop(0x60);
     } else {
-        Fn_48C0B0(p, S(t, 0));
+        Se_Play(p, S(t, 0));
     }
     ADV(t);
     return 0;
@@ -161,7 +161,7 @@ u32 DC2CALL ScrOp_WaitB4A(gptr t)                                  /* 24: r0 = G
 
 u32 DC2CALL ScrOp_Call46FBC0(gptr t)                               /* 25 */
 {
-    Fn_46FBC0(S(t, 2), S(t, 1), S(t, 0));
+    Shake_Set(S(t, 2), S(t, 1), S(t, 0));
     ADV(t);
     return 0;
 }
@@ -274,7 +274,7 @@ u32 DC2CALL ScrOp_RoomReset(gptr t)                                /* 2D: room_r
 
 u32 DC2CALL ScrOp_Call48C640(gptr t)                               /* 2E */
 {
-    Fn_48C640(S(t, 2), S(t, 1), S(t, 0));
+    Se_PlayFlat(S(t, 2), S(t, 1), S(t, 0));
     ADV(t);
     return 0;
 }
@@ -392,7 +392,7 @@ u32 DC2CALL ScrOp_EnemySet(gptr t)                                 /* 4F: enemy_
 
 u32 DC2CALL ScrOp_Op50(gptr t)                                     /* 50 */
 {
-    Fn_473130(S(t, 0));
+    Movie_Start(S(t, 0));
     U32(0x7593A8) = U32(G() + 0xB18);
     U32(G() + 0xB18) = 0;
     U32(0x7593AC) = U32(G() + 0xB14);
@@ -404,7 +404,7 @@ u32 DC2CALL ScrOp_Op50(gptr t)                                     /* 50 */
 
 u32 DC2CALL ScrOp_Op51(gptr t)                                     /* 51 */
 {
-    Fn_4731F0();
+    Movie_Tick();
     if (!Flag_Check(2, 0x17)) {
         Fade_Set(1, 1, 1);
         U32(G() + 0xB18) = U32(0x7593A8);
@@ -427,7 +427,7 @@ u32 DC2CALL ScrOp_Op52(gptr t)                                     /* 52: on the
 
 u32 DC2CALL ScrOp_Call48C600(gptr t)                               /* 53 */
 {
-    Fn_48C600(S(t, 0));
+    Se_StopGroup(S(t, 0));
     ADV(t);
     return 0;
 }
@@ -452,7 +452,7 @@ u32 DC2CALL ScrOp_ObjsHold(gptr t)                                 /* 54: 1 rest
 u32 DC2CALL ScrOp_Call48CE20(gptr t)                               /* 55 */
 {
     gptr sp = SP_(t);
-    Fn_48CE20(U8(sp + 0xD), U16(sp + 8), U16(sp + 4), U16(sp));
+    Strm_SetFade(U8(sp + 0xD), U16(sp + 8), U16(sp + 4), U16(sp));
     ADV(t);
     return 0;
 }
@@ -546,8 +546,8 @@ u32 DC2CALL ScrOp_Cutscene(gptr t)                                 /* 42: -1 end
 u32 DC2CALL ScrOp_Sound(gptr t)                                    /* 43: sound(id, flags) */
 {
     u32 id = U16(SP_(t)), fl = U8(SP_(t) + 4);
-    if (fl & 1) Fn_48CD70(id >> 8, id & 0xFF);
-    if (fl & 2) Fn_48CE60(id >> 8);
+    if (fl & 1) Strm_Start(id >> 8, id & 0xFF);
+    if (fl & 2) Strm_Halt(id >> 8);
     if (fl & 4) {
         gptr c = 0x87FB8C + (id >> 8) * 20;
         U8(c + 4) = 0x80; U8(c + 5) = 3; U16(c) = 0;
@@ -560,7 +560,7 @@ u32 DC2CALL ScrOp_Sound(gptr t)                                    /* 43: sound(
                 U8(c + 4) = 0x80; U8(c + 5) = 2; U16(c) = 0;
             }
     }
-    if (fl & 8) Fn_48C9C0(U16(Room_SoundSlot(U8(G() + 0x1091), U8(G() + 0x1090)) + 2));
+    if (fl & 8) Strm_StartMask(U16(Room_SoundSlot(U8(G() + 0x1091), U8(G() + 0x1090)) + 2));
     ADV(t);
     return 0;
 }

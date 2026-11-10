@@ -170,8 +170,8 @@ void DC2CALL Opening_Init(gptr r)                                    /* 0x475660
 void DC2CALL Opening_Movie(gptr r)                                   /* 0x4756A0 */
 {
     switch (U8(r + 2)) {
-    case 0: U8(r + 2)++; Fn_473130(3); break;
-    case 1: Fn_4731F0(); if (!Flag_Check(2, 0x17)) U8(r + 2)++; break;
+    case 0: U8(r + 2)++; Movie_Start(3); break;
+    case 1: Movie_Tick(); if (!Flag_Check(2, 0x17)) U8(r + 2)++; break;
     case 2: U8(r + 2) = 0; U8(r + 1) = 0; U8(r)++; break;
     default: break;
     }
@@ -210,8 +210,8 @@ void DC2CALL OpeningTask(void)                                       /* 0x475630
 void DC2CALL Game_Init(void)                                         /* 0x451120  mode 0 */
 {
     G16(0x664)++;
-    Fn_403480();
-    Fn_470CB0();
+    Camera_Reset();
+    Msg_Reset();
     Snd_ReleaseAll();
     G16(0x682) = 0xFFFF; G16(0x680) = 0xFFFF; G16(0x67E) = 0xFFFF; G16(0x67C) = 0xFFFF;
     G16(0x67A) = 0xFFFF; G16(0x678) = 0xFFFF; G16(0x676) = 0xFFFF; G16(0x674) = 0xFFFF;
@@ -247,7 +247,7 @@ void DC2CALL Game_RoomEnter(void)                                    /* 0x451330
 {
     G16(0x664)++;
     if (!G8(0x926)) Checkpoint_Save();
-    Fn_48FB50(0);
+    Light_SetFar(0);
     memset(MEM(G() + 0x938), 0, 0xBC * 4);
     U32(0x87DE00) = 2;
     if (!G8(0x108E)) Flag_Set(2, 0x1A, 1);
@@ -256,7 +256,7 @@ void DC2CALL Game_RoomEnter(void)                                    /* 0x451330
         if (s > 6 || (s >= 2 && s <= 4)) Flag_Set(2, 0x1A, 1);
     }
     Room_LoadDat();
-    Fn_46FBC0(0xFFFFFFFF, 0, 0);
+    Shake_Set(0xFFFFFFFF, 0, 0);
     Room_SetPointers(0x5E0000);
     G8(0xA89) = 0xFF; G8(0xAD1) = 0xFF;
     if (!G8(0x927)) {
@@ -277,18 +277,18 @@ void DC2CALL Game_RoomEnter(void)                                    /* 0x451330
     if (G8(0x662)) { G8(0x662) = 0; Flag_Set(2, 0x23, 1); }
     Room_SoundInit();
     CamZones_Init();
-    Fn_470CB0();
+    Msg_Reset();
     Script_Init();
-    Fn_403520();
-    Fn_46B8C0();
+    Camera_ZoneTick();
+    Room_SetLighting();
     G8(0x852) = 0xFF;
     Fade_Set(0, 0x14, 1);
     G8(0x926) = 0;
     Flag_Set(2, 4, (u32)(s32)(s8)G8(0x14F0));
     Flag_Set(2, 0xE, (u32)(s32)(s8)G8(0x14F1));
     Flag_Set(2, 0x1C, (u32)(s32)(s8)G8(0x14F2));
-    Fn_407170();
-    Flag_Set(0xB, (Fn_491B10(G8(0x1091), G8(0x1090)) & 0xFF) + 0x75, 1);
+    Gauge_Reset();
+    Flag_Set(0xB, (Area_SoundArea(G8(0x1091), G8(0x1090)) & 0xFF) + 0x75, 1);
     Flag_Set(0xB, Room_GlobalIndex(G8(0x1091), G8(0x1090)) & 0xFF, 1);
     if (G16(0x1090) == 4 || G16(0x1090) == 5) {
         Flag_Set(0xB, 0, 1); Flag_Set(0xB, 4, 0); Flag_Set(0xB, 5, 0);
@@ -298,7 +298,7 @@ void DC2CALL Game_RoomEnter(void)                                    /* 0x451330
 void DC2CALL Game_Play(void)                                         /* 0x451790  mode 3 */
 {
     if (Flag_Check(2, 0x1B)) {                    /* end of the game */
-        Fn_48CB40();
+        Snd_FadeAll();
         Room_Reset();
         Task_Sleep(0x1E);
         Game_Start(0x11);
@@ -332,7 +332,7 @@ void DC2CALL Game_Play(void)                                         /* 0x451790
     Game_Frame();
     Fn_4A7250();
     Flag_Set(2, 0x25, 0);
-    Fn_452370();
+    Shake_Tick();
 }
 
 void DC2CALL GameTask(void)                                          /* 0x4510F0 */
@@ -353,7 +353,7 @@ void DC2CALL GameTask(void)                                          /* 0x4510F0
 /* the room's sound set-up from its sound table entry */
 void DC2CALL Room_SoundInit(void)                                  /* 0x48CA10 */
 {
-    Fn_48C9C0(U16(Room_SoundSlot(U8(G() + 0x1091), U8(G() + 0x1090)) + 2));
+    Strm_StartMask(U16(Room_SoundSlot(U8(G() + 0x1091), U8(G() + 0x1090)) + 2));
 }
 
 /* ---- the per-frame game work ------------------------------------------------------- */
@@ -415,13 +415,13 @@ void DC2CALL Game_Frame(void)                                       /* 0x472FD0 
         if (!Flag_Check(1, 8)) Aot_Tick();
         if (!Flag_Check(1, 6)) Script_Tick();
         if (!Flag_Check(1, 0xB)) { EnemySet_Tick(); EnemySet_Small(); }
-        Fn_4509C0();
+        Dim_Tick();
         if (!Flag_Check(1, 7)) Eff_RunAll();
         Obj_RunAll();
         if (!Flag_Check(1, 0xD)) ObjEff_RunAll();
         if (!Flag_Check(1, 4)) Prop_RunAll();
-        Fn_445D10();
-        Fn_470CF0();
+        Eff0_Trail();
+        Msg_Tick();
     }
     if (U8(g + 0x84A) != U8(g + 0x84B)) {
         Camera_Load();
@@ -430,8 +430,8 @@ void DC2CALL Game_Frame(void)                                       /* 0x472FD0 
     if (!Flag_Check(1, 0xC)) Fn_404CC0();
     Fn_406050(0xC0, 0x10);
     if (Flag_Check(3, 0xB)) Fn_406520(0xC8, 0xD0);
-    Fn_48FA70();
-    if (!Flag_Check(1, 5)) Fn_46BA00(G() + 0x778);
+    Hidden_UpdateAll();
+    if (!Flag_Check(1, 5)) Obj_PickLights(G() + 0x778);
 }
 
 /* ---- game mode 4: game over, "Will you continue?" ----------------------------------- */
@@ -524,12 +524,12 @@ void DC2CALL Game_Continue(void)                                    /* 0x451990 
         U8(G() + 0xB5B) = 0; U8(G() + 0xB5C) = 0;
         DrawSync(0);
         if (Flag_Check(2, 6)) { Game_Frame(); Fn_4A7250(); return; }
-        Fn_407170();
+        Gauge_Reset();
         Room_Reset();
         U32(0x87DE00) = 2;
-        Fn_46FBC0(0xFFFFFFFF, 0, 0);
+        Shake_Set(0xFFFFFFFF, 0, 0);
         Flag_Set(2, 4, 1);
-        Fn_478790();
+        Lights_Unmark();
         G16(0x668) = 0;
         Flag_Set(3, 0, 0);
         cont_wait();
@@ -548,7 +548,7 @@ void DC2CALL Game_Continue(void)                                    /* 0x451990 
             Continue_SetAnim(CONT_TITLE, 0x6601D0);
             text = U8(G() + 0x108E) ? 0x7275F6u : 0x7275D0u;
             U16(CONT_TEXT) = (u16)Text_Length(text);
-            U32(CONT_TEXT + 4) = (u16)Fn_494DE0(text);
+            U32(CONT_TEXT + 4) = (u16)Text_Left(text);
             U16(CONT_TEXT + 2) = 0;
             U8(CONT_TEXT + 8) = 0; U8(CONT_TEXT + 9) = 1;
             Continue_SetAnim(CONT_LOGO, 0x65F500);
@@ -584,7 +584,7 @@ void DC2CALL Game_Continue(void)                                    /* 0x451990 
         if ((s16)G16(0x66A) <= 5) return;
         u32 pad = U32(0x87DC00);
         if (pad & 0xA000) {                          /* left / right */
-            Fn_48C0B0(0, 0);
+            Se_Play(0, 0);
             G16(0x668) ^= 1;
             G16(0x66A) = 0;
             Continue_SetAnim(CONT_YESNO, G16(0x668) ? 0x660250u : 0x660220u);
@@ -592,7 +592,7 @@ void DC2CALL Game_Continue(void)                                    /* 0x451990 
         }
         if (!(pad & 0x20)) return;
         if (U8(G() + 0x108C) < 0x63) U8(G() + 0x108C)++;   /* continues used */
-        Fn_48C0B0(0, 2);
+        Se_Play(0, 2);
         if (!G16(0x668)) {                           /* yes: from the checkpoint */
             u16 rm = U16(G() + 0x1090);
             u32 t = U32(G() + 0x1098);

@@ -40,7 +40,7 @@ void DC2CALL EnemySet_Cries(gptr s)                                 /* 0x472130 
         if (!U8(s)) continue;
         if (U8(s + 3)--) continue;
         gptr e = U32(0x73758C + U8(s + 1) * 4) + U8(s + 2) * 2;
-        Fn_48C0B0(U32(G() + 0x940) + U8(s) * 0x260, U8(e));
+        Se_Play(U32(G() + 0x940) + U8(s) * 0x260, U8(e));
         if (U8(e + 1)) { U8(s + 2)++; U8(s + 3) = U8(e + 1); }
         else U8(s) = 0;
     }
@@ -58,7 +58,7 @@ void DC2CALL EnemySet_Cry(u32 kind, u32 obj)                        /* 0x4720B0 
     U8(s + 1) = k;
     U8(s + 2) = 0;
     gptr t = U32(0x73758C + k * 4);
-    Fn_48C0B0(U32(G() + 0x940), U8(t));
+    Se_Play(U32(G() + 0x940), U8(t));
     if (!U8(t + 1)) return;
     U8(s) = (u8)obj;
     U8(s + 2)++;
@@ -271,11 +271,11 @@ void DC2CALL EnemySet_Tick(void)                                    /* 0x472230 
     if ((U8(set + 1) == 2 || U8(set + 1) == 7) && U8(sp + 8) == 4) U16(o + 0x5A) -= 2;
     if (U8(set + 1) == 7 && U8(sp + 8) == 4) {
         u32 s = Rand8() & 1 ? 0x3A : 0x3B;
-        Fn_48C0B0(U32(G() + 0x940) + idx * 0x260, s);
+        Se_Play(U32(G() + 0x940) + idx * 0x260, s);
     }
     if (U8(set + 1) == 2 && U8(sp + 8) == 4) {
         u32 s = Rand8() & 1 ? 0x42 : 0x43;
-        Fn_48C0B0(U32(G() + 0x940) + idx * 0x260, s);
+        Se_Play(U32(G() + 0x940) + idx * 0x260, s);
     }
 }
 

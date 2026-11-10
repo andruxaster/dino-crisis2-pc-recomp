@@ -283,7 +283,7 @@ void DC2CALL Sub5_Use(gptr o)                                      /* 0x4B38E0 *
         Anim_Start(o, 0x67C500, 7, 0, 4);
         U32(o + 0xF0) = 0; U16(o + 0xF4) = 0;
         U8(o + 0x17B) = 5; U8(o + 0x11B) = 0;
-        Fn_48C0B0(o, 0x20);
+        Se_Play(o, 0x20);
         Sub_AmmoUse(0);
         U8(o + 0x56)++;
         return;
@@ -337,7 +337,7 @@ void DC2CALL Sub9_Use(gptr o)                                      /* 0x4B4600 *
     if (!l) return;
     U8(l + 1) = 0x16;
     U16(l + 0x10) = U16(o + 0x40); U16(l + 0x12) = U16(o + 0x42); U16(l + 0x14) = U16(o + 0x44);
-    Fn_48C0B0(o, 0x20);
+    Se_Play(o, 0x20);
     Effect_SpawnAt(o, 0x67DF90, 0);
 }
 
@@ -491,9 +491,9 @@ u32 DC2CALL Weapon_Hit(gptr m, gptr pos, u32 kind)                 /* 0x47B430 *
             U16(v) += U16(p + 0x40); U16(v + 2) += U16(p + 0x42); U16(v + 4) += U16(p + 0x44);
             if (Wall_Between(pos, v)) continue;
         }
-        if (kind == 0x10 || kind == 0x1D) Fn_48C0B0(o, U8(o + 0x58) == 0x17 ? 0x68 : 0x25);
+        if (kind == 0x10 || kind == 0x1D) Se_Play(o, U8(o + 0x58) == 0x17 ? 0x68 : 0x25);
         else if (kind == 0x11 || kind == 0x1E) {
-            Fn_48C0B0(o, U8(o + 0x58) == 0x17 ? 0x68 : 0x27);
+            Se_Play(o, U8(o + 0x58) == 0x17 ? 0x68 : 0x27);
             Effect_Attach(U32(G() + 0x940), 0x67DAB0);
         }
         U8(o + 0x174) |= 1;
@@ -615,7 +615,7 @@ void DC2CALL Thrown_Update(gptr o)                                 /* 0x47AFA0 *
             U16(v) = 0x400; U16(v + 2) = 0; U16(v + 4) = 0x400;
             RotMatrixYXZ(v, mt);
             Weapon_Hit(mt, p40, 0x13);
-            Fn_48C0B0(o, 0x23);
+            Se_Play(o, 0x23);
             Effect_Spawn(p40, 0x67DAE0, 0, 0, 0x20, 0);
             Eff_Free(e);
             continue;
@@ -668,19 +668,19 @@ void DC2CALL Thrown_Update(gptr o)                                 /* 0x47AFA0 *
         U16(p40) = U16(v); U16(e + 0x44) = U16(v + 4);
         if (S8(e + 0x4F) == 6) {                                /* the rocket blows up and ends the frame */
             Effect_Spawn(p40, 0x67A31C, 0, 0, 0x20, 0);
-            Fn_48C0B0(o, 0x15);
+            Se_Play(o, 0x15);
             Eff_Free(e);
             break;
         }
     hit:
         switch (S8(e + 0x4F)) {
-        case 5: Effect_Spawn(p40, 0x679E30, 0, 0, 0x20, 0); Fn_48C0B0(o, 0x16); break;
-        case 6: Effect_Spawn(p40, 0x67A040, 0, 0, 0x20, 0); Fn_48C0B0(o, 0x15); break;
+        case 5: Effect_Spawn(p40, 0x679E30, 0, 0, 0x20, 0); Se_Play(o, 0x16); break;
+        case 6: Effect_Spawn(p40, 0x67A040, 0, 0, 0x20, 0); Se_Play(o, 0x15); break;
         case 7:
-            Effect_Spawn(p40, 0x678CF4, 0, 0, 0x20, 0); Fn_48C0B0(o, 0x16);
+            Effect_Spawn(p40, 0x678CF4, 0, 0, 0x20, 0); Se_Play(o, 0x16);
             Noise_Make(U16(p40), U16(e + 0x42), U16(e + 0x44));
             break;
-        case 10: Effect_Spawn(p40, 0x667290, 0, 0, 0x20, 0); Fn_48C0B0(o, 0x1D); break;
+        case 10: Effect_Spawn(p40, 0x667290, 0, 0, 0x20, 0); Se_Play(o, 0x1D); break;
         }
         Eff_Free(e);
     }
@@ -783,7 +783,7 @@ static void throw_sub(gptr o, const struct throw_sub *s)
         if (s->kind == 3) {                                 /* a grenade: the effect takes the spot */
             Effect_SpawnAt(o, 0x67D80C, 0);
             Sub_AmmoUse(1);
-            Fn_48C0B0(o, 0x20); Fn_48C0B0(o, 0x22); Fn_48C0B0(o, 0x24);
+            Se_Play(o, 0x20); Se_Play(o, 0x22); Se_Play(o, 0x24);
             U16(v + 6) = U16(o + 0x4A);
             Effect_Spawn(v, 0x67D888, 0, 0, 0x20, 0);
         } else if (s->kind == 4) {                          /* one mine (+0x46: as the original, an unset stack byte) */
@@ -791,7 +791,7 @@ static void throw_sub(gptr o, const struct throw_sub *s)
             if (m) {
                 Sub_AmmoUse(1);
                 Effect_SpawnAt(o, 0x67DA64, 0);
-                Fn_48C0B0(o, 0x20); Fn_48C0B0(o, 0x22);
+                Se_Play(o, 0x20); Se_Play(o, 0x22);
                 U32(m + 0x50) = 3; U32(m + 0x68) = 0x67CA14; U32(m + 0x54) = 0;
                 U8(m + 0x4E) = 3; U8(m + 0x4F) = 3;
                 U32(m + 0x40) = U32(v); U32(m + 0x44) = U32(v + 4);
@@ -800,7 +800,7 @@ static void throw_sub(gptr o, const struct throw_sub *s)
         } else if (Mines_Place(o, v)) {                     /* a row of mines */
             Sub_AmmoUse(1);
             Effect_SpawnAt(o, 0x67DA64, 0);
-            Fn_48C0B0(o, 0x20); Fn_48C0B0(o, 0x22);
+            Se_Play(o, 0x20); Se_Play(o, 0x22);
         }
     }
     Tmp_Pop(8);

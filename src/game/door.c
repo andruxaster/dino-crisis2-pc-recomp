@@ -143,7 +143,7 @@ void DC2CALL Door_Init(gptr d)                                     /* 0x41E310 *
         if (U8(G() + 0x108F) == 1) U16(G() + 0x11FC) = U16(pl + 0x108);
         else U16(G() + 0x11F8) = U16(pl + 0x108);
         U16(G() + 0x1200) = U16(pl + 0x17E);
-        Fn_48CA40();
+        Snd_LeaveRoom();
     }
         /* fall through */
     case 3:
@@ -183,7 +183,7 @@ void DC2CALL Door_Init(gptr d)                                     /* 0x41E310 *
     U8(d + 0x2491) = 5;
     if (Flag_Check(2, 0x14) && U32(G() + 0xC14)) U8(d + 0x2492) = 1;
     U8(G() + 0xB4C) = 0xFF;
-    Fn_46FBC0(0xFFFFFFFF, 0, 0);
+    Shake_Set(0xFFFFFFFF, 0, 0);
     Flag_Set(3, 0, 0);
     Flag_Set(2, 0x12, 0);
     Flag_Set(1, 3, 0);
@@ -194,7 +194,7 @@ void DC2CALL Door_Init(gptr d)                                     /* 0x41E310 *
     }
     gptr name = Room_Name(U8(d + 0x2479), U8(d + 0x2478));
     U32(d + 0x2498) = name;
-    U16(d + 0x2494) = (u16)Fn_494DE0(name);
+    U16(d + 0x2494) = (u16)Text_Left(name);
 }
 
 /* mode 1: the door's animation and the loading steps, the room name shown */
@@ -213,7 +213,7 @@ void DC2CALL Door_Run(gptr d)                                      /* 0x41E9C0 *
         RotMatrix(o + 0x48, o + 0x20);
         Obj_UpdateMatrix(o);
     }
-    Fn_46BA00(G() + 0x778);
+    Obj_PickLights(G() + 0x778);
 }
 
 /* step 0: switch area/room (the area's tables when it changes) */
@@ -326,7 +326,7 @@ void DC2CALL Door_Common(gptr d)                                   /* 0x41CB70 *
     case 7:
         if (U8(d + 0x247D) != 0x11) break;
         U8(d + 0x2474)++;
-        Fn_48C0B0(0, 0x79);
+        Se_Play(0, 0x79);
         break;
     }
 }
@@ -346,7 +346,7 @@ static void door_swing(gptr d, u32 anim, u32 f1, u32 f2, u32 step)
     case 2:
         if (U16(pl + 0x92) < f1) return;
         DS(d)++;
-        Fn_48C0B0(0, 0x78);
+        Se_Play(0, 0x78);
         /* fall through */
     case 3: {
         gptr o = U32(G() + 0x940) + 0x260;
@@ -407,7 +407,7 @@ void DC2CALL Door_Shutter(gptr d, s32 step)                        /* 0x41D090 *
         if (S16(pl + 0x44) <= 0) break;
     sound:
         DS(d)++;
-        Fn_48C0B0(0, 0x78);
+        Se_Play(0, 0x78);
         break;
     case 5:
         U16(pl + 0x2A2) += (u16)step;
@@ -453,7 +453,7 @@ void DC2CALL Door_Slide(gptr d, u32 dir)                           /* 0x41D230 *
     case 1:
         if (Flag_Check(2, 6)) break;
         DS(d)++;
-        Fn_48C0B0(0, 0x78);
+        Se_Play(0, 0x78);
         break;
     case 2:
         U16(pl + 0x2A0) += r ? (u16)-0x32 : 0x32;
@@ -473,7 +473,7 @@ void DC2CALL Door_Slide(gptr d, u32 dir)                           /* 0x41D230 *
     case 5:
         if (S16(pl + 0x44) < 0x90) break;
         DS(d)++;
-        Fn_48C0B0(0, 0x78);
+        Se_Play(0, 0x78);
         /* fall through */
     case 6: {
         gptr o = U32(G() + 0x940) + 0x260;
@@ -519,7 +519,7 @@ void DC2CALL Door_Common2(gptr d)                                  /* 0x41D460 *
     case 1:
         if (Flag_Check(2, 6)) break;
         DS(d)++;
-        Fn_48C0B0(0, 0x78);
+        Se_Play(0, 0x78);
         break;
     case 8:
         if (U8(d + 0x247D) == 0x11) U8(d + 0x2474)++;
@@ -554,7 +554,7 @@ void DC2CALL Door_Double(gptr d, s32 step, s32 lim, s32 lim2)      /* 0x41D4F0 *
     case 5:
         if (S16(pl + 0x44) < 0x90) break;
         DS(d)++;
-        Fn_48C0B0(0, 0x78);
+        Se_Play(0, 0x78);
         /* fall through */
     case 6: {
         gptr o = U32(G() + 0x940);
@@ -691,7 +691,7 @@ static void door_lift(gptr d, s32 dy)
         U8(d + 0x247C) = 0;
         Fade_Set(0, 0x14, 1);
         DS(d)++;
-        Fn_48C0B0(0, 0x78);
+        Se_Play(0, 0x78);
         /* fall through */
     case 1:
         if (Flag_Check(2, 6)) break;
@@ -703,7 +703,7 @@ static void door_lift(gptr d, s32 dy)
         /* fall through */
     case 3:
         Fade_Set(1, 0x14, 1);
-        Fn_48C0B0(0, 0x79);
+        Se_Play(0, 0x79);
         DS(d)++;
         /* fall through */
     case 4:
@@ -740,7 +740,7 @@ void DC2CALL Door_Drop(gptr d)                                     /* 0x41D860 *
     switch (DS(d)) {
     case 0:
         Fade_Set(0, 0x14, 1);
-        Fn_48C0B0(0, 0x7A);
+        Se_Play(0, 0x7A);
         DS(d)++;
         /* fall through */
     case 1:
@@ -751,8 +751,8 @@ void DC2CALL Door_Drop(gptr d)                                     /* 0x41D860 *
     case 2:
         if (S16(c + 0x3A) > -30000) break;
         DS(d)++;
-        Fn_48C600(0x7A);
-        Fn_48C0B0(0, 0x79);
+        Se_StopGroup(0x7A);
+        Se_Play(0, 0x79);
         /* fall through */
     case 3:
         Fade_Set(1, 0x14, 1);
@@ -814,14 +814,14 @@ void DC2CALL Door_Message(gptr d)                                  /* 0x41DAF0 *
 {
     switch (DS(d)) {
     case 0:
-        Fn_470CB0();
+        Msg_Reset();
         U32(d + 0x2498) = U16(d + 0x2478) == 1 ? 0x728A66u : 0x728ABCu;
         Message_Show(0, 0, U32(d + 0x2498), 2);
         DS(d)++;
         U32(0x87F940) = 0;
         /* fall through */
     case 1:
-        Fn_470CF0();
+        Msg_Tick();
         if (Flag_Check(2, 0x1F)) break;
         DS(d)++;
         /* fall through */
@@ -873,7 +873,7 @@ void DC2CALL Door_Walk(gptr d)                                     /* 0x41DC70 *
     gptr p = e + U32(e) * 4 + 4;
     for (u32 n = U32(e); n; n--) {
         p -= 4;
-        if ((s32)U16(p) * 2 == S16(pl + 0xAA) + (s32)U16(pl + 0x92) * 2) Fn_48C0B0(0, 0x78);
+        if ((s32)U16(p) * 2 == S16(pl + 0xAA) + (s32)U16(pl + 0x92) * 2) Se_Play(0, 0x78);
     }
 }
 

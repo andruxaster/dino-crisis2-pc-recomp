@@ -26,6 +26,25 @@ u32  DC2CALL Snd_IsPlaying(u32 h);                      /* 0x4BFAA0 */
 void DC2CALL Snd_Stop(u32 h);                           /* 0x4BFAE0 */
 void DC2CALL Snd_Free(u32 h);                           /* 0x4BFBD0 */
 void DC2CALL Strm_SetVolume(u32 h, s32 vol);            /* 0x4BFF20 */
+void DC2CALL Strm_Play(u32 h);                          /* 0x4BFEE0 */
+void DC2CALL Strm_Stop(u32 h);                          /* 0x4BFFA0 */
+void DC2CALL Snd_SetPan(u32 h, u32 pan);                /* 0x4BFA60 */
+void DC2CALL Strm_Close(u32 h);                         /* 0x4C0050 */
+
+/* movies (standalone: none, the game goes on as if the file were missing) */
+u32  DC2CALL Movie_Open(gptr name, u32 w, u32 h);       /* 0x4BF3A0: 0 when it plays */
+
+/* the background masks as Direct3D quads (standalone: not drawn yet) */
+void DC2CALL Masks_CreateVB(u32 nverts, gptr pixels);   /* 0x4BE3C0 */
+void DC2CALL Masks_SetQuad(u32 i, u32 x, u32 y, u32 z); /* 0x4BE430 */
+void DC2CALL Masks_BuildTexture(void);                  /* 0x4BE6E0 */
+void DC2CALL Masks_Upload(u32 a);                       /* 0x4BEAC0 */
+
+/* the pads (DirectInput): raw buttons into 0x87DC42 + 0x24 * pad */
+void DC2CALL Input_ReadPad(u32 pad);                    /* 0x4BEF40 */
+#ifndef DC2_IN_PROCESS
+extern u16 g_pad_raw[2];          /* standalone: what the driver presses */
+#endif
 
 /* cooperative tasks: give up the CPU for n frames (0x4C29A9, task.c) */
 void DC2CALL Task_Sleep(u32 n);

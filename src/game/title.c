@@ -99,21 +99,21 @@ void DC2CALL Title_NewGame(gptr t)                                  /* 0x4A5EC0:
     case 0: {
         u32 btn = U32(0x87DC00);
         if (btn & 0x40) {                         /* back */
-            Fn_48C0B0(0, 1);
+            Se_Play(0, 1);
             G16(0x770)--;
             Title_SetAnim(t, 0, U32(LBL_NORMAL));
             Title_SetAnim(t, 1, U32(LBL_IDLE + 4));
             Title_SetAnim(t, 2, U32(LBL_IDLE + 8));
         } else if (btn & 0x5000) {                /* up / down: entries 1..2 */
             s8 c = (s8)U8(t + 0x2A);
-            Fn_48C0B0(0, 0);
+            Se_Play(0, 0);
             Title_SetAnim(t, (u32)(s32)c, U32(LBL_DIFF + c * 4));
             if (btn & 0x1000) { c--; U8(t + 0x2A) = (u8)c; if (c < 1) U8(t + 0x2A) = 2; }
             else { c++; U8(t + 0x2A) = (u8)c; if (c > 2) U8(t + 0x2A) = 1; }
             c = (s8)U8(t + 0x2A);
             Title_SetAnim(t, (u32)(s32)c, U32(LBL_DIFF_SEL + c * 4));
         } else if (btn & 0x820) {
-            Fn_48C0B0(0, 0x59);
+            Se_Play(0, 0x59);
             G16(0x772)++;
             Fade_Set(1, 0x96, 1);
         }
@@ -170,10 +170,10 @@ void DC2CALL Title_Menu(gptr t)                                     /* 0x4A57B0 
     case 1:
         G16(0x770)++;
         Flag_Set(3, 0, 0);
-        Fn_473130(0);
+        Movie_Start(0);
         break;
     case 2:
-        Fn_4731F0();
+        Movie_Tick();
         if (Flag_Check(2, 0x17)) break;
         G16(0x770)++;
         /* fall through */
@@ -186,7 +186,7 @@ void DC2CALL Title_Menu(gptr t)                                     /* 0x4A57B0 
         u16 tm = U16(t);
         if (btn & 0x5000) {                       /* up / down */
             s8 c = (s8)U8(t + 2);
-            Fn_48C0B0(0, 0);
+            Se_Play(0, 0);
             Title_SetAnim(t, (u32)(s32)c, U32(LBL_IDLE + c * 4));
             if (btn & 0x1000) { U8(t + 2) = (u8)(c - 1); if ((s8)U8(t + 2) < 0) U8(t + 2) = 2; }
             else { U8(t + 2) = (u8)(c + 1); if ((s8)U8(t + 2) > 2) U8(t + 2) = 0; }
@@ -194,7 +194,7 @@ void DC2CALL Title_Menu(gptr t)                                     /* 0x4A57B0 
             Title_SetAnim(t, (u32)(s32)c, U32(LBL_NORMAL + c * 4));
             U16(t) = 0x384;
         } else if (btn & 0x820) {                 /* confirm */
-            Fn_48C0B0(0, 2);
+            Se_Play(0, 2);
             G16(0x770)++;
             U8(t + 0x2A) = 1;
             if (!U8(t + 2)) {
@@ -234,10 +234,10 @@ void DC2CALL Title_Movie(gptr t)                                    /* 0x4A5B50 
     case 0:
         Flag_Set(3, 0, 0);
         G16(0x770)++;
-        Fn_473130(U8(t + 3) + 1u);
+        Movie_Start(U8(t + 3) + 1u);
         break;
     case 1:
-        Fn_4731F0();
+        Movie_Tick();
         if (!Flag_Check(2, 0x17)) G16(0x770)++;
         break;
     case 2:

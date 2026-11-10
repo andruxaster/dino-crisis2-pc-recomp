@@ -724,5 +724,70 @@ void DC2CALL K2Bursts_Run(gptr k);                                      /* 0x44A
 void DC2CALL K2_Sparks(gptr k);                                         /* 0x44A480 */
 void DC2CALL K2_Detach(gptr k);                                         /* 0x448080 */
 void DC2CALL Eff_Off(gptr e);                                           /* 0x48D470 */
+/* misc.c */
+void DC2CALL Camera_Reset(void);                                        /* 0x403480 */
+void DC2CALL Camera_ZoneTick(void);                                     /* 0x403520 */
+void DC2CALL Masks_Setup(gptr data, u32 n, gptr pixels);                /* 0x4036F0 */
+void DC2CALL Cutscene_End(void);                                        /* 0x403A30 */
+void DC2CALL Gauge_Clear(void);                                         /* 0x404940 */
+void DC2CALL Gauge_Show(void);                                          /* 0x406020 */
+void DC2CALL Gauge_Reset(void);                                         /* 0x407170 */
+void DC2CALL Room_SetLighting(void);                                    /* 0x46B8C0 */
+void DC2CALL Shake_Set(u32 a, u32 b, u32 c);                            /* 0x46FBC0 */
+void DC2CALL Shake_Tick(void);                                          /* 0x452370 */
+void DC2CALL Shake_Off(void);                                           /* 0x452BA0 */
+void DC2CALL Dim_Tick(void);                                            /* 0x4509C0 */
+void DC2CALL Fade_Set(u32 a, u32 b, u32 c);                             /* 0x450A70 */
+void DC2CALL Fade_Draw(gptr s);                                         /* 0x450B10 */
+void DC2CALL Fade_Tick(void);                                           /* 0x450AF0 */
+void DC2CALL Eff0_Trail(void);                                          /* 0x445D10 */
+void DC2CALL Lights_Unmark(void);                                       /* 0x478790 */
+void DC2CALL Snd_ReleaseAll(void);                                      /* 0x48C080 */
+void DC2CALL Snd_SetFade(u32 slot, u32 a, u32 b, u32 c);                /* 0x48C5D0 */
+void DC2CALL Strm_SetFade(u32 slot, u32 a, u32 b, u32 c);               /* 0x48CE20 */
+void DC2CALL Strm_Start(u32 n, u32 unused);                             /* 0x48CD70 */
+void DC2CALL Strm_StartMask(u32 mask);                                  /* 0x48C9C0 */
+void DC2CALL Snd_LeaveRoom(void);                                       /* 0x48CA40 */
+void DC2CALL Snd_FadeAll(void);                                         /* 0x48CB40 */
+void DC2CALL Snd_FreeBank(u32 n);                                       /* 0x48CEB0 */
+void DC2CALL Snd_FreeStream(u32 n);                                     /* 0x48CF10 */
+void DC2CALL Obj_UpdateHidden(gptr o);                                  /* 0x48F910 */
+void DC2CALL Eff_UpdateHidden(gptr e);                                  /* 0x48F980 */
+void DC2CALL Hidden_UpdateAll(void);                                    /* 0x48FA70 */
+void DC2CALL Light_SetFar(u32 c);                                       /* 0x48FB50 */
+u32 DC2CALL Area_SoundArea(u32 area, u32 room);                         /* 0x491B10 */
+u32 DC2CALL Text_Left(gptr t);                                          /* 0x494DE0 */
+void DC2CALL Msg_Clear(void);                                           /* 0x471A30 */
+void DC2CALL Msg_ClearBox(void);                                        /* 0x471A50 */
+void DC2CALL Msg_SetScale(u32 x, u32 y);                                /* 0x471A70 */
+void DC2CALL Msg_Reset(void);                                           /* 0x470CB0 */
+void DC2CALL Msg_Tick(void);                                            /* 0x470CF0 */
+gptr DC2CALL Message_Show(u32 x, u32 y, gptr text, u32 kind);           /* 0x4718F0 */
+void DC2CALL Msg_Flush(void);                                           /* 0x471AC0 */
+void DC2CALL Movie_Start(u32 n);                                        /* 0x473130 */
+void DC2CALL Movie_Tick(void);                                          /* 0x4731F0 */
+void DC2CALL MsgSlot_Step(gptr s);                                      /* 0x470D30 */
+void DC2CALL Box_Type(void);                                            /* 0x470D50 */
+void DC2CALL Box_Wait(void);                                            /* 0x470F40 */
+void DC2CALL Box_Prompt(void);                                          /* 0x470F70 */
+void DC2CALL Box_Release(void);                                         /* 0x4710D0 */
+void DC2CALL Box_YesNo(void);                                           /* 0x4710F0 */
+void DC2CALL Box_Choose(void);                                          /* 0x4712B0 */
+void DC2CALL Box_Close(void);                                           /* 0x4713C0 */
+void DC2CALL Se_Info(u32 id, gptr r);                                   /* 0x48C220 */
+void DC2CALL Se_Calc(gptr o, u32 vol, gptr pan, gptr pvol, u32 range);  /* 0x48C2D0 */
+u32 DC2CALL Se_Remap(gptr o, u32 id);                                   /* 0x48C3B0 */
+void DC2CALL Se_Start(u32 h, gptr o, gptr e, u32 pan, u32 vol, u32 id); /* 0x48C4F0 */
+void DC2CALL Se_Play(gptr o, u32 id);                                   /* 0x48C0B0 */
+void DC2CALL Se_PlayFlat(u32 id, u32 vol, u32 pan);                     /* 0x48C640 */
+void DC2CALL Se_StopGroup(u32 g);                                       /* 0x48C600 */
+void DC2CALL Strm_Halt(u32 n);                                          /* 0x48CE60 */
+u32 DC2CALL Text_Draw(gptr s, u32 x, u32 y, u32 n, u32 col, u32 z, u32 mode);/* 0x494BA0 */
+void DC2CALL Lights_Run(void);                                          /* 0x478CF0 */
+void DC2CALL Pad_Map(gptr src, gptr dst);                               /* 0x478DF0 */
+void DC2CALL Input_Frame(void);                                         /* 0x478BF0 */
+u32 DC2CALL Light_Try(gptr p, gptr l, u32 slot);                        /* 0x46BC20 */
+void DC2CALL Part_Lights(gptr p, u32 keep);                             /* 0x46BAC0 */
+void DC2CALL Obj_PickLights(gptr unused);                               /* 0x46BA00 */
 
 #endif

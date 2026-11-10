@@ -3,11 +3,10 @@
  * files from DATA_DIR, the root task on the task system, and the per-frame
  * game work of the main loop. Nothing is drawn or played yet; the run is
  * reported as a trace (root mode changes, files, tasks).
- * Buttons can be pressed from the command line (the pad is not read yet):
- * FRAME:MASK sets the "pressed this frame" word 0x87DC00 for that frame
- * (0x820 confirm, 0x40 back, 0x1000 up, 0x4000 down). In play, FROM-TO:MASK
- * holds game buttons (0x87DC08) over frames FROM..TO, pressed (0x87DC94) on
- * the first (0x1000 forward, 0x4000 back, 0x2000/0x8000 turn, 0x20 action).
+ * Buttons can be pressed from the command line: the pad (0x87DC42, read by
+ * Input_Frame 0x478BF0) holds MASK for one frame with FRAME:MASK (0x820
+ * confirm, 0x40 back, 0x1000 up, 0x4000 down) or over frames FROM..TO with
+ * FROM-TO:MASK (0x1000 forward, 0x4000 back, 0x2000/0x8000 turn, 0x20 action).
  * DC2_TRACE=1 prints the player every 50 frames and the room's trigger areas.
  *   usage: dc2 Dino2.exe DATA_DIR [FRAMES] [FRAME:MASK | FROM-TO:MASK ...] */
 #include <stdio.h>
@@ -61,12 +60,12 @@ static void game_frame(void)
         U32(G() + 0x1098) += d;
         if (U32(G() + 0x1098) > 0x14996C4) U32(G() + 0x1098) = 0x14996C4;
     }
-    if (!U8(0x74D74B)) Fn_478BF0(); else U8(0x74D74B)--;
+    if (!U8(0x74D74B)) Input_Frame(); else U8(0x74D74B)--;
     if (Flag_Check(2, 5)) { printf("reset requested (not handled yet)\n"); return; }
     if (!U8(0x74D749)) {
         Task_RunAll();
-        Fn_450AF0();
-        Fn_471AC0();
+        Fade_Tick();
+        Msg_Flush();
     }
     U32(0x87DE0C) ^= 1;
 }
@@ -107,14 +106,13 @@ int main(int argc, char **argv)
             gptr nm = U32(0x71B230 + last_file * 4);
             printf("frame %4d: load file %u %s\n", f, last_file, nm ? (const char *)MEM(nm) : "?");
         }
-        U32(0x87DC00) = 0;
-        for (int k = 0; k < npress; k++) if (press_at[k] == f) { U32(0x87DC00) = press_mask[k]; printf("frame %4d: press %X\n", f, press_mask[k]); }
-        u32 held = 0, pressed = 0;
+        u32 held = 0;
+        for (int k = 0; k < npress; k++) if (press_at[k] == f) { held |= press_mask[k]; printf("frame %4d: press %X\n", f, press_mask[k]); }
         for (int k = 0; k < nhold; k++) if (f >= hold_from[k] && f <= hold_to[k]) {
             held |= hold_mask[k];
-            if (f == hold_from[k]) { pressed |= hold_mask[k]; printf("frame %4d: hold %X until %d\n", f, hold_mask[k], hold_to[k]); }
+            if (f == hold_from[k]) printf("frame %4d: hold %X until %d\n", f, hold_mask[k], hold_to[k]);
         }
-        if (nhold) { U32(0x87DC08) = held; U32(0x87DC94) = pressed; }
+        g_pad_raw[0] = (u16)held;                   /* read by Input_Frame (0x478BF0) */
         game_frame();
         u32 mode = U8(0x74D608) | U8(0x74D60A) << 8;
         if (mode != last_mode) { printf("frame %4d: root mode %u step %u\n", f, mode & 0xFF, mode >> 8); last_mode = mode; }

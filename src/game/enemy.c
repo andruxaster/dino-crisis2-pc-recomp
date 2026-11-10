@@ -178,7 +178,7 @@ void DC2CALL Light_Flash(gptr o)                                    /* 0x414D20 
         U16(l + 0x1C) = 0;
         U16(l + 0x1E) = U16(o + 0x44);
     }
-    Fn_48C640(0x74, 0x5F, 0x40);
+    Se_PlayFlat(0x74, 0x5F, 0x40);
 }
 
 /* the objects' drawing layers (+0xFD): each to the emptier of two */
@@ -282,9 +282,9 @@ void DC2CALL GameOver_Start(u32 fade)                               /* 0x4529C0 
     DrawSync(0);
     Fade_Set(1, fade ? fade : 0x32, 3);
     Cutscene_End();
-    Fn_48CB40();
+    Snd_FadeAll();
     u16 rm = U16(G() + 0x1090);
-    if (!(rm >= 0x407 && rm <= 0x409) && !Flag_Check(2, 0xB)) Fn_48C0B0(0, 4);
+    if (!(rm >= 0x407 && rm <= 0x409) && !Flag_Check(2, 0xB)) Se_Play(0, 4);
     U16(G() + 0x664) = 4;
     U16(G() + 0x666) = 0; U16(G() + 0x668) = 0; U16(G() + 0x66A) = 0;
 }

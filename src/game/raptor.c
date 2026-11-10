@@ -797,7 +797,7 @@ void DC2CALL Raptor_SideBiteHit(gptr o, gptr pl)                    /* 0x4215A0 
     } else Raptor_KnockTarget(p, 6, 0);
     U16(p + 0x174) = 1;
     Enemy_HitDir(o);
-    Fn_48C0B0(o, 0x3B);
+    Se_Play(o, 0x3B);
 }
 
 /* attack 3: the jump at the target (harder raptors run in first) */
@@ -978,7 +978,7 @@ static void Raptor_Land(gptr o, u32 anim)
     U32(o + 0xF0) = 0; U16(o + 0xF4) = 0;
     U8(o + 0x118) &= 0xDF;
     U8(o + 0x56)++;
-    Fn_48C0B0(o, 0x36);
+    Se_Play(o, 0x36);
 }
 
 /* up onto a ledge two levels higher */
@@ -1110,9 +1110,9 @@ void DC2CALL Raptor_KnockDown(gptr o)                               /* 0x422BF0 
             gptr e = U32(RAP_EXT);
             u8 c = U8(e + 0x1D);
             U8(e + 0x1D) = c + 1;
-            if (c & 1) Fn_48C0B0(o, 0x49);
+            if (c & 1) Se_Play(o, 0x49);
         }
-        Fn_48C0B0(o, 0x49);
+        Se_Play(o, 0x49);
         u16 f = U16(o + 0x170);
         if (f & 2) Prop_Attach(o, 0x65AEAC);
         else if (!(f & 4)) Effect_Attach(o, 0x65A978);
@@ -1163,7 +1163,7 @@ void DC2CALL Raptor_BlowStand(gptr o)                               /* 0x422E30 
             Obj_HitDir(o);
             Effect_Attach(o, U32(0x70328C + S16(o + 0x178) * 4));
         }
-        Fn_48C0B0(o, 0x4B);
+        Se_Play(o, 0x4B);
         break; }
     case 1:
         if (Anim_Step(o)) {
@@ -1195,7 +1195,7 @@ void DC2CALL Raptor_HurtAir(gptr o)                                 /* 0x423080 
         if (S16(o + 0x108) < 0) U32(o + 0x50) &= ~8u;
         U32(o + 0x50) &= 0xFFFFD78F;
         U8(o + 0x17B) = 0x1E;
-        Fn_48C0B0(o, 0x48);
+        Se_Play(o, 0x48);
         u16 f = U16(o + 0x170);
         if (f & 2) Prop_Attach(o, 0x65AEAC);
         else if (!(f & 4)) Effect_Attach(o, U16(o + 0x172) > 2 ? 0x65ACA0 : 0x65AB84);
@@ -1206,7 +1206,7 @@ void DC2CALL Raptor_HurtAir(gptr o)                                 /* 0x423080 
         U16(o + 0x42) += 0x118;
         if (S16(o + 0x42) < h) break;
         U32(o + 0xF0) = 0; U16(o + 0xF4) = 0;
-        Fn_48C0B0(o, 0x36);
+        Se_Play(o, 0x36);
         U16(o + 0x174) &= 0xFFFB;
         U16(o + 0x42) = (u16)(S16(o + 0x5A) * -1000);
         if (S16(o + 0x108) < 0) {                   /* lands dead */
@@ -1328,10 +1328,10 @@ void DC2CALL Raptor_HurtStand(gptr o)                               /* 0x422430 
         if (S16(o + 0x108) >= 0 && !(U8(o + 0x170) & 1)) {
             u32 blend;
             if (U16(o + 0x172) == 4) {
-                if (U8(U32(RAP_EXT) + 0x1D) & 1) Fn_48C0B0(o, 0x48);
+                if (U8(U32(RAP_EXT) + 0x1D) & 1) Se_Play(o, 0x48);
                 blend = 1;
             } else {
-                Fn_48C0B0(o, 0x48);
+                Se_Play(o, 0x48);
                 blend = 3;
             }
             Anim_Start(o, U8(0x70320C + k + (U8(o + 0x180) & 3) * 8), 0, 0, blend);
@@ -1343,7 +1343,7 @@ void DC2CALL Raptor_HurtStand(gptr o)                               /* 0x422430 
             U8(o + 0x17B) = 0x20;
             if (S16(o + 0x108) < 0) U32(o + 0x50) &= ~8u;
             U8(o + 0x56) = 2;
-            Fn_48C0B0(o, 0x48);
+            Se_Play(o, 0x48);
         }
         u16 f = U16(o + 0x170);
         if (f & 2) { Prop_Attach(o, 0x65AEAC); break; }
