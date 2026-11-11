@@ -884,4 +884,69 @@ void DC2CALL Boss_Gauge(u32 x, u32 y);                                  /* 0x406
 void DC2CALL Menu_Open(u32 a, u32 b, u32 c, u32 d, u32 e);              /* 0x495E90 */
 void DC2CALL Game_ModeStock(void);                                      /* 0x452450 */
 
+u32  DC2CALL Angle_DiffTo(gptr a, gptr b, u32 ang);                  /* 0x48F3E0 */
+u32  DC2CALL Angle_Diff(u32 a, u32 b);                               /* 0x48F410 */
+u32  DC2CALL Value_Approach(gptr p, u32 step, u32 target);           /* 0x48F4B0 */
+void DC2CALL Vec_RotY(gptr out, gptr in, u32 ang);                   /* 0x48F470 */
+u32  DC2CALL Wall_Dist(gptr o, u32 ang, u32 mask);                   /* 0x454B50 */
+void DC2CALL Score_Hit(gptr o, u32 n);                               /* 0x404A20 */
+void DC2CALL Boss_Flash(gptr o, u32 alt);                            /* 0x415A40 */
+void DC2CALL Enemy_BiteOn(gptr o);                                   /* 0x42B710 */
+void DC2CALL Enemy_BiteOff(gptr o);                                  /* 0x433960 */
+void DC2CALL Enemy_Remove(gptr o);                                   /* 0x47AD60 */
+void DC2CALL Obj_ClearHits(gptr o);                                  /* 0x478840 */
+void DC2CALL Player_Release(gptr o);                                 /* 0x48E780 */
+void DC2CALL Player_Hurt(gptr o, u32 dmg, u32 how, u32 sub);         /* 0x48E7E0 */
+void DC2CALL Player_Hold(gptr o, u32 dmg, u32 cb);                   /* 0x48E8A0 */
+/* allosaurus.c */
+void DC2CALL Allo_Handler(gptr o);                              /* 0x4397C0 */
+void DC2CALL Allo_Init(gptr o);                                 /* 0x439A80 */
+void DC2CALL Allo_Normal(gptr o);                               /* 0x439CA0 */
+void DC2CALL Allo_Hit(gptr o);                                  /* 0x439CE0 */
+void DC2CALL Allo_Die(gptr o);                                  /* 0x439D00 */
+void DC2CALL Allo_Grab(gptr o);                                 /* 0x439D20 */
+void DC2CALL Allo_ThinkIdle(gptr o);                            /* 0x439D50 */
+void DC2CALL Allo_ThinkWalk(gptr o);                            /* 0x43A040 */
+void DC2CALL Allo_ThinkRun(gptr o);                             /* 0x43A240 */
+u32  DC2CALL Allo_Steer(gptr o);                                /* 0x43A4C0 */
+void DC2CALL Allo_ThinkBack(gptr o);                            /* 0x43ABA0 */
+void DC2CALL Allo_ThinkLunge(gptr o);                           /* 0x43B390 */
+void DC2CALL Allo_Idle(gptr o);                                 /* 0x439F70 */
+void DC2CALL Allo_Walk(gptr o);                                 /* 0x43A1B0 */
+void DC2CALL Allo_Run(gptr o);                                  /* 0x43A390 */
+void DC2CALL Allo_Leap(gptr o);                                 /* 0x43A7E0 */
+void DC2CALL Allo_Turn(gptr o);                                 /* 0x43AA10 */
+void DC2CALL Allo_Back(gptr o);                                 /* 0x43AC70 */
+void DC2CALL Allo_Roar(gptr o);                                 /* 0x43AD40 */
+void DC2CALL Allo_Enter(gptr o);                                /* 0x43AE00 */
+void DC2CALL Allo_Anger(gptr o);                                /* 0x43AE60 */
+void DC2CALL Allo_Bite(gptr o);                                 /* 0x43AF00 */
+void DC2CALL Allo_Thrown(gptr pl);                              /* 0x43B2E0 */
+void DC2CALL Allo_Lunge(gptr o);                                /* 0x43B3C0 */
+void DC2CALL Allo_SnapUp(gptr o);                               /* 0x43B4E0 */
+void DC2CALL Allo_Snap(gptr o);                                 /* 0x43B5A0 */
+void DC2CALL Allo_Toss(gptr o);                                 /* 0x43B640 */
+void DC2CALL Allo_Sidestep(gptr o);                             /* 0x43B910 */
+void DC2CALL Allo_Dash(gptr o);                                 /* 0x43B9B0 */
+void DC2CALL Allo_BiteHit(gptr o);                              /* 0x43BA30 */
+void DC2CALL Allo_LungeHit(gptr o);                             /* 0x43BBC0 */
+void DC2CALL Allo_SnapUpHit(gptr o);                            /* 0x43BC40 */
+void DC2CALL Allo_SnapHit(gptr o);                              /* 0x43BCC0 */
+void DC2CALL Allo_SideHit(gptr o);                              /* 0x43BD30 */
+void DC2CALL Allo_LeapHit(gptr o);                              /* 0x43BDB0 */
+void DC2CALL Allo_Damage(gptr o);                               /* 0x43BE00 */
+void DC2CALL Allo_Flinch(gptr o);                               /* 0x43C3C0 */
+void DC2CALL Allo_Stagger(gptr o);                              /* 0x43C450 */
+void DC2CALL Allo_Fall(gptr o);                                 /* 0x43C600 */
+void DC2CALL Allo_DieA(gptr o);                                 /* 0x43C700 */
+void DC2CALL Allo_DieB(gptr o);                                 /* 0x43C890 */
+u32  DC2CALL Allo_PlAnim(gptr o);                               /* 0x43CAF0 */
+u32  DC2CALL Allo_Timer(gptr o);                                /* 0x43CB10 */
+void DC2CALL Allo_Tint(gptr o);                                 /* 0x43CB90 */
+void DC2CALL Allo_Pick(gptr o);                                 /* 0x43CCB0 */
+u32  DC2CALL Allo_FrameFar(gptr o, u32 frame, u32 dist);        /* 0x43CD00 */
+u32  DC2CALL Allo_FrameNear(gptr o, u32 frame, u32 dist);       /* 0x43CD80 */
+u32  DC2CALL Allo_Chance(gptr o, u32 n);                        /* 0x43CDC0 */
+void DC2CALL Allo_Burn(gptr o);                                 /* 0x43CDF0 */
+
 #endif

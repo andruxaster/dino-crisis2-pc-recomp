@@ -300,3 +300,115 @@ u32 DC2CALL Sphere_Hit(gptr a, gptr b, u32 h, u32 r)                /* 0x452FF0 
     if ((s32)(s16)h + (s16)r - dy < 0) return 0;
     return 1;
 }
+
+/* points for a hit of n (doubled by flag 9:0x36 and on easy): score, totals */
+void DC2CALL Score_Hit(gptr o, u32 n)                                /* 0x404A20 */
+{
+    gptr g = G(), r = g + 0x68C;
+    if (!(u16)n) return;
+    if (U8(o + 0x58) == 8 && U16(g + 0x1090) == 0x808) n = 100;
+    if (Flag_Check(9, 0x36)) n <<= 1;
+    if (!U8(G() + 0x108E)) n <<= 1;
+    U8(r + 0xCA) = 1;
+    n &= 0xFFFF;
+    U32(G() + 0x11F4) += n;
+    U32(G() + 0xC14) += n;
+    U32(G() + 0x120C) += n;
+    U32(r + 0xB4) = n;
+    if ((s32)U32(G() + 0x11F4) > 9999999) U32(G() + 0x11F4) = 9999999;
+}
+
+/* a boss's flash: a light by the object's slot, a sound, the screen shakes */
+void DC2CALL Boss_Flash(gptr o, u32 alt)                             /* 0x415A40 */
+{
+    u32 n = U32(0x87F940), k = 1;
+    if (n > 1)
+        for (gptr p = U32(G() + 0x940) + 0x260; p != o; p += 0x260)
+            if (++k >= n) break;
+    gptr l = Light_Alloc();
+    if (l) {
+        U8(l + 1) = 1; U32(l + 0xC) = 0x5E2CE4; U8(l + 2) = 1; U8(l + 0x14) = (u8)k;
+        U32(l + 0x10) = alt ? 0x5E3520 : 0x5E3274;
+    }
+    Se_PlayFlat(0x67, 0x64, 0x40);
+    Shake_Set(5, 0, 5);
+}
+
+/* the bite starts holding: o+0x184 bit 0, its bit 0, the shared bit 0 */
+void DC2CALL Enemy_BiteOn(gptr o)                                    /* 0x42B710 */
+{
+    U32(o + 0x184) |= 1;
+    Bits_Set(o + 0x1C0, 0, 1);
+    Bits_Set(0x87E974, 0, 1);
+}
+
+/* and lets go (when it held) */
+void DC2CALL Enemy_BiteOff(gptr o)                                   /* 0x433960 */
+{
+    U32(o + 0x184) &= ~1u;
+    U32(o + 0x50) |= 8;
+    if (Bits_Check(o + 0x1C0, 0)) {
+        Bits_Set(o + 0x1C0, 0, 0);
+        Bits_Set(0x87E974, 0, 0);
+    }
+}
+
+/* gone: one fewer of the area's (kind 0x20) enemies; disabled next */
+void DC2CALL Enemy_Remove(gptr o)                                    /* 0x47AD60 */
+{
+    if (U16(o + 0x10C) == 0x20) {
+        U8(0x87E8A4)--;
+        gptr c = 0x87E8B8 + U8(o + 0x18F);
+        if (U8(c)) U8(c)--;
+    }
+    U32(o + 0x50) |= 0x40000000;
+}
+
+/* its hit boxes (o+0x190, 2 of 0x18) not active */
+void DC2CALL Obj_ClearHits(gptr o)                                   /* 0x478840 */
+{
+    for (gptr h = o + 0x190; h < o + 0x1C0; h += 0x18) U8(h + 0xC) &= 0xFE;
+}
+
+/* the player let go by o */
+void DC2CALL Player_Release(gptr o)                                  /* 0x48E780 */
+{
+    gptr pl = U32(G() + 0x940);
+    U16(o + 0x174) &= 0xFFFB;
+    U32(o + 0x50) = (U32(o + 0x50) & 0xFFFFDF8Fu) | 8;
+    U32(o + 0x184) &= ~1u;
+    U16(pl + 0x1E8) = 0;
+    Flag_Set(1, 1, 0);
+    Obj_ClearHits(o);
+}
+
+/* the player hurt by o: dmg, how (2 turned to o, 3 away; easy or kind 3: 1) */
+void DC2CALL Player_Hurt(gptr o, u32 dmg, u32 how, u32 sub)          /* 0x48E7E0 */
+{
+    gptr g = G(), pl = U32(g + 0x940);
+    if (!U8(g + 0x108E)) { how = 1; sub = 0; }
+    if (U8(g + 0x108F) == 3) { dmg = (dmg & 0xFFFF0000u) | (u16)((u16)dmg >> 1); how = 1; sub = 0; }
+    else if ((u8)how == 2) U16(pl + 0x4A) = U16(o + 0x4A);
+    else if ((u8)how == 3) U16(pl + 0x4A) = (U16(o + 0x4A) - 0x800) & 0xFFF;
+    U16(pl + 0x174) = 1;
+    U32(pl + 0x1D8) = o;
+    U32(pl + 0x54) = ((sub & 0xFF) << 16 | (how & 0xFF)) << 8 | 2;
+    U16(pl + 0x176) = (u16)dmg;
+    Enemy_HitDir(o);
+}
+
+/* the player held by o: dmg off its health, cb its state (G+0x92C) */
+void DC2CALL Player_Hold(gptr o, u32 dmg, u32 cb)                    /* 0x48E8A0 */
+{
+    gptr pl = U32(G() + 0x940);
+    U32(pl + 0x54) = 0x205;
+    U16(pl + 0x174) = 1;
+    U16(pl + 0xF4) = 0; U16(pl + 0xF2) = 0; U16(pl + 0xF0) = 0;
+    U32(pl + 0x1D8) = o;
+    U16(pl + 0x176) = 0;
+    U16(pl + 0x108) -= (u16)Damage_Scale(dmg);
+    if (S16(pl + 0x108) < 0) GameOver_Start(0);
+    U32(G() + 0x92C) = cb;
+    U8(pl + 0x11B) = 0;
+    U32(pl + 0x50) |= 0x20;
+}

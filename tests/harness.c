@@ -96,7 +96,7 @@ static int compare(const char *name, u32 r_orig, u32 r_new, u32 rmask)
     }
     for (u32 k = 0; k < 36; k++) {             /* matrix pads (+0x12: MulMatrix0's stack bytes) of objects, parts, effects, props */
         u32 ad[5] = {0x690000 + (k % 16) * 0x260 + 0x12, 0x693000 + k * 0x80 + 0x12, 0x694000 + k * 0x70 + 0x12, 0x695000 + (k % 20) * 0xAC + 0x12,
-                     k < 17 ? 0x6C8400 + k * 0x80 + 0x12 : 0x6C8000 + 0x12};   /* (and the animation test's object and parts) */
+                     k < 20 ? 0x6C8400 + k * 0x80 + 0x12 : 0x6C8000 + 0x12};   /* (and the animation test's object and parts) */
         for (int j = 0; j < 5; j++) { snap1[0][ad[j] - RW[0].lo] = U8(ad[j]); snap1[0][ad[j] + 1 - RW[0].lo] = U8(ad[j] + 1); }
     }
     if (g_ign_draw) {           /* the drawing tests: matrix pads (MulMatrix0's stack bytes), the GTE vectors' pads */
@@ -118,8 +118,8 @@ static int compare(const char *name, u32 r_orig, u32 r_new, u32 rmask)
             }
         }
     if (g_ign_objpads)          /* animation test object and its parts */
-        for (int i = 0; i <= 16; i++) {
-            u32 a = i == 16 ? 0x6C8000 + 0x32 : 0x6C8400 + i * 0x80 + 0x32;
+        for (int i = 0; i <= 20; i++) {
+            u32 a = i == 20 ? 0x6C8000 + 0x32 : 0x6C8400 + i * 0x80 + 0x32;
             snap1[0][a - RW[0].lo] = U8(a); snap1[0][a + 1 - RW[0].lo] = U8(a + 1);
         }
     for (u32 k = 0; k < 12; k++) {              /* object-effect slots: matrix pads (stack garbage of MulMatrix0) */
@@ -213,8 +213,13 @@ static int check(u32 addr, void *fn, const char *name, int nargs, const u32 *arg
     snap(snap1);
     restore(snap0);
     g_cur_orig = 0;
+    gptr t0 = Tmp_Push(0);              /* (the scratch stack balanced again after it) */
     u32 r1 = call(fn, nargs, args);
     int ok = compare(name, r0, r1, rmask);
+    if (Tmp_Push(0) != t0) {
+        if (ok && g_fail++ < 4000) printf("FAIL %s: scratch stack off by %d  [%s]\n", name, (int)(t0 - Tmp_Push(0)), g_what);
+        Tmp_Pop(t0 - Tmp_Push(0)); ok = 0;
+    }
     restore(snap1);                     /* continue from the original's state */
     return ok;
 }
@@ -5496,6 +5501,456 @@ static void test_ovi(void)
     g_ign_objpads = 0;
 }
 
+/* ---- the allosaurus ---- */
+static const u32 g_allo_tabs[][2] = {{0x720FB8, 5}, {0x720FCC, 16}, {0x72100C, 16}, {0x72104C, 4}, {0x72105C, 4}, {0x72106C, 16}};
+static const int g_allo_rec[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16};
+static u32 g_allo_saved[6][16];
+static void allo_tables_stub(int on)
+{
+    for (int k = 0; k < 16; k++) g_stubs[g_allo_rec[k]].spec = on ? "d" : "";
+    for (int t = 0; t < 6; t++)
+        for (u32 k = 0; k < g_allo_tabs[t][1]; k++) {
+            gptr a = g_allo_tabs[t][0] + 4 * k;
+            if (on) { g_allo_saved[t][k] = U32(a); U32(a) = (u32)(uintptr_t)g_recs[g_allo_rec[k]]; }
+            else U32(a) = g_allo_saved[t][k];
+        }
+}
+
+static const u32 g_allo_dist[] = {0, 0x7CF, 0x7D0, 0x9C4, 0x9C5, 0xBB7, 0xBB8, 0xDAB, 0xDAC, 0xDAD, 0xF9F, 0xFA0, 0x1387, 0x1388,
+                                  0x1389, 0x176F, 0x1770, 0x1B57, 0x1B58, 0x2EE0, 0x2EE1, 0x7FFFFFFF};
+static u32 allo_dist(void) { return rnd() % 3 ? g_allo_dist[rnd() % 22] : rnd() % 0x3000; }
+
+/* an allosaurus among the test objects; the player its target */
+static gptr allo_setup(void)
+{
+    gptr o = raptor_setup(), pl = U32(G() + 0x940);
+    U32(o + 0x184) &= ~0x40u;
+    U32(o + 0x1C0) = rnd() % 4 ? rnd() & 0x3FF : rnd();
+    U32(o + 0x1C4) = rnd() % 4 ? rnd() % 3 : rnd();
+    U8(o + 0x1C8) = 1 + rnd() % 3; U8(o + 0x1C9) = rnd() % 16; U8(o + 0x1CA) = rnd() % 6; U8(o + 0x1CB) = rnd() % 2;
+    for (u32 k = 0x1CC; k <= 0x1D8; k += 4) U32(o + k) = rnd() % 3 ? rnd() % 3 : rnd() % 2 ? rnd() % 0x800 : rnd();
+    U32(o + 0x1DC) = rnd() % 0x20;
+    for (u32 k = 0x1E0; k < 0x210; k += 2) U16(o + k) = rnd() % 3 ? rnd() % 3 : (u16)rnd();
+    U16(o + 0x1F8) = (u16)(rnd() % 2 ? rnd() % 0x400 - 0x200 : rnd());
+    U16(o + 0x202) = rnd() % 2 ? (u16)(0x1D + rnd() % 3) : rnd() % 2 ? rnd() % 0x20 : (u16)rnd();
+    U8(o + 0x206) = rnd() % 4; U8(o + 0x207) = (u8)rnd();
+    U8(o + 0x210) = rnd() % 2;
+    U32(o + 0x13C) = allo_dist();
+    U8(o + 0x57) = rnd() % 2;
+    U32(o + 0x120) = U32(o + 0x64); U32(o + 0x124) = U32(U32(o + 0x64) + 0x54) ? U32(U32(o + 0x64) + 0x54) : U32(o + 0x64);   /* its feet */
+    U16(pl + 0x5A) = rnd() % 3 ? U16(o + 0x5A) : rnd() % 2 ? (u16)(U16(o + 0x5A) + 2) : (u16)rnd();
+    U16(pl + 0x174) = rnd() % 2 ? rnd() & 3 : (u16)rnd();
+    return o;
+}
+
+/* the angle to its point o+0xD8 (the player there or not) about a value; the
+ * player's heading about its own */
+static void allo_aim(gptr o)
+{
+    static const u16 ed[] = {0, 1, 0x5F, 0x60, 0x61, 0x7F, 0x80, 0x81, 0xFF, 0x100, 0x101, 0x1FF, 0x200, 0x201, 0x3FF, 0x400,
+                             0x401, 0x4FF, 0x500, 0x501, 0x5FF, 0x600, 0x601, 0x7FF, 0x800};
+    gptr pl = U32(G() + 0x940);
+    u32 d = rnd() % 4 ? (rnd() % 2 ? ed[rnd() % 25] : (u16)(0x1000 - ed[rnd() % 25])) & 0xFFF : rnd() % 0x1000;
+    static const s16 dist[] = {1000, 1999, 2000, 2001, 3000, 4800};
+    s16 dd = dist[rnd() % 6];
+    if (rnd() % 2) { S16(o + 0xD8) = (s16)(S16(o + 0x40) + (rnd() % 2 ? dd : -dd)); S16(o + 0xDC) = S16(o + 0x44); }
+    else { S16(o + 0xDC) = (s16)(S16(o + 0x44) + (rnd() % 2 ? dd : -dd)); S16(o + 0xD8) = S16(o + 0x40); }
+    u16 an = (u16)Angle_XZ(o + 0x40, o + 0xD8);
+    U16(o + 0x4A) = (u16)((an - d) & 0xFFF);
+    if (rnd() % 2) { U16(pl + 0x40) = U16(o + 0xD8); U16(pl + 0x44) = U16(o + 0xDC); }
+    u32 e = rnd() % 2 ? ed[rnd() % 25] : rnd();
+    U16(pl + 0x4A) = (u16)((U16(o + 0x4A) + (rnd() % 2 ? e : 0x1000 - e)) & 0xFFF);
+}
+
+/* a wall across its way at about 0x6A4 (Wall_Ahead), or the room's */
+static void allo_wall(gptr o)
+{
+    int k = rnd() % 4;
+    if (k == 0) { U32(G() + 0xA4C) = CL_ROOM; return; }
+    if (k == 3 && U8(CL_ROOM)) {                        /* steps and ledges of the room (Step_Ahead) */
+        U32(G() + 0xA4C) = CL_ROOM;
+        for (u32 j = 0; j < U8(CL_ROOM); j++) {
+            gptr w = CL_ROOM + U32(CL_ROOM + 8 + 4 * j);
+            u32 l = U8(o + 0x5A) & 15;
+            U16(w + 4) = (u16)(rnd() % 3 ? 1u << ((l + (rnd() % 2 ? 2 : 14)) & 15) | (rnd() % 2 ? 1u << l : 0) : (u16)rnd());
+            U8(w) = (u8)((rnd() % 4 ? 1 : 0) | (rnd() % 3 ? 0 : 0x40));
+            U8(w + 6) = rnd() % 2 ? 0 : (u8)rnd();
+            for (u32 e = 0; e < U8(w + 1); e++) U8(w + 8 + 4 * e) = (u8)((rnd() % 4 ? 1 : 0) | (rnd() % 2 ? 0x80 : 0) | (rnd() % 2 ? 0x40 : 0) | (rnd() % 3 ? 0 : 4));
+        }
+        U32(o + 0x128) = 0x720F78;
+        cl_place(o);
+        if (rnd() % 3 == 0) U16(o + 0x42) = (u16)(-1000 * S16(o + 0x5A));
+        return;
+    }
+    if (k == 1) return;
+    gptr w = 0x6CFC00u, pg = w + 0x10;
+    U8(w) = 1; U32(w + 8) = 0x10;
+    double a = U16(o + 0x4A) * 3.14159265358979 / 2048, d = rnd() % 2 ? 1000 : 1600 + rnd() % 3 * 100;
+    double cx = S16(o + 0x40) + d * sin(a), cz = S16(o + 0x44) + d * cos(a), ex = 800 * cos(a), ez = -800 * sin(a);
+    int sw = rnd() % 2;
+    U8(pg) = 1; U8(pg + 1) = 1; U8(pg + 3) = rnd() % 4 ? 0 : 0x40; U16(pg + 4) = rnd() % 4 ? 0xFFFF : (u16)rnd(); U8(pg + 8) = 0x81 | (rnd() & 0x44);
+    S16(pg + 0xC + 4 * sw) = (s16)(cx + ex); S16(pg + 0xE + 4 * sw) = (s16)(cz + ez);
+    S16(pg + 0x10 - 4 * sw) = (s16)(cx - ex); S16(pg + 0x12 - 4 * sw) = (s16)(cz - ez);
+    U32(G() + 0xA4C) = w;
+}
+
+static void allo_rand8(void)
+{
+    static const u8 r[] = {0x07, 0x08, 0x09, 0x0F, 0x10, 0x11, 0x3F, 0x40, 0x41, 0x7F, 0x80, 0x81, 0, 1};
+    if (rnd() % 4) U16(0x87DE10) = rand8_seed(r[rnd() % 14], rnd() % 4 == 0);
+}
+
+typedef struct { u32 addr; void *fn; const char *name; u8 steps, sides; } AlloFn;
+
+/* frames about a move's own limits, by step */
+typedef struct { u32 addr; u8 step, nf; u16 fr[10]; } AlloEdge;
+static const AlloEdge g_allo_edge[] = {
+    {0x43AF00, 1, 6, {4, 5, 0x18, 0x19, 0xD, 0xE}}, {0x43AF00, 3, 4, {5, 6, 0x36, 0x37}}, {0x43AF00, 4, 2, {0x28, 0x29}},
+    {0x43A390, 1, 4, {0x10, 0x11, 0x28, 0x29}}, {0x43A7E0, 1, 10, {0x40, 0x41, 0x1A, 0x1B, 0x47, 0x48, 0x29, 0x2A, 0x42, 0x23}},
+    {0x43AC70, 1, 3, {0x15, 0x16, 0x17}}, {0x43AD40, 1, 3, {0x2B, 0x2C, 0x2D}}, {0x43B3C0, 1, 4, {2, 3, 0x18, 0x19}},
+    {0x43B4E0, 1, 4, {6, 7, 0x15, 0x16}}, {0x43C700, 1, 2, {0xE, 0xF}}, {0x43C700, 2, 6, {0x25, 0x26, 0x4E, 0x4F, 0x56, 0x30}},
+    {0x43C890, 1, 2, {9, 0xA}}, {0x43C890, 2, 6, {0x10, 0x11, 0x39, 0x3A, 0x34, 0x1B}}, {0x43C450, 1, 4, {0x1E, 0x28, 0xB, 0xC}},
+    {0x43C600, 1, 2, {0x46, 0x47}}, {0x439F70, 1, 2, {0xF, 0x10}}};
+
+static void test_allo(void)
+{
+    g_ign_objpads = 1;
+    stubs_install(1);
+    allo_tables_stub(1);
+    player_tables_stub(1);
+    for (int i = 0; i < iters; i++) {
+        game_state();
+        gptr o = allo_setup(), b = o + 0x1C0, pl = U32(G() + 0x940);
+        u32 a[3] = {o};
+        /* the helpers */
+        {
+            u32 c[3] = {o + 0x40, o + 0xD8, (u32)rnd()};
+            allo_aim(o);
+            check(0x48F3E0, Angle_DiffTo, "Angle_DiffTo", 3, c, 0xFFFFFFFF);
+            u32 d[2] = {(u32)rnd(), (u32)rnd()};
+            if (rnd() % 2) d[1] = d[0] + (rnd() % 2 ? 0x800 : 0x7FF) + (rnd() % 2 ? 0 : 0x1000);
+            check(0x48F410, Angle_Diff, "Angle_Diff", 2, d, 0xFFFFFFFF);
+            for (int j = 0; j < 4; j++) {          /* about one step either way */
+                u32 st = rnd() % 0x100, cur = (u16)rnd(), del = rnd() % 3 ? (u32)((s32)st + (rnd() % 2 ? 0 : (s32)(rnd() % 5) - 2)) : rnd();
+                U16(o + 0xF4) = (u16)cur;
+                u32 v[3] = {o + 0xF4, rnd() % 4 ? st : rnd(), cur + (rnd() % 2 ? del : (u32)-(s32)del)};
+                check(0x48F4B0, Value_Approach, "Value_Approach", 3, v, 0xFFFFFFFF);
+            }
+            S16(o + 0x1E0) = (s16)rnd(); S16(o + 0x1E2) = (s16)rnd(); S16(o + 0x1E4) = (s16)rnd();
+            u32 r[3] = {o + 0x1E8, o + 0x1E0, (u32)rnd()};
+            check(0x48F470, Vec_RotY, "Vec_RotY", 3, r, 0);
+            allo_wall(o);
+            u32 w[3] = {o, rnd() % 2 ? 0x400 : (u32)-0x400, rnd() % 2 ? 0x40 : (u8)rnd()};
+            check(0x454B50, Wall_Dist, "Wall_Dist", 3, w, 0xFFFFFFFF);
+            U32(LOG_BASE) = 0;
+            u32 sc[2] = {o, rnd() % 3 ? rnd() % 0x200 : rnd()};
+            U8(o + 0x58) = rnd() % 2 ? 8 : (u8)rnd(); if (rnd() % 2) U16(G() + 0x1090) = 0x808;
+            if (rnd() % 4 == 0) U32(G() + 0x11F4) = 9999999 - rnd() % 0x100;
+            check(0x404A20, Score_Hit, "Score_Hit", 2, sc, 0);
+            U32(0x87F940) = rnd() % 4 ? 1 + rnd() % 16 : rnd() % 2;
+            u32 bf[2] = {rnd() % 4 ? o : O_OBJ + 0x260 * (rnd() % 16), rnd() % 2 ? 0 : rnd()};
+            check(0x415A40, Boss_Flash, "Boss_Flash", 2, bf, 0);
+            check(0x42B710, Enemy_BiteOn, "Enemy_BiteOn", 1, a, 0);
+            Bits_Set(b, 0, rnd() % 2);
+            check(0x433960, Enemy_BiteOff, "Enemy_BiteOff", 1, a, 0);
+            U16(o + 0x10C) = rnd() % 2 ? 0x20 : (u16)rnd(); U8(o + 0x18F) = rnd() % 8; U8(0x87E8B8 + U8(o + 0x18F)) = rnd() % 2 ? 0 : (u8)rnd();
+            check(0x47AD60, Enemy_Remove, "Enemy_Remove", 1, a, 0);
+            check(0x478840, Obj_ClearHits, "Obj_ClearHits", 1, a, 0);
+            check(0x48E780, Player_Release, "Player_Release", 1, a, 0);
+            U8(G() + 0x108E) = rnd() % 3; U8(G() + 0x108F) = rnd() % 2 ? 3 : rnd() % 4;
+            u32 ph[4] = {o, rnd() % 2 ? rnd() % 0x200 : rnd(), rnd() % 2 ? 1 + rnd() % 3 : rnd(), rnd() % 2 ? 0x1E : rnd()};
+            check(0x48E7E0, Player_Hurt, "Player_Hurt", 4, ph, 0);
+            S16(pl + 0x108) = (s16)(rnd() % 2 ? rnd() % 0x100 - 0x10 : rnd());
+            u32 hd[3] = {o, rnd() % 2 ? 0x82 : rnd() % 0x400, 0x48E100};
+            if (rnd() % 2) S16(pl + 0x108) = (s16)(Damage_Scale(hd[1]) + (s32)(rnd() % 3) - 1);   /* to 0 and about */
+            check(0x48E8A0, Player_Hold, "Player_Hold", 3, hd, 0);
+        }
+        /* deciding */
+        static const AlloFn th[] = {
+            {0x439D50, Allo_ThinkIdle, "Allo_ThinkIdle"}, {0x43A040, Allo_ThinkWalk, "Allo_ThinkWalk"}, {0x43A240, Allo_ThinkRun, "Allo_ThinkRun"},
+            {0x43A4C0, Allo_Steer, "Allo_Steer"}, {0x43ABA0, Allo_ThinkBack, "Allo_ThinkBack"}, {0x43B390, Allo_ThinkLunge, "Allo_ThinkLunge"}};
+        for (int k = 0; k < 96; k++) {
+            game_state();
+            o = allo_setup(); a[0] = o; b = o + 0x1C0; pl = U32(G() + 0x940);
+            allo_aim(o); allo_wall(o); allo_rand8();
+            if (rnd() % 2) {                                /* all clear for its choices, but one thing */
+                for (u32 j = 0x1F8; j < 0x210; j += 2) U16(o + j) = 0;
+                U32(o + 0x1D8) = 0; U32(o + 0x1C0) &= rnd() % 2 ? 8 : 0; U8(o + 0x13A) = 0;
+                U16(pl + 0x5A) = rnd() % 3 ? U16(o + 0x5A) : (u16)(U16(o + 0x5A) + 2);
+                Bits_Set(0x87E974, 0, 0); Flag_Set(2, 0x1A, 0);
+                U16(pl + 0x174) = rnd() % 2 ? 2 : 0;
+                switch (rnd() % 8) {
+                case 0: U32(o + 0x1D8) = 1; break;
+                case 1: U16(o + 0x1FA + 2 * (rnd() % 10)) = rnd() % 2 ? 1 : (u16)(2 + rnd() % 0x40); break;
+                case 2: Bits_Set(0x87E974, 0, 1); break;
+                case 3: Flag_Set(2, 0x1A, 1); break;
+                case 4: U8(o + 0x13A) = 1; break;
+                }
+                U8(o + 0x56) = (u8[]){2, 1, 2, 2, 1, 1}[k % 6];
+            }
+            U8(o + 0x56) = rnd() % 4 ? (u8)(rnd() % 3 ? U8(o + 0x56) : rnd() % 3) : (u8)rnd();
+            if (rnd() % 2) U16(o + 0xE8) = U16(o + 0xEA) = U16(o + 0xEC) = 0;
+            U16(o + 0x20E) = rnd() % 2 ? 0x3B : (u16)rnd();
+            if (rnd() % 2) U16(o + 0x92) = (u16)(9 + rnd() % 9);
+            const AlloFn *f = &th[k % 6];
+            U32(LOG_BASE) = 0;
+            sprintf(g_what, "allo %X %s step %u dist %X bits %X", o, f->name, U8(o + 0x56), U32(o + 0x13C), U32(b));
+            check(f->addr, f->fn, f->name, 1, a, f->addr == 0x43A4C0 ? 0xFFFFFFFF : 0);
+        }
+        /* deciding: all its way clear, each limit exact */
+        for (int k = 0; k < 60; k++) {
+            game_state();
+            o = allo_setup(); a[0] = o; b = o + 0x1C0; pl = U32(G() + 0x940);
+            allo_aim(o); allo_wall(o); allo_rand8();
+            for (u32 j = 0x1F8; j < 0x210; j += 2) U16(o + j) = 0;
+            if (rnd() % 3 == 0) U16(o + 0x1FA + 2 * (rnd() % 10)) = (u16)(1 + rnd() % 2);
+            U16(o + 0x204) = rnd() % 2; U8(o + 0x206) = rnd() % 3;
+            U32(o + 0x1D8) = rnd() % 2; U32(b) = rnd() & 0x148; U8(o + 0x13A) = rnd() % 5 == 0;
+            U16(pl + 0x5A) = (u16)(U16(o + 0x5A) + (rnd() % 4 ? 0 : 2));
+            Bits_Set(0x87E974, 0, rnd() % 5 == 0); Flag_Set(2, 0x1A, rnd() % 4 == 0);
+            U16(pl + 0x174) = rnd() % 2 ? 2 : 0;
+            U32(o + 0x13C) = g_allo_dist[rnd() % 22];
+            U16(o + 0xE8) = rnd() % 2 ? 0 : rnd() % 2 ? (u16)(1 + rnd() % 0xFF) : (u16)rnd();
+            U16(o + 0xEA) = rnd() % 4 ? 0 : (u16)rnd(); U16(o + 0xEC) = rnd() % 4 ? 0 : (u16)rnd();
+            U16(o + 0x20E) = rnd() % 2 ? 0x3B : 0;
+            U16(o + 0x92) = (u16[]){9, 0xA, 0x10, 0x11, 0x12}[rnd() % 5];
+            if (rnd() % 2) {                                    /* nearly facing the player, the player about its way */
+                u16 an = (u16)Angle_XZ(o + 0x40, o + 0xD8);
+                U16(o + 0x4A) = (u16)((an - (u16[]){0, 1, 0x5F, 0x60, 0x61, 0xFFF, 0xFA1, 0xFA0, 0xF9F}[rnd() % 9]) & 0xFFF);
+                U16(pl + 0x4A) = (u16)((U16(o + 0x4A) + (u16[]){0, 1, 0x1FF, 0x200, 0xE01, 0xE00}[rnd() % 6]) & 0xFFF);
+            }
+            if (rnd() % 2) U16(o + 0x208) = rnd() % 2 ? 1 : 0x3C;
+            if (k % 6 == 0 && rnd() % 2) {                      /* the grab: the player 0x60 off its way (and one in) */
+                U32(o + 0x1D8) = 1; U16(pl + 0x174) = 2; Flag_Set(2, 0x1A, 0);
+                U32(o + 0x13C) = (u32[]){0x9C5, 0xBB8, 0x1387}[rnd() % 3];
+                u16 an = (u16)Angle_XZ(o + 0x40, o + 0xD8);
+                U16(o + 0x4A) = (u16)((an - (u16[]){0x5F, 0x60, 0x61, 0xFA1, 0xFA0, 0xF9F}[rnd() % 6]) & 0xFFF);
+                U16(pl + 0x4A) = (u16)((U16(o + 0x4A) + (rnd() % 2 ? 0 : 0x1FF)) & 0xFFF);
+            }
+            const AlloFn *f = &th[k % 6];
+            U8(o + 0x56) = (u8[]){2, 1, 2, 1, 1, 1}[k % 6] + (k % 6 == 1 || k % 6 == 3 ? rnd() % 2 : 0);
+            U32(LOG_BASE) = 0;
+            sprintf(g_what, "allo %X %s edge step %u dist %X bits %X", o, f->name, U8(o + 0x56), U32(o + 0x13C), U32(b));
+            check(f->addr, f->fn, f->name, 1, a, f->addr == 0x43A4C0 ? 0xFFFFFFFF : 0);
+        }
+        /* the state handlers */
+        game_state();
+        o = allo_setup(); a[0] = o; b = o + 0x1C0;
+        U8(o + 0x54) = rnd() % 5; U8(o + 0x55) = rnd() % 16; U8(o + 0x56) = rnd() % 6;
+        check(0x439CA0, Allo_Normal, "Allo_Normal", 1, a, 0);
+        U8(o + 0x55) = rnd() % 4;
+        check(0x439CE0, Allo_Hit, "Allo_Hit", 1, a, 0);
+        check(0x439D00, Allo_Die, "Allo_Die", 1, a, 0);
+        U8(o + 0x55) = rnd() % 16;
+        check(0x439D20, Allo_Grab, "Allo_Grab", 1, a, 0);
+        U8(o + 0x54) = rnd() % 5; U8(o + 0x55) = rnd() % 16;
+        if (rnd() % 2) { U32(o + 0x1C4) = 1; S16(o + 0x40) = (s16)(rnd() % 2 ? (u32)(-0x1B58 - (s32)(rnd() % 2)) : rnd()); S16(o + 0x44) = (s16)(0x9C4 + rnd() % 2);
+                         U8(G() + 0x108F) = rnd() % 2; U8(G() + 0x7C4) = rnd() % 2 ? 0xC : (u8)rnd(); }
+        allo_aim(o);
+        if (rnd() % 2) {                                    /* the head where it stands: its angle exact */
+            gptr hp = Obj_Part(U32(o + 0x64), U8(o + 0x15F));
+            U16(hp + 0x40) = U16(o + 0x40); U16(hp + 0x44) = U16(o + 0x44);
+        }
+        sprintf(g_what, "allo %X handler kind %X bits %X", o, U32(o + 0x1C4), U32(b));
+        check(0x4397C0, Allo_Handler, "Allo_Handler", 1, a, 0);
+        for (int k = 0; k < 8; k++) {                       /* the head about its looking limit */
+            game_state();
+            o = allo_setup(); a[0] = o; b = o + 0x1C0;
+            U8(o + 0x54) = rnd() % 5; U8(o + 0x55) = rnd() % 16; Bits_Set(b, 1, rnd() % 4 != 0);
+            allo_aim(o);
+            gptr hp = Obj_Part(U32(o + 0x64), U8(o + 0x15F));
+            U16(hp + 0x40) = U16(o + 0x40); U16(hp + 0x44) = U16(o + 0x44);
+            u16 an = (u16)Angle_XZ(o + 0x40, o + 0xD8);
+            U16(o + 0x4A) = (u16)((an - (u16[]){0x4FF, 0x500, 0x501, 0xB01, 0xB00, 0xAFF}[rnd() % 6]) & 0xFFF);
+            U16(o + 0xF0) = U16(o + 0xF2) = U16(o + 0xF4) = 0;
+            sprintf(g_what, "allo %X handler head bits %X", o, U32(b));
+            check(0x4397C0, Allo_Handler, "Allo_Handler", 1, a, 0);
+        }
+        U8(o + 0x11A) = (u8)rnd();
+        anim_setup_at(AN_OBJ); memcpy(MEM(o + 0x60), MEM(AN_OBJ + 0x60), 0x50);
+        for (int k = 0; k < 2; k++) {                       /* its attack lands from the handler */
+            U8(o + 0x54) = 1; U8(o + 0x55) = rnd() % 16; U8(o + 0x56) = rnd() % 3; U8(o + 0x119) = rnd() % 4 ? 0 : 0x80;
+            U32(o + 0x50) = (U32(o + 0x50) & ~0x40000000u) | 0x30;
+            U32(o + 0xA0) = 1; U16(o + 0x102) &= ~2; U32(pl + 0x134) = 0; U8(pl + 0x17B) = 0;
+            U32(LOG_BASE) = 0;
+            memcpy(MEM(o + 0x60), MEM(AN_OBJ + 0x60), 0x50);   /* (a disabled one has no parts) */
+            U8(o + 0x15F) = (u8)(rnd() % U32(o + 0x68));
+            U32(o + 0x120) = U32(o + 0x124) = U32(o + 0x64);
+            check(0x4397C0, Allo_Handler, "Allo_Handler", 1, a, 0);
+        }
+        model_data(0x638000);
+        U32(0x638000 + 0x14) = 18;                          /* (its feet: parts 12, 16) */
+        for (u32 j = 0; j < 18; j++) { gptr r = 0x638000 + 0x1C + j * 0x14; S8(r + 6) = (s8)(j ? (s32)(rnd() % j) : -1); }
+        anim_setup_at(AN_OBJ); memcpy(MEM(o + 0x60), MEM(AN_OBJ + 0x60), 0x50);
+        U32(0x63AD4C) = AN_DATA;                            /* its first animation */
+        U8(G() + 0x1091) = rnd() % 2 ? 8 : (u8)rnd(); U8(G() + 0x1090) = rnd() % 2 ? 8 : (u8)rnd();
+        U8(G() + 0x927) = rnd() % 3 == 0; U8(G() + 0x108E) = rnd() % 3; U16(o + 0x10C) = (u16)rnd(); U32(0x74AFA0) = rnd();
+        check(0x439A80, Allo_Init, "Allo_Init", 1, a, 0);
+        /* moving, each step */
+        static const AlloFn mv[] = {
+            {0x439F70, Allo_Idle, "Allo_Idle", 5, 1}, {0x43A1B0, Allo_Walk, "Allo_Walk", 3, 1}, {0x43A390, Allo_Run, "Allo_Run", 4, 1},
+            {0x43A7E0, Allo_Leap, "Allo_Leap", 3, 2}, {0x43AA10, Allo_Turn, "Allo_Turn", 3, 4}, {0x43AC70, Allo_Back, "Allo_Back", 3, 2},
+            {0x43AD40, Allo_Roar, "Allo_Roar", 3, 1}, {0x43AE00, Allo_Enter, "Allo_Enter", 1, 1}, {0x43AE60, Allo_Anger, "Allo_Anger", 3, 1},
+            {0x43AF00, Allo_Bite, "Allo_Bite", 7, 1}, {0x43B3C0, Allo_Lunge, "Allo_Lunge", 3, 1}, {0x43B4E0, Allo_SnapUp, "Allo_SnapUp", 3, 1},
+            {0x43B5A0, Allo_Snap, "Allo_Snap", 3, 1}, {0x43B640, Allo_Toss, "Allo_Toss", 5, 1}, {0x43B910, Allo_Sidestep, "Allo_Sidestep", 3, 2},
+            {0x43B9B0, Allo_Dash, "Allo_Dash", 3, 1},
+            {0x43C3C0, Allo_Flinch, "Allo_Flinch", 3, 1}, {0x43C450, Allo_Stagger, "Allo_Stagger", 3, 2}, {0x43C600, Allo_Fall, "Allo_Fall", 3, 1},
+            {0x43C700, Allo_DieA, "Allo_DieA", 5, 1}, {0x43C890, Allo_DieB, "Allo_DieB", 5, 2}};
+        const unsigned nm = sizeof mv / sizeof mv[0];
+        game_state(); world_setup(); enemy_state();
+        o = O_OBJ + 0x260 * (1 + rnd() % 6); a[0] = o; b = o + 0x1C0;
+        anim_setup_at(O_OBJ);
+        do anim_setup_at(o); while (U32(o + 0x68) < 16);
+        memcpy(MEM(O_OBJ + 0x60), MEM(o + 0x60), 0x50);
+        for (u32 k = 16; k < 20; k++) for (u32 j = 0; j < 0x80; j += 4) U32(AN_PART + k * 0x80 + j) = rnd() % 0x1000;
+        for (u32 k = 0; k < 20; k++) {                      /* 20 parts (Allo_Burn) */
+            U32(AN_PART + k * 0x80 + 0x54) = k < 19 ? AN_PART + (k + 1) * 0x80 : 0;
+            U32(AN_PART + k * 0x80 + 0x58) = k ? AN_PART + (k - 1) * 0x80 : o;
+        }
+        U32(G() + 0x940) = pl = O_OBJ;
+        U32(pl + 0x128) = rnd() % 2 ? 0x720F78 : 0; U32(o + 0x128) = 0x720F78;   /* (wall collision boxes) */
+        for (int k = 0x20; k < 0x40; k++) U32(AN_TAB + 4 * k) = AN_DATA + 0x1000 * ((k ^ k >> 2) & 1);
+        u8 sv[0x260]; memcpy(sv, MEM(o), 0x260);
+        for (unsigned k = 0; k < 10 * nm; k++) {
+            const AlloFn *f = &mv[k % nm];
+            memcpy(MEM(o), sv, 0x260);
+            for (u32 j = 0x1C0; j < 0x214; j += 4) U32(o + j) = rnd();
+            U32(o + 0x1C0) = rnd() & 0x3FF; U32(o + 0x1C4) = rnd() % 4 ? rnd() % 3 : rnd();
+            for (u32 j = 0x1F8; j < 0x210; j += 2) U16(o + j) = rnd() % 3 ? rnd() % 3 : (u16)rnd();
+            U32(o + 0x1D4) = rnd() % 3 ? (u32)(rnd() % 3) - 1 : rnd(); U32(o + 0x1D0) = rnd() % 2 ? 1000 - rnd() % 0x100 : rnd();
+            U32(o + 0x1DC) = rnd() % 0x18;
+            U8(o + 0x56) = (u8)(rnd() % 8 ? rnd() % f->steps : rnd());
+            U8(o + 0x57) = (u8)(rnd() % f->sides);
+            U32(o + 0x13C) = allo_dist();
+            if (f->addr == 0x43A390 && rnd() % 2) {            /* Run: a bite start nearer than 0x1B58 */
+                U8(o + 0x56) = 0; U16(o + 0x1FC) = rnd() % 4 == 0; U32(o + 0x13C) = 0x1B57 + rnd() % 3;
+            }
+            static const u16 fr[] = {0, 2, 3, 4, 5, 6, 7, 9, 0xA, 0xB, 0xC, 0xD, 0xE, 0xF, 0x10, 0x11, 0x15, 0x16, 0x18, 0x19, 0x1A, 0x1B, 0x1E,
+                                     0x23, 0x26, 0x28, 0x29, 0x2B, 0x2C, 0x2E, 0x30, 0x33, 0x34, 0x37, 0x39, 0x3E, 0x3F, 0x40, 0x42, 0x46,
+                                     0x47, 0x4E, 0x4F, 0x54, 0x56};
+            U16(o + 0x92) = rnd() % 4 ? (u16)(fr[rnd() % 45] + rnd() % 3 - 1) : rnd() % 2 ? rnd() % 0x60 : (u16)rnd();
+            U16(pl + 0x92) = rnd() % 2 ? (rnd() % 2 ? 0x2B : 0x33) : (u16)rnd();
+            U16(pl + 0x174) = rnd() % 2 ? rnd() & 3 : (u16)rnd();
+            U16(pl + 0xE8) = rnd() % 2 ? 0 : (u16)rnd(); U16(pl + 0xEA) = rnd() % 2 ? 0 : (u16)rnd(); U16(pl + 0xEC) = rnd() % 2 ? 0 : (u16)rnd();
+            S16(pl + 0x108) = (s16)(rnd() % 2 ? rnd() % 0x100 - 0x10 : rnd());
+            U16(o + 0xD4) = (u16)rnd(); U16(o + 0x172) = rnd() % 5; U16(o + 0x176) = rnd() % 2 ? rnd() % 0x400 : (u16)rnd();
+            U8(o + 0x170) = (u8)rnd(); U8(o + 0x11C) = (u8)rnd(); U8(o + 0x18C) = rnd() % 2 ? 4 + 16 * (rnd() % 16) : (u8)rnd();
+            U8(G() + 0x108E) = rnd() % 3;
+            Bits_Set(0x87E974, 2, rnd() % 2);
+            allo_aim(o); allo_rand8();
+            if (U16(o + 0x90))
+                for (u32 j = 0x78; j <= 0x84; j += 4) U32(o + j) = U32(o + 0x8C) + (rnd() % U16(o + 0x90)) * U8(o + 0xAC);
+            if (rnd() % 3 == 0) U16(o + 0x176) = (u16)(1001 - U32(o + 0x1D0) - rnd() % 2);
+            U16(0x87DC12) = rnd() % 2 ? 0 : (u16)(1u << (rnd() % 16)); U32(o + 0x1DC) = rnd() % 2 ? 0x13 - rnd() % 3 + (U16(0x87DC12) ? 0 : 1) : rnd() % 0x18;
+            if (rnd() % 3 == 0) S16(pl + 0x108) = (s16)(Damage_Scale((u32[]){0x28, 0xFA}[rnd() % 2]) + rnd() % 3 - 1);
+            anim_maybe_end(o);
+            if (rnd() % 2) {                                    /* a frame at its own limits */
+                const AlloEdge *e[4]; int ne = 0;
+                for (unsigned j = 0; j < sizeof g_allo_edge / sizeof g_allo_edge[0]; j++) if (g_allo_edge[j].addr == f->addr && ne < 4) e[ne++] = &g_allo_edge[j];
+                if (ne) {
+                    const AlloEdge *x = e[rnd() % ne];
+                    U8(o + 0x56) = x->step;
+                    if (rnd() % 3) { U16(o + 0x92) = x->fr[rnd() % x->nf]; if (rnd() % 4) U16(o + 0x102) |= 0x20; }
+                    if (rnd() % 2) Bits_Set(b, 3, 0);
+                    if (rnd() % 2) S16(pl + 0x108) = (s16)(Damage_Scale(0x28) + rnd() % 3 - 1);
+                    if (rnd() % 2) { U16(pl + 0xE8) = U16(pl + 0xEA) = U16(pl + 0xEC) = 0; }
+                }
+            }
+            if (rnd() % 2) U16(o + 0x102) |= 0x20;              /* paused: the frame as set */
+            if (rnd() % 2) anim_maybe_end(pl);
+            if (rnd() % 2) U16(pl + 0x102) |= 0x20;
+            U32(LOG_BASE) = 0;
+            sprintf(g_what, "allo %X %s step %u side %u frame %X dist %X bits %X", o, f->name, U8(o + 0x56), U8(o + 0x57), U16(o + 0x92), U32(o + 0x13C), U32(b));
+            check(f->addr, f->fn, f->name, 1, a, 0);
+        }
+        /* the attacks land */
+        static const AlloFn gh[] = {
+            {0x43BA30, Allo_BiteHit, "Allo_BiteHit"}, {0x43BBC0, Allo_LungeHit, "Allo_LungeHit"}, {0x43BC40, Allo_SnapUpHit, "Allo_SnapUpHit"},
+            {0x43BCC0, Allo_SnapHit, "Allo_SnapHit"}, {0x43BD30, Allo_SideHit, "Allo_SideHit"}, {0x43BDB0, Allo_LeapHit, "Allo_LeapHit"}};
+        for (int k = 0; k < 48; k++) {
+            memcpy(MEM(o), sv, 0x260);
+            U8(o + 0x56) = rnd() % 4 ? 1 : (u8)rnd(); U8(o + 0x210) = rnd() % 2;
+            U8(G() + 0x108E) = rnd() % 3; U8(G() + 0x108F) = rnd() % 4;
+            Flag_Set(2, 0x1A, rnd() % 2);
+            S16(pl + 0x108) = (s16)(rnd() % 2 ? rnd() % 0x100 - 0x10 : rnd());
+            allo_aim(o);
+            if (rnd() % 2) U16(pl + 0x4A) = (u16)((U16(o + 0x4A) + (rnd() % 2 ? 0x400 : 0xC00) + rnd() % 3 - 1) & 0xFFF);
+            U32(LOG_BASE) = 0;
+            sprintf(g_what, "allo %X %s step %u", o, gh[k % 6].name, U8(o + 0x56));
+            check(gh[k % 6].addr, gh[k % 6].fn, gh[k % 6].name, 1, a, 0);
+        }
+        for (int k = 0; k < 6; k++) {                       /* the player thrown */
+            anim_maybe_end(pl);
+            U16(pl + 0x92) = rnd() % 2 ? 0x2B : (u16)rnd(); S16(pl + 0x108) = (s16)(rnd() % 2 ? rnd() % 3 - 1 + (s32)Damage_Scale(0x82) : rnd() % 0x100 - 0x10);
+            if (rnd() % 2) U16(pl + 0x102) |= 0x20;
+            u32 p1[1] = {pl};
+            U32(LOG_BASE) = 0;
+            check(0x43B2E0, Allo_Thrown, "Allo_Thrown", 1, p1, 0);
+        }
+        /* the damage taken */
+        for (int k = 0; k < 40; k++) {
+            memcpy(MEM(o), sv, 0x260);
+            U32(o + 0x1C0) = rnd() & 0x3FF; U32(o + 0x1C4) = rnd() % 3;
+            U8(o + 0x1C8) = 1 + rnd() % 3; U8(o + 0x1C9) = rnd() % 16; U8(o + 0x1CA) = rnd() % 6; U8(o + 0x1CB) = rnd() % 2;
+            U8(o + 0x54) = 2; U8(o + 0x55) = rnd() % 16; U8(o + 0x56) = rnd() % 3 ? 0 : rnd() % 3; U8(o + 0x57) = rnd() % 2;
+            U8(o + 0x184) = (u8)rnd(); U8(o + 0x17C) = rnd() % 2 ? (u8)(rnd() % 3) : (u8)rnd();
+            U8(o + 0x17D) = (u8[]){0, 1, 2, 3, 4, 0xF, 0x10, 0x11, 0x12, 0x1C}[rnd() % 10];
+            U16(o + 0x172) = rnd() % 5; U16(o + 0x176) = rnd() % 2 ? rnd() % 0x400 : (u16)rnd();
+            S16(o + 0x108) = (s16)(rnd() % 2 ? rnd() % 0x400 : rnd());
+            if (rnd() % 3 == 0) S16(o + 0x108) = (s16)(U16(o + 0x176) * (rnd() % 2 ? 1 : 3) / (rnd() % 2 ? 1 : 5) + rnd() % 3 - 1);
+            U16(o + 0x178) = (u16)((U16(o + 0x4A) + 0x800 + rnd() % 3 - 1 + (rnd() % 2 ? 0 : rnd())) & 0xFFF);
+            U8(o + 0x11D) = (u8)(rnd() % 2 ? 0xD4 - rnd() % 8 : rnd());
+            U16(o + 0x1F8) = (u16)(rnd() % 2 ? rnd() % 0x100 : rnd());
+            U16(o + 0x1E6) = rnd() % 2 ? 0 : (u16)rnd();
+            U16(pl + 0x5A) = rnd() % 2 ? U16(o + 0x5A) : (u16)rnd();
+            Bits_Set(0x87E974, 1, rnd() % 2);
+            U8(o + 0x170) = (u8)rnd();
+            U32(0x87F940) = 1 + rnd() % 8;
+            for (u32 j = 0; j < 20; j++) if (rnd() % 2) U8(O_K2 + j * 0xAC + 0x50) &= ~1;   /* free effect slots */
+            if (rnd() % 2) {                                    /* angry: the anger used up exactly, or not */
+                Bits_Set(b, 3, 1); Bits_Set(b, 2, rnd() % 4 == 0); U32(o + 0x1C4) = rnd() % 2 ? 0 : 2;
+                U8(o + 0x184) &= ~8; U8(o + 0x17C) = rnd() % 3; U8(o + 0x17D) = rnd() % 2 ? 0 : 0x1C;
+                U16(o + 0x176) = (u16)(0x40 + rnd() % 0x200);
+                u16 d = U16(o + 0x176); if ((s8)U8(o + 0x17C) <= 1) d += d >> 1; d >>= 2;
+                U8(o + 0x1C8) = rnd() % 2 ? 1 : 2; U8(o + 0x1CA) = rnd() % 3;
+                S16(o + 0x1F8) = (s16)((rnd() % 2 ? d : d / 5) + rnd() % 3 - 1);
+                if (rnd() % 2) S16(o + 0x108) = (s16)(d / 5 + rnd() % 3 - 1);
+                if (rnd() % 2) U16(o + 0x178) = (u16)((U16(o + 0x4A) + 0x800) & 0xFFF);
+            }
+            allo_rand8();
+            U32(LOG_BASE) = 0;
+            sprintf(g_what, "allo %X damage hp %d dmg %u how %X kind %u bits %X", o, S16(o + 0x108), U16(o + 0x176), U8(o + 0x17D), U16(o + 0x172), U32(b));
+            check(0x43BE00, Allo_Damage, "Allo_Damage", 1, a, 0);
+        }
+        /* its own helpers */
+        for (int k = 0; k < 4; k++) {
+            memcpy(MEM(o), sv, 0x260);
+            U32(o + 0x1C0) = rnd() & 0x3FF; U8(o + 0x210) = (u8)(rnd() % 2 ? 0 : rnd());
+            U32(o + 0x1D8) = rnd() % 3; U8(pl + 0x54) = (u8[]){2, 5, 1, 3}[rnd() % 4]; U16(pl + 0x174) = (u16)rnd();
+            U16(o + 0x202) = rnd() % 2 ? (u16)(0x1D + rnd() % 3) : rnd() % 2 ? rnd() % 3 : (u16)rnd(); U16(o + 0x204) = rnd() % 3;
+            U32(o + 0x13C) = allo_dist(); allo_aim(o); allo_wall(o); allo_rand8();
+            U16(o + 0x92) = (u16)(rnd() % 0x20);
+            check(0x43CAF0, Allo_PlAnim, "Allo_PlAnim", 1, a, 0xFFFFFFFF);
+            check(0x43CB10, Allo_Timer, "Allo_Timer", 1, a, 0xFFFFFFFF);
+            check(0x43CB90, Allo_Tint, "Allo_Tint", 1, a, 0);
+            check(0x43CCB0, Allo_Pick, "Allo_Pick", 1, a, 0);
+            u32 fd[3] = {o, rnd() % 0x20, allo_dist()};
+            allo_rand8();
+            check(0x43CD00, Allo_FrameFar, "Allo_FrameFar", 3, fd, 0xFFFFFFFF);
+            check(0x43CD80, Allo_FrameNear, "Allo_FrameNear", 3, fd, 0xFFFFFFFF);
+            u32 ch[2] = {o, rnd() % 2 ? 0x80 : (u32)rnd()};
+            allo_rand8();
+            check(0x43CDC0, Allo_Chance, "Allo_Chance", 2, ch, 0xFFFFFFFF);
+            for (u32 j = 0; j < 20; j++) for (u32 c = 0x8C; c < 0x8F; c++) U8(AN_PART + j * 0x80 + c) = (u8)(rnd() % 2 ? 0x30 + rnd() % 0x50 : rnd());
+            check(0x43CDF0, Allo_Burn, "Allo_Burn", 1, a, 0);
+        }
+    }
+    player_tables_stub(0);
+    allo_tables_stub(0);
+    stubs_install(0);
+    g_ign_objpads = 0;
+}
+
 static void test_game(void)
 {
     stubs_install(1);
@@ -5659,7 +6114,7 @@ __declspec(dllexport) void harness_main(int argc, char **argv)
     struct { const char *name; void (*fn)(void); } T[] = {
         {"flags", test_flags}, {"geometry", test_geom}, {"script values", test_script_values},
         {"script opcodes", test_script_ops}, {"script objects", test_objects},
-        {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"objects 2", test_object}, {"collision", test_collision}, {"player", test_player}, {"player states", test_player2}, {"zones", test_zones}, {"loading", test_room}, {"title", test_title}, {"game task", test_game}, {"doors", test_doors}, {"frame", test_frame}, {"enemy sets", test_enemyset}, {"enemies", test_enemies}, {"raptor", test_raptor}, {"oviraptor", test_ovi}, {"aot kinds", test_aot_kinds}, {"object effects", test_obj_effects}, {"effect slots", test_k2}, {"effect drops", test_k2_drops}, {"effect emitters", test_eff_slots}, {"effect slots 3", test_k2_more}, {"helpers", test_helpers}, {"draw", test_draw}, {"pc gpu", test_pcgpu}, {"pc draw", test_pcdraw}, {"pc frame", test_pcframe},
+        {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"objects 2", test_object}, {"collision", test_collision}, {"player", test_player}, {"player states", test_player2}, {"zones", test_zones}, {"loading", test_room}, {"title", test_title}, {"game task", test_game}, {"doors", test_doors}, {"frame", test_frame}, {"enemy sets", test_enemyset}, {"enemies", test_enemies}, {"raptor", test_raptor}, {"oviraptor", test_ovi}, {"allosaurus", test_allo}, {"aot kinds", test_aot_kinds}, {"object effects", test_obj_effects}, {"effect slots", test_k2}, {"effect drops", test_k2_drops}, {"effect emitters", test_eff_slots}, {"effect slots 3", test_k2_more}, {"helpers", test_helpers}, {"draw", test_draw}, {"pc gpu", test_pcgpu}, {"pc draw", test_pcdraw}, {"pc frame", test_pcframe},
     };
     for (unsigned i = 0; i < sizeof T / sizeof T[0]; i++) {
         int f0 = g_fail, t0 = g_tests;

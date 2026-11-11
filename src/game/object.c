@@ -166,6 +166,44 @@ void DC2CALL Obj_TurnToPoint(gptr o, u32 max, gptr pos)              /* 0x48F440
     U16(o + 0x4A) += (u16)Angle_Approach(U16(o + 0x4A), max, Angle_XZ(o + 0x40, pos));
 }
 
+/* the angle from a to b, less ang, as -0x800..0x7FF */
+u32 DC2CALL Angle_DiffTo(gptr a, gptr b, u32 ang)                   /* 0x48F3E0 */
+{
+    u32 d = (Angle_XZ(a, b) - ang) & 0xFFF;
+    return d & 0x800 ? d | 0xFFFFF000u : d;
+}
+
+/* b - a as -0x800..0x7FF */
+u32 DC2CALL Angle_Diff(u32 a, u32 b)                                /* 0x48F410 */
+{
+    u32 d = (b - a) & 0xFFF;
+    return d & 0x800 ? d | 0xFFFFF000u : d;
+}
+
+/* the short *p a step nearer target; 1 when it got there */
+u32 DC2CALL Value_Approach(gptr p, u32 step, u32 target)            /* 0x48F4B0 */
+{
+    u16 c = U16(p);
+    s16 d = (s16)(target - c);
+    if (!d) return 1;
+    if (d > 0 ? d > (s16)step : (s32)d < -(s32)(s16)step) {
+        U16(p) = (u16)(d > 0 ? c + step : c - step);
+        return 0;
+    }
+    U16(p) = (u16)(c + d);
+    return 1;
+}
+
+/* the vector in turned by ang about Y, into out */
+void DC2CALL Vec_RotY(gptr out, gptr in, u32 ang)                   /* 0x48F470 */
+{
+    gptr t = Tmp_Push(0x28), r = t, m = t + 8;
+    U16(r) = 0; U16(r + 2) = (u16)ang; U16(r + 4) = 0;
+    RotMatrix(r, m);
+    ApplyMatrixSV(m, in, out);
+    Tmp_Pop(0x28);
+}
+
 /* SquareRoot0 with one Newton step */
 u32 DC2CALL Sqrt_Refined(u32 x)                                    /* 0x48F590 */
 {
@@ -439,6 +477,35 @@ u32 DC2CALL Seg_Cross(gptr a, gptr b, gptr out)                    /* 0x4540B0 *
     U16(out) = (u16)(((s32)imul(dax, (u32)f) >> 10) + a0);
     U16(out + 4) = (u16)(((s32)imul(daz, (u32)f) >> 10) + a1);
     return 1;
+}
+
+/* the squared distance to the nearest wall of the room's floors (o's level,
+ * none of the mask's kinds) crossed by a line 0x7530 long from o at its
+ * heading + ang; 0x7FFFFFFF when none */
+u32 DC2CALL Wall_Dist(gptr o, u32 ang, u32 mask)                    /* 0x454B50 */
+{
+    gptr t = Tmp_Push(0x20), v = t, edge = t + 8, s = t + 0x10, out = t + 0x18;
+    U16(v) = 0; U16(v + 2) = 0; U16(v + 4) = 0x7530;
+    Vec_RotY(v, v, (U16(o + 0x4A) + ang) & 0xFFF);
+    s32 x = S16(o + 0x40) + S16(v), z = S16(o + 0x44) + S16(v + 4);
+    x = x > 0x7C9C ? 0x7C9C : x < -0x7C9C ? -0x7C9C : x;
+    z = z > 0x7C9C ? 0x7C9C : z < -0x7C9C ? -0x7C9C : z;
+    U16(s) = U16(o + 0x40); U16(s + 2) = U16(o + 0x44); U16(s + 4) = (u16)x; U16(s + 6) = (u16)z;
+    u32 best = 0x7FFFFFFF;
+    for (u32 k = U8(U32(G() + 0xA4C)); k--; ) {
+        gptr coll = U32(G() + 0xA4C), poly = coll + U32(coll + 8 + 4 * k);
+        if (!U8(poly) || (U8(poly + 3) & (u8)mask)) continue;
+        if (!(((u32)U16(poly + 4) >> (U8(o + 0x5A) & 31)) & 1)) continue;
+        gptr vtx = poly + 8 + U8(poly + 1) * 4;
+        for (u32 j = U8(poly + 1); j; j--, vtx += 4) {
+            U32(edge) = U32(vtx); U32(edge + 4) = U32(vtx + 4);
+            if (!Seg_Cross(s, edge, out)) continue;
+            u32 d = Dist2_XZ(o + 0x40, out);
+            if (best > d) best = d;
+        }
+    }
+    Tmp_Pop(0x20);
+    return best;
 }
 
 /* wall segment s, circle p (+6 radius): v = how far to push p out (x, 0, z),
