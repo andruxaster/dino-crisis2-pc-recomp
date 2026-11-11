@@ -569,6 +569,45 @@ void DC2CALL Raptor_Back(gptr o);                                      /* 0x4205
 void DC2CALL Raptor_Eat(gptr o);                                       /* 0x420660 */
 void DC2CALL Raptor_Enter(gptr o);                                     /* 0x4207E0 */
 void DC2CALL Raptor_Feint(gptr o);                                     /* 0x420960 */
+/* the oviraptor (src/game/oviraptor.c) */
+void DC2CALL Ovi_Handler(gptr o);                           /* 0x441FB0 */
+void DC2CALL Ovi_Init(gptr o);                              /* 0x442080 */
+void DC2CALL Ovi_Normal(gptr o);                            /* 0x4423D0 */
+void DC2CALL Ovi_Hit(gptr o);                               /* 0x442410 */
+void DC2CALL Ovi_Die(gptr o);                               /* 0x442450 */
+void DC2CALL Ovi_Think(gptr o);                             /* 0x4425D0 */
+void DC2CALL Ovi_Grab(gptr o);                              /* 0x4427E0 */
+void DC2CALL Ovi_Walk(gptr o);                              /* 0x442840 */
+void DC2CALL Ovi_Attack(gptr o);                            /* 0x442B20 */
+void DC2CALL Ovi_Climb(gptr o);                             /* 0x442BF0 */
+void DC2CALL Ovi_JumpOver(gptr o);                          /* 0x442E90 */
+void DC2CALL Ovi_Jump(gptr o);                              /* 0x442B60 */
+void DC2CALL Ovi_Enter(gptr o);                             /* 0x4429B0 */
+void DC2CALL Ovi_Look(gptr o);                              /* 0x4430A0 */
+void DC2CALL Ovi_Hide(gptr o);                              /* 0x4432D0 */
+void DC2CALL Ovi_Turn(gptr o);                              /* 0x4433D0 */
+void DC2CALL Ovi_LeapBack(gptr o, gptr p);                  /* 0x4434B0 */
+void DC2CALL Ovi_Peck(gptr o, gptr p);                      /* 0x4436B0 */
+void DC2CALL Ovi_GrabBite(gptr o, gptr p);                  /* 0x4435D0 */
+void DC2CALL Ovi_Pounce(gptr o, gptr p);                    /* 0x443730 */
+void DC2CALL Ovi_PounceCatch(gptr o, gptr p);               /* 0x443C70 */
+void DC2CALL Ovi_Lunge(gptr o, gptr p);                     /* 0x443E30 */
+void DC2CALL Ovi_LungeHit(gptr o, gptr p);                  /* 0x443EF0 */
+void DC2CALL Ovi_Kick(gptr o, gptr p);                      /* 0x443FA0 */
+void DC2CALL Ovi_KickHit(gptr o, gptr p);                   /* 0x4440D0 */
+void DC2CALL Ovi_BackJump(gptr o, gptr p);                  /* 0x4441A0 */
+void DC2CALL Ovi_BackCatch(gptr o, gptr p);                 /* 0x444330 */
+void DC2CALL Ovi_HurtStand(gptr o);                         /* 0x4444A0 */
+void DC2CALL Ovi_HurtDown(gptr o);                          /* 0x4447F0 */
+void DC2CALL Ovi_Hurt(gptr o);                              /* 0x444470 */
+void DC2CALL Ovi_KnockStand(gptr o);                        /* 0x4449B0 */
+void DC2CALL Ovi_KnockDown(gptr o);                         /* 0x444B80 */
+void DC2CALL Ovi_Knock(gptr o);                             /* 0x444980 */
+void DC2CALL Ovi_Blow(gptr o);                              /* 0x444D00 */
+void DC2CALL Ovi_BlowStand(gptr o);                         /* 0x444D30 */
+void DC2CALL Ovi_BlowDown(gptr o);                          /* 0x444F90 */
+void DC2CALL Ovi_HurtAir(gptr o);                           /* 0x445190 */
+void DC2CALL Obj_TurnToPoint(gptr o, u32 max, gptr pos);              /* 0x48F440 */
 void DC2CALL Door_Task(void);                                          /* 0x41E2D0 */
 void DC2CALL Door_Common(gptr d);                                      /* 0x41CB70 */
 void DC2CALL Door_SwingAMove(gptr d);                                  /* 0x41CA70 */

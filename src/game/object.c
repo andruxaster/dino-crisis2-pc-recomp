@@ -160,6 +160,12 @@ void DC2CALL Obj_MoveLocal(gptr o, gptr v)                         /* 0x48F3A0 *
     Tmp_Pop(8);
 }
 
+/* turns towards a point by at most max */
+void DC2CALL Obj_TurnToPoint(gptr o, u32 max, gptr pos)              /* 0x48F440 */
+{
+    U16(o + 0x4A) += (u16)Angle_Approach(U16(o + 0x4A), max, Angle_XZ(o + 0x40, pos));
+}
+
 /* SquareRoot0 with one Newton step */
 u32 DC2CALL Sqrt_Refined(u32 x)                                    /* 0x48F590 */
 {

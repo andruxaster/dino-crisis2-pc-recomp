@@ -88,7 +88,7 @@ Checked under wine 9 (32-bit prefix): all 26 hooks installed; after one
 minute Lzss_Decode 23 calls, Flag_Check 62 000, Script_Run every frame,
 PointInQuad 5 000.
 
-## Reimplemented (858)
+## Reimplemented (896)
 
 The authoritative list is `src/hook/hooks.c`. By area:
 
@@ -118,6 +118,7 @@ The authoritative list is `src/hook/hooks.c`. By area:
 | frame helpers | camera reset and zone check, background masks, the damage gauge block, screen shake, fades (set, tick, draw), effect 0's trail, hidden flags of objects and effects, lights picked per model part (camera sets, nearest lights, room light) and marked lights run, pads read each frame; message slots and the message box (typing, pages, prompts, yes/no, choices); text drawing and centring; the HUD: the health gauge, the boss's gauge, the event timer, the weapon change boxes, the ammo pop-up and its numbers; the starting stock by difficulty and by game mode; menus started from the game, carried items merged and closed up; sound effects (table, pan and volume by distance, sound areas, slots, groups) and stream slots; movies started (standalone: skipped) | src/game/misc.c |
 | frame drawing | Frame_Draw (0x4A7250): the view matrices of objects, parts, effects and props; models (vertices projected and lit per part, then indexed triangles and quads with depth), effect meshes and their depth rules, shadows on the floor, prop sprites and quads, background mask markers, dim bars, the rope, the text layer (message slots, the sentence and its cursor), the per-frame handlers | src/game/draw.c |
 | velociraptor | handler (damage, movement, collisions), init by level, the choice of the next state, normal sub-states (wait, walk, cry, back off, eat, entrance, feint), jumps and climbs, the attacks (pounce, lunge, side bite, leap, tail) and their hits on the player, the hits it takes (flinch, knock-back, blown back, thrown in the air, burnt, drowned), death | src/game/raptor.c |
+| oviraptor | handler, init by level, the choice of the next state, normal sub-states (walk and turn about, look about, hide, turn in place, entrance), climbs and jumps, the attacks (leap back, peck, pounce and the bites while holding the player down, lunge, kick, jump on the back) and their hits on the player, the hits it takes (staggers, knocked back, blown about, thrown in the air), death | src/game/oviraptor.c |
 | doors (room change) | Door_Task and its modes (set-up: the stand-in, door models, camera, light, room name; run: area switch, room and music loads; end), all door types' handlers: hinged, shutter, sliding and double doors, lifts, stairs, camera drop, waits, message, walk; the score panel after a fight | src/game/door.c |
 | PC layer: GTE | all 80 libgte functions of the port (0x4C08E0..0x4C24C0): rsin/rcos/ratan2, roots, geometry state, Apply/Mul/Rot/Scale/Transpose matrix, RotTransPers 1/3/4 and the float projection, depth cue, normal colour, register loads/stores, rtps/rtpt/nclip/ncct, PC depth stores | src/game/gte.c, include/dc2/gte.h |
 | PC layer: GPU, memory side | primitives linked into the ordering tables, sprite/tile/mode/area packets, texture page words, the software VRAM (1024x512 at 0x76448C: LoadImage, StoreImage, the CLUT rows load, with the texture cache invalidation and palette conversion of the drawing layer). Tested in the harness, called by the standalone builds (the DLL keeps the originals) | src/pc/gpu.c, include/dc2/gpu.h |
@@ -170,11 +171,11 @@ alone and the harness ignores them.
 
 ## Next
 
-The script VM, the keyframe animation, the generic object handler (type 1), object collision, the zone navigation and the player (all states and substates, all weapons and sub-weapons) are complete; the standalone build plays the opening of room 101 and, with buttons held from the command line,
+The script VM, the keyframe animation, the generic object handler (type 1), object collision, the zone navigation, the player (all states and substates, all weapons and sub-weapons), the velociraptor and the oviraptor are complete; the standalone build plays the opening of room 101 and, with buttons held from the command line,
 walks the player through its door into room 102 (`dc2 Dino2.exe ROOT/Data 3300 400:820 440:820
 2900-2932:2000 2940-2955:1000 2960-3010:20`; ROOT also holds `Speech`). The DirectSound buffers have a
-silent stand-in there that only keeps time. Next: the enemies' type handlers (Enemy_LoadModel 0x482070), the object
-type handlers (*0x87DCA0), sound/BGM (0x48C9C0..0x48CE60), messages
+silent stand-in there that only keeps time. Next: the other dinosaurs' type handlers (*0x87DCA0: Allosaurus 0x4397C0,
+Pteranodon 0x429030, T-Rex 0x423680, ...), the area objects and props, sound/BGM (0x48C9C0..0x48CE60), messages
 (0x4718F0), fades and menus. The PC layer's drawing is copied onto
 Direct3D-shaped calls and drawn by a renderer (OpenGL, the Dreamcast's PVR);
 still missing there: the background masks module (0x4BE3C0..), code 0x84,

@@ -490,19 +490,38 @@ static void tile1(gptr p)                                            /* 0x4B8660
 
 /* sprites: width and height from the packet (or 8, 16), uvs from the table
    (the far edge: u0 + w*ustep - 1, read past the table as the port does) */
+/* a float moved through the x87 (fld/fstp): a signalling NaN comes out quiet */
+static u32 x87_move(u32 v)
+{
+    if ((v & 0x7F800000) == 0x7F800000 && (v & 0x7FFFFF) && !(v & 0x400000)) v |= 0x400000;
+    return v;
+}
+
 static void sprite(gptr p, u32 code, s32 w, s32 h, s32 step, const float *size)
 {
     u32 c = vertex_colour(U8(p + 4), U8(p + 5), U8(p + 6), code, dm_tpage());
-    float x1 = size ? (F32(p + 8) + *size) * F32(G_SCALE_X) : ((float)w + F32(p + 8)) * F32(G_SCALE_X);
+    /* in the port's order: the far corner's texel is read from the table after the
+       vertices written so far (an index off the table's start reads them) */
+#define V(i, f) (G_VTX + (i) * 0x20 + (f))
+    float x0 = F32(G_SCALE_X) * F32(p + 8), y0 = F32(G_SCALE_Y) * F32(p + 0xC);
+    F32(V(0, 0)) = x0; F32(V(0, 4)) = y0;
+    U32(V(0, 0x18)) = x87_move(U32(G_UVTAB + 4 * U8(p + 0x14))); U32(V(0, 0x1C)) = x87_move(U32(G_UVTAB + 4 * U8(p + 0x15)));
+    F32(V(1, 0)) = size ? (F32(p + 8) + *size) * F32(G_SCALE_X) : ((float)w + F32(p + 8)) * F32(G_SCALE_X);
+    F32(V(1, 4)) = y0;
+    U32(V(1, 0x1C)) = U32(V(0, 0x1C));
+    U32(V(1, 0x18)) = x87_move(U32(G_UVTAB - 4 + 4 * (u32)(s32)(U8(p + 0x14) + w * step)));
+    F32(V(2, 0)) = x0;
     float y1 = size ? (F32(p + 0xC) + *size) * F32(G_SCALE_Y) : ((float)h + F32(p + 0xC)) * F32(G_SCALE_Y);
-    quad(F32(G_SCALE_X) * F32(p + 8), x1, F32(G_SCALE_Y) * F32(p + 0xC), y1, p + 0x10, c);
-    u32 u0 = U32(G_UVTAB + 4 * U8(p + 0x14)), v0 = U32(G_UVTAB + 4 * U8(p + 0x15));
-    u32 u1 = U32(G_UVTAB - 4 + 4 * (u32)(s32)(U8(p + 0x14) + w * step));
-    u32 v1 = U32(G_UVTAB - 4 + 4 * (u32)(s32)(U8(p + 0x15) + h * step));
-    U32(G_VTX + 0x18) = u0; U32(G_VTX + 0x1C) = v0;
-    U32(G_VTX + 0x38) = u1; U32(G_VTX + 0x3C) = v0;
-    U32(G_VTX + 0x58) = u0; U32(G_VTX + 0x5C) = v1;
-    U32(G_VTX + 0x78) = u1; U32(G_VTX + 0x7C) = v1;
+    F32(V(2, 4)) = y1;
+    U32(V(2, 0x18)) = U32(V(0, 0x18));
+    U32(V(3, 0)) = U32(V(1, 0));
+    u32 v1 = x87_move(U32(G_UVTAB - 4 + 4 * (u32)(s32)(U8(p + 0x15) + h * step)));
+    U32(V(3, 0x18)) = U32(V(1, 0x18));
+    U32(V(2, 0x1C)) = v1; U32(V(3, 0x1C)) = v1;
+    F32(V(3, 4)) = y1;
+    float rhw = k_rhw / F32(p + 0x10);
+    for (u32 i = 0; i < 4; i++) { U32(V(i, 8)) = U32(p + 0x10); F32(V(i, 0xC)) = rhw; vcol(i, c); }
+#undef V
     tex_bind(dm_tpage(), U16(p + 0x16));
     finish(0x400, 0, U8(p + 7), dm_tpage(), 1, 5, 4);
 }
@@ -691,7 +710,11 @@ static void vram_move(gptr r, s32 x, s32 y)                          /* 0x4B4B30
     u32 n = (u32)S16(r + 4) * 2;
     for (s32 row = y; row < S16(r + 6) + y; row++, s += 0x800, d += 0x800) {
         if (!memcmp(MEM(d), MEM(s), n)) continue;
-        memcpy(MEM(d), MEM(s), n);
+        {   /* rep movsd then movsb: forwards, overlapping copies repeat the start */
+            u32 k = 0;
+            for (; k + 4 <= n; k += 4) U32(d + k) = U32(s + k);
+            for (; k < n; k++) U8(d + k) = U8(s + k);
+        }
         PcDraw_ClutRowConvert((u32)S16(r), (u32)row, S16(r + 4));
     }
 }

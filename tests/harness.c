@@ -4539,15 +4539,31 @@ static int check_fk(u32 addr, void *fn, const char *name, int nargs, const u32 *
 /* (debugging: the two logs side by side around their first difference; the packets) */
 static void fk_dump(gptr ot)
 {
+    printf("  OT order:");
+    for (gptr q = ot, n = 0; q != 0xFFFFFF && n < 40; q = U32(q) & 0xFFFFFF, n++) printf(" %X:%02X", q, U8(q + 7));
+    printf("\n");
 
     restore(snap0); PcDraw_DrawOTag(ot);
     u32 n = U32(FK_LOGN), no = *(u32 *)(snap1[0] + FK_LOGN - RW[0].lo), k = 0;
     const u32 *o = (const u32 *)(snap1[0] + FK_LOG - RW[0].lo), *c = (const u32 *)MEM(FK_LOG);
     while (k < n / 4 && k < no / 4 && o[k] == c[k]) k++;
     printf("logs: new %u bytes, original %u; first difference at dword %u\n", n, no, k);
-    for (u32 j = k > 40 ? k - 40 : 0; j < k + 24 && j < (n > no ? n : no) / 4; j++)
+    for (u32 j = k > (getenv("FKBACK") ? (u32)atoi(getenv("FKBACK")) : 40) ? k - (getenv("FKBACK") ? (u32)atoi(getenv("FKBACK")) : 40) : 0; j < k + 24 && j < (n > no ? n : no) / 4; j++)
         printf("  %4u: %08X %08X%s\n", j, j < n / 4 ? c[j] : 0, j < no / 4 ? o[j] : 0, c[j] != o[j] ? "  <" : "");
-    for (gptr p = 0x5D0000; p < 0x5D0000 + 13 * 0x60; p += 0x60) printf("  pkt %X: %08X %08X\n", p, U32(p), U32(p + 4));
+    for (gptr p = 0x5D0000; p < 0x5D0000 + 13 * 0x60; p += 0x60) {
+        printf("  pkt %X: %08X %08X\n", p, U32(p), U32(p + 4));
+        if ((U8(p + 7) & 0xFC) == 0x64 || (U8(p + 7) & 0xFC) == 0x80)
+            printf("    sprite u %u w %d v %u h %d: texel reads at %X, %X\n", U8(p + 0x14), S16(p + 0x18), U8(p + 0x15), S16(p + 0x1A),
+                   0x865940 - 4 + 4 * (U8(p + 0x14) + S16(p + 0x18) * ((U8(p + 7) & 0xFC) == 0x80 ? 2 : 1)), 0x865940 - 4 + 4 * (U8(p + 0x15) + S16(p + 0x1A) * ((U8(p + 7) & 0xFC) == 0x80 ? 2 : 1)));
+    }
+    {   /* the converted palettes that differ, and where the rows' slots point */
+        int nd = 0;
+        for (gptr a = FK_ARENA; a < FK_ARENA + 0x18000 && nd < 48; a += 4) {
+            u32 ov = *(const u32 *)(snap1[0] + a - RW[0].lo);
+            if (ov != U32(a)) { printf("  arena %X: %08X original %08X\n", a, U32(a), ov); nd++; }
+        }
+        for (u32 r = 0; r < 512; r++) if (U32(0x75CEEC + 8 * r)) printf("  row %u: slot %X stamp %u\n", r, U32(0x75CEEC + 8 * r), U32(0x75CEE8 + 8 * r));
+    }
     restore(snap1);
 }
 
@@ -4586,7 +4602,19 @@ static void pkt_random(gptr p, u32 code)
     case 0x60: rnd_xyz(p + 8, 1); S16(p + 0x14) = rnd_size(); S16(p + 0x16) = rnd_size(); break;
     case 0x68: rnd_xyz(p + 8, 1); break;
     case 0x64: case 0x74: case 0x7C: case 0x80:
-        rnd_xyz(p + 8, 1); U16(p + 0x16) = cluts[rnd() % 4]; S16(p + 0x18) = rnd_size(); S16(p + 0x1A) = rnd_size(); break;
+        rnd_xyz(p + 8, 1); U16(p + 0x16) = cluts[rnd() % 4]; S16(p + 0x18) = rnd_size(); S16(p + 0x1A) = rnd_size();
+        if ((code == 0x64 || code == 0x80) && rnd() % 3 == 0) {         /* the far corner's texel off the table's start: in the vertices */
+            /* (the fields the sprite wrote before, or left from earlier draws: colours read as floats) */
+            static const s8 tu[] = {-31, -30, -25, -24, -23, -22, -16}, tv[] = {-31, -30, -25, -24, -23, -22, -16, -17, -15, -14, -9, -7};
+            s32 st = code == 0x80 ? 2 : 1;
+            for (int k = 0; k < 2; k++) {
+                s32 t = rnd() % 2 ? -(s32)(rnd() % 32) : k ? tv[rnd() % sizeof tv] : tu[rnd() % sizeof tu], u0 = (s32)(rnd() % 8);
+                if ((t - u0) % st) u0++;
+                U8(p + 0x14 + k) = (u8)u0;
+                S16(p + 0x18 + 2 * k) = (s16)((t - u0) / st);
+            }
+        }
+        break;
     case 0x6C:
         for (u32 i = 0; i < 4; i++) rnd_xyz(p + 8 + 0xC * i, 0);
         U16(p + 0x12) = cluts[rnd() % 4]; U16(p + 0x1E) = (u16)(rnd() % 3 ? rnd() % 8 : rnd() % 64);
@@ -4607,6 +4635,10 @@ static void pkt_random(gptr p, u32 code)
         S16(p + 0xC) = w; S16(p + 0xE) = h;
         /* (the destination stays >= 0 after clipping: the port's copy keeps dx's top half in its row count) */
         S32(p + 0x10) = (s32)(rnd() % (0x400 - 72)) + 32; S32(p + 0x14) = code == 0xFC ? 480 + (s32)(rnd() % 14) : (s32)(rnd() % (0x200 - 32)) + 16;
+        if (code == 0xFC && rnd() % 3 == 0) {                               /* overlapping, along its rows: copied forwards */
+            S16(p + 8) = (s16)(32 + rnd() % (0x400 - 96)); S32(p + 0x10) = S16(p + 8) + (rnd() % 2 ? (s32)(1 + rnd() % 8) : -(s32)(1 + rnd() % 8));
+            S32(p + 0x14) = S16(p + 0xA);
+        }
         U32(p + 4) = code << 24; break; }
     }
 }
@@ -5227,6 +5259,243 @@ static void test_raptor(void)
     g_ign_objpads = 0;
 }
 
+/* ---- the oviraptor: its tables of states replaced by recorders, like the raptor's ---- */
+static const u32 g_ovi_tabs[][3] = {{0x7212C8, 5, 1}, {0x7212DC, 9, 1}, {0x721300, 5, 1}, {0x721314, 6, 2}, {0x72132C, 6, 2}};
+static const int g_ovi_rec2[] = {28, 29, 51, 52, 53, 54};
+static u32 g_ovi_saved[5][9];
+static void ovi_tables_stub(int on)
+{
+    for (int k = 0; k < 9; k++) g_stubs[g_rap_rec1[k]].spec = on ? "d" : "";
+    for (int k = 0; k < 6; k++) g_stubs[g_ovi_rec2[k]].spec = on ? "dd" : "";
+    for (int t = 0; t < 5; t++)
+        for (u32 k = 0; k < g_ovi_tabs[t][1]; k++) {
+            gptr a = g_ovi_tabs[t][0] + 4 * k;
+            if (on) { g_ovi_saved[t][k] = U32(a); U32(a) = (u32)(uintptr_t)g_recs[g_ovi_tabs[t][2] == 1 ? g_rap_rec1[k] : g_ovi_rec2[k]]; }
+            else U32(a) = g_ovi_saved[t][k];
+        }
+}
+
+static gptr ovi_setup(void)
+{
+    gptr o = raptor_setup(), e = o + 0x1C0;
+    U32(0x74AFA8) = e;
+    U8(o + 0x57) = rnd() % 3 ? rnd() % 3 : rnd() % 8;
+    U16(e + 0x2A) = rnd() % 2 ? rnd() % 3 : (u16)rnd();
+    U16(o + 0x1E8) = rnd() % 2 ? 9 + rnd() % 4 : (u16)rnd();
+    U8(e + 0x1E) = rnd() % 2; U8(e + 0x22) = rnd() % 2; U8(e + 0x23) = rnd() % 8;
+    return o;
+}
+
+/* the angle to the target about a value (o+0x4A + d), the target near */
+static void ovi_aim(gptr o, gptr t)
+{
+    u32 d = rnd() % 3 == 0 ? (u32[]){0, 1, 0xFFF, 0x2F, 0x30, 0x31, 0xFCF, 0xFD0, 0xFD1}[rnd() % 9] : rnd() % 2 ? rnd() % 0x1000 : (u32[]){0xFF, 0x100, 0x101, 0x1FF, 0x200, 0x201, 0x6FF, 0x700, 0x701, 0x8FF, 0x900, 0x901, 0xDFF, 0xE00, 0xE01, 0xF00, 0xF01}[rnd() % 17];
+    double an = ((U16(o + 0x4A) + d) & 0xFFF) * 3.14159265358979 / 2048, dd = rnd() % 2 ? 1000 + rnd() % 4000 : (u32[]){0x7A1, 0xBB8, 0xC35, 0x9C4}[rnd() % 4];
+    S16(t + 0x40) = (s16)(S16(o + 0x40) + dd * sin(an)); S16(t + 0x44) = (s16)(S16(o + 0x44) + dd * cos(an));
+    U16(o + 0x1C0 + 8) = (u16)((U16(o + 0x4A) + d) & 0xFFF);
+    if (rnd() % 2) { U16(o + 0xD8) = U16(t + 0x40); U16(o + 0xDC) = U16(t + 0x44); }
+    if (rnd() % 2) {                                    /* exactly: the target on an axis, it faces d off */
+        static const s16 dist[] = {1000, 1999, 2000, 2001, 2999, 3000, 3001, 4800};
+        s16 dd = dist[rnd() % 8];
+        if (rnd() % 2) { S16(t + 0x40) = (s16)(S16(o + 0x40) + (rnd() % 2 ? dd : -dd)); S16(t + 0x44) = S16(o + 0x44); }
+        else { S16(t + 0x44) = (s16)(S16(o + 0x44) + (rnd() % 2 ? dd : -dd)); S16(t + 0x40) = S16(o + 0x40); }
+        U16(o + 0xD8) = U16(t + 0x40); U16(o + 0xDC) = U16(t + 0x44);
+        u16 an = (u16)Angle_XZ(o + 0x40, t + 0x40);
+        U16(o + 0x4A) = (u16)((an - d) & 0xFFF); U16(o + 0x1C0 + 8) = an;
+    }
+}
+
+static void test_ovi(void)
+{
+    g_ign_objpads = 1;
+    stubs_install(1);
+    ovi_tables_stub(1);
+    player_tables_stub(1);
+    for (int i = 0; i < iters; i++) {
+        game_state();
+        gptr o = ovi_setup(), e = o + 0x1C0;
+        u32 a[2] = {o};
+        sprintf(g_what, "ovi %X state %02X/%02X/%02X level %X", o, U8(o + 0x54), U8(o + 0x55), U8(o + 0x56), U16(o + 0x10C));
+        check(0x4425D0, Ovi_Think, "Ovi_Think", 1, a, 0);
+        for (int k = 0; k < 16; k++) {                      /* the edges of its choices */
+            gptr t = U8(o + 0x184) & 0x40 ? U32(G() + 0xB50) : U32(G() + 0x940);
+            U8(o + 0x18D) = rnd() % 4 ? 0 : (u8)rnd(); U8(o + 0x17B) = rnd() % 4 ? 0 : 1;
+            U8(o + 0x55) = rnd() % 4 ? 0 : (u8)rnd(); U8(o + 0x56) = rnd() % 4 ? 0 : (u8)rnd(); U8(o + 0x13A) = rnd() % 2;
+            ovi_aim(o, t);
+            U16(t + 0x5A) = rnd() % 4 ? U16(o + 0x5A) : (u16)rnd(); U16(t + 0x174) = rnd() % 2 ? 0 : (u16)rnd();
+            U8(t + 0x55) = rnd() % 2 ? 8 : (u8)rnd();
+            if (rnd() % 2) U16(0x87DE10) = rand8_seed((u8[]){0x2F, 0x30, 0x31, 0x3F, 0x40, 0x41, 0x8F, 0x90, 0x91, 0x10, 0}[rnd() % 11], 0);
+            U32(LOG_BASE) = 0;
+            sprintf(g_what, "ovi %X think dist %u", o, Dist2_XZ(o + 0x40, t + 0x40));
+            check(0x4425D0, Ovi_Think, "Ovi_Think", 1, a, 0);
+        }
+        U8(o + 0x54) = rnd() % 5; U8(o + 0x55) = rnd() % 9; U8(o + 0x56) = rnd() % 6; U16(o + 0x172) = rnd() % 5;   /* (in the tables) */
+        check(0x4423D0, Ovi_Normal, "Ovi_Normal", 1, a, 0);
+        check(0x442410, Ovi_Hit, "Ovi_Hit", 1, a, 0);
+        check(0x4427E0, Ovi_Grab, "Ovi_Grab", 1, a, 0);
+        check(0x441FB0, Ovi_Handler, "Ovi_Handler", 1, a, 0);
+        U8(o + 0x11A) = (u8)rnd();
+        anim_setup_at(AN_OBJ); memcpy(MEM(o + 0x60), MEM(AN_OBJ + 0x60), 0x50);
+        for (int k = 0x40; k < 0xC0; k++) U32(AN_TAB + 4 * k) = AN_DATA + 0x1000 * ((k ^ k >> 4 ^ k >> 5) & 1);
+        for (int k = 0; k < 2; k++) {                       /* holding the player: grabs on from the handler */
+            gptr t = U8(o + 0x184) & 0x40 ? U32(G() + 0xB50) : U32(G() + 0x940);
+            U8(o + 0x54) = 1; U8(o + 0x55) = 2; U8(o + 0x56) = rnd() % 6;   /* (state 1 moves the parts) */ U8(o + 0x119) = rnd() % 4 ? 0 : 0x80;
+            U8(t + 0x174) &= rnd() % 4 ? 0xFE : 0xFF; U32(o + 0x50) = (U32(o + 0x50) & ~0x40000000u) | 0x30;
+            U32(o + 0xA0) = 1; U16(o + 0x102) &= ~2; U32(t + 0x134) = 0; U8(t + 0x17B) = 0;   /* (no collisions; its hit left as it is: the target has no hit boxes) */
+            U32(LOG_BASE) = 0;
+            check(0x441FB0, Ovi_Handler, "Ovi_Handler", 1, a, 0);
+        }
+        U32(0x74AF00) = e; raptor_jump_setup(o); U32(0x74AFA8) = e;
+        if (rnd() % 4 == 0) S16(o + 0x42) = (s16)(0x7918 - rnd() % 0x30);
+        sprintf(g_what, "ovi %X jump step %u y %d level %d", o, U8(o + 0x56), S16(o + 0x42), S16(o + 0x5A));
+        check(0x442B60, Ovi_Jump, "Ovi_Jump", 1, a, 0);
+        for (int k = 0; k < 3; k++) {
+            U32(0x74AF00) = e; raptor_jump_setup(o); U32(0x74AFA8) = e;
+            U8(e + 0x1E) = rnd() % 2; U16(e + 0x10) = rnd() % 2 ? U16(o + 0x4A) : (u16)rnd();
+            if (rnd() % 2) S16(o + 0xF4) = (s16)(0xB3 + rnd() % 3);
+            sprintf(g_what, "ovi %X climb step %u y %d level %d vy %d", o, U8(o + 0x56), S16(o + 0x42), S16(o + 0x5A), S16(e + 0x14));
+            check(0x442BF0, Ovi_Climb, "Ovi_Climb", 1, a, 0);
+            U32(0x74AF00) = e; raptor_jump_setup(o); U32(0x74AFA8) = e;
+            check(0x442E90, Ovi_JumpOver, "Ovi_JumpOver", 1, a, 0);
+        }
+        /* hits */
+        static const struct { u32 addr; void *fn; const char *name; } ht[] = {
+            {0x444470, Ovi_Hurt, "Ovi_Hurt"}, {0x4444A0, Ovi_HurtStand, "Ovi_HurtStand"}, {0x4447F0, Ovi_HurtDown, "Ovi_HurtDown"},
+            {0x444980, Ovi_Knock, "Ovi_Knock"}, {0x4449B0, Ovi_KnockStand, "Ovi_KnockStand"}, {0x444B80, Ovi_KnockDown, "Ovi_KnockDown"},
+            {0x444D00, Ovi_Blow, "Ovi_Blow"}, {0x444D30, Ovi_BlowStand, "Ovi_BlowStand"}, {0x444F90, Ovi_BlowDown, "Ovi_BlowDown"},
+            {0x445190, Ovi_HurtAir, "Ovi_HurtAir"}};
+        const unsigned nh = sizeof ht / sizeof ht[0];
+        for (unsigned k = 0; k < 2 * nh; k++) {
+            U32(o + 0x50) ^= rnd() & 0x2878;
+            U32(0x74AFA8) = e;
+            U8(o + 0x56) = rnd() % 4 ? rnd() % 2 : rnd() % 4; U16(o + 0x174) = (u16)(rnd() % 2 ? rnd() & 6 : rnd());
+            U16(o + 0x170) = (u16)rnd(); U16(o + 0x172) = rnd() % 5; U16(o + 0x178) = rnd() % 2 ? rnd() % 4 : (u16)rnd() & 0xFFF;
+            U8(o + 0x184) = (u8)rnd(); U8(o + 0x180) = (u8)rnd(); U8(o + 0xFF) = (u8)rnd();
+            S16(o + 0x10A) = (s16)(rnd() % 0x400); S16(o + 0x108) = (s16)(rnd() % 3 ? rnd() % 0x200 : rnd());
+            U16(o + 0x176) = rnd() % 2 ? (u16)(U16(o + 0x108) + rnd() % 3 - 1) : rnd() % 0x100;
+            U8(e + 0x1D) = (u8)rnd(); U8(e + 0x1A) = (u8)rnd();
+            U16(o + 0x92) = rnd() % 2 ? (u16[]){0x12, 0x13, 0x14, 0x1B, 0x1C, 0x1D}[rnd() % 6] : (u16)rnd();
+            if (rnd() % 2) U16(0x87DE10) = rand8_seed((u8[]){0x3F, 0x40, 0x41, 0x0F, 0x10, 0}[rnd() % 6], 0);
+            if (k % nh == 1 && rnd() % 2) {                     /* low health: knocked down? */
+                S16(o + 0x10A) = 0x400; S16(o + 0x108) = rnd() % 0x120; U16(o + 0x176) = rnd() % 0x10;
+                U16(0x87DE10) = rand8_seed((u8[]){0x3F, 0x40, 0x41}[rnd() % 3], 0);
+            }
+            if (rnd() % 2 && U8(CL_ROOM)) {
+                gptr w = CL_ROOM + U32(CL_ROOM + 8 + 4 * (rnd() % U8(CL_ROOM))), v = w + 8 + U8(w + 1) * 4;
+                s32 sx = 0, sz = 0, n = U8(w + 1) ? U8(w + 1) : 1;
+                for (s32 j = 0; j < U8(w + 1); j++) { sx += S16(v + 4 * j); sz += S16(v + 4 * j + 2); }
+                S16(o + 0x40) = (s16)(sx / n); S16(o + 0x44) = (s16)(sz / n);
+                U16(o + 0xE0) = U16(o + 0x40); U16(o + 0xE4) = U16(o + 0x44); S16(o + 0xE2) = (s16)(rnd() % 2 ? -10000 : 10000);
+            }
+            if (rnd() % 2) {                                    /* about the floor's height */
+                s16 h = (s16)Floor_Height(o + 0xE0, o + 0x40, 0x40, 0);
+                S16(o + 0x42) = (s16)(h - (rnd() % 2 ? 0xF0 : 0) + (s32)(rnd() % 3) - 1);
+            }
+            anim_maybe_end(o);
+            U32(LOG_BASE) = 0;
+            sprintf(g_what, "ovi %X hit step %u fl %X kind %u health %d/%d dmg %d y %d", o, U8(o + 0x56), U16(o + 0x174), U16(o + 0x172),
+                    S16(o + 0x108), S16(o + 0x10A), S16(o + 0x176), S16(o + 0x42));
+            check(ht[k % nh].addr, ht[k % nh].fn, ht[k % nh].name, 1, a, 0);
+        }
+        model_data(0x63D000);
+        if (!U32(G() + 0xB50)) U32(G() + 0xB50) = O_OBJ + 0x260 * 15;
+        if (rnd() % 2) U16(G() + 0x1090) = (u16)(0x400 | (rnd() % 2 ? 8 + rnd() % 2 : rnd() % 16));
+        check(0x442080, Ovi_Init, "Ovi_Init", 1, a, 0);
+        game_state(); world_setup(); enemy_state();
+        o = O_OBJ + 0x260 * (1 + rnd() % 6); a[0] = o; e = o + 0x1C0;
+        anim_setup_at(o);
+        U8(o + 0x55) = rnd() % 4; U8(o + 0x170) = (u8)rnd(); U8(o + 0x11C) = (u8)rnd(); U8(o + 0x184) = (u8)rnd();
+        U32(LOG_BASE) = 0;
+        sprintf(g_what, "ovi %X dies %02X", o, U8(o + 0x55));
+        check(0x442450, Ovi_Die, "Ovi_Die", 1, a, 0);
+        /* the normal sub-states, each step */
+        static const struct { u32 addr; void *fn; const char *name; } st[] = {
+            {0x442840, Ovi_Walk, "Ovi_Walk"}, {0x4430A0, Ovi_Look, "Ovi_Look"}, {0x4432D0, Ovi_Hide, "Ovi_Hide"},
+            {0x4433D0, Ovi_Turn, "Ovi_Turn"}, {0x4429B0, Ovi_Enter, "Ovi_Enter"}};
+        U32(0x74AFA8) = e;
+        for (unsigned k = 0; k < 2 * sizeof st / sizeof st[0]; k++) {
+            U8(o + 0x56) = rnd() % 4; U8(o + 0x18C) = (u8)rnd(); U8(o + 0x18D) = rnd() % 2 ? 0 : (u8)rnd();
+            U8(o + 0x180) = (u8)rnd(); U8(o + 0xFF) = (u8)rnd();
+            U16(o + 0x92) = rnd() % 3 == 0 ? 0x2E + rnd() % 3 : rnd() % 2 ? (u16)(U16(o + 0x90) - 1) : (u16)rnd();
+            if (rnd() % 2) U16(0x87DE10) = rand8_seed((u8[]){0xEF, 0xF0, 0xF1, 0x80, 0x81, 0}[rnd() % 6], 0);
+            ovi_aim(o, O_OBJ);
+            U32(e + 4) = rnd() % 2 ? Dist2_XZ(o + 0x40, O_OBJ + 0x40) : (u32[]){0x3D08FF, 0x3D0900, 0x7A11FF, 0x7A1200, 0x989680, 0x989681}[rnd() % 6];
+            U16(e + 0x2A) = rnd() % 2 ? rnd() % 2 : (u16)rnd();
+            if (U16(o + 0x90))                                  /* the frames it blends between: of its animation (not left at 0) */
+                for (u32 j = 0x78; j <= 0x84; j += 4) U32(o + j) = U32(o + 0x8C) + (rnd() % U16(o + 0x90)) * U8(o + 0xAC);
+            U32(LOG_BASE) = 0;
+            anim_maybe_end(o);
+            sprintf(g_what, "ovi %X step %u level %02X", o, U8(o + 0x56), U8(o + 0x18C));
+            check(st[k % 5].addr, st[k % 5].fn, st[k % 5].name, 1, a, 0);
+        }
+        { u32 c[3] = {o, rnd() % 0x100, O_OBJ + 0x40}; check(0x48F440, Obj_TurnToPoint, "Obj_TurnToPoint", 3, c, 0); }
+        for (int k = 0; k < 6; k++) {                       /* at the ends of animations: looking about, turning */
+            int look = k < 4;
+            U8(o + 0x56) = look ? (k < 2 ? 0 : 2) : 1;
+            if (U16(o + 0x90))
+                for (u32 j = 0x78; j <= 0x84; j += 4) U32(o + j) = U32(o + 0x8C) + (rnd() % U16(o + 0x90)) * U8(o + 0xAC);
+            ovi_aim(o, O_OBJ);
+            U32(e + 4) = (u32[]){0x7A11FF, 0x7A1200, 0x7A1201, 0x98967F, 0x989680, 0x989681}[rnd() % 6];
+            U16(0x87DE10) = rand8_seed(look ? (u8)(rnd() % 2 ? 1 : 3) : (u8[]){0xEF, 0xF0, 0xF1, 1, 2}[rnd() % 5], 0);
+            U16(o + 0x102) &= ~0x20; U16(o + 0x94) = (u16)(U16(o + 0x90) - 1); U16(o + 0x98) = 0x7000;   /* the animation ends */
+            U32(LOG_BASE) = 0;
+            sprintf(g_what, "ovi %X %s at the end, step %u angle %X dist %X", o, look ? "looks" : "turns", U8(o + 0x56), (U16(e + 8) - U16(o + 0x4A)) & 0xFFF, U32(e + 4));
+            if (look) check(0x4430A0, Ovi_Look, "Ovi_Look", 1, a, 0);
+            else check(0x4433D0, Ovi_Turn, "Ovi_Turn", 1, a, 0);
+        }
+        for (int k = 0; k < 3; k++) {                       /* an attack's step; the player's health about 0 */
+            U8(o + 0x56) = rnd() % 6; S16(O_OBJ + 0x108) = (s16)(rnd() % 3) - 1; U32(G() + 0x940) = O_OBJ;
+            U32(LOG_BASE) = 0;
+            sprintf(g_what, "ovi %X attack step %u health %d", o, U8(o + 0x56), S16(O_OBJ + 0x108));
+            check(0x442B20, Ovi_Attack, "Ovi_Attack", 1, a, 0);
+        }
+        /* the attacks and their hits (o, player), the player animated (its animations in the oviraptor's table) */
+        game_state(); world_setup(); enemy_state();
+        o = O_OBJ + 0x260 * (1 + rnd() % 6); a[0] = o; e = o + 0x1C0;
+        anim_setup_at(O_OBJ);
+        do anim_setup_at(o); while (U32(o + 0x68) < 16);
+        memcpy(MEM(O_OBJ + 0x60), MEM(o + 0x60), 0x50);
+        memcpy(MEM(O_OBJ + 0x260 * 7 + 0x60), MEM(o + 0x60), 0x50);
+        U32(G() + 0x940) = O_OBJ;
+        for (int k = 0x40; k < 0xC0; k++) U32(AN_TAB + 4 * k) = AN_DATA + 0x1000 * ((k ^ k >> 4 ^ k >> 5) & 1);
+        U32(0x74AFA8) = e;
+        U32(G() + 0xB50) = O_OBJ + 0x260 * 7; U32(o + 0x184) = (u32)rnd() & ~(rnd() % 4 ? 0x40u : 0);
+        U8(G() + 0x108F) = rnd() % 4;
+        static const struct { u32 addr; void *fn; const char *name; u8 steps; } at[] = {
+            {0x4434B0, Ovi_LeapBack, "Ovi_LeapBack", 3}, {0x4436B0, Ovi_Peck, "Ovi_Peck", 2}, {0x443730, Ovi_Pounce, "Ovi_Pounce", 7},
+            {0x443E30, Ovi_Lunge, "Ovi_Lunge", 2}, {0x443FA0, Ovi_Kick, "Ovi_Kick", 3}, {0x4441A0, Ovi_BackJump, "Ovi_BackJump", 5},
+            {0x4435D0, Ovi_GrabBite, "Ovi_GrabBite", 2}, {0x443C70, Ovi_PounceCatch, "Ovi_PounceCatch", 2}, {0x443EF0, Ovi_LungeHit, "Ovi_LungeHit", 2},
+            {0x4440D0, Ovi_KickHit, "Ovi_KickHit", 2}, {0x444330, Ovi_BackCatch, "Ovi_BackCatch", 2}};
+        const unsigned na = sizeof at / sizeof at[0];
+        u8 sv[0x260]; memcpy(sv, MEM(o), 0x260);
+        u32 b[2] = {o, O_OBJ};
+        for (unsigned k = 0; k < 3 * na; k++) {
+            memcpy(MEM(o), sv, 0x260);
+            gptr p = O_OBJ;
+            U8(o + 0x57) = rnd() % 4 ? rnd() % at[k % na].steps : (u8)rnd();
+            if (at[k % na].steps == 2 && k % na >= 6) U8(o + 0x57) = rnd() % 4 ? 1 : rnd() % 3;
+            U16(o + 0x92) = rnd() % 2 ? (u16[]){3, 4, 7, 8, 9, 0x18, 0x19, 0x1A, 0x1B, 0x23, 0x24}[rnd() % 11] : (u16)rnd();
+            U8(o + 0x119) = rnd() % 2 ? 0 : (u8)rnd(); U8(o + 0x10C) = (u8)rnd(); U8(o + 0x184) = (u8)rnd();
+            U16(o + 0x1E8) = rnd() % 2 ? 9 + rnd() % 4 : (u16)rnd();
+            for (int j = 0x19; j < 0x24; j++) U8(e + j) = rnd() % 2;
+            U8(e + 0x23) = rnd() % 8;
+            U16(e + 8) = (u16)rnd() & 0xFFF;
+            U16(p + 0x172) = rnd() % 4; U16(p + 0x174) = rnd() % 2 ? 0 : (u16)rnd();
+            U8(G() + 0x108E) = rnd() % 3;
+            S16(p + 0x108) = (s16)(rnd() % 2 ? rnd() % 0x60 : rnd());
+            U16(p + 0x4A) = (u16)(U16(o + 0x4A) + 0x400 * (rnd() % 4) + rnd() % 0x400 - 0x200);
+            U32(LOG_BASE) = 0;
+            anim_maybe_end(o);
+            sprintf(g_what, "ovi %X attack step %u frame %X", o, U8(o + 0x57), U16(o + 0x92));
+            check(at[k % na].addr, at[k % na].fn, at[k % na].name, 2, b, 0);
+        }
+    }
+    player_tables_stub(0);
+    ovi_tables_stub(0);
+    stubs_install(0);
+    g_ign_objpads = 0;
+}
+
 static void test_game(void)
 {
     stubs_install(1);
@@ -5378,6 +5647,7 @@ __declspec(dllexport) void harness_main(int argc, char **argv)
     for (int i = 2; i < argc; i++) {
         if (!strcmp(argv[i], "-n") && i + 1 < argc) iters = atoi(argv[++i]);
         else if (!strcmp(argv[i], "-t") && i + 1 < argc) only = argv[++i];   /* one test group */
+        else if (!strcmp(argv[i], "-s") && i + 1 < argc) rs = (u32)strtoul(argv[++i], NULL, 0);   /* the random seed */
         else data = argv[i];
     }
     if (!load_image(exe)) { fflush(stdout); TerminateProcess(GetCurrentProcess(), 2); }
@@ -5389,7 +5659,7 @@ __declspec(dllexport) void harness_main(int argc, char **argv)
     struct { const char *name; void (*fn)(void); } T[] = {
         {"flags", test_flags}, {"geometry", test_geom}, {"script values", test_script_values},
         {"script opcodes", test_script_ops}, {"script objects", test_objects},
-        {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"objects 2", test_object}, {"collision", test_collision}, {"player", test_player}, {"player states", test_player2}, {"zones", test_zones}, {"loading", test_room}, {"title", test_title}, {"game task", test_game}, {"doors", test_doors}, {"frame", test_frame}, {"enemy sets", test_enemyset}, {"enemies", test_enemies}, {"raptor", test_raptor}, {"aot kinds", test_aot_kinds}, {"object effects", test_obj_effects}, {"effect slots", test_k2}, {"effect drops", test_k2_drops}, {"effect emitters", test_eff_slots}, {"effect slots 3", test_k2_more}, {"helpers", test_helpers}, {"draw", test_draw}, {"pc gpu", test_pcgpu}, {"pc draw", test_pcdraw}, {"pc frame", test_pcframe},
+        {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"objects 2", test_object}, {"collision", test_collision}, {"player", test_player}, {"player states", test_player2}, {"zones", test_zones}, {"loading", test_room}, {"title", test_title}, {"game task", test_game}, {"doors", test_doors}, {"frame", test_frame}, {"enemy sets", test_enemyset}, {"enemies", test_enemies}, {"raptor", test_raptor}, {"oviraptor", test_ovi}, {"aot kinds", test_aot_kinds}, {"object effects", test_obj_effects}, {"effect slots", test_k2}, {"effect drops", test_k2_drops}, {"effect emitters", test_eff_slots}, {"effect slots 3", test_k2_more}, {"helpers", test_helpers}, {"draw", test_draw}, {"pc gpu", test_pcgpu}, {"pc draw", test_pcdraw}, {"pc frame", test_pcframe},
     };
     for (unsigned i = 0; i < sizeof T / sizeof T[0]; i++) {
         int f0 = g_fail, t0 = g_tests;
