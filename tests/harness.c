@@ -6783,6 +6783,318 @@ static void test_trex(void)
     g_ign_objpads = 0;
 }
 
+/* ---- the plesiosaurus ---- */
+static const u32 g_ps_tabs[][2] = {{0x720838, 5}, {0x72084C, 6}, {0x720864, 6}, {0x72087C, 4}, {0x72088C, 4}, {0x72089C, 6}};
+static u32 g_ps_saved[6][6];
+static void plesio_tables_stub(int on)
+{
+    for (int k = 1; k <= 6; k++) g_stubs[k].spec = on ? "d" : "";
+    for (int t = 0; t < 6; t++)
+        for (u32 k = 0; k < g_ps_tabs[t][1]; k++) {
+            gptr a = g_ps_tabs[t][0] + 4 * k;
+            if (on) { g_ps_saved[t][k] = U32(a); U32(a) = (u32)(uintptr_t)g_recs[1 + k]; }
+            else U32(a) = g_ps_saved[t][k];
+        }
+}
+
+/* the bits: each of 2..7 now and then, 7 rarely */
+static u32 plesio_bits(void)
+{
+    u32 v = rnd() % 4 ? rnd() & 0x7E : rnd();
+    if (rnd() % 4) v &= ~0x80u;
+    return v;
+}
+
+/* a plesiosaurus among the test objects; the player its target */
+static gptr plesio_setup(void)
+{
+    gptr o = raptor_setup(), pl = U32(G() + 0x940);
+    U32(o + 0x184) &= ~0x40u;
+    trex_parts(o);
+    U32(o + 0x1C0) = plesio_bits();
+    U8(o + 0x1C8) = 1 + rnd() % 3; U8(o + 0x1C9) = rnd() % 6; U8(o + 0x1CA) = rnd() % 3; U8(o + 0x1CB) = rnd() % 2;
+    for (u32 k = 0x1CC; k <= 0x1D0; k += 4) U32(o + k) = rnd() % 3 ? rnd() % 3 : rnd() % 2 ? rnd() % 0x2000 : rnd();
+    for (u32 k = 0x1E8; k < 0x1F8; k += 2) U16(o + k) = rnd() % 3 ? (u16)(rnd() % 0x400 - 0x200) : (u16)rnd();
+    for (u32 k = 0x1F0; k < 0x1F6; k += 2) U16(o + k) = rnd() % 3 ? rnd() % 3 : (u16)rnd();
+    U32(o + 0x1F8) = rnd();
+    U8(o + 0x57) = rnd() % 2;
+    U16(pl + 0x174) = rnd() % 2 ? rnd() & 3 : (u16)rnd();
+    U16(pl + 0x1FA) = (u16)(rnd() % 2 ? 0x7F + rnd() % 3 : rnd());
+    U32(pl + 0x134) = 0;                                /* (no hit spheres: Enemy_AttackHit keeps +0x119) */
+    Bits_Set(0x87E974, 0, rnd() % 3 == 0);
+    U8(G() + 0x7C4) = rnd() % 2 ? (u8[]){0, 0xD, 0xE, 0xF, 0x10, 0x11}[rnd() % 6] : (u8)rnd();
+    S16(pl + 0x42) = (s16)(rnd() % 2 ? -5000 + (s32)(rnd() % 3) - 1 : (s32)(rnd() % 20000) - 15000);
+    trex_ff(o, rnd() % 2);
+    trex_rand8();
+    return o;
+}
+
+/* p (x/z) at distance d from c, by angle t */
+static void plesio_at(gptr p, gptr c, s32 d, u32 t)
+{
+    gptr v = Tmp_Push(8);
+    U16(v) = 0; U16(v + 2) = 0; U16(v + 4) = (u16)d;
+    Vec_RotY(v, v, t & 0xFFF);
+    U16(p) = (u16)(U16(c) + U16(v)); U16(p + 4) = (u16)(U16(c + 4) + U16(v + 4));
+    Tmp_Pop(8);
+}
+
+static void test_plesio(void)
+{
+    g_ign_objpads = 1;
+    stubs_install(1);
+    plesio_tables_stub(1);
+    player_tables_stub(1);
+    for (int i = 0; i < iters; i++) {
+        game_state();
+        gptr o = plesio_setup(), b = o + 0x1C0, pl = U32(G() + 0x940);
+        u32 a[1] = {o};
+        /* the wait */
+        U8(pl + 0x54) = (u8[]){2, 5, 1, 3}[rnd() % 4]; U16(pl + 0x174) = (u16)rnd(); U8(G() + 0x108E) = rnd() % 3;
+        check(0x42CCA0, Plesio_Wait, "Plesio_Wait", 1, a, 0xFFFFFFFF);
+        /* swimming about: diving away, out and back, circling */
+        for (int k = 0; k < 12; k++) {
+            game_state();
+            o = plesio_setup(); a[0] = o; b = o + 0x1C0; pl = U32(G() + 0x940);
+            int sc = k % 4;
+            if (sc == 0) {                                  /* dives away */
+                U32(b) |= 0x80;
+                S16(o + 0x42) = (s16)(rnd() % 2 ? -29900 + (s32)(rnd() % 3) - 1 : (s32)(rnd() % 60000) - 30000);
+                S16(o + 0x44) = (s16)(rnd() % 2 ? -19900 + (s32)(rnd() % 3) - 1 : (s32)(rnd() % 60000) - 30000);
+                U8(G() + 0x7C4) = rnd() % 2 ? 0x10 : (u8)rnd();
+            } else if (sc == 1) {                           /* back out to its place */
+                U32(b) = (U32(b) & ~0x80u) | 0x28;
+                static const s32 dd[] = {2999, 3000, 3001, 1000, 6000};
+                gptr t = Tmp_Push(8);
+                U16(t) = 0x2AF8; U16(t + 4) = 0x16A8;
+                plesio_at(o + 0x40, t, dd[rnd() % 5], rnd() % 4 ? (u32[]){0, 0x400, 0x800, 0xC00}[rnd() % 4] : rnd());
+                Tmp_Pop(8);
+                U16(o + 0x4A) = (u16)rnd(); U16(o + 0xF4) = (u16)(rnd() % 0x200);
+                if (rnd() % 2) U8(G() + 0x7C4) = (u8[]){0xD, 0xE, 0xF, 0x10, 0x11}[rnd() % 5];
+                U32(b) = (U32(b) & ~0x40u) | (rnd() % 2 ? 0x40 : 0);
+                Flag_Set(3, 0xA, rnd() % 2);                /* (Pos_Hidden) */
+            } else if (sc == 2) {                           /* up and at the player */
+                U32(b) = (U32(b) & ~0xA0u) | 8;
+                static const s32 dd[] = {11999, 12000, 12001, 12499, 12500, 12501, 2000, 20000};
+                plesio_at(o + 0x40, pl + 0x40, dd[rnd() % 8], rnd() % 4 ? (u32[]){0, 0x400, 0x800, 0xC00}[rnd() % 4] : rnd());
+                S16(o + 0x44) = (s16)(rnd() % 2 ? S16(o + 0x44) : 6000 + (s32)(rnd() % 3) - 1);
+                U16(o + 0xF4) = (u16)(rnd() % 0x300 - 0x180);
+                S16(o + 0x42) = (s16)(rnd() % 2 ? -7000 + (s32)(rnd() % 201) - 100 : (s32)(rnd() % 20000) - 10000);
+                if (rnd() % 2) U8(G() + 0x7C4) = (u8[]){0xD, 0xE, 0xF, 0x10, 0x11}[rnd() % 5];
+            } else {                                        /* circling: the angle to the player at its edges */
+                U32(b) &= ~0x88u;
+                S16(o + 0x1EA) = (s16)(rnd() % 2 ? (s32)(rnd() % 0xE0) - 0x70 : (s32)(rnd() % 0x400) - 0x200);
+                S16(o + 0x1EC) = (s16)(rnd() % 2 ? (s32)(rnd() % 0x840) - 0x420 : (s32)rnd());
+                S16(o + 0x1EE) = (s16)(rnd() % 2 ? 0x1A0 * (rnd() % 2 ? 1 : -1) + (s32)(rnd() % 17) - 8 : (s32)(rnd() % 0x400) - 0x200);
+                U16(o + 0x1F0) = rnd() % 3 == 0;
+                u8 sv[0x260]; memcpy(sv, MEM(o), 0x260);
+                u8 svp[0x10]; memcpy(svp, MEM(pl + 0x40), 0x10);
+                Plesio_Swim(o);                             /* (where it gets to, and its heading's base) */
+                u16 px = U16(o + 0x40), pz = U16(o + 0x44), base = (u16)(U16(o + 0x1EC) + U16(o + 0x1E8));
+                memcpy(MEM(o), sv, 0x260); memcpy(MEM(pl + 0x40), svp, 0x10);
+                static const s32 ae[] = {0x33F, 0x340, 0x341, 0, 0x100};
+                s32 want = ae[rnd() % 5] * (rnd() % 2 ? 1 : -1);
+                if (rnd() % 3 == 0) {                       /* its head's turn to (about) the clamp */
+                    U16(o + 0x1F0) = 0;
+                    want = (0x1A0 + (s32)(rnd() % 3) - 1) * (rnd() % 2 ? 1 : -1);
+                    S16(o + 0x1EE) = (s16)(want + (s32)(rnd() % 9) - 4);
+                }
+                gptr c = Tmp_Push(8); U16(c) = px; U16(c + 4) = pz;
+                s32 r = 2000 + rnd() % 20000;
+                for (u32 t = 0; t < 0x1000; t++) {
+                    plesio_at(pl + 0x40, c, r, t);
+                    if ((s16)Angle_DiffTo(c, pl + 0x40, base) == want) break;
+                }
+                Tmp_Pop(8);
+                S16(pl + 0x42) = (s16)(S16(o + 0x42) + (rnd() % 2 ? 2000 : 3000) + (s32)(rnd() % 3) - 1);
+                if (rnd() % 3 == 0) S16(pl + 0x42) = (s16)rnd();
+            }
+            U32(LOG_BASE) = 0;
+            sprintf(g_what, "plesio %X swim case %d bits %X event %X", o, sc, U32(b), U8(G() + 0x7C4));
+            check(0x42BFF0, Plesio_Swim, "Plesio_Swim", 1, a, 0);
+        }
+        /* the attacks, and turning about */
+        for (int k = 0; k < 12; k++) {
+            game_state();
+            o = plesio_setup(); a[0] = o; b = o + 0x1C0; pl = U32(G() + 0x940);
+            if (rnd() % 4) { Bits_Set(0x87E974, 0, 0); U32(o + 0x1D0) = 0; U32(b) &= ~0x80u; }
+            static const s32 dd[] = {15999, 16000, 16001, 17999, 18000, 18001, 8000};
+            s32 d = dd[rnd() % 7];
+            plesio_at(pl + 0x40, o + 0x40, d, rnd() % 4 ? 0 : rnd());
+            trex_aim(o + 0x40, o, pl + 0x40);
+            u32 d2 = Dist2_XZ(o + 0x40, pl + 0x40);
+            U32(o + 0x1F8) = rnd() % 2 ? d2 + (u32)(rnd() % 3) - 1 : rnd();
+            U16(o + 0x1F2) = rnd() % 3 == 0;
+            S16(pl + 0x42) = (s16)(rnd() % 2 ? -5000 + (s32)(rnd() % 3) - 1 : (s32)(rnd() % 20000) - 15000);
+            U8(G() + 0x7C4) = 0;
+            trex_rand8();
+            U32(LOG_BASE) = 0;
+            static const TRexFn th[] = {{0x42BE70, Plesio_Decide, "Plesio_Decide"}, {0x42BC40, Plesio_ThinkSwim, "Plesio_ThinkSwim"},
+                                        {0x42BDB0, Plesio_ThinkTurn, "Plesio_ThinkTurn"}, {0x42C400, Plesio_ThinkBite, "Plesio_ThinkBite"},
+                                        {0x42C4A0, Plesio_ThinkLunge, "Plesio_ThinkLunge"}, {0x42C590, Plesio_ThinkSide, "Plesio_ThinkSide"},
+                                        {0x42C680, Plesio_ThinkRise, "Plesio_ThinkRise"}};
+            const TRexFn *f = &th[k < 8 ? k % 2 : k % 7];
+            if (k % 4 == 1 && rnd() % 2) {                  /* swimming first: the player about 18000 from where it gets to */
+                U32(b) &= ~0x88u;
+                u8 sv[0x260]; memcpy(sv, MEM(o), 0x260);
+                Plesio_Swim(o);
+                gptr c = Tmp_Push(8); U16(c) = U16(o + 0x40); U16(c + 4) = U16(o + 0x44);
+                memcpy(MEM(o), sv, 0x260);
+                plesio_at(pl + 0x40, c, dd[3 + rnd() % 3], 0);
+                d2 = Dist2_XZ(c, pl + 0x40);
+                Tmp_Pop(8);
+                U32(o + 0x1F8) = d2 + (u32)(rnd() % 3) - 1;
+                U16(o + 0x1F2) = rnd() % 4 == 0;
+            }
+            if (k < 8 && k % 2 == 0) {                      /* deciding: each attack at its edges */
+                U32(b) = (U32(b) & ~0x88u) | (rnd() % 2 ? 8 : 0);
+                U32(o + 0x1D0) = rnd() % 6 == 0; Bits_Set(0x87E974, 0, rnd() % 6 == 0);
+                plesio_at(pl + 0x40, o + 0x40, rnd() % 4 ? (s32[]){15999, 16000, 8000, 300}[rnd() % 4] : 16001, 0);
+                static const u16 ea[] = {0, 1, 0xFF, 0x100, 0x101, 0x1FF, 0x200, 0x201};
+                u32 e = rnd() % 3 ? ea[rnd() % 8] : 0;
+                U16(o + 0x4A) = (u16)((Angle_XZ(o + 0x40, pl + 0x40) + (rnd() % 2 ? e : 0x1000 - e)) & 0xFFF);
+                S16(pl + 0x42) = (s16)(rnd() % 2 ? -5000 + (s32)(rnd() % 3) - 1 : (s32)(rnd() % 20000) - 15000);
+            }
+            sprintf(g_what, "plesio %X %s bits %X dist %d", o, f->name, U32(b), d);
+            check(f->addr, f->fn, f->name, 1, a, f->addr == 0x42BE70 ? 0xFFFFFFFF : 0);
+        }
+        /* the state handlers */
+        game_state();
+        o = plesio_setup(); a[0] = o; b = o + 0x1C0; pl = U32(G() + 0x940);
+        U8(o + 0x54) = rnd() % 5; U8(o + 0x55) = rnd() % 6; U8(o + 0x56) = rnd() % 3;
+        check(0x42BBA0, Plesio_Normal, "Plesio_Normal", 1, a, 0);
+        U8(o + 0x55) = rnd() % 4;
+        check(0x42BBD0, Plesio_Hit, "Plesio_Hit", 1, a, 0);
+        check(0x42BBF0, Plesio_Die, "Plesio_Die", 1, a, 0);
+        for (int k = 0; k < 3; k++) {
+            U8(o + 0x55) = rnd() % 6;
+            U8(o + 0x119) = (u8[]){0, 1, 0xFF, 0x7F, 0x80}[rnd() % 5];
+            U16(pl + 0x174) &= ~1; U8(pl + 0x17B) = 0; U32(o + 0x184) &= ~0x40u;   /* (Enemy_AttackHit keeps +0x119) */
+            U32(o + 0xA0) = TR_ATK; U16(o + 0x102) &= ~2;
+            check(0x42BC10, Plesio_Grab, "Plesio_Grab", 1, a, 0);
+        }
+        for (int k = 0; k < 6; k++) {
+            game_state();
+            o = plesio_setup(); a[0] = o; b = o + 0x1C0; pl = U32(G() + 0x940);
+            U8(o + 0x54) = rnd() % 5; U8(o + 0x55) = rnd() % 6;
+            if (rnd() % 2) {                                /* the parts about 20000 from the player */
+                for (u32 p = U32(o + 0x64); p; p = U32(p + 0x54))
+                    if (rnd() % 2) plesio_at(p + 0x40, pl + 0x40, 20000 + (s32)(rnd() % 3) - 1, (u32[]){0, 0x400, 0x800, 0xC00}[rnd() % 4]);
+            }
+            U8(G() + 0x7C4) = rnd() % 2 ? 0xF : (u8)rnd();
+            U8(G() + 0x108F) = rnd() % 13;
+            U32(o + 0x50) = (U32(o + 0x50) & ~0x40000030u) | (rnd() & 0x30) | (rnd() % 8 == 0 ? 0x40000000 : 0);
+            S16(o + 0x42) = (s16)(rnd() % 2 ? (s32)(rnd() % 20000) - 15000 : (s32)rnd());
+            for (u32 j = 0x1F0; j < 0x1F6; j += 2) U16(o + j) = rnd() % 3;
+            U32(o + 0x1CC) = rnd() % 2;
+            if (rnd() % 2) trex_spheres(o, 1 + rnd() % 3);
+            if (rnd() % 2) {                                /* still: its height about the floor's less 5000 */
+                U16(o + 0xF0) = 0; U16(o + 0xF2) = 0; U16(o + 0xF4) = 0;
+                for (int j = 0; j < 4; j++) S16(o + 0x42) = (s16)((s16)Floor_Height(o + 0x40, o + 0x40, 0x40, 0) - 5000);
+                S16(o + 0x42) = (s16)(S16(o + 0x42) + (s32)(rnd() % 3) - 1);
+            }
+            sprintf(g_what, "plesio %X handler state %X bits %X", o, U32(o + 0x54), U32(b));
+            check(0x42B750, Plesio_Handler, "Plesio_Handler", 1, a, 0);
+        }
+        do model_data(0x640000); while (U32(0x640000 + 0x14) < 15);
+        do anim_setup_at(AN_OBJ); while (U32(AN_OBJ + 0x68) != 16);
+        memcpy(MEM(o + 0x60), MEM(AN_OBJ + 0x60), 0x50);
+        U32(0x642984) = AN_DATA;                            /* its first animation */
+        U8(G() + 0x108E) = rnd() % 3; U32(0x74AF14) = rnd(); U8(0x87E747) = rnd() % 2;
+        U8(0x87EEC9) = rnd() % 2 ? 8 : (u8)rnd(); U8(0x87EEC8) = rnd() % 2 ? 0 : (u8)rnd();
+        check(0x42B9A0, Plesio_Init, "Plesio_Init", 1, a, 0);
+        /* moving, hit, dying: each step */
+        static const TRexFn mv[] = {
+            {0x42BD10, Plesio_Swimming, "Plesio_Swimming", 2}, {0x42BDD0, Plesio_Turn, "Plesio_Turn", 2},
+            {0x42C410, Plesio_Bite, "Plesio_Bite", 2}, {0x42C4B0, Plesio_Lunge, "Plesio_Lunge", 2},
+            {0x42C5A0, Plesio_Side, "Plesio_Side", 2}, {0x42C690, Plesio_Rise, "Plesio_Rise", 2},
+            {0x42C890, Plesio_Damage, "Plesio_Damage", 1}, {0x42CAA0, Plesio_Flinch, "Plesio_Flinch", 2},
+            {0x42CB00, Plesio_Flinch2, "Plesio_Flinch2", 2}, {0x42CB60, Plesio_Flinch3, "Plesio_Flinch3", 2},
+            {0x42CBC0, Plesio_Dead, "Plesio_Dead", 3}};
+        const unsigned nm = sizeof mv / sizeof mv[0];
+        game_state(); world_setup(); enemy_state(); zones_setup();
+        o = O_OBJ + 0x260 * (1 + rnd() % 6); a[0] = o; b = o + 0x1C0;
+        anim_setup_at(O_OBJ);
+        do anim_setup_at(o); while (U32(o + 0x68) != 16);
+        memcpy(MEM(O_OBJ + 0x60), MEM(o + 0x60), 0x50);
+        U32(G() + 0x940) = pl = O_OBJ;
+        U32(pl + 0x128) = rnd() % 2 ? 0x7200E8 : 0; U32(o + 0x128) = 0x7207F8;
+        U8(o + 0x58) = 5;
+        u8 sv[0x260]; memcpy(sv, MEM(o), 0x260);
+        for (unsigned k = 0; k < 12 * nm; k++) {
+            const TRexFn *f = &mv[k % nm];
+            memcpy(MEM(o), sv, 0x260);
+            for (u32 j = 0x1C0; j < 0x200; j += 4) U32(o + j) = rnd();
+            U32(b) = plesio_bits();
+            U8(o + 0x1C8) = 1 + rnd() % 3; U8(o + 0x1C9) = rnd() % 6; U8(o + 0x1CA) = rnd() % 3; U8(o + 0x1CB) = rnd() % 2;
+            for (u32 j = 0x1CC; j <= 0x1D0; j += 4) U32(o + j) = rnd() % 3 ? rnd() % 3 : rnd() % 2 ? rnd() % 0x2000 : rnd();
+            for (u32 j = 0x1E8; j < 0x1F8; j += 2) U16(o + j) = rnd() % 3 ? (u16)(rnd() % 0x400 - 0x200) : (u16)rnd();
+            for (u32 j = 0x1F0; j < 0x1F6; j += 2) U16(o + j) = rnd() % 3 ? rnd() % 3 : (u16)rnd();
+            U8(o + 0x54) = rnd() % 4 ? 1 + rnd() % 3 : rnd() % 5;
+            U8(o + 0x55) = rnd() % 6;
+            U8(o + 0x56) = (u8)(rnd() % 8 ? rnd() % f->steps : rnd());
+            U8(o + 0x57) = rnd() % 2;
+            static const u16 fr[] = {0, 0x34, 0x35, 0x4F, 0x5A, 0x60, 0x64, 0x10, 0x20};
+            U16(o + 0x92) = rnd() % 4 ? (u16)(fr[rnd() % 9] + rnd() % 3 - 1) : (u16)(rnd() % 0x80);
+            trex_ff(o, rnd() % 2);
+            U8(pl + 0x54) = (u8[]){1, 2, 5, 3}[rnd() % 4]; U16(pl + 0x174) = rnd() % 2 ? rnd() & 3 : (u16)rnd();
+            /* the damage */
+            U16(o + 0x172) = rnd() % 6; U16(o + 0x176) = rnd() % 2 ? rnd() % 0x400 : (u16)rnd();
+            S16(o + 0x10A) = (s16)(rnd() % 2 ? rnd() % 0x2000 : rnd());
+            S16(o + 0x108) = (s16)(rnd() % 2 ? rnd() % 0x800 - 0x10 : rnd());
+            if (rnd() % 3 == 0) S16(o + 0x108) = (s16)(U16(o + 0x176) + rnd() % 3 - 1);
+            if (rnd() % 3 == 0) S16(o + 0x108) = (s16)((s32)U16(o + 0x176) / 5 + (s32)(rnd() % 3) - 1);
+            if (rnd() % 3 == 0) U32(o + 0x1CC) = (u32)(S16(o + 0x10A) / 5 - (s32)U16(o + 0x176) + (s32)(rnd() % 3) - 1);
+            U8(o + 0x184) = (u8)rnd(); U8(o + 0x17D) = rnd() % 2 ? 0x12 : (u8)rnd();
+            if (f->addr == 0x42C890) {
+                if (rnd() % 2) U8(o + 0x56) = 0;
+                if (rnd() % 2) U8(o + 0x1C8) = 2;
+                if (rnd() % 2) U16(o + 0x172) = 3 + rnd() % 2;
+                U8(o + 0x58) = (u8)(rnd() % 16); U8(G() + 0x757) = 0;
+            }
+            if (f->addr == 0x42CBC0) {                      /* sinking: about the bottom, near 0 */
+                S16(o + 0x42) = (s16)(rnd() % 2 ? -19970 + (s32)(rnd() % 3) - 1 : (s32)(rnd() % 40000) - 20000);
+                S16(o + 0x44) = (s16)(rnd() % 2 ? 0x50 + (s32)(rnd() % 3) - 1 : (s32)(rnd() % 40000) - 20000);
+            }
+            U8(G() + 0x108E) = rnd() % 3; U8(G() + 0x108F) = rnd() % 2 ? rnd() % 12 : (u8)rnd();
+            for (u32 j = 0; j < 20; j++) if (rnd() % 2) U8(O_K2 + j * 0xAC + 0x50) &= ~1;
+            if (rnd() % 2) { U16(o + 0xF0) = (u16)(rnd() % 0x600 - 0x300); U16(o + 0xF2) = (u16)(rnd() % 0x600 - 0x300); U16(o + 0xF4) = (u16)(rnd() % 0x300); }
+            trex_rand8();
+            anim_maybe_end(o);
+            if (rnd() % 2) U16(o + 0x102) |= 0x20;
+            static const struct { u32 addr; u16 fr[3]; } edge[] = {
+                {0x42BDD0, {0x34, 0x35, 0x36}}, {0x42C410, {0x4E, 0x4F, 0x50}}, {0x42C4B0, {0x59, 0x5A, 0x5B}},
+                {0x42C5A0, {0x5F, 0x60, 0x61}}, {0x42C690, {0x63, 0x64, 0x65}}};
+            for (unsigned e = 0; e < sizeof edge / sizeof edge[0]; e++)
+                if (edge[e].addr == f->addr && rnd() % 2) {   /* (held at the frame: Anim_Step leaves it) */
+                    U8(o + 0x56) = 1; U16(o + 0x92) = edge[e].fr[rnd() % 3]; U16(o + 0x102) |= 0x20;
+                }
+            U32(LOG_BASE) = 0;
+            sprintf(g_what, "plesio %X %s step %u side %u frame %X", o, f->name, U8(o + 0x56), U8(o + 0x57), U16(o + 0x92));
+            check(f->addr, f->fn, f->name, 1, a, 0);
+        }
+        /* the attacks land */
+        static const TRexFn gh[] = {{0x42C750, Plesio_BiteHit, "Plesio_BiteHit"}, {0x42C7C0, Plesio_LungeHit, "Plesio_LungeHit"},
+                                    {0x42C830, Plesio_RiseHit, "Plesio_RiseHit"}};
+        for (int k = 0; k < 18; k++) {
+            memcpy(MEM(o), sv, 0x260);
+            U8(o + 0x56) = rnd() % 4 ? 1 : (u8)(rnd() % 3);
+            U8(G() + 0x108E) = rnd() % 3; U8(G() + 0x108F) = rnd() % 5;
+            Flag_Set(2, 0x1A, rnd() % 3 == 0);
+            U16(pl + 0x4A) = (u16)((U16(o + 0x4A) + (u16[]){0, 0x3FF, 0x400, 0x401, 0xC01, 0xC00, 0xBFF, 0x800}[rnd() % 8]) & 0xFFF);
+            S16(pl + 0x108) = (s16)(rnd() % 2 ? rnd() % 0x100 - 0x10 : rnd());
+            for (u32 j = 0; j < 20; j++) if (rnd() % 2) U8(O_K2 + j * 0xAC + 0x50) &= ~1;
+            U32(LOG_BASE) = 0;
+            sprintf(g_what, "plesio %X %s step %u", o, gh[k % 3].name, U8(o + 0x56));
+            check(gh[k % 3].addr, gh[k % 3].fn, gh[k % 3].name, 1, a, 0);
+        }
+    }
+    player_tables_stub(0);
+    plesio_tables_stub(0);
+    stubs_install(0);
+    g_ign_objpads = 0;
+}
+
 static void test_game(void)
 {
     stubs_install(1);
@@ -6957,7 +7269,7 @@ __declspec(dllexport) void harness_main(int argc, char **argv)
     struct { const char *name; void (*fn)(void); } T[] = {
         {"flags", test_flags}, {"geometry", test_geom}, {"script values", test_script_values},
         {"script opcodes", test_script_ops}, {"script objects", test_objects},
-        {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"objects 2", test_object}, {"collision", test_collision}, {"player", test_player}, {"player states", test_player2}, {"zones", test_zones}, {"loading", test_room}, {"title", test_title}, {"game task", test_game}, {"doors", test_doors}, {"frame", test_frame}, {"enemy sets", test_enemyset}, {"enemies", test_enemies}, {"raptor", test_raptor}, {"oviraptor", test_ovi}, {"allosaurus", test_allo}, {"pteranodon", test_ptera}, {"tyrannosaurus", test_trex}, {"aot kinds", test_aot_kinds}, {"object effects", test_obj_effects}, {"effect slots", test_k2}, {"effect drops", test_k2_drops}, {"effect emitters", test_eff_slots}, {"effect slots 3", test_k2_more}, {"helpers", test_helpers}, {"draw", test_draw}, {"pc gpu", test_pcgpu}, {"pc draw", test_pcdraw}, {"pc frame", test_pcframe},
+        {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"objects 2", test_object}, {"collision", test_collision}, {"player", test_player}, {"player states", test_player2}, {"zones", test_zones}, {"loading", test_room}, {"title", test_title}, {"game task", test_game}, {"doors", test_doors}, {"frame", test_frame}, {"enemy sets", test_enemyset}, {"enemies", test_enemies}, {"raptor", test_raptor}, {"oviraptor", test_ovi}, {"allosaurus", test_allo}, {"pteranodon", test_ptera}, {"tyrannosaurus", test_trex}, {"plesiosaurus", test_plesio}, {"aot kinds", test_aot_kinds}, {"object effects", test_obj_effects}, {"effect slots", test_k2}, {"effect drops", test_k2_drops}, {"effect emitters", test_eff_slots}, {"effect slots 3", test_k2_more}, {"helpers", test_helpers}, {"draw", test_draw}, {"pc gpu", test_pcgpu}, {"pc draw", test_pcdraw}, {"pc frame", test_pcframe},
     };
     for (unsigned i = 0; i < sizeof T / sizeof T[0]; i++) {
         int f0 = g_fail, t0 = g_tests;

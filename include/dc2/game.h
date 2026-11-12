@@ -1031,5 +1031,34 @@ void DC2CALL TRex_FlinchHard(gptr o);                   /* 0x425DC0 */
 void DC2CALL TRex_Reel(gptr o);                         /* 0x425ED0 */
 void DC2CALL TRex_Down(gptr o);                         /* 0x426010 */
 void DC2CALL TRex_Dead(gptr o);                         /* 0x4261D0 */
+void DC2CALL Plesio_Handler(gptr o);             /* 0x42B750 */
+void DC2CALL Plesio_Init(gptr o);                /* 0x42B9A0 */
+void DC2CALL Plesio_Normal(gptr o);              /* 0x42BBA0 */
+void DC2CALL Plesio_Hit(gptr o);                 /* 0x42BBD0 */
+void DC2CALL Plesio_Die(gptr o);                 /* 0x42BBF0 */
+void DC2CALL Plesio_Grab(gptr o);                /* 0x42BC10 */
+void DC2CALL Plesio_ThinkSwim(gptr o);           /* 0x42BC40 */
+void DC2CALL Plesio_Swimming(gptr o);            /* 0x42BD10 */
+void DC2CALL Plesio_ThinkTurn(gptr o);           /* 0x42BDB0 */
+void DC2CALL Plesio_Turn(gptr o);                /* 0x42BDD0 */
+u32 DC2CALL Plesio_Decide(gptr o);               /* 0x42BE70 */
+void DC2CALL Plesio_Swim(gptr o);                /* 0x42BFF0 */
+void DC2CALL Plesio_ThinkBite(gptr o);           /* 0x42C400 */
+void DC2CALL Plesio_Bite(gptr o);                /* 0x42C410 */
+void DC2CALL Plesio_ThinkLunge(gptr o);          /* 0x42C4A0 */
+void DC2CALL Plesio_Lunge(gptr o);               /* 0x42C4B0 */
+void DC2CALL Plesio_ThinkSide(gptr o);           /* 0x42C590 */
+void DC2CALL Plesio_Side(gptr o);                /* 0x42C5A0 */
+void DC2CALL Plesio_ThinkRise(gptr o);           /* 0x42C680 */
+void DC2CALL Plesio_Rise(gptr o);                /* 0x42C690 */
+void DC2CALL Plesio_BiteHit(gptr o);             /* 0x42C750 */
+void DC2CALL Plesio_LungeHit(gptr o);            /* 0x42C7C0 */
+void DC2CALL Plesio_RiseHit(gptr o);             /* 0x42C830 */
+void DC2CALL Plesio_Damage(gptr o);              /* 0x42C890 */
+void DC2CALL Plesio_Flinch(gptr o);              /* 0x42CAA0 */
+void DC2CALL Plesio_Flinch2(gptr o);             /* 0x42CB00 */
+void DC2CALL Plesio_Flinch3(gptr o);             /* 0x42CB60 */
+void DC2CALL Plesio_Dead(gptr o);                /* 0x42CBC0 */
+u32 DC2CALL Plesio_Wait(gptr o);                 /* 0x42CCA0 */
 
 #endif
