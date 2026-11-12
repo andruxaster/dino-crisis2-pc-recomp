@@ -88,7 +88,7 @@ Checked under wine 9 (32-bit prefix): all 26 hooks installed; after one
 minute Lzss_Decode 23 calls, Flag_Check 62 000, Script_Run every frame,
 PointInQuad 5 000.
 
-## Reimplemented (993)
+## Reimplemented (1040)
 
 The authoritative list is `src/hook/hooks.c`. By area:
 
@@ -121,6 +121,7 @@ The authoritative list is `src/hook/hooks.c`. By area:
 | oviraptor | handler, init by level, the choice of the next state, normal sub-states (walk and turn about, look about, hide, turn in place, entrance), climbs and jumps, the attacks (leap back, peck, pounce and the bites while holding the player down, lunge, kick, jump on the back) and their hits on the player, the hits it takes (staggers, knocked back, blown about, thrown in the air), death | src/game/oviraptor.c |
 | allosaurus | handler, init, deciding (standing, walking, running, steering by walls and ledges), the moves (walk, run, leap down or up a level, turn about, step back, roar, anger, bite and shake the player, lunge, snaps, pick the player up and toss, sidestep, dash), the attacks landing, the damage it takes (anger, stagger, flinch, fall), death, the anger tint and burning | src/game/allosaurus.c |
 | pteranodon | handler (the player shooting keeps them off, height limits, flight height), init, deciding (circling and steering, the swoop at the player or where the running player will be, perched), the moves (fly, rise, swoop, perch, peck, claw, carry the player off and drop it, pin it down), the attacks landing, the player's states while falling and getting up, the damage it takes (flinch, knocked about), falling dead (cliffs, water); the room's water level | src/game/pteranodon.c, src/game/object.c |
+| tyrannosaurus | handler (the gate kind keeps half its health and opens the gates' flags when its attacks reach them, the scripted kind's steps), init, deciding (stand, walk, the attacks by distance, angle and level, wandering to points, charging a gate), the moves (stand, walk, roar, look about, snatch the player up and shake it, recoil, the scripted break through the wall, stagger, bite, bite while walking, charge, lunge), the attacks landing (the charge catches the player in its jaws), the player's states in its jaws, the damage it takes (by kind and weapon, flinch, reel, stagger), going down and getting up, falling dead; attack spheres against a quad, a random zone point, turning from the head | src/game/trex.c |
 | doors (room change) | Door_Task and its modes (set-up: the stand-in, door models, camera, light, room name; run: area switch, room and music loads; end), all door types' handlers: hinged, shutter, sliding and double doors, lifts, stairs, camera drop, waits, message, walk; the score panel after a fight | src/game/door.c |
 | PC layer: GTE | all 80 libgte functions of the port (0x4C08E0..0x4C24C0): rsin/rcos/ratan2, roots, geometry state, Apply/Mul/Rot/Scale/Transpose matrix, RotTransPers 1/3/4 and the float projection, depth cue, normal colour, register loads/stores, rtps/rtpt/nclip/ncct, PC depth stores | src/game/gte.c, include/dc2/gte.h |
 | PC layer: GPU, memory side | primitives linked into the ordering tables, sprite/tile/mode/area packets, texture page words, the software VRAM (1024x512 at 0x76448C: LoadImage, StoreImage, the CLUT rows load, with the texture cache invalidation and palette conversion of the drawing layer). Tested in the harness, called by the standalone builds (the DLL keeps the originals) | src/pc/gpu.c, include/dc2/gpu.h |
@@ -173,10 +174,10 @@ alone and the harness ignores them.
 
 ## Next
 
-The script VM, the keyframe animation, the generic object handler (type 1), object collision, the zone navigation, the player (all states and substates, all weapons and sub-weapons), the velociraptor, the oviraptor, the allosaurus and the pteranodon are complete; the standalone build plays the opening of room 101 and, with buttons held from the command line,
+The script VM, the keyframe animation, the generic object handler (type 1), object collision, the zone navigation, the player (all states and substates, all weapons and sub-weapons), the velociraptor, the oviraptor, the allosaurus, the pteranodon and the tyrannosaurus are complete; the standalone build plays the opening of room 101 and, with buttons held from the command line,
 walks the player through its door into room 102 (`dc2 Dino2.exe ROOT/Data 3300 400:820 440:820
 2900-2932:2000 2940-2955:1000 2960-3010:20`; ROOT also holds `Speech`). The DirectSound buffers have a
-silent stand-in there that only keeps time. Next: the other dinosaurs' type handlers (*0x87DCA0: T-Rex 0x423680,
+silent stand-in there that only keeps time. Next: the other dinosaurs' type handlers (*0x87DCA0: Plesiosaurus 0x42B750,
 ...), the area objects and props, sound/BGM (0x48C9C0..0x48CE60), messages
 (0x4718F0), fades and menus. The PC layer's drawing is copied onto
 Direct3D-shaped calls and drawn by a renderer (OpenGL, the Dreamcast's PVR);

@@ -984,4 +984,52 @@ void DC2CALL Ptera_KnockHard(gptr o);           /* 0x42B1D0 */
 void DC2CALL Ptera_KnockHeavy(gptr o);          /* 0x42B300 */
 void DC2CALL Ptera_Dying(gptr o);               /* 0x42B440 */
 
+void DC2CALL Obj_TurnFromHead(gptr o, u32 max, gptr pos); /* 0x45B3D0 */
+void DC2CALL Zone_RandomPoint(gptr o, gptr out);        /* 0x487340 */
+u32  DC2CALL Enemy_AttackInQuad(gptr o, gptr quad);     /* 0x479B30 */
+void DC2CALL TRex_Handler(gptr o);                      /* 0x423680 */
+void DC2CALL TRex_Init(gptr o);                         /* 0x423970 */
+void DC2CALL TRex_Normal(gptr o);                       /* 0x423BC0 */
+void DC2CALL TRex_Hit(gptr o);                          /* 0x423BF0 */
+void DC2CALL TRex_Die(gptr o);                          /* 0x423C10 */
+void DC2CALL TRex_Grab(gptr o);                         /* 0x423C30 */
+u32  DC2CALL TRex_Timer(gptr o);                        /* 0x426320 */
+u32  DC2CALL TRex_Event(gptr o);                        /* 0x426390 */
+u32  DC2CALL TRex_Script(gptr o);                       /* 0x426410 */
+u32  DC2CALL TRex_Target(gptr o);                       /* 0x426530 */
+u32  DC2CALL TRex_Gates(gptr o);                        /* 0x4266A0 */
+u32  DC2CALL TRex_Decide(gptr o);                       /* 0x4243B0 */
+void DC2CALL TRex_ThinkStand(gptr o);                   /* 0x423C60 */
+void DC2CALL TRex_Stand(gptr o);                        /* 0x423E40 */
+void DC2CALL TRex_ThinkWalk(gptr o);                    /* 0x423F70 */
+void DC2CALL TRex_Walk(gptr o);                         /* 0x4240C0 */
+void DC2CALL TRex_ThinkRoar(gptr o);                    /* 0x4241F0 */
+void DC2CALL TRex_Roar(gptr o);                         /* 0x424210 */
+void DC2CALL TRex_ThinkLook(gptr o);                    /* 0x4242D0 */
+void DC2CALL TRex_Look(gptr o);                         /* 0x424300 */
+void DC2CALL TRex_ThinkSnatch(gptr o);                  /* 0x4246A0 */
+void DC2CALL TRex_Snatch(gptr o);                       /* 0x4246D0 */
+void DC2CALL TRex_PlSnatched(gptr pl);                  /* 0x4248A0 */
+void DC2CALL TRex_Recoil(gptr o);                       /* 0x4249B0 */
+void DC2CALL TRex_Burst(gptr o);                        /* 0x424A30 */
+void DC2CALL TRex_Stagger(gptr o);                      /* 0x424C80 */
+void DC2CALL TRex_ThinkBite(gptr o);                    /* 0x424E20 */
+void DC2CALL TRex_Bite(gptr o);                         /* 0x424E70 */
+void DC2CALL TRex_ThinkWalkBite(gptr o);                /* 0x424F50 */
+void DC2CALL TRex_WalkBite(gptr o);                     /* 0x424F70 */
+void DC2CALL TRex_ThinkCharge(gptr o);                  /* 0x425040 */
+void DC2CALL TRex_Charge(gptr o);                       /* 0x425080 */
+void DC2CALL TRex_Lunge(gptr o);                        /* 0x425190 */
+void DC2CALL TRex_BiteHit(gptr o);                      /* 0x425240 */
+void DC2CALL TRex_WalkBiteHit(gptr o);                  /* 0x425300 */
+void DC2CALL TRex_LungeHit(gptr o);                     /* 0x425690 */
+void DC2CALL TRex_ChargeHit(gptr o);                    /* 0x4253B0 */
+void DC2CALL TRex_PlBitten(gptr pl);                    /* 0x4255D0 */
+void DC2CALL TRex_Damage(gptr o);                       /* 0x425740 */
+void DC2CALL TRex_Flinch(gptr o);                       /* 0x425CA0 */
+void DC2CALL TRex_FlinchHard(gptr o);                   /* 0x425DC0 */
+void DC2CALL TRex_Reel(gptr o);                         /* 0x425ED0 */
+void DC2CALL TRex_Down(gptr o);                         /* 0x426010 */
+void DC2CALL TRex_Dead(gptr o);                         /* 0x4261D0 */
+
 #endif
