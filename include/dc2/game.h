@@ -949,4 +949,39 @@ u32  DC2CALL Allo_FrameNear(gptr o, u32 frame, u32 dist);       /* 0x43CD80 */
 u32  DC2CALL Allo_Chance(gptr o, u32 n);                        /* 0x43CDC0 */
 void DC2CALL Allo_Burn(gptr o);                                 /* 0x43CDF0 */
 
+void DC2CALL Vec_Toward(gptr a, gptr b, u32 speed, gptr out); /* 0x48F500 */
+u32  DC2CALL Water_Level(gptr pos);             /* 0x413980 */
+void DC2CALL Ptera_Type(gptr o);                /* 0x429030 */
+void DC2CALL Ptera_Handler(gptr o);             /* 0x429040 */
+void DC2CALL Ptera_Init(gptr o);                /* 0x429290 */
+void DC2CALL Ptera_Normal(gptr o);              /* 0x429430 */
+void DC2CALL Ptera_Hit(gptr o);                 /* 0x429460 */
+void DC2CALL Ptera_Die(gptr o);                 /* 0x429480 */
+void DC2CALL Ptera_Grab(gptr o);                /* 0x4294A0 */
+u32  DC2CALL Ptera_Timer(gptr o);               /* 0x4338F0 */
+void DC2CALL Ptera_HoldPoint(gptr o, gptr out, gptr v); /* 0x433860 */
+void DC2CALL Ptera_ThinkFly(gptr o);            /* 0x4294D0 */
+void DC2CALL Ptera_Steer(gptr o);               /* 0x4297D0 */
+void DC2CALL Ptera_Fly(gptr o);                 /* 0x4296A0 */
+void DC2CALL Ptera_Rise(gptr o);                /* 0x429890 */
+void DC2CALL Ptera_ThinkSwoop(gptr o);          /* 0x429A10 */
+void DC2CALL Ptera_Swoop(gptr o);               /* 0x429C50 */
+void DC2CALL Ptera_ThinkPerch(gptr o);          /* 0x429E40 */
+void DC2CALL Ptera_Perch(gptr o);               /* 0x429F20 */
+void DC2CALL Ptera_Peck(gptr o);                /* 0x42A070 */
+void DC2CALL Ptera_Claw(gptr o);                /* 0x42A210 */
+u32  DC2CALL Ptera_PlAnim(gptr o);              /* 0x42B6F0 */
+void DC2CALL Ptera_Carry(gptr o);               /* 0x42A3B0 */
+void DC2CALL Ptera_Dropped(gptr pl);            /* 0x42A730 */
+void DC2CALL Ptera_Pin(gptr o);                 /* 0x42A810 */
+void DC2CALL Ptera_Released(gptr pl);           /* 0x42AC00 */
+void DC2CALL Ptera_PeckHit(gptr o);             /* 0x42AC30 */
+void DC2CALL Ptera_ClawHit(gptr o);             /* 0x42ACB0 */
+void DC2CALL Ptera_PinHit(gptr o);              /* 0x42AD30 */
+void DC2CALL Ptera_Damage(gptr o);              /* 0x42AE50 */
+void DC2CALL Ptera_Knock(gptr o);               /* 0x42B0A0 */
+void DC2CALL Ptera_KnockHard(gptr o);           /* 0x42B1D0 */
+void DC2CALL Ptera_KnockHeavy(gptr o);          /* 0x42B300 */
+void DC2CALL Ptera_Dying(gptr o);               /* 0x42B440 */
+
 #endif

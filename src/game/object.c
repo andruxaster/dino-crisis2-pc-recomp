@@ -204,6 +204,50 @@ void DC2CALL Vec_RotY(gptr out, gptr in, u32 ang)                   /* 0x48F470 
     Tmp_Pop(0x28);
 }
 
+/* out: a move of speed toward b from a, in o's own frame (0, up, ahead) by the climb angle */
+void DC2CALL Vec_Toward(gptr a, gptr b, u32 speed, gptr out)        /* 0x48F500 */
+{
+    u32 d = (u32)SquareRoot0((s32)Dist2_XZ(b, a));
+    s32 ang = (s16)ratan2((float)(S16(b + 2) - S16(a + 2)), (float)d);
+    s32 v = (s32)(speed & 0xFFFF);
+    U16(out) = 0;
+    U16(out + 2) = (u16)((rsin(ang) * v) >> 12);
+    U16(out + 4) = (u16)((rcos(ang) * v) >> 12);
+}
+
+/* the water surface under pos: a room area of kind 3 (G+0x948, 0x34 each) is a turned
+ * rectangle (+0xC x, +0xE z, +0x10/+0x11 sizes, +0x1A scale, +0x14 angle) with its
+ * height at +0x12 (in 100s); 0x7FFF none */
+u32 DC2CALL Water_Level(gptr pos)                                   /* 0x413980 */
+{
+    u32 n = U32(0x87DE14);
+    gptr r = U32(G() + 0x948);
+    gptr t = Tmp_Push(0x50), q = t, v = t + 0x10, rot = t + 0x28, m = t + 0x30;
+    u32 res = 0xFFFF7FFF;                                 /* (the high half as the loop leaves it) */
+    for (; n; n--, r += 0x34) {
+        if (U8(r + 1) != 3) continue;
+        u16 s = U8(r + 0x1A);
+        u16 w = (u16)(s * (s16)(s8)U8(r + 0x10) * 500), d = (u16)(s * (s16)(s8)U8(r + 0x11) * 500);
+        memset(MEM(v), 0, 0x18);
+        U16(v + 4) = d;                                     /* (0, 0, d), (w, 0, d), (w, 0, 0) */
+        U16(v + 8) = w; U16(v + 0xC) = d;
+        U16(v + 0x10) = w;
+        if (U16(r + 0x14)) {
+            U16(rot) = 0; U16(rot + 2) = U16(r + 0x14); U16(rot + 4) = 0;
+            RotMatrix(rot, m);
+            for (u32 k = 0; k < 3; k++) { SetRotMatrix(m); gte_ldv0(v + 8 * k); gte_rtv0(); gte_stsv(v + 8 * k); }
+        }
+        U16(q) = U16(r + 0xC); U16(q + 2) = U16(r + 0xE);
+        for (u32 k = 0; k < 3; k++) {
+            U16(q + 4 + 4 * k) = (u16)(U16(r + 0xC) + U16(v + 8 * k));
+            U16(q + 6 + 4 * k) = (u16)(U16(r + 0xE) + U16(v + 8 * k + 4));
+        }
+        if (PointInQuad(pos, q)) { res = (u32)((s32)(s8)U8(r + 0x12) * 100); break; }
+    }
+    Tmp_Pop(0x50);
+    return res;
+}
+
 /* SquareRoot0 with one Newton step */
 u32 DC2CALL Sqrt_Refined(u32 x)                                    /* 0x48F590 */
 {
