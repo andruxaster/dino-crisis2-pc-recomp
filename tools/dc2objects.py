@@ -47,7 +47,7 @@ TYPES = {
     5: ("E30.DAT", "Plesiosaurus"), 6: ("E40.DAT", "Giganotosaurus (E40/E41.TEX)"),
     7: ("E90.DAT", "Oviraptor (E90/E91.TEX)"), 8: ("E60.DAT", "Allosaurus"),
     9: ("E70.DAT", "Triceratops"), 10: ("E80.DAT", "Mosasaurus"),
-    11: ("E31.DAT", "Plesiosaurus part/variant"), 12: ("E32.DAT", "Plesiosaurus part/variant"),
+    11: ("E31.DAT", "Plesiosaurus (surface)"), 12: ("E32.DAT", "Plesiosaurus (diving)"),
     13: ("EA0.DAT", "Compsognathus"), 14: ("E50.DAT", "Inostrancevia"),
     15: ("KOF_P00P.DAT", "playable Velociraptor"),
     16: ("room block", "room prop (model in the room block)"),

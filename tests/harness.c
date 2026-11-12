@@ -7095,6 +7095,426 @@ static void test_plesio(void)
     g_ign_objpads = 0;
 }
 
+/* ---- the plesiosaurs in the water (types 11 and 12) ---- */
+static const u32 g_pw_tabs[2][6][2] = {
+    {{0x720900, 5}, {0x720984, 13}, {0x7209B8, 13}, {0x7209EC, 4}, {0x7209FC, 4}, {0x720A0C, 13}},
+    {{0x720A40, 5}, {0x720AC4, 13}, {0x720AF8, 13}, {0x720B2C, 4}, {0x720B3C, 4}, {0x720B4C, 13}}};
+static u32 g_pw_saved[2][6][13];
+static void pw_tables_stub(int on)
+{
+    for (int k = 1; k <= 13; k++) g_stubs[k].spec = on ? "d" : "";
+    for (int y = 0; y < 2; y++)
+        for (int t = 0; t < 6; t++)
+            for (u32 k = 0; k < g_pw_tabs[y][t][1]; k++) {
+                gptr a = g_pw_tabs[y][t][0] + 4 * k;
+                if (on) { g_pw_saved[y][t][k] = U32(a); U32(a) = (u32)(uintptr_t)g_recs[1 + (k + 3 * t) % 13]; }   /* (each table its own order) */
+                else U32(a) = g_pw_saved[y][t][k];
+            }
+}
+
+#define PW_QUAD (TR_QUAD + 0x180)
+#define PW_TMP  (TR_QUAD + 0x1C0)
+static const u16 g_pw_ed[] = {0, 1, 2, 3, 4, 5, 6, 7, 0x40, 0x45, 0x46, 0x47, 0x5E, 0x5F, 0x60, 0x63, 0x64, 0x65, 0xFFFF, 0xFFFE};
+
+/* a glow (effect slot) or none */
+static gptr pw_slot(u32 j)
+{
+    gptr k = O_K2 + 0xAC * j;
+    U16(k + 0x6C) = rnd() % 3 ? g_pw_ed[rnd() % 20] : (u16)rnd();
+    U16(k + 0x6E) = rnd() % 3 ? g_pw_ed[rnd() % 20] : (u16)rnd();
+    return k;
+}
+
+/* the room's water quad around o, or not */
+static void pw_quad(gptr o)
+{
+    s32 cx = S16(o + 0x40), cz = S16(o + 0x44), r = 500 + rnd() % 4000;
+    if (rnd() % 3 == 0) cx += (rnd() % 2 ? 1 : -1) * (r + 1 + (s32)(rnd() % 3000));
+    S16(PW_QUAD + 0) = (s16)(cx - r); S16(PW_QUAD + 2) = (s16)(cz + r); S16(PW_QUAD + 4) = (s16)(cx + r); S16(PW_QUAD + 6) = (s16)(cz + r);
+    S16(PW_QUAD + 8) = (s16)(cx + r); S16(PW_QUAD + 10) = (s16)(cz - r); S16(PW_QUAD + 12) = (s16)(cx - r); S16(PW_QUAD + 14) = (s16)(cz - r);
+    U32(G() + 0x7BC) = PW_QUAD - 0x1C;
+}
+
+/* the others: live or not, near (about 4000) or not, diving or not */
+static void pw_others(gptr o)
+{
+    gptr pl = U32(G() + 0x940);
+    U32(0x87F940) = rnd() % 4 ? 16 : rnd() % 17;
+    for (u32 k = 1; k < 16; k++) {
+        gptr q = O_OBJ + k * 0x260;
+        if (q == o || q == pl) continue;
+        U8(q + 0x50) = (u8)((U8(q + 0x50) & ~1) | (rnd() % 5 == 0));
+        U8(q + 0x54) = rnd() % 2 ? 1 : (u8)(rnd() % 4); U8(q + 0x55) = rnd() % 2 ? 4 : (u8)(rnd() % 13);
+        if (rnd() % 3 == 0) plesio_at(q + 0x40, o + 0x40, rnd() % 2 ? 4000 + (s32)(rnd() % 3) - 1 : 1000 + (s32)(rnd() % 8000),
+                                      rnd() % 2 ? (u32[]){0, 0x400, 0x800, 0xC00}[rnd() % 4] : rnd());
+        else plesio_at(q + 0x40, o + 0x40, 6000 + rnd() % 20000, rnd());
+    }
+}
+
+/* one of them among the test objects; the player its target */
+static gptr pw_setup(void)
+{
+    gptr o = raptor_setup(), pl = U32(G() + 0x940);
+    U32(o + 0x184) &= ~0x40u;
+    trex_parts(o);
+    U32(pl + 0x64) = AN_PART;                           /* (the player's head, part 8: one of them) */
+    U32(o + 0x1C0) = rnd() % 4 ? rnd() & 0x1F : rnd();
+    U32(o + 0x1C4) = rnd() % 4 ? rnd() % 4 : rnd();
+    U16(o + 0x1C8) = rnd() % 2 ? (u16[]){0, 1, 0x3B, 0x3C, 0x3D, 0x5A}[rnd() % 6] : (u16)rnd();
+    U8(o + 0x1CC) = 1 + rnd() % 3; U8(o + 0x1CD) = rnd() % 13; U8(o + 0x1CE) = rnd() % 3; U8(o + 0x1CF) = rnd() % 2;
+    for (u32 k = 0x1D0; k <= 0x1D8; k += 4) U32(o + k) = rnd() % 3 ? rnd() % 3 : rnd() % 2 ? rnd() % 0x2000 : rnd();
+    for (u32 k = 0x1E8; k < 0x200; k += 2) U16(o + k) = rnd() % 3 ? (u16)(rnd() % 0x400 - 0x200) : (u16)rnd();
+    for (u32 k = 0x1F0; k < 0x1F4; k += 2) U16(o + k) = rnd() % 3 ? rnd() % 3 : (u16)rnd();
+    U16(o + 0x1EE) = rnd() % 2 ? 0x59 + rnd() % 3 : (u16)rnd();
+    U16(o + 0x1FE) = rnd() % 2 ? 0x59 + rnd() % 3 : (u16)rnd();
+    U32(o + 0x1F4) = rnd();
+    for (u32 k = 0x200; k < 0x228; k += 2) U16(o + k) = rnd() % 3 ? rnd() % 3 : (u16)rnd();
+    S16(o + 0x208) = (s16)(S16(o + 0x42) + (s32)(rnd() % 4000) - 2000);
+    U16(o + 0x224) = rnd() % 2 ? 0x59 + rnd() % 3 : (u16)rnd();
+    U32(o + 0x210) = rnd() % 4 ? pw_slot(rnd() % 10) : 0;
+    U32(o + 0x214) = rnd() % 4 ? pw_slot(10 + rnd() % 10) : 0;
+    U32(o + 0x218) = 0;
+    if (rnd() % 2) { gptr k = O_K2 + 0xAC * (rnd() % 20); U32(k + 0xA0) = rnd() % 3 ? o : pl; U32(o + 0x218) = k; }
+    U32(o + 0x21C) = rnd() % 4 ? rnd() % 6 : rnd();
+    U8(o + 0x57) = rnd() % 2;
+    U16(pl + 0x174) = rnd() % 2 ? rnd() & 3 : (u16)rnd();
+    U16(pl + 0x1FA) = (u16)(rnd() % 2 ? 0x7F + rnd() % 3 : rnd() % 2 ? rnd() % 0x120 : rnd());
+    U32(pl + 0x134) = 0;                                /* (no hit spheres: Enemy_AttackHit keeps +0x119) */
+    for (u32 k = 0; k < 3; k++) Bits_Set(0x87E974, k, rnd() % 3 == 0);
+    for (u32 k = 0; k < 8; k += 2) {
+        U16(0x74AF80 + k) = rnd() % 2 ? 0 : (u16)rnd();
+        U16(0x74AF90 + k) = rnd() % 2 ? 0 : (u16)rnd();
+    }
+    pw_quad(o);
+    if (rnd() % 2) pw_others(o);
+    trex_ff(o, rnd() % 2);
+    trex_rand8();
+    return o;
+}
+
+static void test_pw(void)
+{
+    g_ign_objpads = 1;
+    stubs_install(1);
+    pw_tables_stub(1);
+    player_tables_stub(1);
+    for (int i = 0; i < iters; i++) {
+        game_state();
+        gptr o = pw_setup(), b = o + 0x1C0, pl = U32(G() + 0x940);
+        u32 a[4] = {o};
+        /* the wait; the parts by the water; turning; the player's animation set */
+        U8(pl + 0x54) = (u8[]){2, 5, 1, 3}[rnd() % 4]; U16(pl + 0x174) = (u16)rnd(); U8(G() + 0x108E) = rnd() % 3;
+        check(0x42FEA0, Ples_Wait, "Ples_Wait", 1, a, 0xFFFFFFFF);
+        {
+            gptr p = AN_PART + 0x80 * (rnd() % 16);
+            static const s16 ed[] = {300, 299, 301, -200, -199, -201, -400, -399, -401, 0};
+            S16(o + 0x208) = (s16)(S16(p + 0x42) - ed[rnd() % 10]);
+            check(0x42FF10, Ples_PartsWater, "Ples_PartsWater", 1, a, 0);
+        }
+        check(0x42F4C0, Ples_TurnToPlayer, "Ples_TurnToPlayer", 1, a, 0);
+        U8(G() + 0x108F) = rnd() % 2 ? 0 : (u8)rnd();
+        check(0x42FE80, Ples11_PlayerSet, "Ples11_PlayerSet", 0, a, 0xFFFFFFFF);
+        /* the splash, the glows, the bubbles */
+        a[1] = rnd() % 2 ? 0x6578D4 : 0x65A000 + (rnd() % 0x100) * 4;
+        if (U32(o + 0x218)) {                               /* the old splash in use; its own or not */
+            gptr k = U32(o + 0x218);
+            U32(k + 0x50) = rnd() | 1;
+            if (rnd() % 2) U32(k + 0xA0) = rnd() % 2 ? o : pl;
+        }
+        U32(LOG_BASE) = 0;
+        check(0x42FFC0, Ples11_Splash, "Ples11_Splash", 2, a, 0);
+        for (int k = 0; k < 6; k++) {
+            game_state();
+            o = pw_setup(); a[0] = o;
+            a[1] = rnd() % 4 ? (u32)k % 5 : rnd() % 2 ? 0x100 + rnd() % 5 : rnd();
+            U8(o + 0x54) = rnd() % 2 ? 1 : (u8)rnd(); U8(o + 0x55) = rnd() % 2 ? 4 : (u8)rnd();
+            if (rnd() % 2) {                                /* a part at the water less 300 */
+                gptr p = AN_PART + 0x80 * (rnd() % 16);
+                S16(o + 0x208) = (s16)(S16(p + 0x42) + 300 + (s32)(rnd() % 3) - 1);
+                for (u32 q = AN_PART; q < AN_PART + 0x800; q += 0x80)
+                    if (q != p && rnd() % 3) S16(q + 0x42) = (s16)(S16(o + 0x208) - 300 + (s32)(rnd() % 400));
+            }
+            for (u32 j = 0; j < 20; j++) if (rnd() % 2) U8(O_K2 + j * 0xAC + 0x50) &= ~1;
+            U32(LOG_BASE) = 0;
+            sprintf(g_what, "pw %X glow %X state %X", o, a[1], U32(o + 0x54));
+            check(k % 2 ? 0x431B60 : 0x430000, k % 2 ? (void *)Ples12_Glow : (void *)Ples11_Glow, k % 2 ? "Ples12_Glow" : "Ples11_Glow", 2, a, 0);
+        }
+        U32(o + 0x210) = pw_slot(rnd() % 20);
+        U32(o + 0x21C) = rnd() % 3 ? 2 + rnd() % 3 : rnd();
+        for (u32 j = 0; j < 20; j++) if (rnd() % 2) U8(O_K2 + j * 0xAC + 0x50) &= ~1;
+        trex_rand8();
+        check(0x431EC0, Ples12_Bubbles, "Ples12_Bubbles", 1, a, 0);
+        /* taken away */
+        for (u32 k = 0; k < 8; k += 2) { U16(0x74AF80 + k) = rnd() % 3 ? (u16)rnd() : 0; U16(0x74AF90 + k) = rnd() % 3 ? (u16)rnd() : 0; }
+        check(0x42EA20, Ples11_Remove, "Ples11_Remove", 1, a, 0);
+        game_state(); o = pw_setup(); a[0] = o;
+        for (u32 k = 0; k < 8; k += 2) { U16(0x74AF80 + k) = rnd() % 3 ? (u16)rnd() : 0; U16(0x74AF90 + k) = rnd() % 3 ? (u16)rnd() : 0; }
+        trex_rand8();
+        check(0x430E50, Ples12_Remove, "Ples12_Remove", 1, a, 0);
+        /* holding on and letting go */
+        game_state(); o = pw_setup(); a[0] = o; trex_rand8();
+        check(0x431A70, Ples12_BiteOn, "Ples12_BiteOn", 1, a, 0);
+        check(0x431AD0, Ples12_BiteOff, "Ples12_BiteOff", 1, a, 0);
+        /* a step toward a point; the combo of kills */
+        {
+            gptr p0 = PW_TMP, p1 = PW_TMP + 8, out = PW_TMP + 0x10;
+            for (u32 k = 0; k < 0x18; k += 4) U32(PW_TMP + k) = rnd();
+            S16(p0) = (s16)(rnd() % 30000 - 15000); S16(p0 + 4) = (s16)(rnd() % 30000 - 15000);
+            s32 sp = rnd() % 2 ? 0x8C : rnd() % 2 ? 0xFA : (s32)(rnd() % 0x400);
+            s32 d = rnd() % 2 ? sp + (s32)(rnd() % 3) - 1 : (s32)(rnd() % 3000);
+            plesio_at(p1, p0, d, rnd() % 2 ? (u32[]){0, 0x400, 0x800, 0xC00}[rnd() % 4] : rnd());
+            u32 v[4] = {p0, p1, rnd() % 8 ? (u32)sp : (rnd() & 0xFFFF0000) | (u32)sp, out};
+            if (rnd() % 8 == 0) v[2] = rnd();
+            if (rnd() % 6 == 0) {                           /* far apart, a speed with bit 15 */
+                S16(p0) = (s16)(-16000 - (s32)(rnd() % 500)); S16(p1) = (s16)(16500 + rnd() % 500);
+                S16(p0 + 4) = (s16)(rnd() % 2000 - 1000); S16(p1 + 4) = (s16)(rnd() % 2000 - 1000);
+                v[2] = (rnd() % 2 ? rnd() & 0xFFFF0000 : 0) | 0x8000 | (rnd() % 0x400);
+            }
+            check(0x47A630, Vec_StepXZ, "Vec_StepXZ", 4, v, 0xFFFFFFFF);
+        }
+        {
+            U16(0x746E4C) = rnd() % 2 ? (u16)(rnd() % 10) : rnd() % 2 ? 0x7FFF : (u16)rnd();
+            U16(G() + 0xC24) = rnd() % 2 ? (u16)(U16(0x746E4C) + rnd() % 3) : (u16)rnd();
+            U32(0x746E44) = rnd(); U32(0x746E48) = rnd();
+            u32 v[1] = {rnd() % 2 ? 0xC : (u32[]){0xB, 0x10C, 0xFFFFFF0C, 0xD, rnd()}[rnd() % 5]};
+            check(0x412CC0, Combo_Kill, "Combo_Kill", 1, v, 0);
+        }
+        /* deciding */
+        for (int k = 0; k < 64; k++) {
+            game_state();
+            o = pw_setup(); a[0] = o; b = o + 0x1C0; pl = U32(G() + 0x940);
+            int y = k % 2;
+            if (rnd() % 4) { Bits_Set(0x87E974, 0, 0); U32(o + 0x1D8) = 0; }
+            static const s32 d11[] = {5099, 5100, 5101, 4699, 4700, 4701, 3499, 3500, 3501, 2799, 2800, 2801, 11999, 12000, 12001, 1000};
+            static const s32 d12[] = {6699, 6700, 6701, 6999, 7000, 7001, 3000, 9000};
+            static const s32 w11[] = {4701, 4800, 5000, 5099, 5100, 5100, 4700, 2801, 3000, 3499};   /* (the attack ranges) */
+            s32 d = y ? d12[rnd() % 8] : rnd() % 2 ? w11[rnd() % 10] : d11[rnd() % 16];
+            if (y && rnd() % 3 == 0) {                      /* about the stray limits */
+                S16(o + 0x40) = (s16)((0x4650 + (s32)(rnd() % 3) - 1) * (rnd() % 2 ? 1 : -1));
+                S16(o + 0x44) = (s16)(rnd() % 2 ? -5000 + (s32)(rnd() % 3) - 1 : (s32)(rnd() % 20000) - 10000);
+            }
+            plesio_at(pl + 0x40, o + 0x40, d, rnd() % 4 ? 0 : rnd());
+            u16 fin;                                        /* its heading after the turn */
+            if (rnd() % 3) {
+                /* exact: it turns (by 0x19) toward the player's place (type 11: the head put
+                 * there), then the player in front about the edge */
+                gptr hd = Obj_Part(U32(pl + 0x64), 8);
+                if (!y && hd) { U16(hd + 0x40) = U16(pl + 0x40); U16(hd + 0x44) = U16(pl + 0x44); }
+                static const u16 ea[] = {0, 1, 0x7E, 0x7F, 0x80, 0x81, 0x40, 0x200};
+                u32 e = ea[rnd() % 8], an = Angle_XZ(o + 0x40, pl + 0x40);
+                int s = rnd() % 2 ? 1 : -1;
+                U16(o + 0x4A) = (u16)((an + s * (s32)(e + 0x19)) & 0xFFF);
+                fin = (u16)((an + s * (s32)e) & 0xFFF);
+                if (!y && !hd) fin = U16(o + 0x4A);
+            } else { trex_aim(o + 0x40, o, pl + 0x40); fin = U16(o + 0x4A); }
+            static const u16 ra[] = {0, 1, 0x3F, 0x40, 0x41, 0x27F, 0x280, 0x281, 0x37F, 0x380, 0x381, 0x800};
+            u32 e = ra[rnd() % 12];
+            U16(pl + 0x4A) = (u16)((fin + (rnd() % 2 ? e : 0x1000 - e)) & 0xFFF);
+            U8(pl + 0x54) = rnd() % 4 ? 1 : (u8)(rnd() % 6); U8(pl + 0x55) = rnd() % 4 ? 2 : (u8)(rnd() % 10);
+            u32 d2 = Dist2_XZ(o + 0x40, pl + 0x40);
+            U32(o + 0x1F4) = rnd() % 2 ? d2 + (u32)(rnd() % 3) - 1 : rnd();
+            static const u8 r8[] = {1, 2, 3, 4, 5, 7, 8, 9, 0xF, 0x10, 0x11, 0x1F, 0x20, 0x21, 0, 0xFF};
+            u8 r0 = r8[rnd() % 16];
+            U16(0x87DE10) = rand8_seed(r0, rnd() % 4 == 0);
+            U16(pl + 0x1FA) = rnd() % 2 ? (u16)(r0 + rnd() % 3 - 1) : (u16)rnd();
+            Flag_Set(3, 0xA, rnd() % 2);                    /* (Pos_Hidden) */
+            U32(LOG_BASE) = 0;
+            static const TRexFn th[2][4] = {
+                {{0x42E590, Ples11_Decide, "Ples11_Decide"}, {0x42E200, Ples11_ThinkWait, "Ples11_ThinkWait"},
+                 {0x42E330, Ples11_ThinkSwim, "Ples11_ThinkSwim"}, {0x42E470, Ples11_ThinkBack, "Ples11_ThinkBack"}},
+                {{0x430B00, Ples12_Decide, "Ples12_Decide"}, {0x4308C0, Ples12_ThinkWait, "Ples12_ThinkWait"},
+                 {0x4309D0, Ples12_ThinkSwim, "Ples12_ThinkSwim"}, {0x4309D0, Ples12_ThinkSwim, "Ples12_ThinkSwim"}}};
+            const TRexFn *f = &th[y][(k / 2) % 4];
+            U8(o + 0x56) = rnd() % 3 ? 1 : (u8)(rnd() % 3);
+            sprintf(g_what, "pw %X %s dist %d bits %X", o, f->name, d, U32(b));
+            check(f->addr, f->fn, f->name, 1, a, (k / 2) % 4 == 0 ? 0xFFFFFFFF : 0);
+        }
+        /* the state handlers */
+        game_state();
+        o = pw_setup(); a[0] = o; pl = U32(G() + 0x940);
+        for (int y = 0; y < 2; y++) {
+            U8(o + 0x54) = rnd() % 5; U8(o + 0x55) = rnd() % 13; U8(o + 0x56) = rnd() % 3;
+            check(y ? 0x430820 : 0x42E160, y ? (void *)Ples12_Normal : (void *)Ples11_Normal, y ? "Ples12_Normal" : "Ples11_Normal", 1, a, 0);
+            U8(o + 0x55) = rnd() % 4;
+            check(y ? 0x430850 : 0x42E190, y ? (void *)Ples12_Hit : (void *)Ples11_Hit, y ? "Ples12_Hit" : "Ples11_Hit", 1, a, 0);
+            check(y ? 0x430870 : 0x42E1B0, y ? (void *)Ples12_Die : (void *)Ples11_Die, y ? "Ples12_Die" : "Ples11_Die", 1, a, 0);
+            for (int k = 0; k < 3; k++) {
+                U8(o + 0x55) = rnd() % 13;
+                U8(o + 0x119) = (u8[]){0, 1, 0xFF, 0x7F, 0x80}[rnd() % 5];
+                U16(pl + 0x174) &= ~1; U8(pl + 0x17B) = 0; U32(o + 0x184) &= ~0x40u;   /* (Enemy_AttackHit keeps +0x119) */
+                U32(o + 0xA0) = TR_ATK; U16(o + 0x102) &= ~2;
+                check(y ? 0x430890 : 0x42E1D0, y ? (void *)Ples12_Grab : (void *)Ples11_Grab, y ? "Ples12_Grab" : "Ples11_Grab", 1, a, 0);
+            }
+        }
+        for (int k = 0; k < 8; k++) {
+            game_state();
+            o = pw_setup(); a[0] = o; b = o + 0x1C0; pl = U32(G() + 0x940);
+            U8(o + 0x54) = rnd() % 5; U8(o + 0x55) = rnd() % 13;
+            U8(G() + 0x108F) = rnd() % 13;
+            U32(o + 0x50) = (U32(o + 0x50) & ~0x40000030u) | (rnd() & 0x30) | (rnd() % 6 == 0 ? 0x40000000 : 0);
+            U16(pl + 0x1FA) = (u16)(rnd() % 2 ? 0x7F + rnd() % 3 : rnd());
+            U8(o + 0x17B) = rnd() % 3 ? rnd() % 2 : (u8)rnd();
+            if (rnd() % 2) trex_spheres(o, 1 + rnd() % 3);
+            if (k % 2) U32(o + 0x210) = pw_slot(rnd() % 10);    /* (the bubbles come from it) */
+            for (u32 j = 0; j < 20; j++) if (rnd() % 2) U8(O_K2 + j * 0xAC + 0x50) &= ~1;
+            sprintf(g_what, "pw %X handler state %X bits %X", o, U32(o + 0x54), U32(b));
+            if (k % 2) check(0x430360, Ples12_Type, "Ples12_Type", 1, a, 0);
+            else check(0x42DCC0, Ples11_Type, "Ples11_Type", 1, a, 0);
+        }
+        /* state 0 */
+        for (int y = 0; y < 2; y++) {
+            game_state();
+            o = pw_setup(); a[0] = o; pl = U32(G() + 0x940);
+            do model_data(0x640000); while (U32(0x640000 + 0x14) < 15);
+            do anim_setup_at(AN_OBJ); while (U32(AN_OBJ + 0x68) != 16);
+            memcpy(MEM(o + 0x60), MEM(AN_OBJ + 0x60), 0x50);
+            U32(0x642348 + 6 * 4) = AN_DATA; U32(0x644924 + 5 * 4) = AN_DATA;   /* the first animations */
+            U8(G() + 0x108E) = rnd() % 3; U8(0x87E747) = rnd() % 2;
+            U8(G() + 0x1091) = rnd() % 2 ? 6 : (u8)rnd(); U8(G() + 0x1090) = rnd() % 2 ? 1 : (u8)rnd();
+            pw_others(o);
+            trex_rand8();
+            for (u32 k = 0; k < 8; k += 2) { U16(0x74AF80 + k) = rnd() % 3 ? 0 : (u16)rnd(); U16(0x74AF90 + k) = rnd() % 3 ? 0 : (u16)rnd(); }
+            U32(LOG_BASE) = 0;
+            if (y) check(0x430590, Ples12_Init, "Ples12_Init", 1, a, 0);
+            else check(0x42DEA0, Ples11_Init, "Ples11_Init", 1, a, 0);
+        }
+        /* moving, attacks landing, hit, dying: each step */
+        static const TRexFn mv[] = {
+            {0x42E240, Ples11_Wait2, "Ples11_Wait2", 5}, {0x42E3A0, Ples11_Swim, "Ples11_Swim", 3},
+            {0x42E4F0, Ples11_Back, "Ples11_Back", 3}, {0x42E840, Ples11_Leap, "Ples11_Leap", 3},
+            {0x42E950, Ples11_Dive, "Ples11_Dive", 3}, {0x42EA80, Ples11_Rise, "Ples11_Rise", 3},
+            {0x42EB30, Ples11_Lunge, "Ples11_Lunge", 3}, {0x42ECA0, Ples11_Bite, "Ples11_Bite", 3},
+            {0x42ED60, Ples11_ThinkSide, "Ples11_ThinkSide", 2}, {0x42EDD0, Ples11_Side, "Ples11_Side", 4},
+            {0x42EFA0, Ples11_ThinkDrag, "Ples11_ThinkDrag", 3}, {0x42EFD0, Ples11_Drag, "Ples11_Drag", 6},
+            {0x42F300, Ples11_Eat, "Ples11_Eat", 4}, {0x42F4E0, Ples11_Resurface, "Ples11_Resurface", 4},
+            {0x42F5F0, Ples11_Snap, "Ples11_Snap", 3}, {0x42F6E0, Ples11_BiteHit, "Ples11_BiteHit", 3},
+            {0x42F770, Ples11_SideHit, "Ples11_SideHit", 3}, {0x42F820, Ples11_ResurfaceHit, "Ples11_ResurfaceHit", 3},
+            {0x42F890, Ples11_SnapHit, "Ples11_SnapHit", 3}, {0x42F910, Ples11_Damage, "Ples11_Damage", 1},
+            {0x42FBD0, Ples11_Flinch, "Ples11_Flinch", 3}, {0x42FC30, Ples11_Knock, "Ples11_Knock", 3},
+            {0x42FCA0, Ples11_Stagger, "Ples11_Stagger", 3}, {0x42FD90, Ples11_Dead, "Ples11_Dead", 4},
+            {0x4308F0, Ples12_Wait2, "Ples12_Wait2", 5}, {0x430A30, Ples12_Swim, "Ples12_Swim", 3},
+            {0x430C40, Ples12_Leap, "Ples12_Leap", 3}, {0x430D80, Ples12_Dive, "Ples12_Dive", 3},
+            {0x430EB0, Ples12_Rise, "Ples12_Rise", 3}, {0x430F80, Ples12_Lunge, "Ples12_Lunge", 3},
+            {0x4310E0, Ples12_Bite, "Ples12_Bite", 3}, {0x431190, Ples12_Side, "Ples12_Side", 4},
+            {0x4312D0, Ples12_Resurface, "Ples12_Resurface", 4}, {0x4313E0, Ples12_BiteHit, "Ples12_BiteHit", 3},
+            {0x431440, Ples12_SideHit, "Ples12_SideHit", 3}, {0x4314D0, Ples12_ResurfaceHit, "Ples12_ResurfaceHit", 3},
+            {0x431530, Ples12_SnapHit, "Ples12_SnapHit", 3}, {0x4315B0, Ples12_Damage, "Ples12_Damage", 1},
+            {0x431810, Ples12_Flinch, "Ples12_Flinch", 3}, {0x431860, Ples12_Knock, "Ples12_Knock", 3},
+            {0x4318C0, Ples12_Stun, "Ples12_Stun", 3}, {0x431970, Ples12_Dead, "Ples12_Dead", 4}};
+        const unsigned nm = sizeof mv / sizeof mv[0];
+        game_state(); world_setup(); enemy_state(); zones_setup();
+        o = O_OBJ + 0x260 * (1 + rnd() % 6); a[0] = o; b = o + 0x1C0;
+        anim_setup_at(O_OBJ);
+        do anim_setup_at(o); while (U32(o + 0x68) != 16);
+        memcpy(MEM(O_OBJ + 0x60), MEM(o + 0x60), 0x50);
+        U32(G() + 0x940) = pl = O_OBJ;
+        U32(pl + 0x128) = rnd() % 2 ? 0x7200E8 : 0; U32(o + 0x128) = 0x720938;
+        U8(o + 0x58) = 11;
+        u8 sv[0x260]; memcpy(sv, MEM(o), 0x260);
+        for (unsigned k = 0; k < 4 * nm; k++) {
+            const TRexFn *f = &mv[k % nm];
+            memcpy(MEM(o), sv, 0x260);
+            for (int j = 0; j < 0x20; j++) U32(AN_TAB + 4 * j) = AN_DATA + 0x1000 * (rnd() % 2);   /* (which animation started) */
+            for (u32 j = 0x1C0; j < 0x228; j += 4) U32(o + j) = rnd();
+            U32(b) = rnd() % 4 ? rnd() & 0x1F : rnd();
+            U32(o + 0x1C4) = rnd() % 4 ? rnd() % 4 : rnd();
+            U16(o + 0x1C8) = rnd() % 2 ? (u16[]){0, 1, 0x3B, 0x3C, 0x3D}[rnd() % 5] : (u16)rnd();
+            U8(o + 0x1CC) = 1 + rnd() % 3; U8(o + 0x1CD) = rnd() % 13; U8(o + 0x1CE) = rnd() % 3; U8(o + 0x1CF) = rnd() % 2;
+            for (u32 j = 0x1D0; j <= 0x1D8; j += 4) U32(o + j) = rnd() % 3 ? rnd() % 3 : rnd() % 2 ? rnd() % 0x2000 : rnd();
+            for (u32 j = 0x200; j < 0x228; j += 2) U16(o + j) = rnd() % 3 ? rnd() % 3 : (u16)rnd();
+            U32(o + 0x210) = rnd() % 4 ? pw_slot(rnd() % 10) : 0;
+            U32(o + 0x214) = rnd() % 4 ? pw_slot(10 + rnd() % 10) : 0;
+            U32(o + 0x218) = 0;
+            if (rnd() % 2) { gptr kk = O_K2 + 0xAC * (rnd() % 20); U32(kk + 0xA0) = rnd() % 3 ? o : pl; U32(o + 0x218) = kk; }
+            for (u32 j = 0; j < 8; j += 2) { U16(0x74AF80 + j) = rnd() % 3 ? (u16)rnd() : 0; U16(0x74AF90 + j) = rnd() % 3 ? (u16)rnd() : 0; }
+            U8(o + 0x54) = rnd() % 4 ? 1 + rnd() % 3 : rnd() % 5;
+            U8(o + 0x55) = rnd() % 13;
+            U8(o + 0x56) = (u8)(rnd() % 8 ? rnd() % f->steps : rnd());
+            U8(o + 0x57) = (f->addr == 0x42ECA0 || f->addr == 0x42EDD0 || f->addr == 0x42F6E0 || f->addr == 0x4310E0 || f->addr == 0x431190) ? rnd() % 3 : rnd() % 2;
+            static const u16 fr[] = {0x39, 0x3A, 0x3B, 0x3C, 0x3D, 0x4E, 0x4F, 0x50, 0, 0x10};
+            U16(o + 0x92) = rnd() % 4 ? fr[rnd() % 10] : (u16)(rnd() % 0x80);
+            S16(o + 0x208) = (s16)(rnd() % 2 ? S16(o + 0x42) : (s32)(rnd() % 20000) - 10000);
+            trex_ff(o, rnd() % 2);
+            U8(pl + 0x54) = (u8[]){1, 2, 5, 3}[rnd() % 4]; U16(pl + 0x174) = rnd() % 2 ? rnd() & 3 : (u16)rnd();
+            U16(pl + 0x4A) = (u16)((U16(o + 0x4A) + (u16[]){0, 0x3FF, 0x400, 0x401, 0xC01, 0xC00, 0xBFF, 0x800}[rnd() % 8]) & 0xFFF);
+            S16(pl + 0x108) = (s16)(rnd() % 2 ? (s32[]){3, 4, 5, 0xF9, 0xFA, 0xFB, 0, 1}[rnd() % 8] : rnd() % 2 ? (s32)(rnd() % 0x200) - 0x10 : (s32)rnd());
+            Flag_Set(2, 0x1A, rnd() % 3 == 0);
+            /* the damage */
+            U16(o + 0x172) = rnd() % 6; U16(o + 0x176) = rnd() % 2 ? rnd() % 0x400 : (u16)rnd();
+            S16(o + 0x10A) = (s16)(rnd() % 2 ? rnd() % 0x2000 : rnd());
+            S16(o + 0x108) = (s16)(rnd() % 2 ? rnd() % 0x800 - 0x10 : rnd());
+            if (rnd() % 3 == 0) S16(o + 0x108) = (s16)(U16(o + 0x176) + rnd() % 3 - 1);
+            if (rnd() % 3 == 0) S16(o + 0x108) = (s16)((s32)U16(o + 0x176) / 5 + (s32)(rnd() % 3) - 1);
+            if (rnd() % 3 == 0) U32(o + 0x1D0) = (u32)(S16(o + 0x10A) / 2 - (s32)U16(o + 0x176) + (s32)(rnd() % 3) - 1);
+            U8(o + 0x184) = (u8)rnd(); U8(o + 0x17C) = rnd() % 2 ? 0 : (u8)rnd();
+            U8(o + 0x58) = rnd() % 2 ? 0xC : (u8)rnd();
+            U8(G() + 0x108E) = rnd() % 3; U8(G() + 0x108F) = rnd() % 2 ? rnd() % 12 : (u8)rnd();
+            for (u32 j = 0; j < 3; j++) Bits_Set(0x87E974, j, rnd() % 3 == 0);
+            U16(0x746E4C) = (u16)(rnd() % 10); U16(G() + 0xC24) = (u16)(rnd() % 10);
+            if (f->addr == 0x42F910 || f->addr == 0x4315B0) {
+                if (rnd() % 2) U8(o + 0x56) = 0;
+                if (rnd() % 2) U16(o + 0x222) = 0;
+                if (rnd() % 2) U16(o + 0x206) = 0;
+                if (rnd() % 2) U8(o + 0x1CC) = 2;
+                if (rnd() % 2) U16(o + 0x172) = 3 + rnd() % 2;
+                U8(G() + 0x757) = 0;
+            }
+            if (f->addr == 0x42EB30 || f->addr == 0x430F80) {   /* the lunge's end about 500 away, or within a step */
+                u32 sp = f->addr == 0x42EB30 ? 0x8C : 0xFA;
+                if (rnd() % 2) U8(o + 0x56) = 1;
+                if (rnd() % 4) U8(pl + 0x174) |= 2;
+                s32 h = f->addr == 0x42EB30 ? 0xFA : 4;     /* the player's health about the edge */
+                if (rnd() % 2) S16(pl + 0x108) = (s16)(h + (s32)(rnd() % 3) - 1);
+                s32 d = (s32[]){499, 500, 501, (s32)sp - 1, (s32)sp, (s32)sp + 1, 300, 2000}[rnd() % 8];
+                plesio_at(o + 0x1E8, o + 0x40, d, rnd() % 2 ? (u32[]){0, 0x400, 0x800, 0xC00}[rnd() % 4] : rnd());
+            }
+            if (f->addr == 0x42ED60 && rnd() % 2) {         /* the player about 3800 or 6500 away */
+                plesio_at(pl + 0x40, o + 0x40, (s32[]){3799, 3800, 3801, 6499, 6500, 6501}[rnd() % 6], rnd() % 4 ? 0 : rnd());
+                if (rnd() % 2) U16(o + 0x220) = 0;
+                if (rnd() % 2) U8(pl + 0x54) = 1;
+                if (rnd() % 2) U8(o + 0x56) = 1;
+            }
+            if (f->addr == 0x42F4E0 || f->addr == 0x4312D0) U16(o + 0x20C) = rnd() % 3 ? rnd() % 3 : (u16)rnd();
+            if (f->addr == 0x42E950 || f->addr == 0x430D80) pw_quad(o);
+            if (f->addr == 0x42EFD0 || f->addr == 0x42F300) {   /* the player's health about the damage */
+                S16(pl + 0x108) = (s16)(rnd() % 2 ? 0xFA + (s32)(rnd() % 400) - 200 : (s32)rnd());
+            }
+            for (u32 j = 0; j < 20; j++) if (rnd() % 2) U8(O_K2 + j * 0xAC + 0x50) &= ~1;
+            if (rnd() % 2) { U16(o + 0xF0) = (u16)(rnd() % 0x600 - 0x300); U16(o + 0xF2) = (u16)(rnd() % 0x600 - 0x300); U16(o + 0xF4) = (u16)(rnd() % 0x300); }
+            trex_rand8();
+            anim_maybe_end(o);
+            if (rnd() % 2) U16(o + 0x102) |= 0x20;
+            U32(LOG_BASE) = 0;
+            if (rnd() % 2) {                                /* the speed within a step of its target */
+                static const struct { u32 addr; s32 t; int base; } tg[] = {
+                    {0x42E3A0, 0x8C, 1}, {0x42E4F0, -0x8C, 0}, {0x42E950, -0x8C, 0}, {0x42F4E0, 0x32, 0},
+                    {0x42FC30, 0xC8, 0}, {0x42FD90, 10, 0}, {0x430A30, 0xFA, 1}, {0x430C40, 0x82, 0},
+                    {0x430D80, -0xFA, 0}, {0x430EB0, 0xFA, 1}, {0x4312D0, 0xC8, 0}, {0x431860, 0x258, 0}};
+                s32 t = 0;
+                for (unsigned j = 0; j < sizeof tg / sizeof tg[0]; j++)
+                    if (tg[j].addr == f->addr) t = tg[j].t + (tg[j].base ? U16(o + 0x1F0) : 0);
+                U16(o + 0xF4) = (u16)(t + (s32)(rnd() % 0x51) - 0x28);
+            }
+            if ((f->addr == 0x42F910 || f->addr == 0x4315B0) && rnd() % 2)
+                U16(0x87DE10) = rand8_seed((u8)(0x7F + rnd() % 3), 0);   /* (its first Rand8 about 0x80) */
+            if (f->addr == 0x42EFD0 && rnd() % 2) {         /* the drag's bite: health about the damage */
+                U8(o + 0x56) = 2;
+                S16(pl + 0x108) = (s16)(Damage_Scale(0xFA) + (s32)(rnd() % 3) - 1);
+            }
+            sprintf(g_what, "pw %X %s step %u side %u frame %X", o, f->name, U8(o + 0x56), U8(o + 0x57), U16(o + 0x92));
+            check(f->addr, f->fn, f->name, 1, a, 0);
+        }
+        /* the player back up after the drag */
+        anim_maybe_end(pl);
+        a[0] = pl;
+        check(0x42F2C0, Ples11_PlayerUp, "Ples11_PlayerUp", 1, a, 0);
+    }
+    player_tables_stub(0);
+    pw_tables_stub(0);
+    stubs_install(0);
+    g_ign_objpads = 0;
+}
+
 static void test_game(void)
 {
     stubs_install(1);
@@ -7269,7 +7689,7 @@ __declspec(dllexport) void harness_main(int argc, char **argv)
     struct { const char *name; void (*fn)(void); } T[] = {
         {"flags", test_flags}, {"geometry", test_geom}, {"script values", test_script_values},
         {"script opcodes", test_script_ops}, {"script objects", test_objects},
-        {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"objects 2", test_object}, {"collision", test_collision}, {"player", test_player}, {"player states", test_player2}, {"zones", test_zones}, {"loading", test_room}, {"title", test_title}, {"game task", test_game}, {"doors", test_doors}, {"frame", test_frame}, {"enemy sets", test_enemyset}, {"enemies", test_enemies}, {"raptor", test_raptor}, {"oviraptor", test_ovi}, {"allosaurus", test_allo}, {"pteranodon", test_ptera}, {"tyrannosaurus", test_trex}, {"plesiosaurus", test_plesio}, {"aot kinds", test_aot_kinds}, {"object effects", test_obj_effects}, {"effect slots", test_k2}, {"effect drops", test_k2_drops}, {"effect emitters", test_eff_slots}, {"effect slots 3", test_k2_more}, {"helpers", test_helpers}, {"draw", test_draw}, {"pc gpu", test_pcgpu}, {"pc draw", test_pcdraw}, {"pc frame", test_pcframe},
+        {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"objects 2", test_object}, {"collision", test_collision}, {"player", test_player}, {"player states", test_player2}, {"zones", test_zones}, {"loading", test_room}, {"title", test_title}, {"game task", test_game}, {"doors", test_doors}, {"frame", test_frame}, {"enemy sets", test_enemyset}, {"enemies", test_enemies}, {"raptor", test_raptor}, {"oviraptor", test_ovi}, {"allosaurus", test_allo}, {"pteranodon", test_ptera}, {"tyrannosaurus", test_trex}, {"plesiosaurus", test_plesio}, {"water plesiosaurs", test_pw}, {"aot kinds", test_aot_kinds}, {"object effects", test_obj_effects}, {"effect slots", test_k2}, {"effect drops", test_k2_drops}, {"effect emitters", test_eff_slots}, {"effect slots 3", test_k2_more}, {"helpers", test_helpers}, {"draw", test_draw}, {"pc gpu", test_pcgpu}, {"pc draw", test_pcdraw}, {"pc frame", test_pcframe},
     };
     for (unsigned i = 0; i < sizeof T / sizeof T[0]; i++) {
         int f0 = g_fail, t0 = g_tests;

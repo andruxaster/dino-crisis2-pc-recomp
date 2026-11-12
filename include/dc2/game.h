@@ -893,6 +893,8 @@ void DC2CALL Score_Hit(gptr o, u32 n);                               /* 0x404A20
 void DC2CALL Boss_Flash(gptr o, u32 alt);                            /* 0x415A40 */
 void DC2CALL Enemy_BiteOn(gptr o);                                   /* 0x42B710 */
 void DC2CALL Enemy_BiteOff(gptr o);                                  /* 0x433960 */
+u32 DC2CALL Vec_StepXZ(gptr a, gptr b, s32 speed, gptr out);         /* 0x47A630 */
+void DC2CALL Combo_Kill(u32 type);                                     /* 0x412CC0 */
 void DC2CALL Enemy_Remove(gptr o);                                   /* 0x47AD60 */
 void DC2CALL Obj_ClearHits(gptr o);                                  /* 0x478840 */
 void DC2CALL Player_Release(gptr o);                                 /* 0x48E780 */
@@ -1060,5 +1062,81 @@ void DC2CALL Plesio_Flinch2(gptr o);             /* 0x42CB00 */
 void DC2CALL Plesio_Flinch3(gptr o);             /* 0x42CB60 */
 void DC2CALL Plesio_Dead(gptr o);                /* 0x42CBC0 */
 u32 DC2CALL Plesio_Wait(gptr o);                 /* 0x42CCA0 */
+void DC2CALL Ples_TurnToPlayer(gptr o);            /* 0x42F4C0 */
+u32 DC2CALL Ples_Wait(gptr o);                     /* 0x42FEA0 */
+void DC2CALL Ples_PartsWater(gptr o);              /* 0x42FF10 */
+u32 DC2CALL Ples11_PlayerSet(void);                /* 0x42FE80 */
+void DC2CALL Ples11_Splash(gptr o, gptr d);        /* 0x42FFC0 */
+void DC2CALL Ples11_Glow(gptr o, u32 mode);        /* 0x430000 */
+void DC2CALL Ples11_Remove(gptr o);                /* 0x42EA20 */
+void DC2CALL Ples11_Type(gptr o);                  /* 0x42DCC0 */
+void DC2CALL Ples11_Handler(gptr o);               /* 0x42DCD0 */
+void DC2CALL Ples11_Init(gptr o);                  /* 0x42DEA0 */
+void DC2CALL Ples11_Normal(gptr o);                /* 0x42E160 */
+void DC2CALL Ples11_Hit(gptr o);                   /* 0x42E190 */
+void DC2CALL Ples11_Die(gptr o);                   /* 0x42E1B0 */
+void DC2CALL Ples11_Grab(gptr o);                  /* 0x42E1D0 */
+u32 DC2CALL Ples11_Decide(gptr o);                 /* 0x42E590 */
+void DC2CALL Ples11_ThinkWait(gptr o);             /* 0x42E200 */
+void DC2CALL Ples11_ThinkSwim(gptr o);             /* 0x42E330 */
+void DC2CALL Ples11_ThinkBack(gptr o);             /* 0x42E470 */
+void DC2CALL Ples11_Wait2(gptr o);                 /* 0x42E240 */
+void DC2CALL Ples11_Swim(gptr o);                  /* 0x42E3A0 */
+void DC2CALL Ples11_Back(gptr o);                  /* 0x42E4F0 */
+void DC2CALL Ples11_Leap(gptr o);                  /* 0x42E840 */
+void DC2CALL Ples11_Dive(gptr o);                  /* 0x42E950 */
+void DC2CALL Ples11_Rise(gptr o);                  /* 0x42EA80 */
+void DC2CALL Ples11_Lunge(gptr o);                 /* 0x42EB30 */
+void DC2CALL Ples11_Bite(gptr o);                  /* 0x42ECA0 */
+void DC2CALL Ples11_ThinkSide(gptr o);             /* 0x42ED60 */
+void DC2CALL Ples11_Side(gptr o);                  /* 0x42EDD0 */
+void DC2CALL Ples11_ThinkDrag(gptr o);             /* 0x42EFA0 */
+void DC2CALL Ples11_PlayerUp(gptr pl);             /* 0x42F2C0 */
+void DC2CALL Ples11_Drag(gptr o);                  /* 0x42EFD0 */
+void DC2CALL Ples11_Eat(gptr o);                   /* 0x42F300 */
+void DC2CALL Ples11_Resurface(gptr o);             /* 0x42F4E0 */
+void DC2CALL Ples11_Snap(gptr o);                  /* 0x42F5F0 */
+void DC2CALL Ples11_BiteHit(gptr o);               /* 0x42F6E0 */
+void DC2CALL Ples11_SideHit(gptr o);               /* 0x42F770 */
+void DC2CALL Ples11_ResurfaceHit(gptr o);          /* 0x42F820 */
+void DC2CALL Ples11_SnapHit(gptr o);               /* 0x42F890 */
+void DC2CALL Ples11_Damage(gptr o);                /* 0x42F910 */
+void DC2CALL Ples11_Flinch(gptr o);                /* 0x42FBD0 */
+void DC2CALL Ples11_Knock(gptr o);                 /* 0x42FC30 */
+void DC2CALL Ples11_Stagger(gptr o);               /* 0x42FCA0 */
+void DC2CALL Ples11_Dead(gptr o);                  /* 0x42FD90 */
+void DC2CALL Ples12_Glow(gptr o, u32 mode);        /* 0x431B60 */
+void DC2CALL Ples12_BiteOn(gptr o);                /* 0x431A70 */
+void DC2CALL Ples12_BiteOff(gptr o);               /* 0x431AD0 */
+void DC2CALL Ples12_Bubbles(gptr o);               /* 0x431EC0 */
+void DC2CALL Ples12_Remove(gptr o);                /* 0x430E50 */
+void DC2CALL Ples12_Type(gptr o);                  /* 0x430360 */
+void DC2CALL Ples12_Handler(gptr o);               /* 0x430370 */
+void DC2CALL Ples12_Init(gptr o);                  /* 0x430590 */
+void DC2CALL Ples12_Normal(gptr o);                /* 0x430820 */
+void DC2CALL Ples12_Hit(gptr o);                   /* 0x430850 */
+void DC2CALL Ples12_Die(gptr o);                   /* 0x430870 */
+void DC2CALL Ples12_Grab(gptr o);                  /* 0x430890 */
+u32 DC2CALL Ples12_Decide(gptr o);                 /* 0x430B00 */
+void DC2CALL Ples12_ThinkWait(gptr o);             /* 0x4308C0 */
+void DC2CALL Ples12_ThinkSwim(gptr o);             /* 0x4309D0 */
+void DC2CALL Ples12_Wait2(gptr o);                 /* 0x4308F0 */
+void DC2CALL Ples12_Swim(gptr o);                  /* 0x430A30 */
+void DC2CALL Ples12_Leap(gptr o);                  /* 0x430C40 */
+void DC2CALL Ples12_Dive(gptr o);                  /* 0x430D80 */
+void DC2CALL Ples12_Rise(gptr o);                  /* 0x430EB0 */
+void DC2CALL Ples12_Lunge(gptr o);                 /* 0x430F80 */
+void DC2CALL Ples12_Bite(gptr o);                  /* 0x4310E0 */
+void DC2CALL Ples12_Side(gptr o);                  /* 0x431190 */
+void DC2CALL Ples12_Resurface(gptr o);             /* 0x4312D0 */
+void DC2CALL Ples12_BiteHit(gptr o);               /* 0x4313E0 */
+void DC2CALL Ples12_SideHit(gptr o);               /* 0x431440 */
+void DC2CALL Ples12_ResurfaceHit(gptr o);          /* 0x4314D0 */
+void DC2CALL Ples12_SnapHit(gptr o);               /* 0x431530 */
+void DC2CALL Ples12_Damage(gptr o);                /* 0x4315B0 */
+void DC2CALL Ples12_Flinch(gptr o);                /* 0x431810 */
+void DC2CALL Ples12_Knock(gptr o);                 /* 0x431860 */
+void DC2CALL Ples12_Stun(gptr o);                  /* 0x4318C0 */
+void DC2CALL Ples12_Dead(gptr o);                  /* 0x431970 */
 
 #endif

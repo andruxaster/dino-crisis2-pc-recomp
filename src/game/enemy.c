@@ -342,6 +342,41 @@ void DC2CALL Enemy_BiteOn(gptr o)                                    /* 0x42B710
     Bits_Set(0x87E974, 0, 1);
 }
 
+/* a step of at most speed (x/z) from a toward b into out (y 0): the distance
+ * before it, or 0 when b is within the step (out then reaches it) */
+u32 DC2CALL Vec_StepXZ(gptr a, gptr b, s32 speed, gptr out)          /* 0x47A630 */
+{
+    u32 d = (u32)SquareRoot0((s32)Dist2_XZ(b, a));
+    s32 sp = (s16)speed;
+    if (d > (u32)sp) {
+        s32 dz = S16(b + 4) - S16(a + 4), dx = S16(b) - S16(a);
+        s32 ang = (s16)ratan2((float)dx, (float)dz);
+        U16(out) = (u16)(rsin(ang) * sp >> 12);
+        U16(out + 2) = 0;
+        U16(out + 4) = (u16)(rcos(ang) * sp >> 12);
+        return d;
+    }
+    U16(out + 2) = 0;
+    U16(out) = (u16)(U16(b) - U16(a));
+    U16(out + 4) = (u16)(U16(b + 4) - U16(a + 4));
+    return 0;
+}
+
+/* a kill in the extra game: the combo grows (its best kept), points by it
+ * (type 12 counts double) */
+void DC2CALL Combo_Kill(u32 type)                                     /* 0x412CC0 */
+{
+    s32 pts = type == 0xC ? 0xA0 : 0x50;
+    s16 n = (s16)(U16(0x746E4C) + 1);
+    U16(0x746E4E) = 0x82;
+    U16(0x746E4C) = (u16)n;
+    if ((s32)n > (s32)U16(G() + 0xC24)) U16(G() + 0xC24) = (u16)n;
+    s32 add = n < 8 ? n * pts : pts * 8;
+    U32(0x746E48) += (u32)add;
+    U32(0x746E44) += (u32)add;
+    U32(G() + 0xC14) = U32(0x746E44);
+}
+
 /* and lets go (when it held) */
 void DC2CALL Enemy_BiteOff(gptr o)                                   /* 0x433960 */
 {

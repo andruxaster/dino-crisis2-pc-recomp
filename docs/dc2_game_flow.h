@@ -132,8 +132,8 @@
  *  0/1 player characters; 2..15 dinosaurs, Enemy_LoadModel 0x482070:
  *  2 E00 Velociraptor, 3 E10 Tyrannosaurus, 4 E20 Pteranodon, 5 E30
  *  Plesiosaurus, 6 E40 Giganotosaurus, 7 E90 Oviraptor, 8 E60 Allosaurus,
- *  9 E70 Triceratops, 10 E80 Mosasaurus, 11/12 E31/E32 (thin 6.8 m model,
- *  probably the Plesiosaurus neck), 13 EA0 Compsognathus, 14 E50 Inostrancevia
+ *  9 E70 Triceratops, 10 E80 Mosasaurus, 11/12 E31/E32 (plesiosaurs in the
+ *  water: at the surface / under it, src/game/plesio2.c), 13 EA0 Compsognathus, 14 E50 Inostrancevia
  *  (E<k>0 = entry k of the game's dinosaur list; model sizes agree);
  *  16 room prop (model inside the room block); 17..28 area objects;
  *  0x1D.. playable dinosaurs KOF_P*.DAT.
