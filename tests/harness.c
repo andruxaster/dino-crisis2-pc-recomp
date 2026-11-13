@@ -6640,7 +6640,7 @@ static void test_trex(void)
             sprintf(g_what, "trex %X handler state %X kind %u", o, U32(o + 0x54), U32(o + 0x1C4));
             check(0x423680, TRex_Handler, "TRex_Handler", 1, a, 0);
         }
-        do model_data(0x640000); while (U32(0x640000 + 0x14) < 15);   /* (its feet: parts 0xE and 0xA) */
+        do model_data(0x640000); while (U32(0x640000 + 0x14) != 16);   /* (its feet: parts 0xE and 0xA) */
         do anim_setup_at(AN_OBJ); while (U32(AN_OBJ + 0x68) != 16);
         memcpy(MEM(o + 0x60), MEM(AN_OBJ + 0x60), 0x50);
         U32(0x642C84) = AN_DATA;                            /* its first animation */
@@ -6996,7 +6996,7 @@ static void test_plesio(void)
             sprintf(g_what, "plesio %X handler state %X bits %X", o, U32(o + 0x54), U32(b));
             check(0x42B750, Plesio_Handler, "Plesio_Handler", 1, a, 0);
         }
-        do model_data(0x640000); while (U32(0x640000 + 0x14) < 15);
+        do model_data(0x640000); while (U32(0x640000 + 0x14) != 16);
         do anim_setup_at(AN_OBJ); while (U32(AN_OBJ + 0x68) != 16);
         memcpy(MEM(o + 0x60), MEM(AN_OBJ + 0x60), 0x50);
         U32(0x642984) = AN_DATA;                            /* its first animation */
@@ -7365,7 +7365,7 @@ static void test_pw(void)
         for (int y = 0; y < 2; y++) {
             game_state();
             o = pw_setup(); a[0] = o; pl = U32(G() + 0x940);
-            do model_data(0x640000); while (U32(0x640000 + 0x14) < 15);
+            do model_data(0x640000); while (U32(0x640000 + 0x14) != 16);
             do anim_setup_at(AN_OBJ); while (U32(AN_OBJ + 0x68) != 16);
             memcpy(MEM(o + 0x60), MEM(AN_OBJ + 0x60), 0x50);
             U32(0x642348 + 6 * 4) = AN_DATA; U32(0x644924 + 5 * 4) = AN_DATA;   /* the first animations */
@@ -7723,7 +7723,7 @@ static void test_roam(void)
         }
         /* set up, started */
         game_state(); o = roam_setup(0, 0); a[0] = o;
-        do model_data(0x640000); while (U32(0x640000 + 0x14) < 15);
+        do model_data(0x640000); while (U32(0x640000 + 0x14) != 16);
         do anim_setup_at(AN_OBJ); while (U32(AN_OBJ + 0x68) != 16);
         memcpy(MEM(o + 0x60), MEM(AN_OBJ + 0x60), 0x50);
         U32(o + 0x60) = 0x640000;                           /* its model */
@@ -8031,11 +8031,11 @@ static void test_gig(void)
             sprintf(g_what, "gig %X handler state %X kind %u bits %X", o, U32(o + 0x54), U32(o + 0x1C4), U32(b));
             check(0x4339B0, Gig_Handler, "Gig_Handler", 1, a, 0);
         }
-        do model_data(0x63F500); while (U32(0x63F500 + 0x14) < 15);
+        do model_data(0x63F500); while (U32(0x63F500 + 0x14) != 16);
         do anim_setup_at(AN_OBJ); while (U32(AN_OBJ + 0x68) != 16);
         memcpy(MEM(o + 0x60), MEM(AN_OBJ + 0x60), 0x50);
         U32(0x642D84) = AN_DATA;                            /* its first animation */
-        do model_data(0x630000); while (U32(0x630000 + 0x14) < 15);   /* its own model, or the default one */
+        do model_data(0x630000); while (U32(0x630000 + 0x14) != 16);   /* its own model, or the default one */
         U32(o + 0x60) = rnd() % 2 ? 0 : 0x630000;
         U8(G() + 0x108E) = rnd() % 3; U32(0x74AF98) = rnd(); U8(0x87E747) = rnd() % 2;
         static const u8 rm[][2] = {{5, 3}, {5, 2}, {4, 3}, {1, 1}};
