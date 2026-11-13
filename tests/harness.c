@@ -7515,6 +7515,322 @@ static void test_pw(void)
     g_ign_objpads = 0;
 }
 
+/* ---- the roamer (area 3, type 22) ---- */
+#define RM_G    0x6A2000u       /* its graph */
+#define RM_CYL  0x6A2800u       /* two cylinders */
+#define RM_TMP  0x6A2840u
+#define RM_PT(o, n) (U32((o) + 0x1C8) + (u32)(n) * 8)
+static u32 g_rm_saved[8];
+static void roam_tables_stub(int on)
+{
+    for (int k = 1; k <= 8; k++) g_stubs[k].spec = on ? "d" : "";
+    for (u32 k = 0; k < 8; k++) {
+        gptr a = 0x7208E0 + 4 * k;
+        if (on) { g_rm_saved[k] = U32(a); U32(a) = (u32)(uintptr_t)g_recs[1 + k]; }
+        else U32(a) = g_rm_saved[k];
+    }
+}
+
+/* the graph: connected; lengths short (paths below 0x7530) or, when wild, any */
+static void roam_graph(gptr o, int wild)
+{
+    static const u8 kinds[] = {0, 0, 0, 0, 0, 4, 4, 1, 1, 0x21, 3, 8, 0x10, 0x14, 0x11, 0x40, 0x12, 0x18, 0x15, 0x30};
+    u32 nn = rnd() % 4 ? 2 + rnd() % 15 : 1 + rnd() % 32, ne = nn - 1 + rnd() % (nn + 2);
+    gptr p = RM_G, pts = p + 4, ln = pts + nn * 8;
+    U16(p) = (u16)nn; U16(p + 2) = (u16)ne;
+    int plain = rnd() % 6;                                  /* (0: maybe no plain point) */
+    for (u32 i = 0; i < nn; i++) {
+        gptr e = pts + i * 8;
+        S16(e) = (s16)(S16(o + 0x40) + (s32)(rnd() % 16000) - 8000);
+        S16(e + 4) = (s16)(S16(o + 0x44) + (s32)(rnd() % 16000) - 8000);
+        U16(e + 2) = rnd() % 3 ? 0 : (u16)rnd();
+        u8 k = rnd() % 6 ? kinds[rnd() % 20] : (u8)rnd();
+        if (!plain && rnd() % 2) k |= 1;
+        U8(e + 6) = k;
+        U8(e + 7) = (u8)(k & 1 && rnd() % 4 ? rnd() % 3 : rnd() % 32);
+    }
+    if (plain) U8(pts + (rnd() % nn) * 8 + 6) &= ~0x1Du;
+    for (u32 j = 0; j < ne; j++) {
+        gptr l = ln + j * 8;
+        u32 a, b;
+        if (j + 1 < nn) { a = j + 1; b = rnd() % (j + 1); }
+        else { a = rnd() % nn; b = rnd() % nn; }
+        if (rnd() % 2) { u32 t = a; a = b; b = t; }
+        U8(l) = (u8)a; U8(l + 1) = (u8)b;
+        S16(l + 2) = (s16)(wild && rnd() % 3 == 0 ? (rnd() % 2 ? (s32)(s16)rnd() : 0x7000 + (s32)(rnd() % 0x1000))
+                           : rnd() % 2 ? 100 * (s32)(1 + rnd() % 3) : 100 + (s32)(rnd() % 800));   /* (equal ways) */
+        U16(l + 4) = (u16)rnd(); U16(l + 6) = (u16)rnd();
+    }
+    U32(o + 0x1C0) = p; U32(o + 0x1C4) = U32(p); U32(o + 0x1C8) = pts; U32(o + 0x1CC) = ln;
+    u8 n5 = 0, n1 = 0;
+    for (u32 i = 0; i < nn; i++) {
+        u8 k = U8(pts + i * 8 + 6);
+        if (k & 5) U8(0x74AF18 + n5++) = (u8)i;
+        if (k & 1) U8(0x74AF58 + n1++) = (u8)i;
+    }
+    U8(0x74AF78) = n5; U8(0x74AF79) = n1;
+    if (rnd() % 6 == 0) { U8(0x74AF78) = (u8)(rnd() % (n5 + 1)); U8(0x74AF79) = (u8)(rnd() % (n1 + 1)); }
+    for (u32 i = 0; i < 32; i++) U8(0x74AF38 + i) = (u8)(rnd() % nn);
+    U8(0x74AF7A) = (u8)(rnd() % nn); U8(0x74AF7B) = (u8)(rnd() % nn);
+    U8(o + 0x1D0) = (u8)(rnd() % nn); U8(o + 0x1D1) = (u8)(rnd() % nn);
+}
+
+/* one among the test objects, the player near or not */
+static gptr roam_setup(int wild, int anim)
+{
+    gptr o, g, pl;
+    if (anim) {                                             /* (animations it starts) */
+        game_state(); world_setup(); enemy_state(); objects_links(); zones_setup();   /* (parts back: a handler may have taken them) */
+        o = O_OBJ + 0x260 * (1 + rnd() % 6);
+        anim_setup_at(O_OBJ);
+        do anim_setup_at(o); while (U32(o + 0x68) != 16);
+        memcpy(MEM(O_OBJ + 0x60), MEM(o + 0x60), 0x50);
+        U32(G() + 0x940) = O_OBJ;
+        U32(O_OBJ + 0x128) = rnd() % 2 ? 0x7200E8 : 0; U32(o + 0x128) = 0x7208C8;
+        U8(o + 0x58) = 22;
+        U32(o + 0x50) = rnd() % 2 ? 0xAD : rnd();
+        for (int j = 0; j < 0x20; j++) U32(AN_TAB + 4 * j) = AN_DATA + 0x1000 * (rnd() % 2);
+    } else {
+        o = raptor_setup();
+        trex_parts(o);
+    }
+    g = G(); pl = U32(g + 0x940);
+    U32(o + 0x184) &= ~0x40u;
+    trex_ff(o, rnd() % 2);
+    roam_graph(o, wild);
+    U8(o + 0x1D2) = (u8)rnd(); U8(o + 0x1D3) = rnd() % 2;
+    U16(o + 0x1D4) = rnd() % 2 ? 0x95 + rnd() % 4 : (u16)rnd();
+    U16(o + 0x1D8) = (u16)rnd();
+    U32(o + 0x1DC) = rnd() % 2 ? 0x9C4 + rnd() % 0x5DD : rnd();
+    U8(o + 0x1E0) = rnd() % 2 ? 3 : (u8)(rnd() % 5);
+    U8(g + 0x1090) = rnd() % 4 ? (u8)(3 + rnd() % 3) : (u8)(rnd() % 13);
+    U8(g + 0x1274) = rnd() % 2 ? U8(g + 0x1090) : (u8)(rnd() % 7);
+    for (u32 f = 0x69; f <= 0x6D; f++) Flag_Set(6, f, rnd() % 2);
+    Flag_Set(6, 0x7C, rnd() % 2);
+    for (u32 f = 0; f < 32; f++) Flag_Set(7, f, rnd() % 3 == 0);
+    Flag_Set(2, 0x19, rnd() % 2);
+    U32(CL_ROOM + 0x3C) = rnd() % 2 ? 0x40 : 0x200 + rnd() % 0x100;
+    for (u32 k = 0; k < 8; k++) U8(RM_CYL + k) = (u8)rnd();
+    for (u32 k = 0; k < 2; k++) {
+        S16(RM_CYL + k * 8) = (s16)(rnd() % 400 - 200); S16(RM_CYL + k * 8 + 4) = (s16)(rnd() % 400 - 200);
+        U16(RM_CYL + k * 8 + 6) = (u16)(rnd() % 4 ? 100 + rnd() % 700 : rnd());
+    }
+    U32(o + 0x134) = RM_CYL; U32(pl + 0x12C) = RM_CYL + 8;
+    U16(pl + 0x174) = rnd() % 2 ? 0 : (u16)rnd();
+    U16(o + 0xF4) = (u16)rnd();
+    trex_rand8();
+    return o;
+}
+
+/* p at about d from point e */
+static void roam_near(gptr p, gptr e, s32 d)
+{
+    plesio_at(p, e, d, rnd() % 2 ? (u32[]){0, 0x400, 0x800, 0xC00}[rnd() % 4] : rnd());
+}
+
+/* no walls in the way of sight (Line_Blocked) */
+static void roam_open(gptr o)
+{
+    gptr c = U32(G() + 0xA4C);
+    for (u32 k = 0; k < U8(c); k++) U8(c + U32(c + 8 + 4 * k)) = 0;
+    U8(o + 0x184) &= ~0x10;
+}
+
+/* point c the nearest of all, at about d, the others far */
+static void roam_only(gptr o, u32 c, s32 d)
+{
+    for (u32 j = 0; j < U16(o + 0x1C4); j++) if (j != c) roam_near(RM_PT(o, j), o + 0x40, 3000 + rnd() % 5000);
+    roam_near(o + 0x40, RM_PT(o, c), d);
+}
+
+/* one wall: a square whose edge (z = const) is within o's cylinder */
+static void roam_wall(gptr o)
+{
+    gptr c = CL_ROOM, w = c + 0x40, v = w + 8 + 16;
+    U8(c) = 1; U32(c + 8) = 0x40; U32(c + 0x3C) = 0x40;
+    U8(w) = 1; U8(w + 1) = 4; U8(w + 2) = 0; U8(w + 3) = 0; U16(w + 4) = 0xFFFF;
+    for (u32 e = 0; e < 4; e++) { U8(w + 8 + 4 * e) = 1; U8(w + 9 + 4 * e) = 0; }
+    s32 x = S16(o + 0x40), z = S16(o + 0x44), sg = rnd() % 2 ? 1 : -1, z0 = z + sg * (s32)(50 + rnd() % 300), r = 3000;
+    s32 q[4][2] = {{x - r, z0}, {x + r, z0}, {x + r, z0 + sg * 2 * r}, {x - r, z0 + sg * 2 * r}};
+    int rev = rnd() % 2;
+    for (u32 e = 0; e < 4; e++) { u32 k = rev ? 3 - e : e; S16(v + 4 * e) = (s16)q[k][0]; S16(v + 4 * e + 2) = (s16)q[k][1]; }
+    U32(v + 16) = U32(v);
+    U32(G() + 0xA4C) = c; U32(o + 0x128) = 0x7208C8; U8(o + 0x184) &= ~0x10;
+}
+
+static void test_roam(void)
+{
+    g_ign_objpads = 1;
+    stubs_install(1);
+    roam_tables_stub(1);
+    player_tables_stub(1);
+    for (int i = 0; i < iters; i++) {
+        game_state();
+        gptr o = roam_setup(1, 0), pl = U32(G() + 0x940);
+        u32 a[3] = {o};
+        check(0x426C60, Obj_Vanish, "Obj_Vanish", 1, a, 0);
+        /* the graph: shortest paths, the nearest point, the exits */
+        sprintf(g_what, "roam %X points %u links %u from %d", o, U16(o + 0x1C4), U16(o + 0x1C6), (s8)U8(o + 0x1D0));
+        if (rnd() % 8 == 0) U8(o + 0x1D0) = rnd() % 2 ? 0xFF : (u8)(U16(o + 0x1C4) + rnd() % (32 - U16(o + 0x1C4) + 1));
+        if (U8(o + 0x1D0) > 0x1F && U8(o + 0x1D0) != 0xFF) U8(o + 0x1D0) = 0;
+        check(0x42DA50, Roam_Path, "Roam_Path", 1, a, 0);
+        a[1] = RM_TMP; U32(RM_TMP) = rnd();
+        if (rnd() % 2) roam_near(o + 0x40, RM_PT(o, rnd() % U16(o + 0x1C4)), rnd() % 3000);
+        if (rnd() % 3 == 0) {                               /* two at the same place */
+            gptr p0 = RM_PT(o, rnd() % U16(o + 0x1C4)), p1 = RM_PT(o, rnd() % U16(o + 0x1C4));
+            U16(p1) = U16(p0); U16(p1 + 4) = U16(p0 + 4);
+            if (rnd() % 2) roam_open(o);
+        }
+        if (rnd() % 6 == 0) {                               /* all over 30000 away */
+            S16(o + 0x40) = -16000; S16(o + 0x44) = (s16)(rnd() % 2000);
+            for (u32 j = 0; j < U16(o + 0x1C4); j++) { S16(RM_PT(o, j)) = (s16)(15000 + rnd() % 2000); S16(RM_PT(o, j) + 4) = (s16)(rnd() % 2000); }
+            if (rnd() % 2) roam_open(o);
+        }
+        check(0x42DC20, Roam_Nearest, "Roam_Nearest", 2, a, 0xFF);
+        if (rnd() % 8 == 0) U32(o + 0x1C8) = 0;
+        { gptr c = U32(G() + 0xA4C); U8(c + U32(c + 0x3C) + 3) = (u8)rnd(); }
+        if (rnd() % 3 == 0) {                               /* exits listed that are not (or no longer) */
+            U8(0x74AF79) = (u8)(1 + rnd() % 8);
+            for (u32 j = 0; j < 8; j++) U8(0x74AF58 + j) = (u8)(rnd() % U16(o + 0x1C4));
+        }
+        check(0x42CFF0, Roam_Exits, "Roam_Exits", 1, a, 0);
+        /* a point to go to */
+        game_state(); o = roam_setup(0, 0); a[0] = o;
+        for (int k = 0; k < 4; k++) {
+            a[1] = rnd() % 4 ? rnd() % U16(o + 0x1C4) : (rnd() & 0xFFFFFF00) | rnd() % U16(o + 0x1C4);
+            a[2] = rnd() % 4 ? rnd() % 4 : rnd();
+            Flag_Set(6, 0x6C, rnd() % 2);
+            check(0x42D380, Roam_Pick, "Roam_Pick", 3, a, 0xFF);
+        }
+        /* turning toward a point */
+        a[1] = RM_TMP; a[2] = RM_PT(o, rnd() % U16(o + 0x1C4));
+        U32(RM_TMP) = rnd() % 2 ? 0x64 : rnd();
+        if (rnd() % 2) {                                    /* about 0x64 off */
+            static const s32 ed[] = {0, 1, -1, 0x63, 0x64, 0x65, -0x63, -0x64, -0x65, 0x7FF, 0x800};
+            U16(o + 0x4A) = (u16)((Angle_XZ(o + 0x40, a[2]) + ed[rnd() % 11]) & 0xFFF);
+        }
+        check(0x42D7E0, Roam_TurnTo, "Roam_TurnTo", 3, a, 0xFFFF);
+        /* bumping the player */
+        game_state(); o = roam_setup(0, 0); a[0] = o; pl = U32(G() + 0x940);
+        {
+            gptr ca = RM_CYL, cb = RM_CYL + 8, c = RM_TMP, t = RM_TMP + 8;
+            s32 r = U16(ca + 6) + U16(cb + 6);
+            U16(c) = (u16)(U16(o + 0x40) + U16(ca)); U16(c + 4) = (u16)(U16(o + 0x44) + U16(ca + 4));
+            plesio_at(t, c, rnd() % 3 ? r + (s32)(rnd() % 3) - 1 : (s32)(rnd() % 3000), rnd() % 3 ? (u32[]){0, 0x400, 0x800, 0xC00}[rnd() % 4] : rnd());
+            U16(pl + 0x40) = (u16)(U16(t) - U16(cb)); U16(pl + 0x44) = (u16)(U16(t + 4) - U16(cb + 4));
+            U16(pl + 0x174) = rnd() % 2 ? 0 : (u16[]){1, 0x100, 0x8000, (u16)rnd()}[rnd() % 4];
+            check(0x42D880, Roam_Bump, "Roam_Bump", 1, a, 0);
+        }
+        /* set up, started */
+        game_state(); o = roam_setup(0, 0); a[0] = o;
+        do model_data(0x640000); while (U32(0x640000 + 0x14) < 15);
+        do anim_setup_at(AN_OBJ); while (U32(AN_OBJ + 0x68) != 16);
+        memcpy(MEM(o + 0x60), MEM(AN_OBJ + 0x60), 0x50);
+        U32(o + 0x60) = 0x640000;                           /* its model */
+        U8(o + 0x54) = (u8)rnd(); U8(G() + 0x1274) = rnd() % 2 ? 0 : (u8)rnd();
+        check(0x42CDF0, Roam_Init, "Roam_Init", 1, a, 0);
+        o = roam_setup(0, 1); a[0] = o;
+        U8(o + 0x54) = (u8)rnd();
+        U32(o + 0x1C4) = rnd(); U32(o + 0x1C8) = rnd(); U32(o + 0x1CC) = rnd();
+        if (rnd() % 4) U8(G() + 0x1274) = U8(G() + 0x1090);
+        snd_setup(); U8(G() + 0x927) = rnd() % 2; U8(0x87E747) = rnd() % 3;
+        for (u32 id = 0x61; id <= 0x81; id += 0x20) U8(0x6EED00 + id * 8 + 1) = (u8)(rnd() % 4);   /* (its cry plays) */
+        sprintf(g_what, "roam %X start points %u room %u/%u", o, U16(RM_G), U8(G() + 0x1090), U8(G() + 0x1274));
+        check(0x42CE60, Roam_Start, "Roam_Start", 1, a, 0);
+        /* the moves */
+        for (int k = 0; k < 12; k++) {
+            int sc = k % 6;
+            if (sc == 5) { game_state(); o = roam_setup(0, 0); } else o = roam_setup(0, 1);
+            a[0] = o; pl = U32(G() + 0x940);
+            u32 nn = U16(o + 0x1C4);
+            U8(o + 0x55) = rnd() % 4 ? (u8)(sc % 3) : (u8)(rnd() % 3);
+            U8(o + 0x56) = rnd() % 4 ? (u8)(rnd() % 2) : (u8)rnd();
+            if (sc == 0) {                                  /* walking: near a point to turn at, the player near */
+                u32 c = rnd() % nn;
+                s32 n = (s32)U32(0x7208AC + U8(G() + 0x1090) * 4);
+                roam_near(o + 0x40, RM_PT(o, c), rnd() % 2 ? n + (s32)(rnd() % 3) - 1 : (s32)(rnd() % 2000));
+                for (u32 j = 0; j < nn; j++) if (j != c && rnd() % 2) roam_near(RM_PT(o, j), o + 0x40, 3000 + rnd() % 5000);
+                if (rnd() % 2) { roam_open(o); roam_only(o, c, n + (s32)(rnd() % 3) - 1); }
+                if (rnd() % 2) U8(RM_PT(o, c) + 6) |= 0x10;
+                u8 v = (u8)rnd(); U16(0x87DE10) = rand8_seed(v, 0);
+                if (rnd() % 2) U32(o + 0x1DC) = 0xFA0 - v % 20 + rnd() % 2;
+                s32 k2 = (s32)((U32(o + 0x1DC) + v % 20) > 0xFA0 ? 0x9C4 : U32(o + 0x1DC) + v % 20);
+                roam_near(pl + 0x40, o + 0x40, rnd() % 2 ? k2 + (s32)(rnd() % 3) - 1 : (s32)(rnd() % 6000));
+                sprintf(g_what, "roam %X walk near %u", o, c);
+                check(0x42D180, Roam_Walk, "Roam_Walk", 1, a, 0);
+            } else if (sc == 1) {                           /* waiting: the timer, the player about 6000 away */
+                roam_near(pl + 0x40, o + 0x40, rnd() % 2 ? 6000 + (s32)(rnd() % 3) - 1 : (s32)(rnd() % 12000));
+                if (rnd() % 2) U8(o + 0x1E0) = 3;
+                sprintf(g_what, "roam %X wait at %u", o, U8(o + 0x1D0));
+                check(0x42D400, Roam_Wait, "Roam_Wait", 1, a, 0);
+            } else if (sc == 2) {                           /* running along the path */
+                u32 s = rnd() % nn, t = rnd() % nn;
+                U8(o + 0x1D0) = (u8)s; Roam_Path(o);
+                u32 on = t, steps = rnd() % 4;              /* where it is: on the path from s to t */
+                for (u32 j = 0; j < steps && on != s; j++) on = U8(0x74AF38 + on);
+                if (rnd() % 3 == 0) on = s;
+                U8(o + 0x1D0) = (u8)on; U8(o + 0x1D1) = (u8)t;
+                if (rnd() % 4) U8(RM_PT(o, t) + 6) &= ~2u;
+                if (rnd() % 4 == 0) U8(RM_PT(o, t) + 6) |= 2;  /* (its exit shut) */
+                gptr e = RM_PT(o, on);
+                if (on == t && rnd() % 3 == 0) U8(e + 6) = (u8)((U8(e + 6) & ~5u) | 8);   /* the way out for good */
+                roam_near(o + 0x40, e, rnd() % 2 ? 500 + (s32)(rnd() % 3) - 1 : (s32)(rnd() % 3000));
+                if (rnd() % 2) {                            /* about 0x64 off */
+                    static const s32 ed[] = {0, 1, -1, 0x63, 0x64, 0x65, -0x63, -0x64, -0x65, 0x100};
+                    U16(o + 0x4A) = (u16)((Angle_XZ(o + 0x40, e) + ed[rnd() % 10]) & 0xFFF);
+                }
+                if (U8(RM_PT(o, t) + 6) & 2 && rnd() % 2) {   /* shut: near an exit */
+                    u32 c = rnd() % nn;
+                    s32 n = (s32)U32(0x7208AC + U8(G() + 0x1090) * 4);
+                    roam_near(o + 0x40, RM_PT(o, c), rnd() % 2 ? n + (s32)(rnd() % 3) - 1 : (s32)(rnd() % 2000));
+                    if (rnd() % 2) {                        /* the exit the only one in sight, at its edge */
+                        roam_open(o); roam_only(o, c, n + (s32)(rnd() % 3) - 1);
+                        if (rnd() % 3) U8(RM_PT(o, c) + 6) |= 1;
+                    }
+                }
+                sprintf(g_what, "roam %X run %u to %u kind %X step %u", o, on, t, U8(e + 6), U8(o + 0x56));
+                check(0x42D5C0, Roam_Run, "Roam_Run", 1, a, 0);
+            } else if (sc == 3) {
+                if (U8(0x74AF78) > 1 && rnd() % 2) {        /* two at the same place */
+                    gptr p0 = RM_PT(o, U8(0x74AF18 + rnd() % U8(0x74AF78))), p1 = RM_PT(o, U8(0x74AF18 + rnd() % U8(0x74AF78)));
+                    U16(p1) = U16(p0); U16(p1 + 4) = U16(p0 + 4);
+                    U8(p0 + 6) &= ~2u; U8(p1 + 6) &= ~2u;
+                    if (rnd() % 2) roam_near(o + 0x40, p0, 300 + rnd() % 2000);
+                }
+                sprintf(g_what, "roam %X hit sub %u", o, U8(o + 0x55));
+                check(0x42D940, Roam_Hit, "Roam_Hit", 1, a, 0);
+            } else if (sc == 4) {
+                U8(o + 0x55) = (u8)(rnd() % 3);
+                U8(pl + 0x54) = rnd() % 2 ? 2 : (u8)(rnd() % 6);
+                U16(0x87DE10) = rand8_seed(rnd() % 2 ? 0 : 180, 0);
+                check(0x42D820, Roam_Normal, "Roam_Normal", 1, a, 0);
+            } else {                                        /* the handler; a wall pushing it out the way it faces */
+                U8(o + 0x54) = (u8)(rnd() % 8);
+                U32(o + 0x50) = (U32(o + 0x50) & ~0x40000010u) | (rnd() % 3 ? 0 : 0x10) | (rnd() % 8 ? 0 : 0x40000000);
+                if (rnd() % 2) cl_place(o);
+                else if (rnd() % 2) roam_wall(o);
+                if (rnd() % 3 == 0) {
+                    U16(o + 0xF0) = 0; U16(o + 0xF2) = 0; U16(o + 0xF4) = 0;
+                    static u8 sv[0x260], sg[0x400], sq[8];
+                    gptr q = CL_ROOM + U32(CL_ROOM + 0x3C);
+                    memcpy(sv, MEM(o), 0x260); memcpy(sg, MEM(RM_G), 0x400); memcpy(sq, MEM(q), 8);
+                    Roam_Type(o);
+                    u16 h = U16(o + 0x4A), z = U16(o + 0x1D8), t = U8(o + 0x1D3);
+                    memcpy(MEM(o), sv, 0x260); memcpy(MEM(RM_G), sg, 0x400); memcpy(MEM(q), sq, 8);
+                    if (t) U16(o + 0x4A) = (u16)((z ? h : h - 3) & 0xFFF);
+                }
+                U32(LOG_BASE) = 0;
+                sprintf(g_what, "roam %X handler state %u flags %X", o, U8(o + 0x54), U32(o + 0x50));
+                check(0x42CD10, Roam_Type, "Roam_Type", 1, a, 0);
+            }
+        }
+    }
+    player_tables_stub(0);
+    roam_tables_stub(0);
+    stubs_install(0);
+    g_ign_objpads = 0;
+}
+
 static void test_game(void)
 {
     stubs_install(1);
@@ -7689,7 +8005,7 @@ __declspec(dllexport) void harness_main(int argc, char **argv)
     struct { const char *name; void (*fn)(void); } T[] = {
         {"flags", test_flags}, {"geometry", test_geom}, {"script values", test_script_values},
         {"script opcodes", test_script_ops}, {"script objects", test_objects},
-        {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"objects 2", test_object}, {"collision", test_collision}, {"player", test_player}, {"player states", test_player2}, {"zones", test_zones}, {"loading", test_room}, {"title", test_title}, {"game task", test_game}, {"doors", test_doors}, {"frame", test_frame}, {"enemy sets", test_enemyset}, {"enemies", test_enemies}, {"raptor", test_raptor}, {"oviraptor", test_ovi}, {"allosaurus", test_allo}, {"pteranodon", test_ptera}, {"tyrannosaurus", test_trex}, {"plesiosaurus", test_plesio}, {"water plesiosaurs", test_pw}, {"aot kinds", test_aot_kinds}, {"object effects", test_obj_effects}, {"effect slots", test_k2}, {"effect drops", test_k2_drops}, {"effect emitters", test_eff_slots}, {"effect slots 3", test_k2_more}, {"helpers", test_helpers}, {"draw", test_draw}, {"pc gpu", test_pcgpu}, {"pc draw", test_pcdraw}, {"pc frame", test_pcframe},
+        {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"objects 2", test_object}, {"collision", test_collision}, {"player", test_player}, {"player states", test_player2}, {"zones", test_zones}, {"loading", test_room}, {"title", test_title}, {"game task", test_game}, {"doors", test_doors}, {"frame", test_frame}, {"enemy sets", test_enemyset}, {"enemies", test_enemies}, {"raptor", test_raptor}, {"oviraptor", test_ovi}, {"allosaurus", test_allo}, {"pteranodon", test_ptera}, {"tyrannosaurus", test_trex}, {"plesiosaurus", test_plesio}, {"water plesiosaurs", test_pw}, {"roamer", test_roam}, {"aot kinds", test_aot_kinds}, {"object effects", test_obj_effects}, {"effect slots", test_k2}, {"effect drops", test_k2_drops}, {"effect emitters", test_eff_slots}, {"effect slots 3", test_k2_more}, {"helpers", test_helpers}, {"draw", test_draw}, {"pc gpu", test_pcgpu}, {"pc draw", test_pcdraw}, {"pc frame", test_pcframe},
     };
     for (unsigned i = 0; i < sizeof T / sizeof T[0]; i++) {
         int f0 = g_fail, t0 = g_tests;

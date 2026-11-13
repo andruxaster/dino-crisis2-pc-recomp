@@ -135,7 +135,11 @@
  *  9 E70 Triceratops, 10 E80 Mosasaurus, 11/12 E31/E32 (plesiosaurs in the
  *  water: at the surface / under it, src/game/plesio2.c), 13 EA0 Compsognathus, 14 E50 Inostrancevia
  *  (E<k>0 = entry k of the game's dinosaur list; model sizes agree);
- *  16 room prop (model inside the room block); 17..28 area objects;
+ *  16 room prop (model inside the room block); 17..28 area objects
+ *  (area 3 type 22, src/game/roamer.c: the roamer of rooms 303..305, walks a
+ *  graph at o+0x1C0 {u16 points, u16 links; points of 8 bytes: s16 x, u16
+ *  mark, s16 z, u8 kind, s8 flag; links: u8 a, u8 b, s16 length}, from room
+ *  to room through the exits event flags open; G+0x1274 the room it is in);
  *  0x1D.. playable dinosaurs KOF_P*.DAT.
  *  Placed by the room script only: obj_spawn (op 0x1A) and enemy_set (op 0x4F,
  *  random spawner EnemySet_Tick 0x472230). ENEMY SET: u8 zones, u8 type,

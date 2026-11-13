@@ -1109,6 +1109,23 @@ void DC2CALL Ples12_Glow(gptr o, u32 mode);        /* 0x431B60 */
 void DC2CALL Ples12_BiteOn(gptr o);                /* 0x431A70 */
 void DC2CALL Ples12_BiteOff(gptr o);               /* 0x431AD0 */
 void DC2CALL Ples12_Bubbles(gptr o);               /* 0x431EC0 */
+
+/* the roamer (area 3 type 22): src/game/roamer.c */
+void DC2CALL Obj_Vanish(gptr o);                /* 0x426C60 */
+void DC2CALL Roam_Type(gptr o);                 /* 0x42CD10 */
+void DC2CALL Roam_Init(gptr o);                 /* 0x42CDF0 */
+void DC2CALL Roam_Start(gptr o);                /* 0x42CE60 */
+void DC2CALL Roam_Exits(gptr o);                /* 0x42CFF0 */
+void DC2CALL Roam_Walk(gptr o);                 /* 0x42D180 */
+u32  DC2CALL Roam_Pick(gptr o, u32 n, u32 res); /* 0x42D380 */
+void DC2CALL Roam_Wait(gptr o);                 /* 0x42D400 */
+void DC2CALL Roam_Run(gptr o);                  /* 0x42D5C0 */
+u32  DC2CALL Roam_TurnTo(gptr o, gptr max, gptr e);/* 0x42D7E0 */
+void DC2CALL Roam_Normal(gptr o);               /* 0x42D820 */
+void DC2CALL Roam_Bump(gptr o);                 /* 0x42D880 */
+void DC2CALL Roam_Hit(gptr o);                  /* 0x42D940 */
+void DC2CALL Roam_Path(gptr o);                 /* 0x42DA50 */
+u32  DC2CALL Roam_Nearest(gptr o, gptr d2);     /* 0x42DC20 */
 void DC2CALL Ples12_Remove(gptr o);                /* 0x430E50 */
 void DC2CALL Ples12_Type(gptr o);                  /* 0x430360 */
 void DC2CALL Ples12_Handler(gptr o);               /* 0x430370 */
