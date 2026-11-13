@@ -7831,6 +7831,395 @@ static void test_roam(void)
     g_ign_objpads = 0;
 }
 
+/* ---- the giganotosaurus (type 6) ---- */
+static const u32 g_gi_tabs[][2] = {{0x720D48, 5}, {0x720D5C, 15}, {0x720D98, 15}, {0x720DD4, 4}, {0x720DE4, 4}, {0x720DF4, 15}};
+static u32 g_gi_saved[6][15];
+static void gig_tables_stub(int on)
+{
+    for (int k = 1; k <= 15; k++) g_stubs[k].spec = on ? "d" : "";
+    for (int t = 0; t < 6; t++)
+        for (u32 k = 0; k < g_gi_tabs[t][1]; k++) {
+            gptr a = g_gi_tabs[t][0] + 4 * k;
+            if (on) { g_gi_saved[t][k] = U32(a); U32(a) = (u32)(uintptr_t)g_recs[1 + k]; }
+            else U32(a) = g_gi_saved[t][k];
+        }
+}
+
+static const u32 g_gi_dist[] = {0, 0x1B57, 0x1B58, 0x1B59, 0x1F3F, 0x1F40, 0x1F41, 0x2327, 0x2328, 0x2329, 0x270F, 0x2710, 0x2711,
+                                0x2AF7, 0x2AF8, 0x2AF9, 0x2EDF, 0x2EE0, 0x2EE1, 0x32C7, 0x32C8, 0x32C9, 0x7FFFFFFF};
+static u32 gig_dist(void) { return rnd() % 4 ? g_gi_dist[rnd() % 23] : rnd() % 0x4000; }
+
+static void gig_rand8(void)
+{
+    static const u8 r[] = {7, 8, 9, 0x1F, 0x20, 0x21, 0x3F, 0x40, 0x41, 0x7F, 0x80, 0x81, 0xC7, 0xC8, 0xC9, 0, 1, 0xFF};
+    if (rnd() % 4) U16(0x87DE10) = rand8_seed(r[rnd() % 18], rnd() % 4 == 0);
+}
+
+/* its state block: bits, kind, the last state, timers */
+static void gig_state(gptr o)
+{
+    U32(o + 0x1C0) = rnd() % 4 ? rnd() & 0x7FFF : rnd();
+    U32(o + 0x1C4) = rnd() % 4 ? rnd() % 3 : rnd() % 2 ? 3 : rnd();
+    U8(o + 0x1C8) = 1 + rnd() % 3; U8(o + 0x1C9) = rnd() % 15; U8(o + 0x1CA) = rnd() % 4; U8(o + 0x1CB) = rnd() % 2;
+    for (u32 k = 0x1CC; k <= 0x1D4; k += 4) U32(o + k) = rnd() % 3 ? rnd() % 3 : rnd() % 2 ? rnd() % 0x2000 : rnd();
+    for (u32 k = 0x1E0; k < 0x1FA; k += 2) U16(o + k) = rnd() % 3 ? rnd() % 3 : (u16)rnd();
+    U16(o + 0x1F2) = rnd() % 4 ? rnd() % 11 : (u16)rnd();
+    U16(o + 0x1F0) = rnd() % 2;
+    U8(o + 0x18D) = rnd() % 3 ? 0 : (u8)rnd();
+}
+
+/* a giganotosaurus among the test objects (no animations); the player its target */
+static gptr gig_setup(void)
+{
+    gptr o = raptor_setup(), pl = U32(G() + 0x940);
+    U32(o + 0x184) &= ~0x40u;
+    trex_parts(o);
+    U32(o + 0x120) = AN_PART + 0xE * 0x80; U32(o + 0x124) = AN_PART + 0xA * 0x80;
+    U8(o + 0x15F) = rnd() % 4 ? 3 : rnd() % 16;
+    gig_state(o);
+    U32(o + 0x13C) = gig_dist();
+    U8(o + 0x13A) = rnd() % 3 == 0;
+    U8(o + 0x57) = rnd() % 2;
+    U16(pl + 0x174) = rnd() % 2 ? rnd() & 3 : (u16)rnd();
+    U32(pl + 0x134) = 0;
+    Bits_Set(0x87E974, 0, rnd() % 3 == 0); Bits_Set(0x87E974, 0x1F, rnd() % 3 == 0);
+    U16(o + 0xD8) = U16(pl + 0x40); U16(o + 0xDA) = U16(pl + 0x42); U16(o + 0xDC) = U16(pl + 0x44);
+    if (rnd() % 3 == 0) { S16(o + 0xD8) = (s16)(S16(o + 0x40) + (s32)(rnd() % 8000) - 4000); S16(o + 0xDC) = (s16)(S16(o + 0x44) + (s32)(rnd() % 8000) - 4000); }
+    trex_aim(o + 0x40, o, o + 0xD8);
+    trex_ff(o, rnd() % 2);
+    gig_rand8();
+    return o;
+}
+
+/* spheres on parts in the bridge's sections (or off them) */
+static void gig_bridge_spheres(gptr o)
+{
+    u32 n = 1 + rnd() % 3;
+    trex_spheres(o, n);
+    for (u32 s = 0; s < n; s++) {
+        gptr sa = TR_ATK + s * 0x10, q = 0x720D38 - 0x10 * (rnd() % 7);
+        U8(sa + 8) = 0; U8(sa + 9) = 0x7F; U8(sa + 0xA) = (u8)(1 + s);
+        gptr p = AN_PART + (1 + s) * 0x80;
+        for (u32 j = 0x20; j < 0x32; j += 2) U16(p + j) = 0;
+        s32 cx = 0, cz = 0;
+        for (int c = 0; c < 4; c++) { cx += S16(q + 4 * c); cz += S16(q + 4 * c + 2); }
+        S16(p + 0x40) = (s16)(cx / 4 + (rnd() % 4 ? 0 : 5000)); S16(p + 0x44) = (s16)(cz / 4);
+    }
+    U16(o + 0x92) = rnd() % 0x40;
+}
+
+typedef struct { u32 addr; void *fn; const char *name; u8 steps; } GigFn;
+
+static void test_gig(void)
+{
+    g_ign_objpads = 1;
+    stubs_install(1);
+    gig_tables_stub(1);
+    player_tables_stub(1);
+    for (int i = 0; i < iters; i++) {
+        game_state();
+        gptr o = gig_setup(), b = o + 0x1C0, pl = U32(G() + 0x940);
+        u32 a[3] = {o};
+        /* the helpers */
+        U8(pl + 0x54) = (u8[]){2, 5, 1, 3}[rnd() % 4]; U16(pl + 0x174) = (u16)rnd(); U8(G() + 0x108E) = rnd() % 3;
+        U32(o + 0x1D0) = rnd() % 3 ? rnd() % 3 : rnd();
+        check(0x436A90, Gig_Timer, "Gig_Timer", 1, a, 0xFFFFFFFF);
+        U32(b) = rnd(); Bits_Set(0x87E974, 0, rnd() % 2);
+        check(0x436B00, Gig_Calm, "Gig_Calm", 1, a, 0);
+        for (int k = 0; k < 8; k++) {
+            gig_state(o);
+            U32(b) = (rnd() & 0x1E0) | (rnd() % 4 ? 0x20 : 0);
+            U16(o + 0x1F2) = rnd() % 4 ? rnd() % 11 : (u16)rnd(); U16(o + 0x1F0) = rnd() % 2;
+            U32(o + 0x13C) = rnd() % 2 ? (u32[]){0x32C7, 0x32C8, 0}[rnd() % 3] : gig_dist();
+            u32 f = rnd() % 0x60;
+            U16(o + 0x92) = (u16)(rnd() % 4 ? f : f + 1);
+            if (rnd() % 4 == 0) f |= rnd() << 16;
+            gig_rand8();
+            u32 cb[2] = {o, f};
+            sprintf(g_what, "gig %X combo bits %X n %u frame %X", o, U32(b), U16(o + 0x1F2), U16(o + 0x92));
+            check(0x436B80, Gig_Combo, "Gig_Combo", 2, cb, 0);
+        }
+        for (int k = 0; k < 8; k++) {                   /* on the bridge: where the player and it are */
+            game_state();
+            o = gig_setup(); a[0] = o; b = o + 0x1C0; pl = U32(G() + 0x940);
+            U32(o + 0x1C4) = rnd() % 4 ? 1 : rnd() % 3;
+            Bits_Set(b, 0xA, rnd() % 4 != 0);
+            Flag_Set(7, 0x18, rnd() % 4 == 0);
+            static const s16 oz[] = {0xBB7, 0xBB8, 0xBB9, 0xF9F, 0xFA0, 0xFA1, 0, -3000, 2000};
+            S16(o + 0x44) = oz[rnd() % 9];
+            S16(pl + 0x44) = (s16)(S16(o + 0x44) + (s16[]){0x1F3, 0x1F4, 0x1F5, 0, -100, 3000}[rnd() % 6]);
+            sprintf(g_what, "gig %X on bridge kind %u z %d player %d", o, U32(o + 0x1C4), S16(o + 0x44), S16(pl + 0x44));
+            check(0x4370B0, Gig_OnBridge, "Gig_OnBridge", 1, a, 0xFFFFFFFF);
+        }
+        for (int k = 0; k < 8; k++) {
+            game_state();
+            o = gig_setup(); a[0] = o; b = o + 0x1C0; pl = U32(G() + 0x940);
+            if (rnd() % 2) { Bits_Set(b, 0xA, 0); U8(o + 0x13A) = 0; Bits_Set(0x87E974, 0, 0); U32(o + 0x1D0) = rnd() % 4 == 0; }
+            U32(o + 0x13C) = (u32[]){0x1B57, 0x1B58, 0x1B59, 0, 0x7FFFFFFF}[rnd() % 5];
+            u32 tu[2] = {o, rnd() % 2 ? rnd() % 2 : (rnd() & ~0xFFu) | (rnd() % 2)};
+            sprintf(g_what, "gig %X turn bits %X dist %X", o, U32(b), U32(o + 0x13C));
+            check(0x437180, Gig_Turn, "Gig_Turn", 2, tu, 0xFFFFFFFF);
+        }
+        /* deciding */
+        static const GigFn th[] = {
+            {0x434400, Gig_Decide, "Gig_Decide"}, {0x433F20, Gig_ThinkWalk, "Gig_ThinkWalk"}, {0x4340C0, Gig_ThinkStand, "Gig_ThinkStand"},
+            {0x4341D0, Gig_ThinkRun, "Gig_ThinkRun"}, {0x434BD0, Gig_ThinkFace, "Gig_ThinkFace"}, {0x434C70, Gig_ThinkBite, "Gig_ThinkBite"},
+            {0x435080, Gig_ThinkSwipe, "Gig_ThinkSwipe"}, {0x4351B0, Gig_ThinkSnatch, "Gig_ThinkSnatch"}, {0x4353C0, Gig_ThinkMaul, "Gig_ThinkMaul"},
+            {0x435780, Gig_ThinkCharge, "Gig_ThinkCharge"}};
+        for (int k = 0; k < 80; k++) {
+            const GigFn *f = &th[k < 48 ? k % 4 : k % 10];
+            game_state();
+            o = gig_setup(); a[0] = o; b = o + 0x1C0; pl = U32(G() + 0x940);
+            U8(o + 0x56) = rnd() % 6 ? 1 : (u8)(rnd() % 3);
+            if (rnd() % 4) {                                /* nothing keeps it from attacking */
+                U8(o + 0x13A) = 0; Bits_Set(0x87E974, 0, 0); U32(o + 0x1D0) = rnd() % 6 == 0; U8(o + 0x18D) = 0;
+                Bits_Set(b, 0xA, rnd() % 6 == 0); U16(o + 0x1EC) = rnd() % 4 == 0; U16(o + 0x1EE) = rnd() % 4 == 0;
+                U32(o + 0x1C4) = rnd() % 4 ? rnd() % 3 : 1;
+                Flag_Set(2, 0x1A, rnd() % 4 == 0);
+                u16 an = (u16)Angle_XZ(o + 0x40, o + 0xD8);
+                U16(o + 0x4A) = (u16)((an - (u16[]){0, 1, 0x7F, 0x80, 0x81, 0xF81, 0xF80, 0xF7F}[rnd() % 8]) & 0xFFF);
+                U32(o + 0x13C) = g_gi_dist[rnd() % 23];
+                S16(pl + 0x10A) = (s16)(rnd() % 2 ? 100 + rnd() % 0x400 : rnd());
+                S16(pl + 0x108) = (s16)(S16(pl + 0x10A) / 2 + (s32)(rnd() % 3) - 1);
+                U16(pl + 0x174) = rnd() % 2 ? 2 : (u16)(rnd() & ~2u);
+            }
+            if (f->addr == 0x434BD0 || f->addr == 0x434C70 || f->addr == 0x435780)
+                U16(o + 0x92) = (u16)((u16[]){0xE, 0xF, 0x10, 0x1D, 0x1E, 0x1F}[rnd() % 6]);
+            if (f->addr == 0x435080 || f->addr == 0x4353C0) U16(o + 0x92) = (u16)((u16[]){0x13, 0x14, 0x15, 0x3B, 0x3C, 0x3D}[rnd() % 6]);
+            if (f->addr == 0x4340C0 && rnd() % 2) U16(o + 0x1F6) = 0;
+            if (rnd() % 4 == 0) U16(o + 0x1E2) = (u16)rnd();
+            gig_rand8();
+            u32 dc[2] = {o, rnd() % 2 ? rnd() % 2 : rnd()};
+            U32(LOG_BASE) = 0;
+            sprintf(g_what, "gig %X %s step %u kind %u dist %X bits %X", o, f->name, U8(o + 0x56), U32(o + 0x1C4), U32(o + 0x13C), U32(b));
+            if (f->addr == 0x434400) check(f->addr, f->fn, f->name, 2, dc, 0xFFFFFFFF);
+            else check(f->addr, f->fn, f->name, 1, a, 0);
+        }
+        /* the state handlers */
+        game_state();
+        o = gig_setup(); a[0] = o; b = o + 0x1C0; pl = U32(G() + 0x940);
+        U8(o + 0x54) = rnd() % 5; U8(o + 0x55) = rnd() % 15; U8(o + 0x56) = rnd() % 6;
+        check(0x433E80, Gig_Normal, "Gig_Normal", 1, a, 0);
+        U8(o + 0x55) = rnd() % 4;
+        check(0x433EB0, Gig_Hit, "Gig_Hit", 1, a, 0);
+        check(0x433ED0, Gig_Die, "Gig_Die", 1, a, 0);
+        U8(o + 0x55) = rnd() % 15;
+        if (rnd() % 2) trex_spheres(o, 1 + rnd() % 3);
+        check(0x433EF0, Gig_Grab, "Gig_Grab", 1, a, 0);
+        for (int k = 0; k < 12; k++) {
+            game_state();
+            o = gig_setup(); a[0] = o; b = o + 0x1C0; pl = U32(G() + 0x940);
+            U8(o + 0x54) = rnd() % 5; U8(o + 0x55) = rnd() % 15;
+            U32(o + 0x1C4) = rnd() % 4 ? rnd() % 3 : 1;
+            if (U32(o + 0x1C4) == 1 && rnd() % 2) Bits_Set(b, 9, 1);
+            for (u32 j = 0x12; j <= 0x18; j++) Flag_Set(7, j, 1);   /* (the bridge: no section left to break) */
+            Flag_Set(6, 0x8D, rnd() % 4 == 0 && Bits_Check(b, 9));
+            U32(o + 0x50) = (U32(o + 0x50) & ~0x40000030u) | (rnd() & 0x30) | (rnd() % 8 == 0 ? 0x40000000 : 0);
+            for (u32 j = 0x1EC; j <= 0x1F8; j += 2) U16(o + j) = rnd() % 3;
+            U32(o + 0x1CC) = rnd() % 2; U32(o + 0x1D4) = rnd() % 2; U8(o + 0x18D) = rnd() % 2;
+            U16(pl + 0x1FA) = (u16[]){0x7F, 0x80, 0x81, 0}[rnd() % 4];
+            S16(pl + 0x44) = rnd() % 2 ? (s16)(0x2748 + rnd() % 3 - 1) : S16(pl + 0x44);
+            if (rnd() % 2) trex_spheres(o, 1 + rnd() % 3);
+            if (rnd() % 2) { trex_aim(Obj_Part(U32(o + 0x64), U8(o + 0x15F)) + 0x40, o, o + 0xD8); Bits_Set(b, 1, 1); }
+            if (rnd() % 2) {                                /* the head where it stands, about its looking limit */
+                gptr hp = Obj_Part(U32(o + 0x64), U8(o + 0x15F));
+                U16(hp + 0x40) = U16(o + 0x40); U16(hp + 0x44) = U16(o + 0x44);
+                u16 an = (u16)Angle_XZ(o + 0x40, o + 0xD8);
+                U16(o + 0x4A) = (u16)((an - (u16[]){0x4FF, 0x500, 0x501, 0xB01, 0xB00, 0xAFF}[rnd() % 6]) & 0xFFF);
+                U16(o + 0xF0) = U16(o + 0xF2) = U16(o + 0xF4) = 0; Bits_Set(b, 1, rnd() % 4 != 0); Bits_Set(b, 0xA, 0);
+            }
+            sprintf(g_what, "gig %X handler state %X kind %u bits %X", o, U32(o + 0x54), U32(o + 0x1C4), U32(b));
+            check(0x4339B0, Gig_Handler, "Gig_Handler", 1, a, 0);
+        }
+        do model_data(0x63F500); while (U32(0x63F500 + 0x14) < 15);
+        do anim_setup_at(AN_OBJ); while (U32(AN_OBJ + 0x68) != 16);
+        memcpy(MEM(o + 0x60), MEM(AN_OBJ + 0x60), 0x50);
+        U32(0x642D84) = AN_DATA;                            /* its first animation */
+        do model_data(0x630000); while (U32(0x630000 + 0x14) < 15);   /* its own model, or the default one */
+        U32(o + 0x60) = rnd() % 2 ? 0 : 0x630000;
+        U8(G() + 0x108E) = rnd() % 3; U32(0x74AF98) = rnd(); U8(0x87E747) = rnd() % 2;
+        static const u8 rm[][2] = {{5, 3}, {5, 2}, {4, 3}, {1, 1}};
+        int r = rnd() % 4; U8(G() + 0x1091) = rm[r][0]; U8(G() + 0x1090) = rm[r][1];
+        U8(G() + 0x927) = rnd() % 3 == 0;
+        check(0x433C70, Gig_Init, "Gig_Init", 1, a, 0);
+        /* moving, hit, dying: each step */
+        static const GigFn mv[] = {
+            {0x433F90, Gig_Walk, "Gig_Walk", 3}, {0x434120, Gig_Stand, "Gig_Stand", 3}, {0x4342A0, Gig_Run, "Gig_Run", 3},
+            {0x434670, Gig_TurnStep, "Gig_TurnStep", 3}, {0x434730, Gig_Roar, "Gig_Roar", 3}, {0x434AA0, Gig_Threat, "Gig_Threat", 4},
+            {0x434BF0, Gig_Shake, "Gig_Shake", 3}, {0x434CB0, Gig_Bite, "Gig_Bite", 4}, {0x434EF0, Gig_Bite2, "Gig_Bite2", 4},
+            {0x4350B0, Gig_Swipe, "Gig_Swipe", 3}, {0x4351E0, Gig_Snatch, "Gig_Snatch", 5}, {0x4353F0, Gig_Maul, "Gig_Maul", 5},
+            {0x4355D0, Gig_Lunge, "Gig_Lunge", 4}, {0x4357C0, Gig_Charge, "Gig_Charge", 4}, {0x435970, Gig_Smash, "Gig_Smash", 3},
+            {0x436140, Gig_Damage, "Gig_Damage", 2}, {0x436740, Gig_Flinch, "Gig_Flinch", 3}, {0x436860, Gig_Stagger, "Gig_Stagger", 3},
+            {0x436910, Gig_Down, "Gig_Down", 3}, {0x4369B0, Gig_Dead, "Gig_Dead", 3}, {0x436D90, Gig_Bridge, "Gig_Bridge", 1}};
+        const unsigned nm = sizeof mv / sizeof mv[0];
+        game_state(); world_setup(); enemy_state(); zones_setup();
+        o = O_OBJ + 0x260 * (1 + rnd() % 6); a[0] = o; b = o + 0x1C0;
+        anim_setup_at(O_OBJ);
+        do anim_setup_at(o); while (U32(o + 0x68) != 16);
+        memcpy(MEM(O_OBJ + 0x60), MEM(o + 0x60), 0x50);
+        U32(G() + 0x940) = pl = O_OBJ;
+        U32(pl + 0x128) = rnd() % 2 ? 0x720C78 : 0; U32(o + 0x128) = 0x720C78;
+        U8(o + 0x58) = 6;
+        u8 sv[0x260]; memcpy(sv, MEM(o), 0x260);
+        for (unsigned k = 0; k < 14 * nm; k++) {
+            const GigFn *f = &mv[k % nm];
+            memcpy(MEM(o), sv, 0x260);
+            gig_state(o);
+            U8(o + 0x54) = rnd() % 4 ? 1 + rnd() % 3 : rnd() % 5;
+            U8(o + 0x55) = rnd() % 15;
+            U8(o + 0x56) = (u8)(rnd() % 8 ? rnd() % f->steps : rnd());
+            U8(o + 0x57) = rnd() % 2;
+            static const u16 fr[] = {0, 2, 8, 0x10, 0x11, 0x14, 0x1B, 0x1C, 0x25, 0x26, 0x28, 0x2B, 0x2C, 0x30, 0x37, 0x3C, 0x43, 0x46, 0x4D,
+                                     0x50, 0x5B, 0x60, 0x69, 0x70, 0x85};
+            U16(o + 0x92) = rnd() % 4 ? (u16)(fr[rnd() % 25] + rnd() % 3 - 1) : (u16)(rnd() % 0x90);
+            trex_ff(o, rnd() % 2);
+            U32(o + 0x13C) = gig_dist();
+            for (u32 j = 0; j < 0x2000; j += 0x1000) {     /* the animations' frame flags and spheres: valid or none */
+                U32(AN_DATA + j + 0xC) = rnd() % 2 ? TR_QUAD + 0x100 : 0; U32(AN_DATA + j + 8) = rnd() % 2 ? TR_ATK : 0;
+            }
+            U8(pl + 0x54) = (u8[]){1, 2, 5, 3}[rnd() % 4]; U16(pl + 0x174) = rnd() % 2 ? rnd() & 3 : (u16)rnd();
+            Flag_Set(2, 0x1A, rnd() % 3 == 0);
+            S16(pl + 0x108) = (s16)(rnd() % 2 ? rnd() % 0x100 - 0x10 : rnd());
+            S16(pl + 0x44) = rnd() % 2 ? (s16)(0x2748 + rnd() % 3 - 1) : (s16)rnd();
+            /* the damage */
+            U16(o + 0x172) = rnd() % 5; U16(o + 0x176) = rnd() % 2 ? rnd() % 0x400 : (u16)rnd();
+            S16(o + 0x10A) = (s16)(rnd() % 2 ? rnd() % 0x2000 : rnd());
+            S16(o + 0x108) = (s16)(rnd() % 2 ? rnd() % 0x800 - 0x10 : rnd());
+            U8(o + 0x170) = (u8)rnd(); U8(o + 0x184) = (u8)rnd(); U8(o + 0x17D) = rnd() % 2 ? (u8[]){0x19, 4, 0}[rnd() % 3] : (u8)rnd();
+            U16(o + 0x178) = (u16)((U16(o + 0x4A) + 0x800 + rnd() % 3 - 1 + (rnd() % 2 ? 0 : rnd())) & 0xFFF);
+            U32(0x87E974) = rnd();
+            if (f->addr == 0x436140) {
+                if (rnd() % 2) U8(o + 0x56) = 0;
+                if (rnd() % 2) U8(o + 0x1C8) = 2;
+                if (rnd() % 2) U8(o + 0x1CA) = 0;
+                U32(o + 0x1C4) = rnd() % 4 ? rnd() % 3 : rnd();
+                U16(o + 0x1F8) = rnd() % 2 ? 0 : (u16)rnd();
+                if (rnd() % 2) U16(o + 0x172) = 3;
+                u16 d = U16(o + 0x176);
+                if (U8(o + 0x184) & 8) d = (u16)(d + (d >> 1));
+                if (!U32(o + 0x1C4) && U8(o + 0x17D) != 0x19) d = d / 3;
+                s32 m = S16(o + 0x10A);
+                switch (rnd() % 4) {                        /* a limit reached exactly, or about */
+                case 0: U32(o + 0x1CC) = (u32)(m / 30 - d + (s32)(rnd() % 3) - 1); Bits_Set(b, 2, 1); break;
+                case 1: U32(o + 0x1CC) = (u32)(m / 11 - (U16(o + 0x172) == 3 ? d : d >> 1) + (s32)(rnd() % 3) - 1); Bits_Set(b, 2, 0); U16(o + 0x1F8) = 0; break;
+                case 2: U32(o + 0x1D4) = (u32)(m / 4 - d + (s32)(rnd() % 3) - 1); Bits_Set(b, 5, 1); break;
+                }
+                if (rnd() % 3 == 0) S16(o + 0x108) = (s16)(d + (s32)(rnd() % 3) - 1);
+                if (rnd() % 3 == 0) { U8(o + 0x56) = 1; S16(o + 0x108) = (s16)(d / 5 + (s32)(rnd() % 3) - 1); }
+                U8(o + 0x11C) = (u8)rnd();
+                for (u32 j = 0; j < 0x20; j++) S8(0x87F989 + j * 0x10) = (s8)(u8[]){0x38, 0x39, 0x3C, 0x3B, 0}[rnd() % 5];   /* sound groups it stops */
+            }
+            if (f->addr == 0x436D90) {                      /* the bridge scene */
+                U32(o + 0x1C4) = rnd() % 4 ? 1 : rnd() % 3;
+                Flag_Set(6, 0x8D, rnd() % 2);
+                Bits_Set(b, 9, rnd() % 2); Bits_Set(b, 0xA, rnd() % 4 != 0); Bits_Set(b, 0xE, rnd() % 4 == 0);
+                for (u32 j = 0x12; j <= 0x18; j++) Flag_Set(7, j, rnd() % 4 == 0);
+                gig_bridge_spheres(o);
+                U32(AN_DATA + 0x1008) = rnd() % 2 ? TR_ATK : 0;  /* (the scene's animation: its spheres) */
+                if (rnd() % 2) S16(pl + 0x44) = (s16)(S16(0x720D3A - 0x10 * (rnd() % 7)) + rnd() % 3 - 1);
+            }
+            if (f->addr == 0x435970) {                      /* the smash: caught on the bridge */
+                Bits_Set(b, 0xB, rnd() % 2);
+                if (rnd() % 2) U8(o + 0x56) = 1;
+            }
+            U8(G() + 0x108E) = rnd() % 3; U8(G() + 0x108F) = rnd() % 2 ? rnd() % 12 : (u8)rnd();
+            for (u32 j = 0; j < 20; j++) if (rnd() % 2) U8(O_K2 + j * 0xAC + 0x50) &= ~1;
+            if (rnd() % 2) { U16(o + 0xF0) = (u16)(rnd() % 0x600 - 0x300); U16(o + 0xF2) = (u16)(rnd() % 0x600 - 0x300); U16(o + 0xF4) = (u16)(rnd() % 0x300); }
+            U16(0x87DC12) = rnd() % 2 ? 0 : (u16)rnd();
+            gig_rand8();
+            anim_maybe_end(o);
+            if (rnd() % 2) U16(o + 0x102) |= 0x20;
+            static const struct { u32 addr; u8 step, n; u16 fr[8]; } edge[] = {
+                {0x434670, 1, 3, {0x1B, 0x1C, 0x11}}, {0x434730, 1, 6, {0x2B, 0x2C, 0x2D, 0x4C, 0x4D, 0x4E}},
+                {0x434BF0, 1, 2, {0x37, 0x38}}, {0x434CB0, 1, 3, {0x2C, 0x3C, 0x3B}}, {0x434EF0, 1, 2, {0x46, 0x45}},
+                {0x4355D0, 1, 3, {0x3C, 0x1B, 0x1C}}, {0x4357C0, 1, 3, {0x50, 0x43, 0x42}}, {0x4350B0, 0, 6, {0x1C, 0x1D, 0x3B, 0x3C, 0x10, 0x26}},
+                {0x4351E0, 2, 4, {8, 0x50, 0x10, 9}}, {0x4353F0, 1, 4, {0x60, 0x69, 0x70, 0x6A}}, {0x4353F0, 2, 2, {0x70, 0x71}},
+                {0x4353F0, 3, 2, {0x14, 0x15}}, {0x435970, 1, 6, {0x3C, 0x3D, 0x28, 0x29, 0x25, 0x27}}, {0x436740, 1, 2, {0x14, 0x15}},
+                {0x4369B0, 1, 2, {0x85, 0x84}}, {0x433F90, 1, 2, {0x5B, 0x2B}}, {0x4342A0, 1, 2, {0x10, 0x30}}};
+            for (unsigned e = 0; e < sizeof edge / sizeof edge[0]; e++)
+                if (edge[e].addr == f->addr && rnd() % 2) {
+                    U8(o + 0x56) = edge[e].step; U16(o + 0x92) = edge[e].fr[rnd() % edge[e].n]; U16(o + 0x102) |= 0x20;
+                }
+            if ((f->addr == 0x434CB0 || f->addr == 0x434EF0 || f->addr == 0x4355D0 || f->addr == 0x4357C0) && rnd() % 2) {
+                U32(b) = (U32(b) & ~0x1E0u) | (rnd() % 4 ? 0x20 : 0) | (rnd() & 0x1C0);   /* a combo */
+                U16(o + 0x1F2) = rnd() % 10;
+                U32(o + 0x13C) = (u32[]){0x32C7, 0x32C8, 0x1000}[rnd() % 3];
+            }
+            if (f->addr == 0x434730 && rnd() % 2) {         /* the roar: the player free to be held or not */
+                U8(pl + 0x54) = (u8[]){1, 3, 2, 5}[rnd() % 4]; U16(pl + 0x174) = (u16)(rnd() % 4); Flag_Set(2, 0x1A, rnd() % 4 == 0);
+                for (u32 j = 0xB58; j <= 0xB5C; j++) U8(G() + j) = (u8)rnd();
+            }
+            if (f->addr == 0x434AA0 && rnd() % 2) {         /* the threat: the player ahead in reach */
+                u16 an = (u16)Angle_XZ(o + 0x40, o + 0xD8);
+                U16(o + 0x4A) = (u16)((an - (u16[]){0, 0x7F, 0x80, 0xF81, 0xF80}[rnd() % 5]) & 0xFFF);
+                U32(o + 0x13C) = (u32[]){0x270F, 0x2710}[rnd() % 2];
+            }
+            U32(LOG_BASE) = 0;
+            sprintf(g_what, "gig %X %s step %u side %u frame %X kind %u bits %X", o, f->name, U8(o + 0x56), U8(o + 0x57), U16(o + 0x92), U32(o + 0x1C4), U32(b));
+            u32 r1 = f->addr == 0x436D90 ? 0xFFFFFFFF : 0;
+            check(f->addr, f->fn, f->name, 1, a, r1);
+        }
+        /* the attacks land */
+        static const GigFn gh[] = {{0x435B60, Gig_BiteHit, "Gig_BiteHit"}, {0x435CC0, Gig_Bite2Hit, "Gig_Bite2Hit"},
+                                   {0x435DB0, Gig_SwipeHit, "Gig_SwipeHit"}, {0x435E90, Gig_MaulHit, "Gig_MaulHit"},
+                                   {0x435EF0, Gig_LungeHit, "Gig_LungeHit"}, {0x435FE0, Gig_ChargeHit, "Gig_ChargeHit"},
+                                   {0x4360D0, Gig_SmashHit, "Gig_SmashHit"}};
+        for (int k = 0; k < 42; k++) {
+            memcpy(MEM(o), sv, 0x260);
+            U8(o + 0x56) = rnd() % 4 ? 1 : (u8)(rnd() % 3);
+            U8(o + 0x57) = rnd() % 2;
+            U32(o + 0x1C0) = rnd() & 0x7FFF;
+            U32(o + 0x1C4) = rnd() % 4 ? rnd() % 3 : rnd();
+            U8(G() + 0x108E) = rnd() % 3; U8(G() + 0x108F) = rnd() % 5;
+            Flag_Set(2, 0x1A, rnd() % 3 == 0);
+            U16(pl + 0x4A) = (u16)((U16(o + 0x4A) + (u16[]){0, 0x3FF, 0x400, 0x401, 0xC01, 0xC00, 0xBFF, 0x800}[rnd() % 8]) & 0xFFF);
+            S16(pl + 0x108) = (s16)(rnd() % 2 ? rnd() % 0x100 - 0x10 : rnd());
+            for (u32 j = 0; j < 20; j++) if (rnd() % 2) U8(O_K2 + j * 0xAC + 0x50) &= ~1;
+            if (k % 7 == 0 && rnd() % 2) {                 /* the bite's floor probe (part 3, 0x7D0 ahead) at a floor's edge */
+                gptr p3 = Obj_Part(U32(o + 0x64), 3), w = 0x6CFC00u, pg = w + 0x10;
+                for (u32 j = 0x20; j < 0x34; j += 2) U16(p3 + j) = 0;
+                U16(p3 + 0x20) = U16(p3 + 0x28) = U16(p3 + 0x30) = 0x1000;
+                S16(p3 + 0x40) = 0; S16(p3 + 0x42) = -2000; S16(p3 + 0x44) = 0;
+                U8(w) = 1; U32(w + 8) = 0x10;
+                U8(pg) = 1; U8(pg + 1) = 4; U8(pg + 2) = 0; U8(pg + 3) = 0; U16(pg + 4) = 1; U8(pg + 6) = 0; U8(pg + 7) = 0;
+                for (u32 j = 8; j < 0x18; j++) U8(pg + j) = 0;
+                s16 z1 = (s16)(0x7D0 + (s32)(rnd() % 3) - 1), z0 = (s16)(0x7D0 - 1000);
+                static const s16 px[5] = {-500, 500, 500, -500, -500};
+                for (int c = 0; c < 5; c++) { S16(pg + 0x18 + 4 * c) = px[c]; S16(pg + 0x1A + 4 * c) = c == 2 || c == 3 ? z1 : z0; }
+                if (rnd() % 2) for (int c = 0; c < 5; c++) S16(pg + 0x1A + 4 * c) = c == 2 || c == 3 ? z0 : z1;
+                U32(G() + 0xA4C) = w;
+            }
+            U32(LOG_BASE) = 0;
+            sprintf(g_what, "gig %X %s step %u side %u bits %X", o, gh[k % 7].name, U8(o + 0x56), U8(o + 0x57), U32(o + 0x1C0));
+            check(gh[k % 7].addr, gh[k % 7].fn, gh[k % 7].name, 1, a, 0);
+        }
+        for (int k = 0; k < 24; k++) {                      /* the player stunned by the roar, falling with the bridge */
+            memcpy(MEM(o), sv, 0x260);
+            anim_maybe_end(pl);
+            U32(pl + 0x1D8) = o;
+            U8(pl + 0x57) = rnd() % 3 ? (rnd() % 3 ? 0 : 1) : (u8)rnd();
+            U32(o + 0x1C0) = rnd() & 0x1F; U32(o + 0x1C4) = rnd() % 4 ? rnd() % 3 : rnd();
+            U16(o + 0x1E2) = (u16)(rnd() % 2 ? 0xF + rnd() % 0x10 : rnd());
+            U16(o + 0x1F4) = rnd() % 3; U16(o + 0x1EA) = (u16)rnd();
+            U8(0x87DC08) = (u8)rnd(); U8(G() + 0x10B4) = rnd() % 2 ? 0 : (u8)rnd(); U8(G() + 0x108E) = rnd() % 3;
+            U16(G() + 0x664) = rnd() % 2 ? 4 : (u16)(rnd() % 8);
+            U16(pl + 0x92) = (u16)(rnd() % 2 ? 0x46 + rnd() % 3 - 1 : rnd() % 0x50);
+            if (rnd() % 2) U16(pl + 0x102) |= 0x20;
+            u32 p1[1] = {pl};
+            U32(LOG_BASE) = 0;
+            sprintf(g_what, "gig %X player step %u bits %X", o, U8(pl + 0x57), U32(o + 0x1C0));
+            check(0x434900, Gig_RoarStun, "Gig_RoarStun", 1, p1, 0);
+            anim_maybe_end(pl);
+            if (rnd() % 2) U16(pl + 0x102) |= 0x20;
+            check(0x435B00, Gig_BridgeFall, "Gig_BridgeFall", 1, p1, 0);
+        }
+    }
+    player_tables_stub(0);
+    gig_tables_stub(0);
+    stubs_install(0);
+    g_ign_objpads = 0;
+}
+
 static void test_game(void)
 {
     stubs_install(1);
@@ -8005,7 +8394,7 @@ __declspec(dllexport) void harness_main(int argc, char **argv)
     struct { const char *name; void (*fn)(void); } T[] = {
         {"flags", test_flags}, {"geometry", test_geom}, {"script values", test_script_values},
         {"script opcodes", test_script_ops}, {"script objects", test_objects},
-        {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"objects 2", test_object}, {"collision", test_collision}, {"player", test_player}, {"player states", test_player2}, {"zones", test_zones}, {"loading", test_room}, {"title", test_title}, {"game task", test_game}, {"doors", test_doors}, {"frame", test_frame}, {"enemy sets", test_enemyset}, {"enemies", test_enemies}, {"raptor", test_raptor}, {"oviraptor", test_ovi}, {"allosaurus", test_allo}, {"pteranodon", test_ptera}, {"tyrannosaurus", test_trex}, {"plesiosaurus", test_plesio}, {"water plesiosaurs", test_pw}, {"roamer", test_roam}, {"aot kinds", test_aot_kinds}, {"object effects", test_obj_effects}, {"effect slots", test_k2}, {"effect drops", test_k2_drops}, {"effect emitters", test_eff_slots}, {"effect slots 3", test_k2_more}, {"helpers", test_helpers}, {"draw", test_draw}, {"pc gpu", test_pcgpu}, {"pc draw", test_pcdraw}, {"pc frame", test_pcframe},
+        {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"objects 2", test_object}, {"collision", test_collision}, {"player", test_player}, {"player states", test_player2}, {"zones", test_zones}, {"loading", test_room}, {"title", test_title}, {"game task", test_game}, {"doors", test_doors}, {"frame", test_frame}, {"enemy sets", test_enemyset}, {"enemies", test_enemies}, {"raptor", test_raptor}, {"oviraptor", test_ovi}, {"allosaurus", test_allo}, {"pteranodon", test_ptera}, {"tyrannosaurus", test_trex}, {"plesiosaurus", test_plesio}, {"water plesiosaurs", test_pw}, {"roamer", test_roam}, {"giganotosaurus", test_gig}, {"aot kinds", test_aot_kinds}, {"object effects", test_obj_effects}, {"effect slots", test_k2}, {"effect drops", test_k2_drops}, {"effect emitters", test_eff_slots}, {"effect slots 3", test_k2_more}, {"helpers", test_helpers}, {"draw", test_draw}, {"pc gpu", test_pcgpu}, {"pc draw", test_pcdraw}, {"pc frame", test_pcframe},
     };
     for (unsigned i = 0; i < sizeof T / sizeof T[0]; i++) {
         int f0 = g_fail, t0 = g_tests;

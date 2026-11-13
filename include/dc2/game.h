@@ -1126,6 +1126,59 @@ void DC2CALL Roam_Bump(gptr o);                 /* 0x42D880 */
 void DC2CALL Roam_Hit(gptr o);                  /* 0x42D940 */
 void DC2CALL Roam_Path(gptr o);                 /* 0x42DA50 */
 u32  DC2CALL Roam_Nearest(gptr o, gptr d2);     /* 0x42DC20 */
+
+/* the giganotosaurus (type 6), src/game/gigano.c */
+void DC2CALL Gig_Handler(gptr o);       /* 0x4339B0 */
+void DC2CALL Gig_Init(gptr o);          /* 0x433C70 */
+void DC2CALL Gig_Normal(gptr o);        /* 0x433E80 */
+void DC2CALL Gig_Hit(gptr o);           /* 0x433EB0 */
+void DC2CALL Gig_Die(gptr o);           /* 0x433ED0 */
+void DC2CALL Gig_Grab(gptr o);          /* 0x433EF0 */
+u32  DC2CALL Gig_Timer(gptr o);          /* 0x436A90 */
+void DC2CALL Gig_Calm(gptr o);          /* 0x436B00 */
+void DC2CALL Gig_Combo(gptr o, u32 f);  /* 0x436B80 */
+u32  DC2CALL Gig_Bridge(gptr o);         /* 0x436D90 */
+u32  DC2CALL Gig_OnBridge(gptr o);       /* 0x4370B0 */
+u32  DC2CALL Gig_Turn(gptr o, u32 bite); /* 0x437180 */
+u32  DC2CALL Gig_Decide(gptr o, u32 ff); /* 0x434400 */
+void DC2CALL Gig_ThinkWalk(gptr o);     /* 0x433F20 */
+void DC2CALL Gig_ThinkStand(gptr o);    /* 0x4340C0 */
+void DC2CALL Gig_ThinkRun(gptr o);      /* 0x4341D0 */
+void DC2CALL Gig_ThinkFace(gptr o);     /* 0x434BD0 */
+void DC2CALL Gig_ThinkBite(gptr o);     /* 0x434C70 */
+void DC2CALL Gig_ThinkSwipe(gptr o);    /* 0x435080 */
+void DC2CALL Gig_ThinkSnatch(gptr o);   /* 0x4351B0 */
+void DC2CALL Gig_ThinkMaul(gptr o);     /* 0x4353C0 */
+void DC2CALL Gig_ThinkCharge(gptr o);   /* 0x435780 */
+void DC2CALL Gig_Walk(gptr o);          /* 0x433F90 */
+void DC2CALL Gig_Stand(gptr o);         /* 0x434120 */
+void DC2CALL Gig_Run(gptr o);           /* 0x4342A0 */
+void DC2CALL Gig_TurnStep(gptr o);      /* 0x434670 */
+void DC2CALL Gig_Roar(gptr o);          /* 0x434730 */
+void DC2CALL Gig_RoarStun(gptr pl);     /* 0x434900 */
+void DC2CALL Gig_Threat(gptr o);        /* 0x434AA0 */
+void DC2CALL Gig_Shake(gptr o);         /* 0x434BF0 */
+void DC2CALL Gig_Bite(gptr o);          /* 0x434CB0 */
+void DC2CALL Gig_Bite2(gptr o);         /* 0x434EF0 */
+void DC2CALL Gig_Lunge(gptr o);         /* 0x4355D0 */
+void DC2CALL Gig_Charge(gptr o);        /* 0x4357C0 */
+void DC2CALL Gig_Swipe(gptr o);         /* 0x4350B0 */
+void DC2CALL Gig_Snatch(gptr o);        /* 0x4351E0 */
+void DC2CALL Gig_Maul(gptr o);          /* 0x4353F0 */
+void DC2CALL Gig_Smash(gptr o);         /* 0x435970 */
+void DC2CALL Gig_BridgeFall(gptr pl);   /* 0x435B00 */
+void DC2CALL Gig_BiteHit(gptr o);       /* 0x435B60 */
+void DC2CALL Gig_Bite2Hit(gptr o);      /* 0x435CC0 */
+void DC2CALL Gig_SwipeHit(gptr o);      /* 0x435DB0 */
+void DC2CALL Gig_MaulHit(gptr o);       /* 0x435E90 */
+void DC2CALL Gig_LungeHit(gptr o);      /* 0x435EF0 */
+void DC2CALL Gig_ChargeHit(gptr o);     /* 0x435FE0 */
+void DC2CALL Gig_SmashHit(gptr o);      /* 0x4360D0 */
+void DC2CALL Gig_Damage(gptr o);        /* 0x436140 */
+void DC2CALL Gig_Flinch(gptr o);        /* 0x436740 */
+void DC2CALL Gig_Stagger(gptr o);       /* 0x436860 */
+void DC2CALL Gig_Down(gptr o);          /* 0x436910 */
+void DC2CALL Gig_Dead(gptr o);          /* 0x4369B0 */
 void DC2CALL Ples12_Remove(gptr o);                /* 0x430E50 */
 void DC2CALL Ples12_Type(gptr o);                  /* 0x430360 */
 void DC2CALL Ples12_Handler(gptr o);               /* 0x430370 */

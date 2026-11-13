@@ -131,7 +131,9 @@
  *  obj+0x58 type; per-area handler table *0x87DCA0 (28 entries).
  *  0/1 player characters; 2..15 dinosaurs, Enemy_LoadModel 0x482070:
  *  2 E00 Velociraptor, 3 E10 Tyrannosaurus, 4 E20 Pteranodon, 5 E30
- *  Plesiosaurus, 6 E40 Giganotosaurus, 7 E90 Oviraptor, 8 E60 Allosaurus,
+ *  Plesiosaurus, 6 E40 Giganotosaurus (src/game/gigano.c; kind 1 the bridge scene of
+ *  room 503: sections are quads at 0x720D38 - 0x10*i, event flags 7/0x12..0x18 the
+ *  broken ones), 7 E90 Oviraptor, 8 E60 Allosaurus,
  *  9 E70 Triceratops, 10 E80 Mosasaurus, 11/12 E31/E32 (plesiosaurs in the
  *  water: at the surface / under it, src/game/plesio2.c), 13 EA0 Compsognathus, 14 E50 Inostrancevia
  *  (E<k>0 = entry k of the game's dinosaur list; model sizes agree);
