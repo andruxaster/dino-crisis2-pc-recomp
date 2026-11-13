@@ -8220,6 +8220,285 @@ static void test_gig(void)
     g_ign_objpads = 0;
 }
 
+/* ---- the inostrancevia (type 14) ---- */
+static const u32 g_in_tabs[][2] = {{0x720E80, 5}, {0x720E94, 9}, {0x720EB8, 9}, {0x720EDC, 9}, {0x720F00, 9}, {0x720F24, 9}};
+static u32 g_in_saved[6][9];
+static void ino_tables_stub(int on)
+{
+    for (int k = 1; k <= 9; k++) g_stubs[k].spec = on ? "d" : "";
+    for (int t = 0; t < 6; t++)
+        for (u32 k = 0; k < g_in_tabs[t][1]; k++) {
+            gptr a = g_in_tabs[t][0] + 4 * k;
+            if (on) { g_in_saved[t][k] = U32(a); U32(a) = (u32)(uintptr_t)g_recs[1 + k]; }
+            else U32(a) = g_in_saved[t][k];
+        }
+}
+
+static const u32 g_in_dist[] = {0, 0xBB7, 0xBB8, 0xBB9, 0xDAB, 0xDAC, 0xDAD, 0xF9F, 0xFA0, 0xFA1, 0x157B, 0x157C, 0x157D,
+                                0x1769, 0x176F, 0x1770, 0x1771, 0x1963, 0x1964, 0x1965, 0x270F, 0x2710, 0x2711, 0x7FFFFFFF};
+static u32 ino_dist(void) { return rnd() % 4 ? g_in_dist[rnd() % 24] : rnd() % 0x3000; }
+
+static void ino_rand8(void)
+{
+    static const u8 r[] = {0xF, 0x10, 0x11, 0x3F, 0x40, 0x41, 0x7F, 0x80, 0x81, 0, 1, 0xFF};
+    if (rnd() % 4) U16(0x87DE10) = rand8_seed(r[rnd() % 12], rnd() % 4 == 0);
+}
+
+/* its state block: bits, the last state, timers */
+static void ino_state(gptr o)
+{
+    U32(o + 0x1C0) = rnd() % 4 ? rnd() & 0x7F : rnd();
+    U8(o + 0x1C8) = 1 + rnd() % 3; U8(o + 0x1C9) = rnd() % 9; U8(o + 0x1CA) = rnd() % 4; U8(o + 0x1CB) = rnd() % 2;
+    for (u32 k = 0x1CC; k <= 0x1D8; k += 4) U32(o + k) = rnd() % 3 ? rnd() % 3 : rnd() % 2 ? rnd() % 0x2000 : rnd();
+    for (u32 k = 0x1EC; k < 0x216; k += 2) U16(o + k) = rnd() % 3 ? rnd() % 3 : (u16)rnd();
+    U8(o + 0x216) = rnd() % 2;
+    U8(o + 0x18D) = rnd() % 3 ? rnd() % 3 : (u8)rnd();
+}
+
+/* an inostrancevia among the test objects (no animations); the player its target */
+static gptr ino_setup(void)
+{
+    gptr o = raptor_setup(), pl = U32(G() + 0x940);
+    U32(o + 0x184) &= ~0x40u;
+    trex_parts(o);
+    U8(o + 0x15F) = rnd() % 4 ? 3 : rnd() % 16;
+    ino_state(o);
+    U32(o + 0x13C) = ino_dist();
+    U8(o + 0x13A) = rnd() % 3 == 0;
+    U8(o + 0x57) = rnd() % 2;
+    U16(pl + 0x174) = rnd() % 2 ? rnd() & 3 : (u16)rnd();
+    U32(pl + 0x134) = 0;
+    Bits_Set(0x87E974, 0, rnd() % 3 == 0); Bits_Set(0x87E974, 1, rnd() % 3 == 0); Bits_Set(0x87E974, 2, rnd() % 3 == 0);
+    U16(o + 0xD8) = U16(pl + 0x40); U16(o + 0xDA) = U16(pl + 0x42); U16(o + 0xDC) = U16(pl + 0x44);
+    if (rnd() % 3 == 0) { S16(o + 0xD8) = (s16)(S16(o + 0x40) + (s32)(rnd() % 8000) - 4000); S16(o + 0xDC) = (s16)(S16(o + 0x44) + (s32)(rnd() % 8000) - 4000); }
+    trex_aim(o + 0x40, o, o + 0xD8);
+    trex_ff(o, rnd() % 2);
+    ino_rand8();
+    return o;
+}
+
+static void test_ino(void)
+{
+    g_ign_objpads = 1;
+    stubs_install(1);
+    ino_tables_stub(1);
+    player_tables_stub(1);
+    for (int i = 0; i < iters; i++) {
+        game_state();
+        gptr o = ino_setup(), b = o + 0x1C0, pl = U32(G() + 0x940);
+        u32 a[3] = {o};
+        U8(o + 0x216) = rnd() % 2 ? rnd() % 2 : (u8)rnd();
+        check(0x4397A0, Ino_Side, "Ino_Side", 1, a, 0xFFFFFFFF);
+        /* deciding */
+        static const GigFn th[] = {
+            {0x437960, Ino_Decide, "Ino_Decide"}, {0x437780, Ino_ThinkWait, "Ino_ThinkWait"}, {0x437860, Ino_ThinkWalk, "Ino_ThinkWalk"},
+            {0x437BF0, Ino_ThinkRoar, "Ino_ThinkRoar"}, {0x437CC0, Ino_ThinkFall, "Ino_ThinkFall"}, {0x438110, Ino_ThinkBite, "Ino_ThinkBite"},
+            {0x4381F0, Ino_ThinkGrab, "Ino_ThinkGrab"}};
+        for (int k = 0; k < 80; k++) {
+            const GigFn *f = &th[k < 48 ? k % 3 : k % 7];
+            game_state();
+            o = ino_setup(); a[0] = o; b = o + 0x1C0; pl = U32(G() + 0x940);
+            U8(o + 0x56) = rnd() % 6 ? 1 : (u8)(rnd() % 3);
+            if (rnd() % 4) {                                /* nothing keeps it from attacking */
+                U8(o + 0x13A) = 0; Bits_Set(0x87E974, 0, rnd() % 4 == 0); U32(o + 0x1D4) = rnd() % 6 == 0;
+                U8(o + 0x18D) = rnd() % 4 ? 0 : 1;
+                U16(o + 0x208) = rnd() % 4 == 0; U16(o + 0x20A) = rnd() % 4 == 0;
+                Flag_Set(2, 0x1A, rnd() % 4 == 0);
+                u16 an = (u16)Angle_XZ(o + 0x40, o + 0xD8);
+                static const u16 ae[] = {0, 1, 0x3F, 0x40, 0x41, 0xFF, 0x100, 0x101, 0x3FF, 0x400, 0x401, 0x800,
+                                         0xFFF, 0xFC1, 0xFC0, 0xFBF, 0xF01, 0xF00, 0xEFF, 0xC01, 0xC00, 0xBFF};
+                U16(o + 0x4A) = (u16)((an - ae[rnd() % 22]) & 0xFFF);
+                static const u16 pe[] = {0, 0x5F, 0x60, 0x61, 0xFA1, 0xFA0, 0xF9F, 0x800};
+                U16(pl + 0x4A) = (u16)((U16(o + 0x4A) + pe[rnd() % 8]) & 0xFFF);
+                U32(o + 0x13C) = g_in_dist[rnd() % 24];
+                U16(pl + 0x174) = rnd() % 2 ? 2 : (u16)(rnd() & ~2u);
+            }
+            if (f->addr == 0x438110) U16(o + 0x92) = (u16)((u16[]){0x13, 0x14, 0x15, 0}[rnd() % 4]);
+            if (rnd() % 4 == 0) U16(o + 0x1E2) = (u16)rnd();
+            ino_rand8();
+            U32(LOG_BASE) = 0;
+            sprintf(g_what, "ino %X %s step %u dist %X bits %X", o, f->name, U8(o + 0x56), U32(o + 0x13C), U32(b));
+            check(f->addr, f->fn, f->name, 1, a, f->addr == 0x437960 ? 0xFFFFFFFF : 0);
+        }
+        /* the state handlers */
+        game_state();
+        o = ino_setup(); a[0] = o; b = o + 0x1C0; pl = U32(G() + 0x940);
+        U8(o + 0x54) = rnd() % 5; U8(o + 0x55) = rnd() % 9; U8(o + 0x56) = rnd() % 6;
+        check(0x4376D0, Ino_Normal, "Ino_Normal", 1, a, 0);
+        check(0x437710, Ino_Hit, "Ino_Hit", 1, a, 0);
+        check(0x437730, Ino_Die, "Ino_Die", 1, a, 0);
+        for (int k = 0; k < 6; k++) {
+            U8(o + 0x55) = rnd() % 9; U8(o + 0x56) = rnd() % 3;
+            if (rnd() % 2) trex_spheres(o, 1 + rnd() % 3);
+            if (rnd() % 2) U32(pl + 0x134) = 0;              /* (no hit boxes: the last hit is kept) */
+            U8(o + 0x119) = (u8[]){0, 1, 0x7F, 0x80, 0xFF}[rnd() % 5];
+            check(0x437750, Ino_Grab, "Ino_Grab", 1, a, 0);
+        }
+        for (int k = 0; k < 12; k++) {
+            game_state();
+            o = ino_setup(); a[0] = o; b = o + 0x1C0; pl = U32(G() + 0x940);
+            U8(o + 0x54) = rnd() % 5; U8(o + 0x55) = rnd() % 9;
+            if (rnd() % 3 == 0) { U8(o + 0x54) = 1; U8(o + 0x55) = 4; }
+            U32(o + 0x50) = (U32(o + 0x50) & ~0x40000038u) | (rnd() & 0x38) | (rnd() % 8 == 0 ? 0x40000000 : 0);
+            static const u8 rm[][2] = {{8, 0xB}, {8, 0xA}, {7, 0xB}, {1, 1}};
+            int r = rnd() % 4; U8(G() + 0x1091) = rm[r][0]; U8(G() + 0x1090) = rm[r][1];
+            Flag_Set(7, 0x1F, rnd() % 2);
+            U8(0x87E747) = rnd() % 3 == 0;
+            if (rnd() % 2) {                                /* standing at the floor's height, or about */
+                s16 h = (s16)Floor_Height(o + 0x40, o + 0x40, 0x40, 0);
+                S16(o + 0x42) = (s16)(h + (s32)(rnd() % 3) - 1);
+            }
+            U32(o + 0x13C) = (u32[]){0x270F, 0x2710, 0x2711, 0}[rnd() % 4];
+            U32(o + 0x1CC) = rnd() % 2; U32(o + 0x1D0) = rnd() % 2; U8(o + 0x18D) = rnd() % 2;
+            U16(pl + 0x1FA) = (u16[]){0x7F, 0x80, 0x81, 0}[rnd() % 4];
+            if (rnd() % 2) trex_spheres(o, 1 + rnd() % 3);
+            if (rnd() % 2) {                                /* the head where it stands, about its looking limit */
+                gptr hp = Obj_Part(U32(o + 0x64), U8(o + 0x15F));
+                U16(hp + 0x40) = U16(o + 0x40); U16(hp + 0x44) = U16(o + 0x44);
+                u16 an = (u16)Angle_XZ(o + 0x40, o + 0xD8);
+                U16(o + 0x4A) = (u16)((an - (u16[]){0x4FF, 0x500, 0x501, 0xB01, 0xB00, 0xAFF}[rnd() % 6]) & 0xFFF);
+                U16(o + 0xF0) = U16(o + 0xF2) = U16(o + 0xF4) = 0; Bits_Set(b, 1, rnd() % 4 != 0);
+            }
+            sprintf(g_what, "ino %X handler state %X flags %X bits %X", o, U32(o + 0x54), U32(o + 0x50), U32(b));
+            check(0x437230, Ino_Handler, "Ino_Handler", 1, a, 0);
+        }
+        /* 16 parts, as the animation: another count changes the frame stride and the
+           key lengths read could add up to 0 (a division by zero in Anim_ApplyFrame) */
+        do model_data(0x640000); while (U32(0x640000 + 0x14) != 16);
+        do anim_setup_at(AN_OBJ); while (U32(AN_OBJ + 0x68) != 16);
+        memcpy(MEM(o + 0x60), MEM(AN_OBJ + 0x60), 0x50);
+        U32(0x642350) = AN_DATA;                           /* its first animation */
+        U32(o + 0x60) = rnd() % 2 ? 0 : 0x640000;
+        U8(G() + 0x108E) = rnd() % 2 ? rnd() % 3 : (u8)rnd(); U32(0x74AF9C) = rnd(); U8(0x87E747) = rnd() % 2;
+        U8(G() + 0x927) = rnd() % 3 == 0; S16(o + 0x42) = (s16)rnd();
+        check(0x437540, Ino_Init, "Ino_Init", 1, a, 0);
+        /* moving, hit, dying: each step */
+        static const GigFn mv[] = {
+            {0x437800, Ino_Wait, "Ino_Wait", 2}, {0x4378B0, Ino_Walk, "Ino_Walk", 2}, {0x437C10, Ino_Roar, "Ino_Roar", 2},
+            {0x437ED0, Ino_Turn, "Ino_Turn", 2}, {0x437CE0, Ino_Fall, "Ino_Fall", 2}, {0x438060, Ino_Bite, "Ino_Bite", 2},
+            {0x438140, Ino_Bite2, "Ino_Bite2", 2}, {0x438210, Ino_Eat, "Ino_Eat", 5}, {0x438650, Ino_Pounce, "Ino_Pounce", 3},
+            {0x438B40, Ino_Damage, "Ino_Damage", 2}, {0x438F70, Ino_Flinch, "Ino_Flinch", 2}, {0x439000, Ino_Knock, "Ino_Knock", 2},
+            {0x4390B0, Ino_Stagger, "Ino_Stagger", 4}, {0x4391A0, Ino_Down, "Ino_Down", 4}, {0x4392D0, Ino_Hit5, "Ino_Hit5", 2},
+            {0x439370, Ino_Hit6, "Ino_Hit6", 2}, {0x4393E0, Ino_Hit7, "Ino_Hit7", 2}, {0x4394B0, Ino_Hit8, "Ino_Hit8", 2},
+            {0x439520, Ino_Dead, "Ino_Dead", 3}, {0x4395F0, Ino_DeadDown, "Ino_DeadDown", 4}, {0x4396D0, Ino_DeadFire, "Ino_DeadFire", 3}};
+        const unsigned nm = sizeof mv / sizeof mv[0];
+        game_state(); world_setup(); enemy_state(); zones_setup();
+        o = O_OBJ + 0x260 * (1 + rnd() % 6); a[0] = o; b = o + 0x1C0;
+        anim_setup_at(O_OBJ);
+        do anim_setup_at(o); while (U32(o + 0x68) != 16);
+        memcpy(MEM(O_OBJ + 0x60), MEM(o + 0x60), 0x50);
+        U32(G() + 0x940) = pl = O_OBJ;
+        U32(pl + 0x128) = rnd() % 2 ? 0x720C78 : 0; U32(o + 0x128) = 0x720E58;
+        U8(o + 0x58) = 14;
+        u8 sv[0x260], svp[0x260]; memcpy(sv, MEM(o), 0x260); memcpy(svp, MEM(pl), 0x260);
+        for (unsigned k = 0; k < 14 * nm; k++) {
+            const GigFn *f = &mv[k % nm];
+            memcpy(MEM(o), sv, 0x260); memcpy(MEM(pl), svp, 0x260);
+            ino_state(o);
+            U8(o + 0x54) = rnd() % 4 ? 1 + rnd() % 3 : rnd() % 5;
+            U8(o + 0x55) = rnd() % 9;
+            U8(o + 0x56) = (u8)(rnd() % 8 ? rnd() % f->steps : rnd());
+            U8(o + 0x57) = rnd() % 2;
+            static const u16 fr[] = {0, 0xA, 0xE, 0x12, 0x14, 0x15, 0x16, 0x18, 0x24, 0x2D, 0x31, 0x36, 0x3C, 0x44, 0x5A, 0x64};
+            U16(o + 0x92) = rnd() % 4 ? (u16)(fr[rnd() % 16] + rnd() % 3 - 1) : (u16)(rnd() % 0x80);
+            U16(pl + 0x92) = rnd() % 4 ? (u16)(0x5A + rnd() % 3 - 1) : (u16)(rnd() % 0x80);
+            trex_ff(o, rnd() % 2);
+            U32(o + 0x13C) = ino_dist();
+            for (u32 j = 0; j < 0x2000; j += 0x1000) {     /* the animations' frame flags and spheres: valid or none */
+                U32(AN_DATA + j + 0xC) = rnd() % 2 ? TR_QUAD + 0x100 : 0; U32(AN_DATA + j + 8) = rnd() % 2 ? TR_ATK : 0;
+            }
+            U8(pl + 0x54) = (u8[]){1, 2, 5, 3}[rnd() % 4]; U16(pl + 0x174) = rnd() % 2 ? rnd() & 3 : (u16)rnd();
+            Flag_Set(2, 0x1A, rnd() % 3 == 0);
+            S16(pl + 0x108) = (s16)(rnd() % 2 ? rnd() % 0x100 - 0x10 : rnd());
+            /* the damage */
+            U16(o + 0x172) = rnd() % 6; U16(o + 0x176) = rnd() % 2 ? rnd() % 0x400 : (u16)rnd();
+            S16(o + 0x10A) = (s16)(rnd() % 2 ? rnd() % 0x2000 : rnd());
+            S16(o + 0x108) = (s16)(rnd() % 2 ? rnd() % 0x800 - 0x10 : rnd());
+            U8(o + 0x170) = (u8)rnd(); U8(o + 0x184) = (u8)rnd();
+            U8(o + 0x17D) = rnd() % 4 ? (u8[]){0, 1, 2, 3, 4, 9, 0x10, 0x11, 0x12, 0x13, 0x14}[rnd() % 11] : (u8)rnd();
+            U32(0x87E974) = rnd();
+            if (f->addr == 0x438B40) {
+                if (rnd() % 2) U8(o + 0x56) = 0;
+                if (rnd() % 2) U8(o + 0x1C8) = 2;
+                if (rnd() % 2) U8(o + 0x1CA) = 0;
+                Bits_Set(b, 2, rnd() % 2);
+                u16 d = U16(o + 0x176);                     /* the damage after its scaling, about a limit */
+                if (U8(o + 0x184) & 8) d = (u16)(d + (d >> 1));
+                if (Bits_Check(b, 3)) d >>= 2;
+                u8 w = U8(o + 0x17D);
+                if (w == 1 || w == 2 || w == 9 || w == 0x10 || w == 0x11) d >>= 1;
+                if (w == 4 && Bits_Check(b, 2)) d <<= 1;
+                if (U16(o + 0x172) == 4) d >>= 1;
+                if (rnd() % 2) U32(o + 0x1D0) = (u32)(S16(o + 0x10A) / 3 - d + (s32)(rnd() % 3) - 1);
+                if (rnd() % 2) S16(o + 0x108) = (s16)(d + (s32)(rnd() % 3) - 1);
+                U16(o + 0x204) = rnd() % 2 ? 0 : (u16)rnd();
+            }
+            if (f->addr == 0x437CE0) {                      /* the fall: below the floor's level or not */
+                S16(o + 0x42) = (s16)(rnd() % 3) - 1;
+                S16(o + 0x214) = (s16)((s16[]){0, 1, -1, 4, 0xC8}[rnd() % 5]);
+                U8(o + 0x202) = rnd() % 5;
+            }
+            if (f->addr == 0x4378B0) S16(o + 0x210) = (s16)((s16[]){0x77, 0x78, 0x7FFF, 0}[rnd() % 4]);
+            if (f->addr == 0x438210 && rnd() % 2) {          /* eaten: the player's struggle about enough */
+                U8(o + 0x56) = 3;
+                U32(o + 0x1D8) = (u32)(0x13 + rnd() % 3);
+                U16(o + 0x92) = (u16)((u16[]){0x14, 0x63, 0x64, 0x65}[rnd() % 4]);
+            }
+            U8(G() + 0x108E) = rnd() % 3; U8(G() + 0x108F) = rnd() % 2 ? rnd() % 9 : (u8)rnd();
+            for (u32 j = 0; j < 20; j++) if (rnd() % 2) U8(O_K2 + j * 0xAC + 0x50) &= ~1;
+            if (rnd() % 2) { U16(o + 0xF0) = (u16)(rnd() % 0x600 - 0x300); U16(o + 0xF2) = (u16)(rnd() % 0x600 - 0x300); U16(o + 0xF4) = (u16)(rnd() % 0x300); }
+            U16(0x87DC12) = rnd() % 2 ? 0 : (u16)rnd();
+            ino_rand8();
+            anim_maybe_end(o);
+            if (rnd() % 2) U16(o + 0x102) |= 0x20;
+            static const struct { u32 addr; u8 step, n; u16 fr[8]; } edge[] = {
+                {0x437C10, 1, 4, {0xD, 0xE, 0x31, 0x32}}, {0x438060, 1, 4, {0xD, 0xE, 0x18, 0x19}},
+                {0x438140, 1, 4, {0x14, 0x15, 0x24, 0x25}}, {0x438210, 1, 5, {0x14, 0x15, 0x35, 0x36, 0x3C}},
+                {0x438210, 4, 2, {0x43, 0x44}}, {0x438650, 2, 5, {0x12, 0x13, 0x59, 0x5A, 0x11}},
+                {0x4391A0, 3, 2, {0x16, 0x15}}, {0x4392D0, 1, 2, {0xF, 0x10}}, {0x439520, 1, 2, {0x2D, 0x2C}},
+                {0x4395F0, 1, 2, {0x16, 0x17}}, {0x4395F0, 2, 2, {0xA, 0xB}}, {0x4396D0, 2, 2, {0xA, 0xB}}};
+            for (unsigned e = 0; e < sizeof edge / sizeof edge[0]; e++)
+                if (edge[e].addr == f->addr && rnd() % 2) {
+                    U8(o + 0x56) = edge[e].step; U16(o + 0x92) = edge[e].fr[rnd() % edge[e].n]; U16(o + 0x102) |= 0x20;
+                }
+            if (f->addr == 0x437ED0 || f->addr == 0x438210) U8(o + 0x57) &= 1;   /* (indexes of its tables) */
+            if ((f->addr == 0x438210 || f->addr == 0x438650) && rnd() % 2)       /* the player's health about the bite's */
+                S16(pl + 0x108) = (s16)(Damage_Scale(f->addr == 0x438210 ? 0x64 : 0xC8) + rnd() % 3 - 1);
+            U32(LOG_BASE) = 0;
+            sprintf(g_what, "ino %X %s step %u side %u frame %X bits %X", o, f->name, U8(o + 0x56), U8(o + 0x57), U16(o + 0x92), U32(b));
+            check(f->addr, f->fn, f->name, 1, a, 0);
+        }
+        /* the attacks land */
+        static const GigFn gh[] = {{0x4388F0, Ino_BiteHit, "Ino_BiteHit"}, {0x438970, Ino_Bite2Hit, "Ino_Bite2Hit"},
+                                   {0x4389F0, Ino_EatHit, "Ino_EatHit"}};
+        for (int k = 0; k < 30; k++) {
+            memcpy(MEM(o), sv, 0x260); memcpy(MEM(pl), svp, 0x260);
+            U8(o + 0x56) = rnd() % 4 ? 1 : (u8)(rnd() % 3);
+            U32(o + 0x1C0) = rnd() & 0x7F; U8(o + 0x216) = rnd() % 2;
+            Flag_Set(2, 0x1A, rnd() % 3 == 0);
+            U16(pl + 0x4A) = (u16)((U16(o + 0x4A) + (u16[]){0, 0x3FF, 0x400, 0x401, 0xC01, 0xC00, 0xBFF, 0x800}[rnd() % 8]) & 0xFFF);
+            S16(pl + 0x108) = (s16)(rnd() % 2 ? rnd() % 0x100 - 0x10 : rnd());
+            for (u32 j = 0; j < 20; j++) if (rnd() % 2) U8(O_K2 + j * 0xAC + 0x50) &= ~1;
+            U32(LOG_BASE) = 0;
+            sprintf(g_what, "ino %X %s step %u bits %X", o, gh[k % 3].name, U8(o + 0x56), U32(o + 0x1C0));
+            check(gh[k % 3].addr, gh[k % 3].fn, gh[k % 3].name, 1, a, 0);
+        }
+        for (int k = 0; k < 12; k++) {                      /* the player thrown free */
+            memcpy(MEM(pl), svp, 0x260);
+            anim_maybe_end(pl);
+            if (rnd() % 2) U16(pl + 0x102) |= 0x20;
+            u32 p1[1] = {pl};
+            U32(LOG_BASE) = 0;
+            sprintf(g_what, "ino player frame %X", U16(pl + 0x92));
+            check(0x4385E0, Ino_EatEnd, "Ino_EatEnd", 1, p1, 0);
+        }
+    }
+    player_tables_stub(0);
+    ino_tables_stub(0);
+    stubs_install(0);
+    g_ign_objpads = 0;
+}
+
 static void test_game(void)
 {
     stubs_install(1);
@@ -8394,7 +8673,8 @@ __declspec(dllexport) void harness_main(int argc, char **argv)
     struct { const char *name; void (*fn)(void); } T[] = {
         {"flags", test_flags}, {"geometry", test_geom}, {"script values", test_script_values},
         {"script opcodes", test_script_ops}, {"script objects", test_objects},
-        {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"objects 2", test_object}, {"collision", test_collision}, {"player", test_player}, {"player states", test_player2}, {"zones", test_zones}, {"loading", test_room}, {"title", test_title}, {"game task", test_game}, {"doors", test_doors}, {"frame", test_frame}, {"enemy sets", test_enemyset}, {"enemies", test_enemies}, {"raptor", test_raptor}, {"oviraptor", test_ovi}, {"allosaurus", test_allo}, {"pteranodon", test_ptera}, {"tyrannosaurus", test_trex}, {"plesiosaurus", test_plesio}, {"water plesiosaurs", test_pw}, {"roamer", test_roam}, {"giganotosaurus", test_gig}, {"aot kinds", test_aot_kinds}, {"object effects", test_obj_effects}, {"effect slots", test_k2}, {"effect drops", test_k2_drops}, {"effect emitters", test_eff_slots}, {"effect slots 3", test_k2_more}, {"helpers", test_helpers}, {"draw", test_draw}, {"pc gpu", test_pcgpu}, {"pc draw", test_pcdraw}, {"pc frame", test_pcframe},
+        {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"objects 2", test_object}, {"collision", test_collision}, {"player", test_player}, {"player states", test_player2}, {"zones", test_zones}, {"loading", test_room}, {"title", test_title}, {"game task", test_game}, {"doors", test_doors}, {"frame", test_frame}, {"enemy sets", test_enemyset}, {"enemies", test_enemies}, {"raptor", test_raptor}, {"oviraptor", test_ovi}, {"allosaurus", test_allo}, {"pteranodon", test_ptera}, {"tyrannosaurus", test_trex}, {"plesiosaurus", test_plesio}, {"water plesiosaurs", test_pw}, {"roamer", test_roam}, {"giganotosaurus", test_gig},
+    {"inostrancevia", test_ino}, {"aot kinds", test_aot_kinds}, {"object effects", test_obj_effects}, {"effect slots", test_k2}, {"effect drops", test_k2_drops}, {"effect emitters", test_eff_slots}, {"effect slots 3", test_k2_more}, {"helpers", test_helpers}, {"draw", test_draw}, {"pc gpu", test_pcgpu}, {"pc draw", test_pcdraw}, {"pc frame", test_pcframe},
     };
     for (unsigned i = 0; i < sizeof T / sizeof T[0]; i++) {
         int f0 = g_fail, t0 = g_tests;
