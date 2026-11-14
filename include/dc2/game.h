@@ -1292,6 +1292,20 @@ void DC2CALL Mosa_Bite(gptr o);         /* 0x441E30 */
 void DC2CALL Mosa_Release(gptr o);      /* 0x441E80 */
 void DC2CALL Mosa_PitchTo(gptr o, u32 max, gptr p); /* 0x441EE0 */
 u32  DC2CALL Mosa_PitchDiff(gptr from, gptr p, u32 cur); /* 0x441F40 */
+/* compso.c: the compsognathus (type 13) */
+void DC2CALL Compso_Handler (gptr o);  /* 0x445690 */
+void DC2CALL Compso_Init    (gptr o);     /* 0x445720 */
+void DC2CALL Compso_Normal  (gptr o);   /* 0x4457F0 */
+void DC2CALL Compso_Hit     (gptr o);      /* 0x445820 */
+void DC2CALL Compso_Die     (gptr o);      /* 0x445840 */
+void DC2CALL Compso_Grab    (gptr o);     /* 0x445860 */
+void DC2CALL Compso_Turn    (gptr o);     /* 0x445880 */
+void DC2CALL Compso_Cling   (gptr o);    /* 0x4458A0 */
+void DC2CALL Compso_Damage  (gptr o);   /* 0x445910 */
+void DC2CALL Compso_Hurt    (gptr o);     /* 0x445920 */
+void DC2CALL Compso_Fade    (gptr o);     /* 0x445980 */
+void DC2CALL Flash_Full     (gptr o);      /* 0x4459A0 */
+void DC2CALL Flash_Quads    (gptr o);     /* 0x445A60 */
 
 void DC2CALL Ples12_Remove(gptr o);                /* 0x430E50 */
 void DC2CALL Ples12_Type(gptr o);                  /* 0x430360 */

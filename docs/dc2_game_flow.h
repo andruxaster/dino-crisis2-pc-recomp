@@ -136,7 +136,8 @@
  *  broken ones), 7 E90 Oviraptor, 8 E60 Allosaurus,
  *  9 E70 Triceratops (src/game/tricera.c, handler 0x43CF30),
  *  10 E80 Mosasaurus (src/game/mosa.c, handler 0x43F820), 11/12 E31/E32 (plesiosaurs in the
- *  water: at the surface / under it, src/game/plesio2.c), 13 EA0 Compsognathus, 14 E50 Inostrancevia
+ *  water: at the surface / under it, src/game/plesio2.c), 13 EA0 Compsognathus
+ *  (src/game/compso.c, handler 0x445690: only a few moves in the PC game), 14 E50 Inostrancevia
  *  (src/game/inostr.c; handler 0x437230 straight in the table, no type wrapper)
  *  (E<k>0 = entry k of the game's dinosaur list; model sizes agree);
  *  16 room prop (model inside the room block); 17..28 area objects

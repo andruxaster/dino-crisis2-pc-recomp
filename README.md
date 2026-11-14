@@ -88,7 +88,7 @@ Checked under wine 9 (32-bit prefix): all 26 hooks installed; after one
 minute Lzss_Decode 23 calls, Flag_Check 62 000, Script_Run every frame,
 PointInQuad 5 000.
 
-## Reimplemented (1320)
+## Reimplemented (1333)
 
 The authoritative list is `src/hook/hooks.c`. By area:
 
@@ -129,6 +129,7 @@ The authoritative list is `src/hook/hooks.c`. By area:
 | inostrancevia (type 14, E50) | handler (the fall off a ledge, removed when far and out of sight), init (health by difficulty), deciding (roar, bites, seizing or pouncing on the player by distance, angle and the player running; turns), the moves (wait, walk, roar, turn, fall off a ledge, two bites, seize and eat the player who struggles free with the pad, pounce on the player), the attacks landing, the damage (scaled by weapon; flinch, stagger, knocked over, down and hit while down), dying (falling, from lying, burnt) | src/game/inostr.c |
 | triceratops (type 9, E70) | handler (pushed down the street, the lead one tinted by the player's distance, dust), init (two kinds: the lead one and the herd), the phase by its health and the herd's and its values, steering across the street (at the player, weaving, to the side, along the wall knocking debris off, to the far side, back), deciding (roar, charge, gore), the moves (run, run on, roar, swerve, charge, gore), the attacks landing, the damage (strength by the attack's frames, the herd's last phases), flinch, knocked down, dying (falls, runs off the street's end) | src/game/tricera.c |
 | mosasaurus (type 10, E80) | handler (under the surface, above the bottom, its pitch limited), init, deciding (its own point away from the player, turning and pitching to the target; the lunge, the leap, the seize), swim, rush, turn, pitch, dive, the lunge and its bite, the leap that drags the player in and the player thrown (callback), the seize that swims off with the player and lets it fall (callback), the damage, flinches, dives, knocked over, dying (sinks, fades) | src/game/mosa.c |
+| compsognathus (type 13, EA0) | handler, init (health 1000), the PC game's few moves: turning to its target, clinging at the player's height, hurt (lets go of the player), fading out dead; the two screen flashes in its table (whole, in quarters) | src/game/compso.c |
 | doors (room change) | Door_Task and its modes (set-up: the stand-in, door models, camera, light, room name; run: area switch, room and music loads; end), all door types' handlers: hinged, shutter, sliding and double doors, lifts, stairs, camera drop, waits, message, walk; the score panel after a fight | src/game/door.c |
 | PC layer: GTE | all 80 libgte functions of the port (0x4C08E0..0x4C24C0): rsin/rcos/ratan2, roots, geometry state, Apply/Mul/Rot/Scale/Transpose matrix, RotTransPers 1/3/4 and the float projection, depth cue, normal colour, register loads/stores, rtps/rtpt/nclip/ncct, PC depth stores | src/game/gte.c, include/dc2/gte.h |
 | PC layer: GPU, memory side | primitives linked into the ordering tables, sprite/tile/mode/area packets, texture page words, the software VRAM (1024x512 at 0x76448C: LoadImage, StoreImage, the CLUT rows load, with the texture cache invalidation and palette conversion of the drawing layer). Tested in the harness, called by the standalone builds (the DLL keeps the originals) | src/pc/gpu.c, include/dc2/gpu.h |
@@ -181,11 +182,11 @@ alone and the harness ignores them.
 
 ## Next
 
-The script VM, the keyframe animation, the generic object handler (type 1), object collision, the zone navigation, the player (all states and substates, all weapons and sub-weapons), the velociraptor, the oviraptor, the allosaurus, the pteranodon, the tyrannosaurus, the plesiosaurs, the giganotosaurus, the inostrancevia, the triceratops and the mosasaurus are complete; the standalone build plays the opening of room 101 and, with buttons held from the command line,
+The script VM, the keyframe animation, the generic object handler (type 1), object collision, the zone navigation, the player (all states and substates, all weapons and sub-weapons), the velociraptor, the oviraptor, the allosaurus, the pteranodon, the tyrannosaurus, the plesiosaurs, the giganotosaurus, the inostrancevia, the triceratops, the mosasaurus and the compsognathus are complete; the standalone build plays the opening of room 101 and, with buttons held from the command line,
 walks the player through its door into room 102 (`dc2 Dino2.exe ROOT/Data 3300 400:820 440:820
 2900-2932:2000 2940-2955:1000 2960-3010:20`; ROOT also holds `Speech`). The DirectSound buffers have a
-silent stand-in there that only keeps time. Next: the other dinosaurs' type handlers (*0x87DCA0:
-Compsognathus 0x445690), the area objects and props, sound/BGM (0x48C9C0..0x48CE60), messages
+silent stand-in there that only keeps time. Next: the playable dinosaurs of the extra game (type 15,
+KOF_P*.DAT), the area objects and props, sound/BGM (0x48C9C0..0x48CE60), messages
 (0x4718F0), fades and menus. The PC layer's drawing is copied onto
 Direct3D-shaped calls and drawn by a renderer (OpenGL, the Dreamcast's PVR);
 still missing there: the background masks module (0x4BE3C0..), code 0x84,

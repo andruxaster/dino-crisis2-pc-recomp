@@ -9171,6 +9171,118 @@ static void test_mosa(void)
     g_ign_objpads = 0;
 }
 
+/* ---- the compsognathus (type 13) ---- */
+/* its tables 0x7213CC..0x72141C (they overlap): a recorder per entry */
+static u32 g_co_saved[21];
+static void co_tables_stub(int on)
+{
+    for (int k = 1; k <= 21; k++) g_stubs[k].spec = on ? "d" : "";
+    for (u32 k = 0; k < 21; k++) {
+        gptr a = 0x7213CC + 4 * k;
+        if (on) { g_co_saved[k] = U32(a); U32(a) = (u32)(uintptr_t)g_recs[1 + k]; }
+        else U32(a) = g_co_saved[k];
+    }
+}
+
+/* a compsognathus among the test objects, the player its target */
+static gptr co_setup(void)
+{
+    gptr o = raptor_setup(), pl = U32(G() + 0x940);
+    trex_parts(o);
+    U8(o + 0x54) = rnd() % 4 ? 1 + rnd() % 3 : rnd() % 5;
+    U8(o + 0x55) = rnd() % 4; U8(o + 0x56) = rnd() % 4 ? rnd() % 2 : (u8)rnd();
+    U8(o + 0x119) = (u8[]){0, 1, 0x7F, 0x80, 0xFF}[rnd() % 5];
+    U32(o + 0x50) = rnd() % 2 ? (U32(o + 0x50) & ~0x30u) | (rnd() & 0x30) : rnd();
+    U32(o + 0x184) = (rnd() % 2 ? rnd() & 3 : rnd()) & ~0x40u;   /* (0x40: a target at G+0xB50) */
+    S16(o + 0x108) = (s16)(rnd() % 2 ? rnd() % 0x400 - 0x10 : rnd());
+    U16(o + 0x176) = rnd() % 2 ? rnd() % 0x400 : (u16)rnd();
+    if (rnd() % 4 == 0) U16(o + 0x176) = (u16)(S16(o + 0x108) + rnd() % 3 - 1);
+    static const s16 ys[] = {0, -1, -999, -1000, -1001, 999, 1000, 1001, -32768, 32767};
+    S16(o + 0x42) = rnd() % 2 ? ys[rnd() % 10] : (s16)rnd();
+    for (u32 j = 0xF0; j < 0xF6; j += 2) U16(o + j) = rnd() % 3 ? (u16)(rnd() % 0x200 - 0x100) : (u16)rnd();
+    if (rnd() % 3 == 0) U16(o + 0xF4) = (u16)(0x8C + rnd() % 0x41 - 0x20);
+    U16(pl + 0x1E8) = (u16)rnd(); S16(pl + 0x42) = (s16)rnd();
+    U32(pl + 0x134) = 0;                                /* (no hit spheres: Enemy_AttackHit keeps +0x119) */
+    U16(o + 0xD8) = U16(pl + 0x40); U16(o + 0xDA) = U16(pl + 0x42); U16(o + 0xDC) = U16(pl + 0x44);
+    if (rnd() % 2) {                                    /* about straight at the target */
+        s32 d = (s32[]){0, 1, 0x18, 0x19, 0x1A, 0x800}[rnd() % 6] * (rnd() % 2 ? 1 : -1);
+        U16(o + 0x4A) = (u16)((Angle_XZ(o + 0x40, o + 0xD8) + d) & 0xFFF);
+    } else U16(o + 0x4A) = (u16)rnd();
+    return o;
+}
+
+static void test_compso(void)
+{
+    g_ign_objpads = 1;
+    stubs_install(1);
+    co_tables_stub(1);
+    for (int i = 0; i < iters; i++) {
+        gptr o;
+        u32 a[1];
+        /* the state handlers and the moves */
+        static const GigFn fn[] = {
+            {0x4457F0, Compso_Normal, "Compso_Normal", 15}, {0x445820, Compso_Hit, "Compso_Hit", 14},
+            {0x445840, Compso_Die, "Compso_Die", 9}, {0x445860, Compso_Grab, "Compso_Grab", 4},
+            {0x445880, Compso_Turn, "Compso_Turn", 0}, {0x4458A0, Compso_Cling, "Compso_Cling", 0},
+            {0x445910, Compso_Damage, "Compso_Damage", 0}, {0x445920, Compso_Hurt, "Compso_Hurt", 0},
+            {0x445980, Compso_Fade, "Compso_Fade", 0}};
+        for (unsigned k = 0; k < 4 * sizeof fn / sizeof fn[0]; k++) {
+            const GigFn *f = &fn[k % (sizeof fn / sizeof fn[0])];
+            game_state(); world_setup(); mo_zones();
+            o = co_setup(); a[0] = o;
+            if (f->steps) U8(o + 0x55) = (u8)(rnd() % f->steps);
+            if (f->addr == 0x4458A0) {                  /* its animation: valid, at its end or not */
+                anim_setup_at(o);
+                memcpy(MEM(O_OBJ + 0x60), MEM(o + 0x60), 0x50);
+                U8(o + 0x56) = rnd() % 4 ? rnd() % 2 : (u8)rnd();
+                anim_maybe_end(o);
+                if (rnd() % 2) U16(o + 0x102) |= 0x20;
+                if (rnd() % 2) U16(o + 0xF4) = (u16)(0x8C + rnd() % 0x2B - 0x15);   /* about its top speed */
+            }
+            U32(LOG_BASE) = 0;
+            sprintf(g_what, "compso %X %s state %X flags %X", o, f->name, U32(o + 0x54), U32(o + 0x50));
+            check(f->addr, f->fn, f->name, 1, a, 0);
+        }
+        /* the handler */
+        for (int k = 0; k < 8; k++) {
+            game_state(); world_setup(); mo_zones();
+            o = co_setup(); a[0] = o;
+            if (rnd() % 2) trex_spheres(o, 1 + rnd() % 3);
+            U8(o + 0x54) = rnd() % 5;
+            U32(LOG_BASE) = 0;
+            sprintf(g_what, "compso %X handler state %X flags %X", o, U32(o + 0x54), U32(o + 0x50));
+            check(0x445690, Compso_Handler, "Compso_Handler", 1, a, 0);
+        }
+        /* set up: 16 parts, as the animation */
+        game_state(); world_setup(); mo_zones();
+        o = co_setup(); a[0] = o;
+        do model_data(0x640000); while (U32(0x640000 + 0x14) != 16);
+        do anim_setup_at(AN_OBJ); while (U32(AN_OBJ + 0x68) != 16);
+        memcpy(MEM(o + 0x60), MEM(AN_OBJ + 0x60), 0x50);
+        U32(0x640868) = AN_DATA;                            /* its animation 0 */
+        U32(AN_TAB) = AN_DATA + 0x1000; U32(o + 0x88) = AN_TAB;   /* (another table before) */
+        U32(LOG_BASE) = 0;
+        sprintf(g_what, "compso %X init y %X", o, U16(o + 0x42));
+        check(0x445720, Compso_Init, "Compso_Init", 1, a, 0);
+        /* the screen flashes: colour, blend, the quarters' offset about its limits */
+        for (int k = 0; k < 4; k++) {
+            game_state(); draw_safe();
+            if (rnd() % 2) U32(0x87DC98) += 1 + rnd() % 3;    /* (an odd primitive address: the link keeps its low bits) */
+            gptr fl = G_SCR + 0x100 * (rnd() % 12);
+            for (u32 j = 0; j < 8; j++) U8(fl + j) = (u8)rnd();
+            if (rnd() % 2) S8(fl + 5) = (s8[]){0, 1, -1, 0x77, 0x78, 0x79, 0x7F, -0x80, 0x9F}[rnd() % 9];
+            a[0] = fl;
+            U32(LOG_BASE) = 0;
+            sprintf(g_what, "flash %X col %X k %d", fl, U32(fl), S8(fl + 5));
+            if (k % 2) check(0x445A60, Flash_Quads, "Flash_Quads", 1, a, 0);
+            else check(0x4459A0, Flash_Full, "Flash_Full", 1, a, 0);
+        }
+    }
+    co_tables_stub(0);
+    stubs_install(0);
+    g_ign_objpads = 0;
+}
+
 static void test_game(void)
 {
     stubs_install(1);
@@ -9346,7 +9458,7 @@ __declspec(dllexport) void harness_main(int argc, char **argv)
         {"flags", test_flags}, {"geometry", test_geom}, {"script values", test_script_values},
         {"script opcodes", test_script_ops}, {"script objects", test_objects},
         {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"objects 2", test_object}, {"collision", test_collision}, {"player", test_player}, {"player states", test_player2}, {"zones", test_zones}, {"loading", test_room}, {"title", test_title}, {"game task", test_game}, {"doors", test_doors}, {"frame", test_frame}, {"enemy sets", test_enemyset}, {"enemies", test_enemies}, {"raptor", test_raptor}, {"oviraptor", test_ovi}, {"allosaurus", test_allo}, {"pteranodon", test_ptera}, {"tyrannosaurus", test_trex}, {"plesiosaurus", test_plesio}, {"water plesiosaurs", test_pw}, {"roamer", test_roam}, {"giganotosaurus", test_gig},
-    {"inostrancevia", test_ino}, {"triceratops", test_tri}, {"mosasaurus", test_mosa}, {"aot kinds", test_aot_kinds}, {"object effects", test_obj_effects}, {"effect slots", test_k2}, {"effect drops", test_k2_drops}, {"effect emitters", test_eff_slots}, {"effect slots 3", test_k2_more}, {"helpers", test_helpers}, {"draw", test_draw}, {"pc gpu", test_pcgpu}, {"pc draw", test_pcdraw}, {"pc frame", test_pcframe},
+    {"inostrancevia", test_ino}, {"triceratops", test_tri}, {"mosasaurus", test_mosa}, {"compsognathus", test_compso}, {"aot kinds", test_aot_kinds}, {"object effects", test_obj_effects}, {"effect slots", test_k2}, {"effect drops", test_k2_drops}, {"effect emitters", test_eff_slots}, {"effect slots 3", test_k2_more}, {"helpers", test_helpers}, {"draw", test_draw}, {"pc gpu", test_pcgpu}, {"pc draw", test_pcdraw}, {"pc frame", test_pcframe},
     };
     for (unsigned i = 0; i < sizeof T / sizeof T[0]; i++) {
         int f0 = g_fail, t0 = g_tests;
