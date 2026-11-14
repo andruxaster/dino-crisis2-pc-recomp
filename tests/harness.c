@@ -8795,6 +8795,382 @@ static void test_tri(void)
     g_ign_objpads = 0;
 }
 
+/* ---- the mosasaurus (type 10) ---- */
+static const u32 g_mo_tabs[][2] = {{0x7211E4, 5}, {0x7211F8, 8}, {0x721218, 8}, {0x721238, 7}, {0x721254, 7}, {0x721270, 8}};
+static u32 g_mo_saved[6][8];
+static void mo_tables_stub(int on)
+{
+    for (int k = 1; k <= 8; k++) g_stubs[k].spec = on ? "d" : "";
+    for (int t = 0; t < 6; t++)
+        for (u32 k = 0; k < g_mo_tabs[t][1]; k++) {
+            gptr a = g_mo_tabs[t][0] + 4 * k;
+            if (on) { g_mo_saved[t][k] = U32(a); U32(a) = (u32)(uintptr_t)g_recs[1 + k]; }
+            else U32(a) = g_mo_saved[t][k];
+        }
+}
+
+/* the distance to the player (o+0x13C) about its limits */
+static u32 mo_dist(void)
+{
+    static const u32 e[] = {0x7D0, 0xBB8, 0xE10, 0xFA0, 0x1770, 0x400, 0x2000};
+    return rnd() % 5 ? e[rnd() % 7] + rnd() % 3 - 1 : rnd() % 0x3000;
+}
+
+/* its state block, the player's hold on it */
+static void mo_state(gptr o)
+{
+    gptr pl = U32(G() + 0x940);
+    U32(o + 0x1C0) = rnd() % 4 ? rnd() & 0x1F : rnd();
+    U8(o + 0x1C8) = rnd() % 4 ? 1 + rnd() % 3 : rnd() % 5; U8(o + 0x1C9) = rnd() % 8;
+    U8(o + 0x1CA) = rnd() % 5; U8(o + 0x1CB) = rnd() % 2;
+    U32(o + 0x1CC) = rnd() % 2 ? rnd() % 0x800 : rnd() % 2 ? 0 : rnd();
+    U32(o + 0x1D0) = rnd() % 3 ? 0 : rnd() % 3 ? 1 + rnd() % 0x78 : rnd();
+    U16(o + 0x1D8) = (u16)(rnd() % 3 ? rnd() % 0x40 : rnd()); U16(o + 0x1DA) = (u16)(rnd() % 3 ? rnd() % 0x40 : rnd());
+    U16(o + 0x1DE) = rnd() % 2 ? 0 : (u16)rnd();
+    U16(o + 0x1E6) = (u16[]){0, 1, 2, 0x78, 0xFFFF}[rnd() % 5];
+    U16(o + 0x1EE) = rnd() % 3 ? 0x12C : rnd() % 2 ? 0x96 : (u16)(rnd() % 0x800);
+    for (u32 k = 0x1F2; k < 0x1F8; k += 2) U16(o + k) = (u16)(U16(o + 0x40 + k - 0x1F2) + rnd() % 0x6000 - 0x3000);
+    if (rnd() % 3 == 0) {                               /* its point about 0x895440 / 0x17D7840 off */
+        s32 d = rnd() % 2 ? 3000 : 5000;
+        U16(o + 0x1F2) = (u16)(U16(o + 0x40) + d + rnd() % 3 - 1); U16(o + 0x1F6) = U16(o + 0x44);
+    }
+    U16(o + 0x1FA) = rnd() % 2 ? 0 : (u16)(rnd() % 0x3C); U16(o + 0x1FC) = rnd() % 2 ? 0 : (u16)(rnd() % 0x3C);
+    U16(o + 0x1FE) = (u16)(rnd() % 4 ? (u32)((rnd() % 2 ? 0x1E : -0x1E) + (s32)(rnd() % 5) - 2) : rnd()); U16(o + 0x200) = rnd() % 2;
+    U16(o + 0x202) = (u16)tri_about(0x78);
+    U16(o + 0x204) = (u16)(rnd() % 0x2000 - 0x1000);
+    U16(o + 0x208) = (u16[]){0, 1, 4, 8, 0xC, 0xFFFC, 7}[rnd() % 7];
+    for (u32 k = 0x20A; k < 0x210; k += 2) U16(o + k) = (u16)(rnd() % 0x2000 - 0x1000);
+    U8(o + 0x13A) = rnd() % 3 ? 0 : (u8)rnd();
+    U32(o + 0x13C) = mo_dist();
+    U8(o + 0x18D) = rnd() % 2 ? 0 : rnd() % 2 ? 1 + rnd() % 2 : (u8)rnd();
+    U16(o + 0x48) = rnd() % 3 ? (u16)tri_about((rnd() % 2 ? 1 : -1) * (s32)(rnd() % 2 ? 0x3E0 : 0x40)) : (u16)rnd();
+    U16(o + 0x172) = rnd() % 6; U8(o + 0x17D) = rnd() % 3 ? 0x12 : (u8)rnd();
+    U16(o + 0x176) = rnd() % 2 ? rnd() % 0x400 : (u16)rnd();
+    S16(o + 0x10A) = (s16)(rnd() % 2 ? 0x578 : rnd() % 0x4000);
+    S16(o + 0x108) = (s16)(rnd() % 2 ? rnd() % 0x400 - 0x10 : rnd());
+    U32(pl + 0x1D8) = o;
+    Flag_Set(2, 0x1A, rnd() % 3 == 0);
+    U32(0x87E974) = rnd() % 4 ? rnd() & 1 : rnd();
+}
+
+/* a mosasaurus among the test objects (no animations); the player its target */
+static gptr mo_setup(void)
+{
+    gptr o = raptor_setup(), pl = U32(G() + 0x940);
+    U32(o + 0x184) &= ~0x40u;
+    trex_parts(o);
+    U8(o + 0x15F) = rnd() % 4 ? 0xD : rnd() % 16;
+    mo_state(o);
+    U8(o + 0x57) = rnd() % 2;
+    U16(pl + 0x174) = rnd() % 2 ? rnd() & 3 : (u16)rnd();
+    U32(pl + 0x134) = 0;
+    U16(o + 0xD8) = U16(pl + 0x40); U16(o + 0xDA) = U16(pl + 0x42); U16(o + 0xDC) = U16(pl + 0x44);
+    trex_aim(o + 0x40, o, o + 0xD8);
+    trex_ff(o, rnd() % 2);
+    return o;
+}
+
+/* yaw and pitch off the target by about the deciding limits, past the turn
+   (yr) and pitch (pr) it makes first */
+static void mo_aim(gptr o, s32 yr, s32 pr)
+{
+    static const s32 ya[] = {0, 1, 0x1D, 0x1E, 0x1F, 0xFF, 0x100, 0x17F, 0x180, 0x200};
+    static const s32 pa[] = {0, 1, 0xF, 0x10, 0x1D, 0x1E, 0x1F, 0x7F, 0x80};
+    if (rnd() % 3) {
+        s32 d = ya[rnd() % 10] + yr;
+        U16(o + 0x4A) = (u16)((Angle_XZ(o + 0x40, o + 0xD8) + (rnd() % 2 ? d : -d)) & 0xFFF);
+    }
+    if (rnd() % 3) {
+        u32 r0 = Mosa_PitchDiff(o + 0x40, o + 0xD8, 0);
+        s32 d = pa[rnd() % 9] + pr;
+        U16(o + 0x48) = (u16)((r0 - (rnd() % 2 ? d : -d)) & 0xFFF);
+    }
+    gptr pl = U32(G() + 0x940);
+    if (rnd() % 2) U16(pl + 0x4A) = (u16)((U16(o + 0x4A) + (rnd() % 2 ? 1 : -1) * (0x1FF + (s32)(rnd() % 3) - 1)) & 0xFFF);
+}
+
+/* a Rand8 seed whose n-th value is want */
+static u16 rand8_seed_at(u8 want, int n)
+{
+    u32 v = rnd() & 0xFFFF;
+    for (u32 k = 0; k < 0x10000; k++, v = (v + 1) & 0xFFFF) {
+        u16 x = (u16)v;
+        for (int i = 0; i < n; i++) {
+            u8 hi = (u8)((x * 3u) >> 8); u16 y = (u16)(hi << 8 | (u8)(x + hi));
+            if (y == x) y += 0x101;
+            x = y;
+        }
+        if ((u8)x == want) return (u16)v;
+    }
+    return (u16)v;
+}
+
+/* an attack about to be decided: no turning first, nothing keeping it back;
+   its pitch, the pitch to the target, the distance and the roll about their limits */
+static void mo_attack(gptr o)
+{
+    gptr pl = U32(G() + 0x940);
+    static const s32 pv[] = {0, 1, 0x10, 0x3F, 0x40, 0x41, 0x80};
+    static const s32 dv[] = {0, 1, 0xF, 0x10, 0x11, 0x7F, 0x80, 0x81};
+    static const u32 dist[] = {0x7D0, 0xBB8, 0xE10, 0xFA0, 0x1770};
+    U16(o + 0x1D8) = 0; U16(o + 0x1DA) = 0;
+    U8(o + 0x13A) = 0; U32(o + 0x1D0) = rnd() % 4 ? 0 : 1; U32(o + 0x1C0) &= ~0x14u; U32(0x87E974) &= ~1u;
+    U32(o + 0x13C) = dist[rnd() % 5] + rnd() % 3 - 1;
+    s32 p = pv[rnd() % 7] * (rnd() % 2 ? 1 : -1), want = p + dv[rnd() % 8] * (rnd() % 2 ? 1 : -1);
+    /* the target's height giving want (PitchDiff with no pitch), by halving */
+    s32 lo = -0x6000, hi = 0x6000;
+    S16(o + 0xDA) = (s16)lo; s32 rl = (s16)Mosa_PitchDiff(o + 0x40, o + 0xD8, 0);
+    S16(o + 0xDA) = (s16)hi; s32 inc = rl < (s16)Mosa_PitchDiff(o + 0x40, o + 0xD8, 0);
+    for (int k = 0; k < 20 && lo < hi; k++) {
+        s32 m = (lo + hi) / 2;
+        S16(o + 0xDA) = (s16)m;
+        s32 r = (s16)Mosa_PitchDiff(o + 0x40, o + 0xD8, 0);
+        if ((r < want) == inc) lo = m + 1; else hi = m;
+    }
+    S16(o + 0xDA) = (s16)lo;
+    U16(o + 0x48) = (u16)((s16)Mosa_PitchDiff(o + 0x40, o + 0xD8, 0) - (want - p)) & 0xFFF;
+    if (rnd() % 4) U16(pl + 0x4A) = (u16)((U16(o + 0x4A) + (rnd() % 2 ? 1 : -1) * (0x1FF + (s32)(rnd() % 3) - 1)) & 0xFFF);
+    U16(0x87DE10) = rand8_seed_at((u8)(0x3F + rnd() % 3), 1 + rnd() % 2);
+}
+
+/* one floor polygon around o (Fn_454950 finds its edges; with none in reach,
+   or products past 32 bits with long edges, it returns stack garbage) */
+static void mo_floor(gptr o, int slope)
+{
+    gptr w = 0x6CFC00u, pg = w + 0x10, v = pg + 0x18;
+    S16(o + 0x40) = (s16)(rnd() % 0x4000 - 0x2000); S16(o + 0x44) = (s16)(rnd() % 0x4000 - 0x2000);
+    U16(o + 0x5A) = rnd() % 4;
+    s32 r = 3000 + rnd() % 2000, x = S16(o + 0x40), z = S16(o + 0x44);
+    U8(w) = 1; U32(w + 8) = 0x10;
+    U8(pg) = slope ? (u8)(0x81 | (rnd() % 2 ? 0x10 : 0) | (rnd() % 2 ? 0x20 : 0)) : 1; U8(pg + 1) = 4; U8(pg + 3) = rnd() % 4 ? 0 : 0x20; U16(pg + 4) = slope ? (u16)(rnd() | 1) : rnd() % 4 ? 0xFFFF : (u16)(1u << U16(o + 0x5A));
+    for (u32 e = 0; e < 4; e++) U8(pg + 8 + 4 * e) = (u8)(rnd() % 2);
+    /* a quadrilateral with no edge along an axis (the rays Fn_454950 casts are) */
+    s32 vx[5] = {x - r, x + r + 40 + (s32)(rnd() % 300), x + r, x - r - 40 - (s32)(rnd() % 300), 0};
+    s32 vz[5] = {z - r - 40 - (s32)(rnd() % 300), z - r, z + r + 40 + (s32)(rnd() % 300), z + r, 0};
+    vx[4] = vx[0]; vz[4] = vz[0];
+    for (u32 e = 0; e < 5; e++) { S16(v + 4 * e) = (s16)vx[e]; S16(v + 4 * e + 2) = (s16)vz[e]; }
+    U32(G() + 0xA4C) = w;
+}
+
+/* the zones (Zone_TrackPoint, Zone_RandomPoint): every object with parts */
+static void mo_zones(void)
+{
+    enemy_state();
+    for (u32 k = 8; k < 16; k++) U32(O_OBJ + k * 0x260 + 0x64) = O_PART + (k - 8) * 0x200;
+    zones_setup();
+}
+
+static void test_mosa(void)
+{
+    g_ign_objpads = 1;
+    stubs_install(1);
+    mo_tables_stub(1);
+    player_tables_stub(1);
+    for (int i = 0; i < iters; i++) {
+        gptr o, b, pl;
+        u32 a[3];
+        /* deciding, steering, the helpers */
+        static const GigFn th[] = {
+            {0x440180, Mosa_Decide, "Mosa_Decide"}, {0x43FD40, Mosa_ThinkSwim, "Mosa_ThinkSwim"},
+            {0x43FE50, Mosa_ThinkRush, "Mosa_ThinkRush"}, {0x43FF60, Mosa_ThinkTurn, "Mosa_ThinkTurn"},
+            {0x440070, Mosa_ThinkPitch, "Mosa_ThinkPitch"}, {0x4406F0, Mosa_ThinkLunge, "Mosa_ThinkLunge"},
+            {0x440D30, Mosa_ThinkSeize, "Mosa_ThinkSeize"}, {0x441D90, Mosa_Timer, "Mosa_Timer"},
+            {0x441E30, Mosa_Bite, "Mosa_Bite"}, {0x441E80, Mosa_Release, "Mosa_Release"},
+            {0x441EE0, Mosa_PitchTo, "Mosa_PitchTo"}, {0x441F40, Mosa_PitchDiff, "Mosa_PitchDiff"}};
+        for (int k = 0; k < 100; k++) {
+            const GigFn *f = &th[k < 40 ? 0 : k % 12];
+            game_state(); world_setup(); mo_zones();
+            o = mo_setup(); b = o + 0x1C0; pl = U32(G() + 0x940);
+            U8(o + 0x55) = rnd() % 3 ? (u8[]){0, 2, 3}[rnd() % 3] : rnd() % 8;
+            U8(o + 0x56) = rnd() % 6;
+            s32 yr = 0, pr = 0;
+            if (rnd() % 2) {                                /* its turning rates as steering leaves them */
+                static const u32 st[][3] = {{0x440180, 0, 0}, {0x43FD40, 0xA, 0xA}, {0x43FE50, 0xA, 0xA}, {0x43FF60, 0x3C, 0xA}, {0x440070, 0xA, 0x32}};
+                for (u32 j = 0; j < 5; j++)
+                    if (f->addr == st[j][0]) { yr = st[j][1]; pr = st[j][2]; U16(o + 0x1DA) = (u16)yr; U16(o + 0x1D8) = (u16)pr; }
+            }
+            mo_aim(o, yr, pr);
+            if (rnd() % 2) {                                /* nothing keeps it from attacking */
+                U8(o + 0x13A) = 0; U32(o + 0x1D0) = 0; U32(b) &= ~0x10u; U32(0x87E974) &= ~1u;
+            }
+            tri_rand8();
+            /* the player deep in the water of room 704, or not (Mosa_Timer) */
+            u32 rm = rnd() % 4;
+            if (rm < 2) { U8(G() + 0x1091) = 7; U8(G() + 0x1090) = 4; }
+            else if (rm == 2) { U8(G() + 0x1091) = 7; U8(G() + 0x1090) = (u8)(rnd() % 4); }
+            S16(pl + 0x42) = rnd() % 2 ? tri_about(-3000) : (s16)rnd();
+            U8(pl + 0x54) = (u8[]){1, 2, 5, 3, 1}[rnd() % 5]; U8(pl + 0x55) = rnd() % 2 ? 9 : (u8)(rnd() % 12);
+            U8(G() + 0x108E) = rnd() % 3;
+            if (f->addr == 0x441D90 && rnd() % 2) {         /* in the deep water, its roll about the limit */
+                U8(G() + 0x1091) = 7; U8(G() + 0x1090) = 4; S16(pl + 0x42) = tri_about(-3000);
+                U8(pl + 0x54) = rnd() % 2 ? 3 : 1; U8(pl + 0x55) = 0; U16(pl + 0x174) &= ~1;
+                U16(0x87DE10) = rand8_seed_at((u8)(0x3F + rnd() % 3), 1);
+            }
+            if (f->addr == 0x440180 && rnd() % 2) mo_attack(o);
+            a[0] = o; a[1] = U16(o + 0x1D8); a[2] = o + 0xD8;
+            if (f->addr == 0x441F40) { a[0] = o + 0x40; a[1] = o + 0xD8; a[2] = rnd() % 2 ? U16(o + 0x48) : rnd(); }
+            if (f->addr == 0x441EE0) a[1] = rnd() % 2 ? rnd() % 0x40 : rnd();
+            U32(LOG_BASE) = 0;
+            sprintf(g_what, "mosa %X %s move %u step %u dist %X bits %X", o, f->name, U8(o + 0x55), U8(o + 0x56), U32(o + 0x13C), U32(b));
+            u32 ret = f->addr == 0x440180 || f->addr == 0x441D90 || f->addr == 0x441F40 ? 0xFFFFFFFF : 0;
+            check(f->addr, f->fn, f->name, f->addr == 0x441EE0 || f->addr == 0x441F40 ? 3 : 1, a, ret);
+        }
+        /* the state handlers */
+        game_state(); world_setup(); mo_zones();
+        o = mo_setup(); a[0] = o; b = o + 0x1C0; pl = U32(G() + 0x940);
+        U8(o + 0x55) = rnd() % 7;
+        check(0x43FCA0, Mosa_Normal, "Mosa_Normal", 1, a, 0);
+        U8(o + 0x55) = rnd() % 7;
+        check(0x43FCD0, Mosa_Hit, "Mosa_Hit", 1, a, 0);
+        U8(o + 0x55) = rnd() % 7;
+        check(0x43FCF0, Mosa_Die, "Mosa_Die", 1, a, 0);
+        for (int k = 0; k < 6; k++) {
+            U8(o + 0x55) = rnd() % 8; U8(o + 0x56) = rnd() % 3;
+            if (rnd() % 2) trex_spheres(o, 1 + rnd() % 3);
+            if (rnd() % 2) U32(pl + 0x134) = 0;
+            U8(o + 0x119) = (u8[]){0, 1, 0x7F, 0x80, 0xFF}[rnd() % 5];
+            check(0x43FD10, Mosa_Grab, "Mosa_Grab", 1, a, 0);
+        }
+        for (int k = 0; k < 12; k++) {
+            game_state(); world_setup(); mo_zones();
+            o = mo_setup(); a[0] = o; b = o + 0x1C0; pl = U32(G() + 0x940);
+            U8(o + 0x54) = rnd() % 5; U8(o + 0x55) = rnd() % 8;
+            U32(o + 0x50) = (U32(o + 0x50) & ~0x40000030u) | (rnd() & 0x30) | (rnd() % 8 == 0 ? 0x40000000 : 0);
+            if (rnd() % 2) {                                /* about the surface, the bottom and the deepest */
+                s16 f = (s16)Floor_Height(o + 0x40, o + 0x40, 0x40, 0);
+                s32 e[] = {f - S16(o + 0x1EE), S16(o + 0x1EE) - 15000, f};
+                S16(o + 0x42) = tri_about(e[rnd() % 3]);
+            }
+            if (rnd() % 2) U16(o + 0x48) = (u16)(rnd() % 2 ? tri_about(0x3E0) : tri_about(-0x3E0)) & (rnd() % 2 ? 0xFFF : 0xFFFF);
+            U8(o + 0x17B) = rnd() % 2 ? 0 : (u8)rnd();
+            U8(G() + 0x108F) = rnd() % 2 ? 0 : (u8)rnd();
+            if (rnd() % 2) trex_spheres(o, 1 + rnd() % 3);
+            if (rnd() % 2) {                                /* the head where it stands, about its looking limit */
+                gptr hp = Obj_Part(U32(o + 0x64), U8(o + 0x15F));
+                U16(hp + 0x40) = U16(o + 0x40); U16(hp + 0x44) = U16(o + 0x44);
+                u16 an = (u16)Angle_XZ(o + 0x40, o + 0xD8);
+                U16(o + 0x4A) = (u16)((an - (u16[]){0x4FF, 0x500, 0x501, 0xB01, 0xB00, 0xAFF}[rnd() % 6]) & 0xFFF);
+                U16(o + 0xF0) = U16(o + 0xF2) = U16(o + 0xF4) = 0; Bits_Set(b, 1, rnd() % 4 != 0);
+            }
+            sprintf(g_what, "mosa %X handler state %X flags %X bits %X", o, U32(o + 0x54), U32(o + 0x50), U32(b));
+            check(0x43F820, Mosa_Handler, "Mosa_Handler", 1, a, 0);
+        }
+        /* set up: 16 parts, as the animation */
+        do model_data(0x640000); while (U32(0x640000 + 0x14) != 16);
+        do anim_setup_at(AN_OBJ); while (U32(AN_OBJ + 0x68) != 16);
+        memcpy(MEM(o + 0x60), MEM(AN_OBJ + 0x60), 0x50);
+        U32(0x643100 + 8) = AN_DATA;                        /* its animation 2 */
+        U8(G() + 0x108E) = rnd() % 4 ? rnd() % 3 : rnd() % 2 ? 3 : (u8)rnd(); S16(o + 0x42) = (s16)rnd();
+        check(0x43FB00, Mosa_Init, "Mosa_Init", 1, a, 0);
+        /* moving, hit, dying: each step; the player's callbacks */
+        static const GigFn mv[] = {
+            {0x43FDB0, Mosa_Swim, "Mosa_Swim", 2}, {0x43FEB0, Mosa_Rush, "Mosa_Rush", 2}, {0x43FFD0, Mosa_Turn, "Mosa_Turn", 2},
+            {0x4400E0, Mosa_Pitch, "Mosa_Pitch", 2}, {0x4405A0, Mosa_Dive, "Mosa_Dive", 3}, {0x440710, Mosa_Lunge, "Mosa_Lunge", 4},
+            {0x440880, Mosa_Leap, "Mosa_Leap", 5}, {0x440D80, Mosa_Seize, "Mosa_Seize", 5},
+            {0x4412B0, Mosa_LungeHit, "Mosa_LungeHit", 3}, {0x441340, Mosa_SeizeHit, "Mosa_SeizeHit", 3},
+            {0x441440, Mosa_Damage, "Mosa_Damage", 1}, {0x4416B0, Mosa_Flinch, "Mosa_Flinch", 2},
+            {0x441720, Mosa_Flinch2, "Mosa_Flinch2", 2}, {0x4417B0, Mosa_HitDive, "Mosa_HitDive", 2},
+            {0x441830, Mosa_Knock, "Mosa_Knock", 3}, {0x4418F0, Mosa_Knock2, "Mosa_Knock2", 3},
+            {0x4419A0, Mosa_HitDive2, "Mosa_HitDive2", 2}, {0x441A20, Mosa_Dead, "Mosa_Dead", 5},
+            {0x441BD0, Mosa_Dead2, "Mosa_Dead2", 5}, {0x440AF0, Mosa_PlThrown, "Mosa_PlThrown", 3},
+            {0x4411E0, Mosa_PlDrop, "Mosa_PlDrop", 1}};
+        const unsigned nm = sizeof mv / sizeof mv[0];
+        game_state(); world_setup(); mo_zones();
+        o = O_OBJ + 0x260 * (1 + rnd() % 6); b = o + 0x1C0;
+        anim_setup_at(O_OBJ);
+        do anim_setup_at(o); while (U32(o + 0x68) != 16);
+        memcpy(MEM(O_OBJ + 0x60), MEM(o + 0x60), 0x50);
+        U32(G() + 0x940) = pl = O_OBJ;
+        U32(pl + 0x128) = rnd() % 2 ? 0x720C78 : 0; U32(o + 0x128) = 0x7211A0;
+        U32(0x87E760) = O_OBJ;
+        U8(o + 0x58) = 10;
+        u8 sv[0x260], svp[0x260]; memcpy(sv, MEM(o), 0x260); memcpy(svp, MEM(pl), 0x260);
+        for (unsigned k = 0; k < 14 * nm; k++) {
+            const GigFn *f = &mv[k % nm];
+            memcpy(MEM(o), sv, 0x260); memcpy(MEM(pl), svp, 0x260);
+            mo_state(o);
+            U8(o + 0x54) = rnd() % 4 ? 1 + rnd() % 3 : rnd() % 5;
+            U8(o + 0x55) = rnd() % 7;
+            U8(o + 0x56) = (u8)(rnd() % 8 ? rnd() % f->steps : rnd());
+            U8(o + 0x57) = rnd() % 2;
+            static const u16 fr[] = {0, 1, 7, 8, 9, 0xA, 0xB, 0x14, 0x15, 0x2C, 0x2D, 0x2E, 0x31, 0x32, 0x40};
+            U16(o + 0x92) = rnd() % 4 ? fr[rnd() % 15] : (u16)(rnd() % 0x80);
+            trex_ff(o, rnd() % 2);
+            for (u32 j = 0; j < 0x2000; j += 0x1000) {     /* the animations' frame flags and spheres: valid or none */
+                U32(AN_DATA + j + 0xC) = rnd() % 2 ? TR_QUAD + 0x100 : 0; U32(AN_DATA + j + 8) = rnd() % 2 ? TR_ATK : 0;
+            }
+            U8(pl + 0x54) = (u8[]){1, 2, 5, 3}[rnd() % 4]; U16(pl + 0x174) = rnd() % 2 ? rnd() & 3 : (u16)rnd();
+            S16(pl + 0x108) = (s16)(rnd() % 2 ? rnd() % 0x100 - 0x10 : rnd());
+            S16(pl + 0x42) = rnd() % 3 ? 0 : (s16)(rnd() % 0x2000 - 0x1000);
+            for (u32 j = 0xE8; j < 0xEE; j += 2) U16(pl + j) = rnd() % 2 ? 0 : (u16)(rnd() % 0x100 - 0x80);
+            for (u32 j = 0xE8; j < 0xEE; j += 2) U16(o + j) = rnd() % 2 ? 0 : (u16)(rnd() % 0x100 - 0x80);
+            U16(pl + 0xE2) = rnd() % 2 ? U16(pl + 0x42) : (u16)rnd();
+            U8(o + 0x184) = (u8)rnd();
+            if (f->addr == 0x441440 && rnd() % 2) {         /* about killed */
+                U8(o + 0x56) = 0; S16(o + 0x108) = tri_about(U16(o + 0x176)); if (rnd() % 2) U16(o + 0x172) = 0;
+                if (rnd() % 2) U8(o + 0x17D) = 0;
+                if (rnd() % 2) U32(o + 0x1CC) = (u32)(S16(o + 0x10A) / 2 - U16(o + 0x176) + (s32)(rnd() % 3) - 1);
+            }
+            if (f->addr == 0x440AF0 || f->addr == 0x4411E0) {  /* the player's callbacks: the player thrown or dropped */
+                a[0] = pl;
+                U8(pl + 0x57) = rnd() % 4 ? rnd() % 3 : (u8)rnd();
+                gptr p = U32(pl + 0x64);
+                if (f->addr == 0x4411E0 && rnd() % 2) {     /* on a slope: a floor height of any value */
+                    mo_floor(pl, 1);
+                    s32 cx = S16(pl + 0x40), cz = S16(pl + 0x44);
+                    int odd = rnd() % 2;                    /* (or where its level is off by the rounding) */
+                    S16(p + 0x42) = -0x7000;                 /* (above it all: Floor_Height looks down) */
+                    for (int t = 0; t < 600; t++) {
+                        S16(p + 0x40) = (s16)(cx + (s32)(rnd() % 4000) - 2000); S16(p + 0x44) = (s16)(cz + (s32)(rnd() % 4000) - 2000);
+                        s32 fh = (s16)Floor_Height(p + 0x40, p + 0x40, 0x80, 0);
+                        if (!odd || fh / -1000 != fh / -999) break;
+                    }
+                }
+                if (rnd() % 2) U16(pl + 0x92) = (u16)(0x2B + rnd() % 5);   /* about its last frame flying */
+                s16 fl = (s16)Floor_Height(pl + 0x40, pl + 0x40, 0x80, 0);
+                if (rnd() % 2) S16(pl + 0x42) = tri_about(fl - 0x1F4 - 0x40);
+                if (rnd() % 2) S16(p + 0x42) = tri_about((s16)Floor_Height(p + 0x40, p + 0x40, 0x80, 0));
+                if (rnd() % 2) U16(pl + 0xE2) = U16(pl + 0x42);
+            } else a[0] = o;
+            U8(G() + 0x108E) = rnd() % 3; U8(G() + 0x108F) = rnd() % 2 ? rnd() % 9 : (u8)rnd();
+            for (u32 j = 0; j < 20; j++) if (rnd() % 2) U8(O_K2 + j * 0xAC + 0x50) &= ~1;
+            if (rnd() % 2) { U16(o + 0xF0) = (u16)(rnd() % 0x600 - 0x300); U16(o + 0xF2) = (u16)(rnd() % 0x600 - 0x300); U16(o + 0xF4) = (u16)(rnd() % 0x600 - 0x300); }
+            if (rnd() % 3 == 0) U16(o + 0xF4) = (u16[]){0, 0x50, 0x64, 0x78, 0xC8, 0xDC}[rnd() % 6] + rnd() % 0x30 - 0x18;
+            U16(0x87DC12) = rnd() % 2 ? 0 : (u16)rnd();
+            if (rnd() % 3 == 0) S16(pl + 0x108) = (s16)(Damage_Scale(0x64) + rnd() % 3 - 1);   /* its last bit of health */
+            if (f->addr == 0x4412B0 && rnd() % 2)           /* the player turned away by about the limit */
+                U16(pl + 0x4A) = (u16)((U16(o + 0x4A) + (rnd() % 2 ? 1 : -1) * (0x3FF + (s32)(rnd() % 3))) & 0xFFF);
+            if (f->addr == 0x441440 && rnd() % 4 == 0)      /* left with none */
+                S16(o + 0x108) = (s16)(U16(o + 0x176) / 5 + rnd() % 3 - 1);
+            if ((f->addr == 0x441A20 || f->addr == 0x441BD0) && rnd() % 2)   /* sinking at about its speed */
+                U16(o + 0xF2) = (u16)((f->addr == 0x441A20 ? 0x4B : 0x58) + (s32)(rnd() % 7) - 3);
+            if (f->addr == 0x440880 || f->addr == 0x440D80) mo_floor(o, 0);   /* (and no root motion to leave it, below) */
+            if (f->addr == 0x440D80) {                      /* the seize: reaching the player, its point, letting go */
+                if (rnd() % 2) U32(o + 0x13C) = 0x7D0 + rnd() % 3 - 1;
+                if (rnd() % 3 == 0) U16(o + 0x42) = (u16)(U16(pl + 0x42) - 0x3EC + (s32)(rnd() % 0x29) - 0x14);
+                if (rnd() % 2) {
+                    U16(o + 0x1F2) = (u16)(U16(o + 0x40) + 5000 + (s32)(rnd() % 3) - 1); U16(o + 0x1F6) = U16(o + 0x44);
+                    for (u32 j = 0xE8; j < 0xEE; j += 2) U16(o + j) = U16(pl + j) = 0;
+                }
+            }
+            if ((f->addr == 0x441A20 || f->addr == 0x441BD0) && rnd() % 2)   /* about the bottom */
+                S16(o + 0x42) = tri_about((s16)Floor_Height(o + 0x40, o + 0x40, 0x40, 0) - S16(o + 0x1EE));
+            tri_rand8();
+            anim_maybe_end(o);
+            if (a[0] == pl) anim_maybe_end(pl);
+            if (rnd() % 2) U16(o + 0x102) |= 0x20;
+            if (f->addr == 0x440880 || f->addr == 0x440D80) U16(o + 0x102) &= ~0x40;
+            U32(LOG_BASE) = 0;
+            sprintf(g_what, "mosa %X %s step %u side %u frame %X bits %X", o, f->name, U8(o + 0x56), U8(o + 0x57), U16(o + 0x92), U32(b));
+            check(f->addr, f->fn, f->name, 1, a, 0);
+        }
+    }
+    player_tables_stub(0);
+    mo_tables_stub(0);
+    stubs_install(0);
+    g_ign_objpads = 0;
+}
+
 static void test_game(void)
 {
     stubs_install(1);
@@ -8970,7 +9346,7 @@ __declspec(dllexport) void harness_main(int argc, char **argv)
         {"flags", test_flags}, {"geometry", test_geom}, {"script values", test_script_values},
         {"script opcodes", test_script_ops}, {"script objects", test_objects},
         {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"objects 2", test_object}, {"collision", test_collision}, {"player", test_player}, {"player states", test_player2}, {"zones", test_zones}, {"loading", test_room}, {"title", test_title}, {"game task", test_game}, {"doors", test_doors}, {"frame", test_frame}, {"enemy sets", test_enemyset}, {"enemies", test_enemies}, {"raptor", test_raptor}, {"oviraptor", test_ovi}, {"allosaurus", test_allo}, {"pteranodon", test_ptera}, {"tyrannosaurus", test_trex}, {"plesiosaurus", test_plesio}, {"water plesiosaurs", test_pw}, {"roamer", test_roam}, {"giganotosaurus", test_gig},
-    {"inostrancevia", test_ino}, {"triceratops", test_tri}, {"aot kinds", test_aot_kinds}, {"object effects", test_obj_effects}, {"effect slots", test_k2}, {"effect drops", test_k2_drops}, {"effect emitters", test_eff_slots}, {"effect slots 3", test_k2_more}, {"helpers", test_helpers}, {"draw", test_draw}, {"pc gpu", test_pcgpu}, {"pc draw", test_pcdraw}, {"pc frame", test_pcframe},
+    {"inostrancevia", test_ino}, {"triceratops", test_tri}, {"mosasaurus", test_mosa}, {"aot kinds", test_aot_kinds}, {"object effects", test_obj_effects}, {"effect slots", test_k2}, {"effect drops", test_k2_drops}, {"effect emitters", test_eff_slots}, {"effect slots 3", test_k2_more}, {"helpers", test_helpers}, {"draw", test_draw}, {"pc gpu", test_pcgpu}, {"pc draw", test_pcdraw}, {"pc frame", test_pcframe},
     };
     for (unsigned i = 0; i < sizeof T / sizeof T[0]; i++) {
         int f0 = g_fail, t0 = g_tests;

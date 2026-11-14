@@ -134,7 +134,8 @@
  *  Plesiosaurus, 6 E40 Giganotosaurus (src/game/gigano.c; kind 1 the bridge scene of
  *  room 503: sections are quads at 0x720D38 - 0x10*i, event flags 7/0x12..0x18 the
  *  broken ones), 7 E90 Oviraptor, 8 E60 Allosaurus,
- *  9 E70 Triceratops (src/game/tricera.c, handler 0x43CF30), 10 E80 Mosasaurus, 11/12 E31/E32 (plesiosaurs in the
+ *  9 E70 Triceratops (src/game/tricera.c, handler 0x43CF30),
+ *  10 E80 Mosasaurus (src/game/mosa.c, handler 0x43F820), 11/12 E31/E32 (plesiosaurs in the
  *  water: at the surface / under it, src/game/plesio2.c), 13 EA0 Compsognathus, 14 E50 Inostrancevia
  *  (src/game/inostr.c; handler 0x437230 straight in the table, no type wrapper)
  *  (E<k>0 = entry k of the game's dinosaur list; model sizes agree);

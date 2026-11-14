@@ -1252,6 +1252,47 @@ void DC2CALL Tri_Dust(gptr o);          /* 0x43ECC0 */
 void DC2CALL Tri_Phase(gptr o);         /* 0x43EDD0 */
 void DC2CALL Tri_Debris(gptr o, u32 side); /* 0x43F6D0 */
 
+/* the mosasaurus (type 10), src/game/mosa.c */
+void DC2CALL Mosa_Handler(gptr o);      /* 0x43F820 */
+void DC2CALL Mosa_Init(gptr o);         /* 0x43FB00 */
+void DC2CALL Mosa_Normal(gptr o);       /* 0x43FCA0 */
+void DC2CALL Mosa_Hit(gptr o);          /* 0x43FCD0 */
+void DC2CALL Mosa_Die(gptr o);          /* 0x43FCF0 */
+void DC2CALL Mosa_Grab(gptr o);         /* 0x43FD10 */
+void DC2CALL Mosa_ThinkSwim(gptr o);    /* 0x43FD40 */
+void DC2CALL Mosa_Swim(gptr o);         /* 0x43FDB0 */
+void DC2CALL Mosa_ThinkRush(gptr o);    /* 0x43FE50 */
+void DC2CALL Mosa_Rush(gptr o);         /* 0x43FEB0 */
+void DC2CALL Mosa_ThinkTurn(gptr o);    /* 0x43FF60 */
+void DC2CALL Mosa_Turn(gptr o);         /* 0x43FFD0 */
+void DC2CALL Mosa_ThinkPitch(gptr o);   /* 0x440070 */
+void DC2CALL Mosa_Pitch(gptr o);        /* 0x4400E0 */
+u32  DC2CALL Mosa_Decide(gptr o);       /* 0x440180 */
+void DC2CALL Mosa_Dive(gptr o);         /* 0x4405A0 */
+void DC2CALL Mosa_ThinkLunge(gptr o);   /* 0x4406F0 */
+void DC2CALL Mosa_Lunge(gptr o);        /* 0x440710 */
+void DC2CALL Mosa_Leap(gptr o);         /* 0x440880 */
+void DC2CALL Mosa_PlThrown(gptr pl);    /* 0x440AF0 */
+void DC2CALL Mosa_ThinkSeize(gptr o);   /* 0x440D30 */
+void DC2CALL Mosa_Seize(gptr o);        /* 0x440D80 */
+void DC2CALL Mosa_PlDrop(gptr pl);      /* 0x4411E0 */
+void DC2CALL Mosa_LungeHit(gptr o);     /* 0x4412B0 */
+void DC2CALL Mosa_SeizeHit(gptr o);     /* 0x441340 */
+void DC2CALL Mosa_Damage(gptr o);       /* 0x441440 */
+void DC2CALL Mosa_Flinch(gptr o);       /* 0x4416B0 */
+void DC2CALL Mosa_Flinch2(gptr o);      /* 0x441720 */
+void DC2CALL Mosa_HitDive(gptr o);      /* 0x4417B0 */
+void DC2CALL Mosa_Knock(gptr o);        /* 0x441830 */
+void DC2CALL Mosa_Knock2(gptr o);       /* 0x4418F0 */
+void DC2CALL Mosa_HitDive2(gptr o);     /* 0x4419A0 */
+void DC2CALL Mosa_Dead(gptr o);         /* 0x441A20 */
+void DC2CALL Mosa_Dead2(gptr o);        /* 0x441BD0 */
+u32  DC2CALL Mosa_Timer(gptr o);        /* 0x441D90 */
+void DC2CALL Mosa_Bite(gptr o);         /* 0x441E30 */
+void DC2CALL Mosa_Release(gptr o);      /* 0x441E80 */
+void DC2CALL Mosa_PitchTo(gptr o, u32 max, gptr p); /* 0x441EE0 */
+u32  DC2CALL Mosa_PitchDiff(gptr from, gptr p, u32 cur); /* 0x441F40 */
+
 void DC2CALL Ples12_Remove(gptr o);                /* 0x430E50 */
 void DC2CALL Ples12_Type(gptr o);                  /* 0x430360 */
 void DC2CALL Ples12_Handler(gptr o);               /* 0x430370 */

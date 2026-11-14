@@ -12,6 +12,7 @@
 #define ORIG_LIST(F, V) \
     F(u32, Strm_Open,     0x4BFC10, (gptr data, u32 size, u32 a), (data, size, a)) \
     V(Fn_4BF130,          0x4BF130, (u32 a), (a)) \
+    V(Fn_454950,          0x454950, (gptr o, gptr out, u32 mask), (o, out, mask)) \
     F(u32, Fn_4BF330,     0x4BF330, (void), ()) \
 
 #define ORIG_DECL_F(ret, name, addr, params, args) ret DC2CALL name params;
