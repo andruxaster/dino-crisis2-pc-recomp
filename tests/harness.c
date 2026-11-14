@@ -9283,6 +9283,260 @@ static void test_compso(void)
     g_ign_objpads = 0;
 }
 
+/* ---- the extra game's playable dinosaurs: shared, the inostrancevia (types 41/42) ---- */
+static const u32 g_ki_t[2] = {0x722B08, 0x722C68}, g_ki_v[2] = {0x74B2D8, 0x74B330};
+static const u32 g_ki_m[2] = {0x662500, 0x638000}, g_ki_foe[2] = {2, 1};
+static const u32 g_ki_pad[2][2] = {{0x87DC94, 0x87DC08}, {0x87DC92, 0x87DE0A}};
+static u32 g_ki_saved[2][54];
+/* the 54 entries from t+0x60 (state, pick, move, hit, die, landing) as recorders 1..30:
+   the tables one function calls together never share one */
+static int ki_rec(u32 e) { return e < 24 ? 1 + (int)e : e < 44 ? (int)e - 19 : (int)e - 23; }
+static void ki_tables_stub(int on)
+{
+    for (int k = 1; k <= 30; k++) g_stubs[k].spec = on ? "d" : "";
+    for (int c = 0; c < 2; c++)
+        for (u32 e = 0; e < 54; e++) {
+            gptr a = g_ki_t[c] + 0x60 + 4 * e;
+            if (on) { g_ki_saved[c][e] = U32(a); U32(a) = (u32)(uintptr_t)g_recs[ki_rec(e)]; }
+            else U32(a) = g_ki_saved[c][e];
+        }
+}
+
+/* pad words: a few buttons, now and then anything */
+static u16 ki_pad(void)
+{
+    u16 b = 0;
+    for (int n = rnd() % 4; n; n--) b |= (u16)(1u << (rnd() % 16));
+    return rnd() % 8 ? b : (u16)rnd();
+}
+
+/* the inostrancevia of copy c among the test objects (animated: its parts
+   from anim_setup_at), its variables, pads and the other player */
+static gptr ki_setup(int c, int anim)
+{
+    gptr o = raptor_setup(), v = g_ki_v[c];
+    if (anim) { anim_setup_at(o); anim_maybe_end(o); U8(o + 0xFD) &= 1; }
+    else trex_parts(o);
+    aim_desc_setup(0);
+    U32(0x87E760) = O_OBJ;
+    gptr foe = O_OBJ + g_ki_foe[c] * 0x260;
+    U8(foe + 0xFF) = (u8)g_ki_foe[c];                   /* (its own index: the head looks at it) */
+    U8(o + 0x54) = rnd() % 4 ? 1 + rnd() % 3 : rnd() % 4;
+    U8(o + 0x55) = rnd() % 4 ? rnd() % 10 : (u8)rnd();
+    U8(o + 0x56) = rnd() % 4 ? rnd() % 3 : (u8)rnd();
+    U8(o + 0x57) = rnd() % 3 ? rnd() % 2 : (u8)(rnd() % 0x20);
+    U16(o + 0x92) = rnd() % 4 ? rnd() % 0x50 : (u16)rnd();
+    U16(o + 0x10A) = rnd() % 2 ? 0x4B0 : (u16)(rnd() % 0x800);
+    S16(o + 0x108) = (s16)(rnd() % 2 ? (u32)(S16(o + 0x10A) >> 1) + rnd() % 5 - 2 : rnd() % 3 ? rnd() % 0x800 - 0x10 : rnd());
+    U16(o + 0x176) = rnd() % 2 ? rnd() % 0x200 : (u16)rnd();
+    if (rnd() % 4 == 0) U16(o + 0x176) = (u16)(S16(o + 0x108) + rnd() % 3 - 1);
+    U32(o + 0x184) = rnd() % 2 ? rnd() & 9 : rnd();
+    U8(o + 0x15F) = rnd() % 4 ? 3 : (u8)(rnd() % 16);       /* (a part of its chain: Head_Update needs it) */
+    U8(o + 0x17B) = rnd() % 3 ? 0 : (u8)rnd();
+    U32(o + 0x50) = rnd() % 2 ? (U32(o + 0x50) & ~0x38u) | (rnd() & 0x38) : rnd();
+    U16(g_ki_pad[c][0]) = ki_pad(); U16(g_ki_pad[c][1]) = ki_pad();
+    U16(v) = ki_pad();
+    U32(v + 8) = rnd() % 4 ? rnd() & 0x5A : rnd();
+    U16(v + 0x10) = rnd() % 5;
+    U16(v + 0x40) = rnd() % 2 ? 0 : (u16)rnd();
+    for (u32 k = 0x48; k < 0x4E; k += 2) U16(v + k) = (u16)(S16(o + 0x40 + k - 0x48) + rnd() % 8000 - 4000);
+    U32(v + 0x50) = rnd() % 5 ? foe : o;
+    U16(v + 0x54) = ki_pad();
+    static const s16 ang[] = {0, 1, -1, 0x4FF, 0x500, -0x4FF, -0x500, 0x7FF, -0x800};
+    S16(v + 0x56) = rnd() % 2 ? ang[rnd() % 9] : (s16)rnd();
+    gptr cb = g_ki_t[c] + 0x50;                         /* the button sequence: 0x10 0x10 0x4000 0x20 */
+    U16(cb) = rnd() % 4; U16(cb + 2) = rnd() % 3 ? rnd() % 12 : (u16)rnd();
+    if (rnd() % 3 == 0) {                               /* its last button now: the super move, at about half health */
+        U16(cb) = 3; U16(cb + 2) = 2 + rnd() % 9; U16(v) = (u16)(0x20 | (rnd() % 2 ? ki_pad() : 0));
+        S16(o + 0x108) = (s16)((S16(o + 0x10A) >> 1) + rnd() % 3 - 1);
+    }
+    else if (rnd() % 4 == 0) {                          /* the super move on, health about full */
+        U32(v + 8) |= 0x40; S16(o + 0x108) = (s16)(S16(o + 0x10A) - rnd() % 3);
+    }
+    U8(G() + 0x927) = rnd() % 3;
+    U32(0x87E4A4) = rnd();
+    if (rnd() % 2) { U16(o + 0xD8) = U16(foe + 0x40); U16(o + 0xDA) = U16(foe + 0x42); U16(o + 0xDC) = U16(foe + 0x44); }
+    if (rnd() % 2) {                                    /* about facing the point turned to */
+        s32 d = (s32[]){0, 1, 0x95, 0x96, 0x97, 0x800}[rnd() % 6] * (rnd() % 2 ? 1 : -1);
+        U16(o + 0x4A) = (u16)((Angle_XZ(o + 0x40, v + 0x48) + d) & 0xFFF);
+    }
+    return o;
+}
+
+/* the other player right at o (its parts too), open to hits: the attacks land */
+static void ki_close(gptr o, gptr foe)
+{
+    U32(foe + 0x50) |= 8; U8(foe + 0x17B) = 0;
+    for (u32 j = 0x40; j < 0x46; j += 2) S16(foe + j) = (s16)(S16(o + j) + rnd() % 200 - 100);
+    for (gptr q = U32(foe + 0x64); q; q = U32(q + 0x54))
+        for (u32 j = 0x40; j < 0x46; j += 2) S16(q + j) = (s16)(S16(o + j) + rnd() % 400 - 200);
+}
+
+/* a state of Rand8 (0x87DE10) whose next value is r */
+static u16 ki_seed(u8 r)
+{
+    for (u32 k = 0, v = rnd() & 0xFFFF; k < 0x10000; k++, v = (v + 1) & 0xFFFF) {
+        u8 hi = (u8)((v * 3u) >> 8);
+        u16 n = (u16)(hi << 8 | (u8)(v + hi));
+        if (n == v) n += 0x101;
+        if ((u8)n == r) return (u16)v;
+    }
+    return 0;
+}
+
+typedef struct { u32 addr; void *fn[2]; const char *name; u8 anim, s55; } KiFn;
+
+static void test_kof_ino(void)
+{
+    g_ign_objpads = 1;
+    stubs_install(1);
+    ki_tables_stub(1);
+    static const KiFn fn[] = {
+        {0x45D410, {KIno1_Normal, KIno2_Normal}, "Normal", 0, 10}, {0x45D500, {KIno1_Hit, KIno2_Hit}, "Hit", 0, 10},
+        {0x45D520, {KIno1_Die, KIno2_Die}, "Die", 0, 10}, {0x45D540, {KIno1_Attack, KIno2_Attack}, "Attack", 0, 10},
+        {0x45D590, {KIno1_PickStand, KIno2_PickStand}, "PickStand", 0, 0}, {0x45D680, {KIno1_Stand, KIno2_Stand}, "Stand", 1, 0},
+        {0x45D6F0, {KIno1_PickWalk, KIno2_PickWalk}, "PickWalk", 0, 0}, {0x45D7C0, {KIno1_Walk, KIno2_Walk}, "Walk", 1, 0},
+        {0x45D830, {KIno1_Turn, KIno2_Turn}, "Turn", 1, 0}, {0x45D920, {KIno1_PickOn, KIno2_PickOn}, "PickOn", 0, 0},
+        {0x45D9E0, {KIno1_On, KIno2_On}, "On", 1, 0}, {0x45DA50, {KIno1_PickBack, KIno2_PickBack}, "PickBack", 0, 0},
+        {0x45DB10, {KIno1_Back, KIno2_Back}, "Back", 1, 0}, {0x45DB80, {KIno1_Roar, KIno2_Roar}, "Roar", 1, 0},
+        {0x45DC20, {KIno1_About, KIno2_About}, "About", 1, 0}, {0x45DD50, {KIno1_Steer7, KIno2_Steer7}, "Steer7", 0, 0},
+        {0x45DD80, {KIno1_Bite, KIno2_Bite}, "Bite", 1, 0}, {0x45DE30, {KIno1_PickBite2, KIno2_PickBite2}, "PickBite2", 1, 0},
+        {0x45DE80, {KIno1_Bite2, KIno2_Bite2}, "Bite2", 1, 0}, {0x45DF30, {KIno1_Steer9, KIno2_Steer9}, "Steer9", 0, 0},
+        {0x45DF60, {KIno1_Lunge, KIno2_Lunge}, "Lunge", 1, 0}, {0x45E030, {KIno1_Land7, KIno2_Land7}, "Land7", 0, 0},
+        {0x45E060, {KIno1_Land8, KIno2_Land8}, "Land8", 0, 0}, {0x45E090, {KIno1_Land9, KIno2_Land9}, "Land9", 0, 0},
+        {0x45E0B0, {KIno1_Hurt, KIno2_Hurt}, "Hurt", 0, 10}, {0x45E290, {KIno1_Flinch8, KIno2_Flinch8}, "Flinch8", 1, 0},
+        {0x45E300, {KIno1_Flinch9, KIno2_Flinch9}, "Flinch9", 1, 0}, {0x45E370, {KIno1_Dying, KIno2_Dying}, "Dying", 1, 0}};
+    for (int i = 0; i < iters; i++) {
+        u32 a[5];
+        gptr o;
+        /* a button sequence */
+        for (int k = 0; k < 4; k++) {
+            gptr cb = G_SCR + 0x100 * (rnd() % 12);
+            u32 n = 1 + rnd() % 5;
+            for (u32 j = 0; j < 8; j++) U16(cb + 4 + 2 * j) = j < n ? (u16)(1u << (rnd() % 16)) : 0xFFFF;
+            if (rnd() % 4 == 0) U16(cb + 4 + 2 * (rnd() % 8)) = (u16)rnd();
+            U16(cb) = (u16)(rnd() % 4 ? rnd() % (n + 1) : rnd() % 8);
+            U16(cb + 2) = rnd() % 3 ? rnd() % 12 : (u16)rnd();
+            a[0] = cb; a[1] = rnd() % 2 ? U16(cb + 4 + 2 * U16(cb)) | (rnd() % 2 ? ki_pad() : 0) : rnd();
+            sprintf(g_what, "combo step %u left %u pad %X", U16(cb), U16(cb + 2), a[1]);
+            check(0x418F40, Combo_Input, "Combo_Input", 2, a, 0xFFFFFFFF);
+        }
+        /* the super move: the shout by mode, stage and kind */
+        for (int k = 0; k < 4; k++) {
+            game_state(); world_setup();
+            o = O_OBJ + 0x260 * (rnd() % 16); a[0] = o;
+            U8(o + 0x58) = (u8)(rnd() % 4 ? 0x1C + rnd() % 0x10 : rnd());
+            U8(0x87E747) = rnd() % 3; U8(0x87EEAF) = (u8)(rnd() % 4 ? 3 + rnd() % 11 : rnd());
+            U32(LOG_BASE) = 0;
+            sprintf(g_what, "super type %X mode %u stage %u", U8(o + 0x58), U8(0x87E747), U8(0x87EEAF));
+            check(0x418FA0, Kof_Super, "Kof_Super", 1, a, 0);
+        }
+        /* the other player hit, and a playable dinosaur's attack spheres */
+        for (int k = 0; k < 4; k++) {
+            game_state(); world_setup();
+            o = ki_setup(rnd() % 2, 0);
+            targets_setup(); aim_desc_setup(rnd() % 2);
+            U32(G() + 0x948) = O_K3; U16(O_K3 + 0x18) = (u16)(0x200 + rnd() % 0x900);
+            u32 slot = rnd() % 4 ? (u32[]){0x1F, 2, 5, 0}[rnd() % 4] : rnd() % 0x23;
+            gptr e = 0x737A90 + slot * 0x24;
+            if (rnd() % 2) {                            /* a record as an attack makes it */
+                U32(e + 0xC) = (0x800 + (u32[]){0, 1, 2, 0x100}[rnd() % 4]) | (rnd() % 4 ? 0 : rnd() & 0xFFFF0000u);
+                U16(e + 0x10) = 0; U16(e + 0x12) = 0;
+                U16(e) = 0; U16(e + 2) = (u16)(rnd() % 2000);  /* (one radius: the cone tests divide by its spread) */
+                u16 r = (u16)(rnd() % 800); for (u32 j = 4; j < 0xC; j += 2) U16(e + j) = r;
+            }
+            if (rnd() % 4 == 0) U32(e + 0xC) = rnd() & 0xD00;
+            gptr m = G_SCR + 0x40;
+            S16(G_SCR + 0x60) = (s16)(rnd() % 0x1000); S16(G_SCR + 0x62) = (s16)(rnd() % 0x1000); S16(G_SCR + 0x64) = (s16)(rnd() % 0x1000);
+            if (rnd() % 2) { S16(G_SCR + 0x60) = 0; S16(G_SCR + 0x64) = 0; }
+            RotMatrix(G_SCR + 0x60, m);
+            a[0] = m; a[1] = o + 0x40; a[2] = slot; a[3] = rnd() % 4 ? 1 + rnd() % 2 : rnd() % 16;
+            if (rnd() % 2) ki_close(o, O_OBJ + 0x260 * a[3]);
+            if (rnd() % 2) U16(0x87DE10) = ki_seed((u8[]){0xBF, 0xC0, 0xC1}[rnd() % 3]);   /* the critical hit's limit */
+            U32(LOG_BASE) = 0;
+            sprintf(g_what, "hit foe %u slot %X", a[3], slot);
+            check(0x47B9E0, Kof_HitFoe, "Kof_HitFoe", 4, a, 0xFFFFFFFF);
+
+            game_state(); world_setup();
+            o = ki_setup(rnd() % 2, 0);
+            targets_setup(); aim_desc_setup(rnd() % 2);
+            U32(G() + 0x948) = O_K3; U16(O_K3 + 0x18) = (u16)(0x200 + rnd() % 0x900);
+            if (rnd() % 8) trex_spheres(o, 1 + rnd() % 4);
+            else U16(o + 0x102) = (u16)rnd();
+            a[0] = o;
+            a[1] = rnd() % 4 ? (u32[]){0, 1, 2}[rnd() % 3] : rnd() % 3 ? 0x100 | rnd() % 3 : rnd() % 16;   /* (only the low byte counts) */
+            a[2] = rnd() % 6 ? 1 + rnd() % 0x200 : rnd() % 2 ? 0 : 0x10000;
+            a[3] = rnd() % 4 ? rnd() % 4 : (u32[]){4, 0xFFFF, 0x10002, 0x8000}[rnd() % 4];
+            a[4] = rnd() % 4 ? 0x1F : rnd() % 2 ? 0x100 | (rnd() % 0x23) : (u32[]){2, 5}[rnd() % 2];
+            if (rnd() % 2 && (a[1] & 0xFF) && (a[1] & 0xFF) < 16) ki_close(o, O_OBJ + 0x260 * (a[1] & 0xFF));
+            U32(LOG_BASE) = 0;
+            sprintf(g_what, "attack foe %X dmg %X react %X slot %X frame %u 102 %X", a[1], a[2], a[3], a[4], U16(o + 0x92), U16(o + 0x102));
+            check(0x47CB20, Kof_Attack, "Kof_Attack", 5, a, 0);
+        }
+        /* both copies: the states, picks and moves */
+        for (unsigned k = 0; k < 2 * sizeof fn / sizeof fn[0]; k++) {
+            const KiFn *f = &fn[k % (sizeof fn / sizeof fn[0])];
+            int c = rnd() % 2;
+            game_state(); world_setup(); mo_zones();
+            o = ki_setup(c, f->anim); a[0] = o;
+            if (f->s55) U8(o + 0x55) = (u8)(rnd() % f->s55);
+            if (f->addr == 0x45DC20) U8(o + 0x57) = rnd() % 2;            /* (the side: a table of two) */
+            if (f->addr == 0x45D540 && rnd() % 4) trex_spheres(o, 1 + rnd() % 4);
+            if (f->addr == 0x45D540 && rnd() % 2) ki_close(o, O_OBJ + g_ki_foe[c] * 0x260);
+            if (f->addr == 0x45E370) U8(o + 0x56) = rnd() % 4;
+            if (rnd() % 2) S16(o + 0xF4) = (s16)((s16[]){0x3C, -0x1E, 0x78}[rnd() % 3] + rnd() % 0x2B - 0x15);   /* about a top speed */
+            if (f->addr == 0x45D830 && rnd() % 2) U8(o + 0x57) = (u8)(0x12 + rnd() % 3);   /* the turn's 20 frames */
+            if (f->addr == 0x45DE30 && rnd() % 2) {     /* the second bite going on: 0x20 held, about frame 0x17 */
+                U16(g_ki_v[c] + 0x54) |= 0x20; U16(o + 0x92) = (u16)(0x16 + rnd() % 3);
+            }
+            if (f->anim && rnd() % 2) {            /* the frames that matter */
+                static const u16 fr[] = {0x9, 0xA, 0xD, 0xE, 0x13, 0x23, 0x2C, 0x30, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1C, 0x1D, 0x24, 0x25, 0x26,
+                                         0x2A, 0x2B, 0x2D, 0x31, 0x32, 0x35, 0x36, 0x40, 0x41};
+                U16(o + 0x92) = fr[rnd() % (sizeof fr / sizeof fr[0])];
+                U16(o + 0x102) |= 0x20;                 /* (not at its end: the frame stays) */
+            }
+            U32(LOG_BASE) = 0;
+            sprintf(g_what, "kino%d %X %s state %08X v8 %X held %X pad %X frame %u", c + 1, o, f->name, U32(o + 0x54),
+                    U32(g_ki_v[c] + 8), U16(g_ki_v[c] + 0x54), U16(g_ki_v[c]), U16(o + 0x92));
+            check(f->addr + c * 0x1330, f->fn[c], f->name, 1, a, 0);
+        }
+        /* the handler */
+        for (int k = 0; k < 4; k++) {
+            int c = rnd() % 2;
+            game_state(); world_setup(); mo_zones();
+            o = ki_setup(c, 0); a[0] = o;
+            if (rnd() % 2) trex_spheres(o, 1 + rnd() % 3);
+            U8(o + 0x54) = rnd() % 4;
+            U8(o + 0x55) %= 10;                          /* (a hit calls the table of its 10 moves) */
+            if (rnd() % 2 && U8(o + 0x15F) < 16) {      /* the head about +-0x500 from the other player */
+                gptr hp = AN_PART + U8(o + 0x15F) * 0x80, foe = O_OBJ + g_ki_foe[c] * 0x260;
+                s32 d = (s32[]){0x4FF, 0x500, 0x501}[rnd() % 3] * (rnd() % 2 ? 1 : -1);
+                U16(o + 0x4A) = (u16)((Angle_XZ(hp + 0x40, foe + 0x40) - d) & 0xFFF);
+            }
+            U32(LOG_BASE) = 0;
+            sprintf(g_what, "kino%d %X handler state %08X flags %X", c + 1, o, U32(o + 0x54), U32(o + 0x50));
+            check(0x45D100 + c * 0x1330, c ? (void *)KIno2_Handler : (void *)KIno1_Handler, "KIno_Handler", 1, a, 0);
+        }
+        /* set up: 16 parts, as its standing animation */
+        {
+            int c = rnd() % 2;
+            game_state(); world_setup(); mo_zones();
+            o = ki_setup(c, 0); a[0] = o;
+            gptr md = g_ki_m[c];
+            do model_data(md); while (U32(md + 0x14) != 16);
+            do anim_setup_at(AN_OBJ); while (U32(AN_OBJ + 0x68) != 16);
+            memcpy(MEM(o + 0x60), MEM(AN_OBJ + 0x60), 0x50);
+            U32(md + 0x2350 + 0x16 * 4) = AN_DATA;
+            U32(LOG_BASE) = 0;
+            sprintf(g_what, "kino%d %X init y %X", c + 1, o, U16(o + 0x42));
+            check(0x45D2C0 + c * 0x1330, c ? (void *)KIno2_Init : (void *)KIno1_Init, "KIno_Init", 1, a, 0);
+        }
+    }
+    ki_tables_stub(0);
+    stubs_install(0);
+    g_ign_objpads = 0;
+}
+
 static void test_game(void)
 {
     stubs_install(1);
@@ -9458,7 +9712,7 @@ __declspec(dllexport) void harness_main(int argc, char **argv)
         {"flags", test_flags}, {"geometry", test_geom}, {"script values", test_script_values},
         {"script opcodes", test_script_ops}, {"script objects", test_objects},
         {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"objects 2", test_object}, {"collision", test_collision}, {"player", test_player}, {"player states", test_player2}, {"zones", test_zones}, {"loading", test_room}, {"title", test_title}, {"game task", test_game}, {"doors", test_doors}, {"frame", test_frame}, {"enemy sets", test_enemyset}, {"enemies", test_enemies}, {"raptor", test_raptor}, {"oviraptor", test_ovi}, {"allosaurus", test_allo}, {"pteranodon", test_ptera}, {"tyrannosaurus", test_trex}, {"plesiosaurus", test_plesio}, {"water plesiosaurs", test_pw}, {"roamer", test_roam}, {"giganotosaurus", test_gig},
-    {"inostrancevia", test_ino}, {"triceratops", test_tri}, {"mosasaurus", test_mosa}, {"compsognathus", test_compso}, {"aot kinds", test_aot_kinds}, {"object effects", test_obj_effects}, {"effect slots", test_k2}, {"effect drops", test_k2_drops}, {"effect emitters", test_eff_slots}, {"effect slots 3", test_k2_more}, {"helpers", test_helpers}, {"draw", test_draw}, {"pc gpu", test_pcgpu}, {"pc draw", test_pcdraw}, {"pc frame", test_pcframe},
+    {"inostrancevia", test_ino}, {"triceratops", test_tri}, {"mosasaurus", test_mosa}, {"compsognathus", test_compso}, {"duel inostrancevia", test_kof_ino}, {"aot kinds", test_aot_kinds}, {"object effects", test_obj_effects}, {"effect slots", test_k2}, {"effect drops", test_k2_drops}, {"effect emitters", test_eff_slots}, {"effect slots 3", test_k2_more}, {"helpers", test_helpers}, {"draw", test_draw}, {"pc gpu", test_pcgpu}, {"pc draw", test_pcdraw}, {"pc frame", test_pcframe},
     };
     for (unsigned i = 0; i < sizeof T / sizeof T[0]; i++) {
         int f0 = g_fail, t0 = g_tests;

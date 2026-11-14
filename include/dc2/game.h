@@ -1306,6 +1306,72 @@ void DC2CALL Compso_Hurt    (gptr o);     /* 0x445920 */
 void DC2CALL Compso_Fade    (gptr o);     /* 0x445980 */
 void DC2CALL Flash_Full     (gptr o);      /* 0x4459A0 */
 void DC2CALL Flash_Quads    (gptr o);     /* 0x445A60 */
+/* kof.c: the extra game's playable dinosaurs, shared */
+u32  DC2CALL Combo_Input(gptr c, u32 pad);                         /* 0x418F40 */
+void DC2CALL Kof_Super(gptr o);                                    /* 0x418FA0 */
+u32  DC2CALL Kof_HitFoe(gptr m, gptr pos, u32 slot, u32 foe);      /* 0x47B9E0 */
+void DC2CALL Kof_Attack(gptr o, u32 foe, u32 dmg, u32 react, u32 slot); /* 0x47CB20 */
+/* kof_ino.c: the inostrancevia of the duel (types 41/42) */
+void DC2CALL KIno1_Handler(gptr o);             /* 0x45D100 */
+void DC2CALL KIno1_Init(gptr o);                /* 0x45D2C0 */
+void DC2CALL KIno1_Normal(gptr o);              /* 0x45D410 */
+void DC2CALL KIno1_Hit(gptr o);                 /* 0x45D500 */
+void DC2CALL KIno1_Die(gptr o);                 /* 0x45D520 */
+void DC2CALL KIno1_Attack(gptr o);              /* 0x45D540 */
+void DC2CALL KIno1_PickStand(gptr o);           /* 0x45D590 */
+void DC2CALL KIno1_Stand(gptr o);               /* 0x45D680 */
+void DC2CALL KIno1_PickWalk(gptr o);            /* 0x45D6F0 */
+void DC2CALL KIno1_Walk(gptr o);                /* 0x45D7C0 */
+void DC2CALL KIno1_Turn(gptr o);                /* 0x45D830 */
+void DC2CALL KIno1_PickOn(gptr o);              /* 0x45D920 */
+void DC2CALL KIno1_On(gptr o);                  /* 0x45D9E0 */
+void DC2CALL KIno1_PickBack(gptr o);            /* 0x45DA50 */
+void DC2CALL KIno1_Back(gptr o);                /* 0x45DB10 */
+void DC2CALL KIno1_Roar(gptr o);                /* 0x45DB80 */
+void DC2CALL KIno1_About(gptr o);               /* 0x45DC20 */
+void DC2CALL KIno1_Steer7(gptr o);              /* 0x45DD50 */
+void DC2CALL KIno1_Bite(gptr o);                /* 0x45DD80 */
+void DC2CALL KIno1_PickBite2(gptr o);           /* 0x45DE30 */
+void DC2CALL KIno1_Bite2(gptr o);               /* 0x45DE80 */
+void DC2CALL KIno1_Steer9(gptr o);              /* 0x45DF30 */
+void DC2CALL KIno1_Lunge(gptr o);               /* 0x45DF60 */
+void DC2CALL KIno1_Land7(gptr o);               /* 0x45E030 */
+void DC2CALL KIno1_Land8(gptr o);               /* 0x45E060 */
+void DC2CALL KIno1_Land9(gptr o);               /* 0x45E090 */
+void DC2CALL KIno1_Hurt(gptr o);                /* 0x45E0B0 */
+void DC2CALL KIno1_Flinch8(gptr o);             /* 0x45E290 */
+void DC2CALL KIno1_Flinch9(gptr o);             /* 0x45E300 */
+void DC2CALL KIno1_Dying(gptr o);               /* 0x45E370 */
+void DC2CALL KIno2_Handler(gptr o);             /* 0x45E430 */
+void DC2CALL KIno2_Init(gptr o);                /* 0x45E5F0 */
+void DC2CALL KIno2_Normal(gptr o);              /* 0x45E740 */
+void DC2CALL KIno2_Hit(gptr o);                 /* 0x45E830 */
+void DC2CALL KIno2_Die(gptr o);                 /* 0x45E850 */
+void DC2CALL KIno2_Attack(gptr o);              /* 0x45E870 */
+void DC2CALL KIno2_PickStand(gptr o);           /* 0x45E8C0 */
+void DC2CALL KIno2_Stand(gptr o);               /* 0x45E9B0 */
+void DC2CALL KIno2_PickWalk(gptr o);            /* 0x45EA20 */
+void DC2CALL KIno2_Walk(gptr o);                /* 0x45EAF0 */
+void DC2CALL KIno2_Turn(gptr o);                /* 0x45EB60 */
+void DC2CALL KIno2_PickOn(gptr o);              /* 0x45EC50 */
+void DC2CALL KIno2_On(gptr o);                  /* 0x45ED10 */
+void DC2CALL KIno2_PickBack(gptr o);            /* 0x45ED80 */
+void DC2CALL KIno2_Back(gptr o);                /* 0x45EE40 */
+void DC2CALL KIno2_Roar(gptr o);                /* 0x45EEB0 */
+void DC2CALL KIno2_About(gptr o);               /* 0x45EF50 */
+void DC2CALL KIno2_Steer7(gptr o);              /* 0x45F080 */
+void DC2CALL KIno2_Bite(gptr o);                /* 0x45F0B0 */
+void DC2CALL KIno2_PickBite2(gptr o);           /* 0x45F160 */
+void DC2CALL KIno2_Bite2(gptr o);               /* 0x45F1B0 */
+void DC2CALL KIno2_Steer9(gptr o);              /* 0x45F260 */
+void DC2CALL KIno2_Lunge(gptr o);               /* 0x45F290 */
+void DC2CALL KIno2_Land7(gptr o);               /* 0x45F360 */
+void DC2CALL KIno2_Land8(gptr o);               /* 0x45F390 */
+void DC2CALL KIno2_Land9(gptr o);               /* 0x45F3C0 */
+void DC2CALL KIno2_Hurt(gptr o);                /* 0x45F3E0 */
+void DC2CALL KIno2_Flinch8(gptr o);             /* 0x45F5C0 */
+void DC2CALL KIno2_Flinch9(gptr o);             /* 0x45F630 */
+void DC2CALL KIno2_Dying(gptr o);               /* 0x45F6A0 */
 
 void DC2CALL Ples12_Remove(gptr o);                /* 0x430E50 */
 void DC2CALL Ples12_Type(gptr o);                  /* 0x430360 */
