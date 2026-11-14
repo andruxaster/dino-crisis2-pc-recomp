@@ -8500,6 +8500,301 @@ static void test_ino(void)
     g_ign_objpads = 0;
 }
 
+/* ---- the triceratops (type 9) ---- */
+static const u32 g_tri_tabs[][2] = {{0x72110C, 5}, {0x721120, 6}, {0x721138, 6}, {0x721150, 4}, {0x721160, 4}, {0x721170, 6}};
+static u32 g_tri_saved[6][6];
+static void tri_tables_stub(int on)
+{
+    for (int k = 1; k <= 6; k++) g_stubs[k].spec = on ? "d" : "";
+    for (int t = 0; t < 6; t++)
+        for (u32 k = 0; k < g_tri_tabs[t][1]; k++) {
+            gptr a = g_tri_tabs[t][0] + 4 * k;
+            if (on) { g_tri_saved[t][k] = U32(a); U32(a) = (u32)(uintptr_t)g_recs[1 + k]; }
+            else U32(a) = g_tri_saved[t][k];
+        }
+}
+
+/* the next Rand8 (most of the time), returned; else -1 */
+static int tri_rand8(void)
+{
+    static const u8 r[] = {0, 1, 0xF, 0x10, 0x11, 0x17, 0x18, 0x19, 0x1F, 0x20, 0x21, 0x3F, 0x40, 0x41, 0x7F, 0x80, 0x81, 0xFE, 0xFF};
+    if (rnd() % 4 == 0) return -1;
+    u8 v = r[rnd() % 19];
+    U16(0x87DE10) = rand8_seed(v, rnd() % 4 == 0);
+    return v;
+}
+
+/* v about an edge e: e-1, e, e+1, or anything */
+static s16 tri_about(s32 e) { return (s16)(rnd() % 4 ? e + (s32)(rnd() % 3) - 1 : (s32)(rnd() % 0x10000) - 0x8000); }
+
+/* its state block: bits, the last state, timers, its phase and its values */
+static void tri_state(gptr o)
+{
+    U32(o + 0x1C0) = rnd() % 4 ? rnd() & 0x1FFF : rnd();
+    U32(o + 0x1C4) = rnd() % 4 ? rnd() % 2 : rnd() % 2 ? 2 : rnd();
+    U8(o + 0x1C8) = rnd() % 3 ? 1 + rnd() % 3 : 2; U8(o + 0x1C9) = rnd() % 3 ? rnd() % 6 : 2;
+    U8(o + 0x1CA) = rnd() % 3; U8(o + 0x1CB) = rnd() % 2;
+    U32(o + 0x1CC) = rnd() % 2 ? rnd() % 0x500 : rnd() % 2 ? 0 : rnd();
+    U32(o + 0x1D0) = rnd() % 3 ? 0 : rnd() % 3 ? 1 + rnd() % 0x14 : rnd();
+    U16(o + 0x1E6) = (u16)(rnd() % 0x100 - 0x80);
+    U32(o + 0x1E8) = rnd() % 3 ? (u32[]){0, 1, 2, 4, 5, 7, 8, 0xB, 0xC, 0xD, 0x10, 0x16}[rnd() % 12] : rnd() % 0x7FFF;
+    for (u32 k = 0x1EC; k <= 0x1F8; k += 2) U16(o + k) = rnd() % 3 ? rnd() % 3 : (u16)rnd();
+    U16(o + 0x1F0) = rnd() % 8 ? rnd() % 7 : rnd() % 2 ? 7 : (u16)rnd();
+    U16(o + 0x1F2) = rnd() % 6;
+    U16(o + 0x1F4) = rnd() % 3 ? 0xFFFF : rnd() % 2 ? U16(o + 0x1F2) : rnd() % 6;
+    U16(o + 0x1FA) = (u16[]){0, 0x80, 0xFF80, 1, 0xFFFF, 0x80, 0xFF80}[rnd() % 7];
+    U16(o + 0x1F4) = 0xFFFF; Tri_Phase(o);           /* its values: a phase's, or anything */
+    if (rnd() % 4 == 0) for (u32 k = 0x1FC; k < 0x238; k += 2) U16(o + k) = (u16)(rnd() % 4 ? rnd() % 0x6000 - 0x3000 : rnd());
+    if (rnd() % 4 == 0) U32(o + 0x238) = rnd() % 2 ? rnd() % 0x800 : rnd();
+    U16(o + 0x1F4) = rnd() % 2 ? U16(o + 0x1F2) : rnd() % 3 ? 0xFFFF : (u16)rnd();
+    U16(o + 0x23C) = rnd() % 3 ? 0 : rnd() % 2 ? 1 + rnd() % 2 : (u16)rnd();
+    U16(o + 0x23E) = rnd() % 4 ? 2 + rnd() % 3 : (u16)rnd();
+    U8(o + 0x240) = (u8)rnd(); U8(o + 0x241) = rnd() % 7;
+    for (u32 k = 0x242; k < 0x248; k += 2) U16(o + k) = (u16)rnd();
+    U8(o + 0x24A) = (u8)rnd();
+}
+
+/* a triceratops among the test objects (no animations); the player its target */
+static gptr tri_setup(void)
+{
+    gptr o = raptor_setup(), pl = U32(G() + 0x940);
+    U32(o + 0x184) &= ~0x40u;
+    trex_parts(o);
+    U8(o + 0x15F) = rnd() % 4 ? 0xC : rnd() % 16;
+    tri_state(o);
+    U8(o + 0x57) = rnd() % 2;
+    U16(pl + 0x174) = rnd() % 2 ? rnd() & 3 : (u16)rnd();
+    U32(pl + 0x134) = 0;
+    U32(0x87E974) = rnd() % 4 ? rnd() & 0x1F : rnd();
+    U16(o + 0xD8) = U16(pl + 0x40); U16(o + 0xDA) = U16(pl + 0x42); U16(o + 0xDC) = U16(pl + 0x44);
+    trex_aim(o + 0x40, o, o + 0xD8);
+    trex_ff(o, rnd() % 2);
+    return o;
+}
+
+/* across the street (o+0x40) and along it (o+0x44), about its edges */
+static void tri_place(gptr o)
+{
+    s32 hw = S16(o + 0x236) >> 1, ww = S16(o + 0x202);
+    s32 xe[] = {0, 0x1F40, 0x1F41, 0x2EDF, 0x2EE0, 0x32C7, 0x32C8, 0x59D8, 0x59D9, hw, hw + 1, ww, 1, 0x4000};
+    s32 x = xe[rnd() % 14] + (rnd() % 3 == 0 ? (s32)(rnd() % 3) - 1 : 0);
+    S16(o + 0x40) = rnd() % 5 ? (s16)(rnd() % 2 ? x : -x) : (s16)(rnd() % 0xC000 - 0x6000);
+    s32 ze[] = {0x2710, 0x2711, 0x32C7, 0x32C8, -10000, S16(o + 0x200), S16(o + 0x210), S16(o + 0x212), S16(o + 0x214),
+                S16(o + 0x216), S16(o + 0x230), S16(o + 0x232), S16(o + 0x234), 0x59D8, 0};
+    S16(o + 0x44) = rnd() % 5 ? tri_about(ze[rnd() % 15]) : (s16)(rnd() % 0xC000 - 0x6000);
+}
+
+static void test_tri(void)
+{
+    g_ign_objpads = 1;
+    stubs_install(1);
+    tri_tables_stub(1);
+    player_tables_stub(1);
+    for (int i = 0; i < iters; i++) {
+        game_state(); world_setup();
+        gptr o = tri_setup(), b = o + 0x1C0, pl = U32(G() + 0x940);
+        u32 a[3] = {o};
+        /* deciding, steering, the phase, the effects */
+        static const GigFn th[] = {
+            {0x43D780, Tri_Steer, "Tri_Steer"}, {0x43DBE0, Tri_Decide, "Tri_Decide"}, {0x43D440, Tri_ThinkRun, "Tri_ThinkRun"},
+            {0x43D650, Tri_ThinkAfter, "Tri_ThinkAfter"}, {0x43DF30, Tri_Face, "Tri_Face"}, {0x43EBD0, Tri_Timer, "Tri_Timer"},
+            {0x43EC40, Tri_Recover, "Tri_Recover"}, {0x43EDD0, Tri_Phase, "Tri_Phase"}, {0x43ECC0, Tri_Dust, "Tri_Dust"},
+            {0x43F6D0, Tri_Debris, "Tri_Debris"}};
+        for (int k = 0; k < 100; k++) {
+            const GigFn *f = &th[k < 40 ? k % 2 : k % 10];
+            game_state(); world_setup();
+            o = tri_setup(); a[0] = o; b = o + 0x1C0; pl = U32(G() + 0x940);
+            U8(o + 0x55) = rnd() % 4 ? rnd() % 2 : rnd() % 6;
+            U8(o + 0x56) = rnd() % 6 ? 1 : (u8)(rnd() % 3);
+            tri_place(o);
+            if (rnd() % 2) {                                /* nothing keeps it from attacking */
+                U16(o + 0x23C) = 0; U32(o + 0x1D0) = 0; U16(o + 0x1EC) = 0;
+                Bits_Set(0x87E974, 0, rnd() % 6 == 0);
+            }
+            int r = tri_rand8();                            /* its chances about the roll */
+            if (r >= 0 && rnd() % 2) {
+                static const u32 ch[] = {0x208, 0x20A, 0x20C, 0x20E};
+                U16(o + ch[rnd() % 4]) = (u16)(r + (s32)(rnd() % 3) - 1);
+            }
+            if (rnd() % 3 == 0) {                           /* the player straight ahead, about */
+                u16 an = (u16)Angle_XZ(o + 0x40, pl + 0x40);
+                U16(o + 0x4A) = (u16)((an + rnd() % 3 - 1) & 0xFFF);
+            }
+            S16(U32(0x87E760) + 0x2A0) = (s16)(rnd() % 3 - 1);
+            if (rnd() % 3 == 0) {                           /* each way it steers, about its edges */
+                s32 hw = S16(o + 0x236) >> 1, sg = rnd() % 2 ? 1 : -1;
+                switch (rnd() % 5) {
+                case 0:                                     /* weaving far down the street */
+                    U16(o + 0x1F0) = 2; U8(o + 0x55) = 0; U16(o + 0x20A) = U16(o + 0x20C) = 0;
+                    S16(o + 0x44) = tri_about(-10001); S16(o + 0x40) = (s16)(sg * (hw + (s32)(rnd() % 2)));
+                    break;
+                case 1:                                     /* to the far side, about its z range */
+                    U16(o + 0x1F0) = 5; U16(o + 0x20E) = 0x100;
+                    S16(o + 0x44) = tri_about(S16(o + (rnd() % 2 ? 0x210 : 0x212)));
+                    break;
+                case 2:                                     /* the roar, its chance about the roll */
+                    U16(o + 0x1F0) = rnd() % 2 ? 0 : 2; U16(o + 0x23C) = 0; U32(o + 0x1D0) = 0; U16(o + 0x1EC) = 0;
+                    Bits_Set(0x87E974, 0, 0);
+                    S16(o + 0x44) = (s16)(0x2711 + rnd() % 0xBB6);
+                    U16(o + 0x208) = (u16)(r < 0 ? 0x80 : r + (s32)(rnd() % 2));
+                    break;
+                case 3:                                     /* the gore, from either side of the middle */
+                    U16(o + 0x1F0) = 3; U16(o + 0x23C) = 0; U32(o + 0x1D0) = 0; Bits_Set(0x87E974, 0, 0);
+                    S16(o + 0x44) = (s16)(S16(o + 0x234) - 1); S16(o + 0x40) = (s16)(rnd() % 3 - 1);
+                    break;
+                default:
+                    break;
+                }
+            }
+            /* the player and its dodging (Tri_Timer) */
+            U8(pl + 0x54) = (u8[]){1, 2, 5, 3, 0}[rnd() % 5]; U8(pl + 0x174) = (u8)rnd();
+            U8(G() + 0x108E) = rnd() % 3;
+            /* the phase: health about its limits */
+            S16(o + 0x10A) = (s16)(rnd() % 2 ? 0x1F40 : rnd() % 0x4000);
+            s32 mx = S16(o + 0x10A);
+            s32 he[] = {mx * 3 / 4, mx / 3, mx * 2 / 3, 0, mx};
+            S16(o + 0x108) = tri_about(he[rnd() % 5]);
+            for (u32 j = 0; j < 20; j++) if (rnd() % 2) U8(O_K2 + j * 0xAC + 0x50) &= ~1;
+            a[1] = rnd() % 2 ? (o & ~0xFFu) | (rnd() % 2) : rnd();
+            U32(LOG_BASE) = 0;
+            sprintf(g_what, "tri %X %s steer %u phase %u x %X z %X bits %X", o, f->name, U16(o + 0x1F0), U16(o + 0x1F2),
+                    U16(o + 0x40), U16(o + 0x44), U32(b));
+            u32 ret = f->addr == 0x43D780 || f->addr == 0x43DBE0 || f->addr == 0x43EBD0 ? 0xFFFFFFFF : 0;
+            check(f->addr, f->fn, f->name, f->addr == 0x43F6D0 ? 2 : 1, a, ret);
+        }
+        /* the state handlers */
+        game_state(); world_setup();
+        o = tri_setup(); a[0] = o; b = o + 0x1C0; pl = U32(G() + 0x940);
+        U8(o + 0x55) = rnd() % 4;
+        check(0x43D3A0, Tri_Normal, "Tri_Normal", 1, a, 0);
+        U8(o + 0x55) = rnd() % 4;
+        check(0x43D3D0, Tri_Hit, "Tri_Hit", 1, a, 0);
+        U8(o + 0x55) = rnd() % 4;
+        check(0x43D3F0, Tri_Die, "Tri_Die", 1, a, 0);
+        for (int k = 0; k < 6; k++) {
+            U8(o + 0x55) = rnd() % 6; U8(o + 0x56) = rnd() % 3;
+            if (rnd() % 2) trex_spheres(o, 1 + rnd() % 3);
+            if (rnd() % 2) U32(pl + 0x134) = 0;
+            U8(o + 0x119) = (u8[]){0, 1, 0x7F, 0x80, 0xFF}[rnd() % 5];
+            check(0x43D410, Tri_Grab, "Tri_Grab", 1, a, 0);
+        }
+        for (int k = 0; k < 12; k++) {
+            game_state(); world_setup();
+            o = tri_setup(); a[0] = o; b = o + 0x1C0; pl = U32(G() + 0x940);
+            U8(o + 0x54) = rnd() % 5; U8(o + 0x55) = rnd() % 6;
+            U32(o + 0x50) = (U32(o + 0x50) & ~0x40000030u) | (rnd() & 0x30) | (rnd() % 8 == 0 ? 0x40000000 : 0);
+            if (rnd() % 2) U32(o + 0x1C4) = 1;
+            if (rnd() % 2) {                                /* the player far, about the tint's and the dust's limits */
+                s32 d = 0x7530 - 300 + (s32)(rnd() % 1600);
+                S16(o + 0x40) = (s16)(-0x3C00 + (s32)(rnd() % 0x200)); S16(pl + 0x40) = (s16)(S16(o + 0x40) + d);
+                S16(pl + 0x44) = S16(o + 0x44);
+            }
+            U16(o + 0x23E) = (u16[]){2, 3, 4, 0xFFFF, 0x7FFF}[rnd() % 5];
+            U16(o + 0x23C) = rnd() % 3 ? (u16)(rnd() % 3) : (u16)rnd();
+            U16(pl + 0x1FA) = (u16[]){0x7F, 0x80, 0x81, 0}[rnd() % 4];
+            U8(o + 0x17B) = rnd() % 2 ? 0 : (u8)rnd();
+            U8(G() + 0x108F) = rnd() % 2 ? 0 : (u8)rnd();
+            if (rnd() % 2) trex_spheres(o, 1 + rnd() % 3);
+            if (rnd() % 2) {                                /* the head where it stands, about its looking limit */
+                gptr hp = Obj_Part(U32(o + 0x64), U8(o + 0x15F));
+                U16(hp + 0x40) = U16(o + 0x40); U16(hp + 0x44) = U16(o + 0x44);
+                u16 an = (u16)Angle_XZ(o + 0x40, o + 0xD8);
+                U16(o + 0x4A) = (u16)((an - (u16[]){0x4FF, 0x500, 0x501, 0xB01, 0xB00, 0xAFF}[rnd() % 6]) & 0xFFF);
+                U16(o + 0xF0) = U16(o + 0xF2) = U16(o + 0xF4) = 0; Bits_Set(b, 1, rnd() % 4 != 0);
+            }
+            for (u32 j = 0; j < 20; j++) if (rnd() % 2) U8(O_K2 + j * 0xAC + 0x50) &= ~1;
+            sprintf(g_what, "tri %X handler state %X flags %X bits %X", o, U32(o + 0x54), U32(o + 0x50), U32(b));
+            check(0x43CF30, Tri_Handler, "Tri_Handler", 1, a, 0);
+        }
+        /* set up: 16 parts, as the animation */
+        do model_data(0x650000); while (U32(0x650000 + 0x14) != 16);
+        do anim_setup_at(AN_OBJ); while (U32(AN_OBJ + 0x68) != 16);
+        memcpy(MEM(o + 0x60), MEM(AN_OBJ + 0x60), 0x50);
+        U32(0x652DC4) = AN_DATA;                            /* its first animation */
+        U16(o + 0x10C) = rnd() % 3 ? rnd() % 2 : (u16)rnd();
+        U8(G() + 0x108E) = rnd() % 3; U8(0x87E747) = rnd() % 2; S16(o + 0x42) = (s16)rnd();
+        check(0x43D1E0, Tri_Init, "Tri_Init", 1, a, 0);
+        /* moving, hit, dying: each step */
+        static const GigFn mv[] = {
+            {0x43D470, Tri_Run, "Tri_Run", 2}, {0x43D670, Tri_After, "Tri_After", 2}, {0x43DD00, Tri_Roar, "Tri_Roar", 2},
+            {0x43DDB0, Tri_Swerve, "Tri_Swerve", 2}, {0x43DF50, Tri_Charge, "Tri_Charge", 2}, {0x43E070, Tri_Gore, "Tri_Gore", 2},
+            {0x43E1B0, Tri_ChargeHit, "Tri_ChargeHit", 2}, {0x43E200, Tri_GoreHit, "Tri_GoreHit", 2},
+            {0x43E250, Tri_Damage, "Tri_Damage", 1}, {0x43E6A0, Tri_Flinch, "Tri_Flinch", 2}, {0x43E880, Tri_Knock, "Tri_Knock", 2},
+            {0x43E9D0, Tri_Dead, "Tri_Dead", 3}, {0x43EAB0, Tri_DeadRun, "Tri_DeadRun", 3}};
+        const unsigned nm = sizeof mv / sizeof mv[0];
+        game_state(); world_setup(); enemy_state(); zones_setup();
+        o = O_OBJ + 0x260 * (rnd() % 2 ? 1 : 1 + rnd() % 6); a[0] = o; b = o + 0x1C0;   /* (the second object: the lead one) */
+        anim_setup_at(O_OBJ);
+        do anim_setup_at(o); while (U32(o + 0x68) != 16);
+        memcpy(MEM(O_OBJ + 0x60), MEM(o + 0x60), 0x50);
+        U32(G() + 0x940) = pl = O_OBJ;
+        U32(pl + 0x128) = rnd() % 2 ? 0x720C78 : 0; U32(o + 0x128) = 0x7210D8;
+        U32(0x87E760) = O_OBJ;                              /* the objects */
+        U8(o + 0x58) = 9;
+        u8 sv[0x260], svp[0x260]; memcpy(sv, MEM(o), 0x260); memcpy(svp, MEM(pl), 0x260);
+        for (unsigned k = 0; k < 14 * nm; k++) {
+            const GigFn *f = &mv[k % nm];
+            memcpy(MEM(o), sv, 0x260); memcpy(MEM(pl), svp, 0x260);
+            tri_state(o);
+            U8(o + 0x54) = rnd() % 4 ? 1 + rnd() % 3 : rnd() % 5;
+            U8(o + 0x55) = rnd() % 4;
+            U8(o + 0x56) = (u8)(rnd() % 8 ? rnd() % f->steps : rnd());
+            U8(o + 0x57) = rnd() % 2;
+            tri_place(o);
+            static const u16 fr[] = {0, 1, 2, 3, 0xA, 0xB, 0xE, 0xF, 0x10, 0x18, 0x19, 0x22, 0x23, 0x2C, 0x2D, 0x40};
+            U16(o + 0x92) = rnd() % 4 ? fr[rnd() % 16] : (u16)(rnd() % 0x80);
+            trex_ff(o, rnd() % 2);
+            for (u32 j = 0; j < 0x2000; j += 0x1000) {     /* the animations' frame flags and spheres: valid or none */
+                U32(AN_DATA + j + 0xC) = rnd() % 2 ? TR_QUAD + 0x100 : 0; U32(AN_DATA + j + 8) = rnd() % 2 ? TR_ATK : 0;
+            }
+            U8(pl + 0x54) = (u8[]){1, 2, 5, 3}[rnd() % 4]; U16(pl + 0x174) = rnd() % 2 ? rnd() & 3 : (u16)rnd();
+            S16(pl + 0x108) = (s16)(rnd() % 2 ? rnd() % 0x100 - 0x10 : rnd());
+            /* the damage */
+            U16(o + 0x172) = rnd() % 6; U16(o + 0x176) = rnd() % 2 ? rnd() % 0x400 : (u16)rnd();
+            S16(o + 0x10A) = (s16)(rnd() % 2 ? 0x1F40 : rnd() % 0x4000);
+            S16(o + 0x108) = (s16)(rnd() % 2 ? rnd() % 0x800 - 0x10 : rnd());
+            U8(o + 0x184) = (u8)rnd();
+            U32(0x87E974) = rnd() % 4 ? rnd() & 0x1F : rnd();
+            if (f->addr == 0x43E250) {
+                if (rnd() % 2) U8(o + 0x56) = 0;
+                if (rnd() % 3 == 0) { U8(o + 0x1C8) = 2; U8(o + 0x1C9) = 2; }
+                if (rnd() % 2) {                            /* the player about its limits */
+                    s32 d = rnd() % 2 ? 10000 : 8000;
+                    S16(pl + 0x40) = (s16)(S16(o + 0x40) + d + (s32)(rnd() % 3) - 1); S16(pl + 0x44) = S16(o + 0x44);
+                }
+                if (rnd() % 2) U32(o + 0x238) = U32(o + 0x1CC) + 0xC8 + rnd() % 3 - 1;
+                static const u16 hp[] = {0xC8, 0x64, 0x190, 0x258, 0x352, 0x44C, 0x578, 0x7D0, 0x12C, 0x1C2, 0x28};
+                if (rnd() % 2) S16(o + 0x108) = tri_about(hp[rnd() % 11]);
+                gptr c = U32(0x87E760);                     /* the others' health about a third */
+                S16(c + 0x5CA) = (s16)(rnd() % 0x2000); S16(c + 0x5C8) = tri_about(S16(c + 0x5CA) / 3);
+                S16(c + 0x36A) = (s16)(rnd() % 0x2000); S16(c + 0x368) = tri_about(S16(c + 0x36A) / 3);
+                U16(o + 0x1F2) = (u16[]){0, 2, 5, 3}[rnd() % 4];
+                if (rnd() % 3 == 0) {                       /* killed in the herd's last phases */
+                    U8(o + 0x56) = 0; U8(o + 0x1C8) = 1; U32(o + 0x1C0) &= ~0x800u;
+                    S16(o + 0x108) = (s16)(rnd() % 0xC8); U32(0x87E974) = 4 | (rnd() & 0x13);
+                }
+            }
+            if ((f->addr == 0x43E9D0 || f->addr == 0x43EAB0) && rnd() % 2) S16(o + 0x44) = tri_about(0x59D8);
+            if (rnd() % 3 == 0)                             /* its speed near one it heads for */
+                U16(o + 0xF4) = (u16)(U16(o + 0x21C + 2 * (rnd() % 10)) + rnd() % 0x30 - 0x18);
+            U8(G() + 0x108E) = rnd() % 3; U8(G() + 0x108F) = rnd() % 2 ? rnd() % 9 : (u8)rnd();
+            for (u32 j = 0; j < 20; j++) if (rnd() % 2) U8(O_K2 + j * 0xAC + 0x50) &= ~1;
+            if (rnd() % 2) { U16(o + 0xF0) = (u16)(rnd() % 0x600 - 0x300); U16(o + 0xF2) = (u16)(rnd() % 0x600 - 0x300); U16(o + 0xF4) = (u16)(rnd() % 0x600 - 0x300); }
+            U16(0x87DC12) = rnd() % 2 ? 0 : (u16)rnd();
+            tri_rand8();
+            anim_maybe_end(o);
+            if (rnd() % 2) U16(o + 0x102) |= 0x20;
+            U32(LOG_BASE) = 0;
+            sprintf(g_what, "tri %X %s step %u side %u frame %X bits %X", o, f->name, U8(o + 0x56), U8(o + 0x57), U16(o + 0x92), U32(b));
+            check(f->addr, f->fn, f->name, 1, a, 0);
+        }
+    }
+    player_tables_stub(0);
+    tri_tables_stub(0);
+    stubs_install(0);
+    g_ign_objpads = 0;
+}
+
 static void test_game(void)
 {
     stubs_install(1);
@@ -8675,7 +8970,7 @@ __declspec(dllexport) void harness_main(int argc, char **argv)
         {"flags", test_flags}, {"geometry", test_geom}, {"script values", test_script_values},
         {"script opcodes", test_script_ops}, {"script objects", test_objects},
         {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"objects 2", test_object}, {"collision", test_collision}, {"player", test_player}, {"player states", test_player2}, {"zones", test_zones}, {"loading", test_room}, {"title", test_title}, {"game task", test_game}, {"doors", test_doors}, {"frame", test_frame}, {"enemy sets", test_enemyset}, {"enemies", test_enemies}, {"raptor", test_raptor}, {"oviraptor", test_ovi}, {"allosaurus", test_allo}, {"pteranodon", test_ptera}, {"tyrannosaurus", test_trex}, {"plesiosaurus", test_plesio}, {"water plesiosaurs", test_pw}, {"roamer", test_roam}, {"giganotosaurus", test_gig},
-    {"inostrancevia", test_ino}, {"aot kinds", test_aot_kinds}, {"object effects", test_obj_effects}, {"effect slots", test_k2}, {"effect drops", test_k2_drops}, {"effect emitters", test_eff_slots}, {"effect slots 3", test_k2_more}, {"helpers", test_helpers}, {"draw", test_draw}, {"pc gpu", test_pcgpu}, {"pc draw", test_pcdraw}, {"pc frame", test_pcframe},
+    {"inostrancevia", test_ino}, {"triceratops", test_tri}, {"aot kinds", test_aot_kinds}, {"object effects", test_obj_effects}, {"effect slots", test_k2}, {"effect drops", test_k2_drops}, {"effect emitters", test_eff_slots}, {"effect slots 3", test_k2_more}, {"helpers", test_helpers}, {"draw", test_draw}, {"pc gpu", test_pcgpu}, {"pc draw", test_pcdraw}, {"pc frame", test_pcframe},
     };
     for (unsigned i = 0; i < sizeof T / sizeof T[0]; i++) {
         int f0 = g_fail, t0 = g_tests;

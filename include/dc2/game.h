@@ -1221,6 +1221,37 @@ void DC2CALL Ino_Dead(gptr o);          /* 0x439520 */
 void DC2CALL Ino_DeadDown(gptr o);      /* 0x4395F0 */
 void DC2CALL Ino_DeadFire(gptr o);      /* 0x4396D0 */
 
+/* the triceratops (type 9), src/game/tricera.c */
+void DC2CALL Tri_Handler(gptr o);       /* 0x43CF30 */
+void DC2CALL Tri_Init(gptr o);          /* 0x43D1E0 */
+void DC2CALL Tri_Normal(gptr o);        /* 0x43D3A0 */
+void DC2CALL Tri_Hit(gptr o);           /* 0x43D3D0 */
+void DC2CALL Tri_Die(gptr o);           /* 0x43D3F0 */
+void DC2CALL Tri_Grab(gptr o);          /* 0x43D410 */
+void DC2CALL Tri_ThinkRun(gptr o);      /* 0x43D440 */
+void DC2CALL Tri_Run(gptr o);           /* 0x43D470 */
+void DC2CALL Tri_ThinkAfter(gptr o);    /* 0x43D650 */
+void DC2CALL Tri_After(gptr o);         /* 0x43D670 */
+u32  DC2CALL Tri_Steer(gptr o);         /* 0x43D780 */
+u32  DC2CALL Tri_Decide(gptr o);        /* 0x43DBE0 */
+void DC2CALL Tri_Roar(gptr o);          /* 0x43DD00 */
+void DC2CALL Tri_Swerve(gptr o);        /* 0x43DDB0 */
+void DC2CALL Tri_Face(gptr o);          /* 0x43DF30 */
+void DC2CALL Tri_Charge(gptr o);        /* 0x43DF50 */
+void DC2CALL Tri_Gore(gptr o);          /* 0x43E070 */
+void DC2CALL Tri_ChargeHit(gptr o);     /* 0x43E1B0 */
+void DC2CALL Tri_GoreHit(gptr o);       /* 0x43E200 */
+void DC2CALL Tri_Damage(gptr o);        /* 0x43E250 */
+void DC2CALL Tri_Flinch(gptr o);        /* 0x43E6A0 */
+void DC2CALL Tri_Knock(gptr o);         /* 0x43E880 */
+void DC2CALL Tri_Dead(gptr o);          /* 0x43E9D0 */
+void DC2CALL Tri_DeadRun(gptr o);       /* 0x43EAB0 */
+u32  DC2CALL Tri_Timer(gptr o);         /* 0x43EBD0 */
+void DC2CALL Tri_Recover(gptr o);       /* 0x43EC40 */
+void DC2CALL Tri_Dust(gptr o);          /* 0x43ECC0 */
+void DC2CALL Tri_Phase(gptr o);         /* 0x43EDD0 */
+void DC2CALL Tri_Debris(gptr o, u32 side); /* 0x43F6D0 */
+
 void DC2CALL Ples12_Remove(gptr o);                /* 0x430E50 */
 void DC2CALL Ples12_Type(gptr o);                  /* 0x430360 */
 void DC2CALL Ples12_Handler(gptr o);               /* 0x430370 */
