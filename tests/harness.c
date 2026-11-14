@@ -4271,6 +4271,7 @@ static void test_draw(void)
                 World_Matrices(); SetRotMatrix(e); SetTransMatrix(e);
                 a[0] = U32(m + (F[k].addr == 0x4A8470 ? 0 : 4)); a[1] = U16(m + (F[k].addr == 0x4A8470 ? 8 : 0xA)); a[2] = zf[rnd() % 5];
                 U32(0x75A618) = rnd() % 0x500;     /* (a u16 in the game: never negative) */
+                U32(0x75BD54) = rnd() % 0x2000;     /* (a triangle's Z_Min4/Z_Max4 read a fourth z: the last one, never negative) */
                 break; }
             case 0x4A82F0: case 0x4A8310: case 0x4A8360: case 0x4A83C0: case 0x4A8410:
                 for (u32 q = 0; q < 4; q++) U32(0x75BD48 + 4 * q) = rnd() % 4 ? rnd() % 0x2000 : rnd();
