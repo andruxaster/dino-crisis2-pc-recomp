@@ -146,8 +146,8 @@
  *  mark, s16 z, u8 kind, s8 flag; links: u8 a, u8 b, s16 length}, from room
  *  to room through the exits event flags open; G+0x1274 the room it is in);
  *  0x1D.. playable dinosaurs KOF_P*.DAT (area 9 table only, 0x739964 + 4*type): 29/30
- *  raptor, 31/32 oviraptor, 33/34 allosaurus, 35/36 tyrannosaurus, 37/38 triceratops,
- *  39/40 compsognathus, 41/42 inostrancevia (src/game/kof_ino.c): each kind's code twice,
+ *  raptor, 31/32 oviraptor, 33/34 allosaurus, 35/36 tyrannosaurus, 37/38 triceratops
+ *  (src/game/kof_tri.c), 39/40 compsognathus, 41/42 inostrancevia (src/game/kof_ino.c): each kind's code twice,
  *  one per player of the duel (the pads 0x87DC94/0x87DC08 and 0x87DC92/0x87DE0A, the
  *  other player object 2 or 1, own tables, variables and model at 0x662500/0x638000).
  *  Their attacks: Kof_Attack 0x47CB20 (spheres +0xA0 -> weapon record 0x1F).
