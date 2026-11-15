@@ -9692,6 +9692,233 @@ static void test_kof_tri(void)
     g_ign_objpads = 0;
 }
 
+/* ---- the extra game's allosaurus (types 33/34) ---- */
+static const u32 g_ka_t[2] = {0x722DC8, 0x722FB8}, g_ka_v[2] = {0x74B388, 0x74B3E0};
+static u32 g_ka_saved[2][76];
+/* the 76 entries from t+0x80 (state 4, pick 16, move 16, hit 12, die 12, landing 16) as
+   recorders 1..30: the tables one function calls together never share one */
+static int ka_rec(u32 e)
+{
+    return e < 20 ? 1 + (int)e : e < 30 ? (int)e + 1 : e < 36 ? (int)e - 29 : e < 60 ? (int)e - 31 : (int)e - 55;
+}
+static void ka_tables_stub(int on)
+{
+    for (int k = 1; k <= 30; k++) g_stubs[k].spec = on ? "d" : "";
+    for (int c = 0; c < 2; c++)
+        for (u32 e = 0; e < 76; e++) {
+            gptr a = g_ka_t[c] + 0x80 + 4 * e;
+            if (on) { g_ka_saved[c][e] = U32(a); U32(a) = (u32)(uintptr_t)g_recs[ka_rec(e)]; }
+            else U32(a) = g_ka_saved[c][e];
+        }
+}
+
+/* the allosaurus of copy c among the test objects, its variables, pads and the other player */
+static gptr ka_setup(int c, int anim)
+{
+    gptr o = raptor_setup(), v = g_ka_v[c];
+    if (anim) { anim_setup_at(o); anim_maybe_end(o); U8(o + 0xFD) &= 1; }
+    else trex_parts(o);
+    aim_desc_setup(0);
+    U32(0x87E760) = O_OBJ;
+    gptr foe = O_OBJ + g_ki_foe[c] * 0x260;
+    U8(foe + 0xFF) = (u8)g_ki_foe[c];                   /* (its own index: the head looks at it) */
+    U8(o + 0x54) = rnd() % 4 ? 1 + rnd() % 3 : rnd() % 4;
+    U8(o + 0x55) = rnd() % 4 ? rnd() % 16 : (u8)rnd();
+    U8(o + 0x56) = rnd() % 4 ? rnd() % 4 : (u8)rnd();
+    U8(o + 0x57) = rnd() % 3 ? rnd() % 2 : (u8)(rnd() % 0x20);
+    U16(o + 0x92) = rnd() % 4 ? rnd() % 0x60 : (u16)rnd();
+    U16(o + 0x10A) = rnd() % 2 ? 0x5DC : (u16)(rnd() % 0x1000);
+    S16(o + 0x108) = (s16)(rnd() % 2 ? (u32)(S16(o + 0x10A) >> 1) + rnd() % 5 - 2 : rnd() % 3 ? rnd() % 0x1000 - 0x10 : rnd());
+    U16(o + 0x176) = rnd() % 2 ? rnd() % 0x200 : (u16)rnd();
+    if (rnd() % 4 == 0) U16(o + 0x176) = (u16)(S16(o + 0x108) + rnd() % 3 - 1);
+    U16(o + 0x172) = rnd() % 4 ? rnd() % 5 : (u16)rnd();
+    U16(o + 0x178) = (u16)rnd();
+    S8(o + 0x17C) = (s8)(rnd() % 2 ? (s32)(rnd() % 5) - 1 : (s32)rnd());
+    S16(o + 0xD0) = (s16)(rnd() % 0x100 - 0x80); S16(o + 0xD4) = (s16)(rnd() % 2 ? rnd() % 0x200 - 0x100 : rnd());
+    U32(o + 0x184) = rnd() % 2 ? rnd() & 9 : rnd();
+    U8(o + 0x15F) = rnd() % 4 ? 3 : (u8)(rnd() % 16);       /* (a part of its chain: Head_Update needs it) */
+    U8(o + 0x17B) = rnd() % 3 ? 0 : (u8)rnd();
+    U32(o + 0x50) = rnd() % 2 ? (U32(o + 0x50) & ~0x38u) | (rnd() & 0x38) : rnd();
+    U16(g_ki_pad[c][0]) = ki_pad(); U16(g_ki_pad[c][1]) = ki_pad();
+    U16(v) = ki_pad();
+    U32(v + 8) = rnd() % 4 ? rnd() & 0xE : rnd();
+    U16(v + 0x10) = rnd() % 5;
+    U16(v + 0x2E) = rnd() % 2 ? 0 : (u16)rnd();
+    U16(v + 0x38) = (u16)(rnd() % 2 ? rnd() % 0x40 : rnd() % 3 ? rnd() % 0x200 : rnd());
+    U16(v + 0x3A) = (u16)(rnd() % 3 ? rnd() % 0x22 : rnd());
+    U16(v + 0x3C) = (u16)(rnd() % 3 ? rnd() % 3 : rnd());
+    for (u32 k = 0x44; k < 0x4A; k += 2) U16(v + k) = (u16)(S16(o + 0x40 + k - 0x44) + rnd() % 8000 - 4000);
+    U32(v + 0x4C) = rnd() % 5 ? foe : o;
+    U16(v + 0x50) = ki_pad();
+    static const s16 ang[] = {0, 1, -1, 0x4FF, 0x500, -0x4FF, -0x500, 0x7FF, -0x800};
+    S16(v + 0x52) = rnd() % 2 ? ang[rnd() % 9] : (s16)rnd();
+    gptr cb = g_ka_t[c] + 0x70;                         /* the button sequence: 0x1000 0x4000 0x1000 0x20 */
+    U16(cb) = rnd() % 4; U16(cb + 2) = rnd() % 3 ? rnd() % 12 : (u16)rnd();
+    if (rnd() % 3 == 0) {                               /* its last button now: the rage, at about half health */
+        U16(cb) = 3; U16(cb + 2) = 2 + rnd() % 9; U16(v) = (u16)(0x20 | (rnd() % 2 ? ki_pad() : 0));
+        S16(o + 0x108) = (s16)((S16(o + 0x10A) >> 1) + rnd() % 3 - 1);
+    }
+    U8(G() + 0x927) = rnd() % 3;
+    U32(0x87E4A4) = rnd();
+    if (rnd() % 2) { U16(o + 0xD8) = U16(foe + 0x40); U16(o + 0xDA) = U16(foe + 0x42); U16(o + 0xDC) = U16(foe + 0x44); }
+    if (rnd() % 2) {                                    /* about facing the point turned to */
+        s32 d = (s32[]){0, 1, 0x95, 0x96, 0x97, 0x800}[rnd() % 6] * (rnd() % 2 ? 1 : -1);
+        U16(o + 0x4A) = (u16)((Angle_XZ(o + 0x40, v + 0x44) + d) & 0xFFF);
+    }
+    return o;
+}
+
+/* a wall on each side (Wall_Dist at +-0x400), near or far, now and then of a kind it passes through */
+static void ka_walls(gptr o)
+{
+    gptr w = 0x6CFC00u;
+    U8(w) = 2; U32(w + 8) = 0x10; U32(w + 0xC) = 0x28;
+    for (int k = 0; k < 2; k++) {
+        gptr pg = w + (k ? 0x28 : 0x10);
+        double a = ((U16(o + 0x4A) + (k ? 0xC00 : 0x400)) & 0xFFF) * 3.14159265358979 / 2048;
+        double d = 600 + rnd() % 3000, cx = S16(o + 0x40) + d * sin(a), cz = S16(o + 0x44) + d * cos(a);
+        double ex = 3000 * cos(a), ez = -3000 * sin(a);
+        U8(pg) = 1; U8(pg + 1) = 1; U8(pg + 3) = (u8)(u8[]){0, 0, 0x40, 1, 0x41}[rnd() % 5];
+        U16(pg + 4) = 0xFFFF; U8(pg + 8) = 0x81;
+        S16(pg + 0xC) = (s16)(cx + ex); S16(pg + 0xE) = (s16)(cz + ez);
+        S16(pg + 0x10) = (s16)(cx - ex); S16(pg + 0x12) = (s16)(cz - ez);
+    }
+    U32(G() + 0xA4C) = w;
+}
+
+static void test_kof_allo(void)
+{
+    g_ign_objpads = 1;
+    stubs_install(1);
+    ka_tables_stub(1);
+#define KA(a, n, an, s) {{a, a + 0x2320}, {KAllo1_##n, KAllo2_##n}, #n, an, s}
+    static const KtFn fn[] = {
+        KA(0x45FAA0, Normal, 0, 16), KA(0x45FB30, Hit, 0, 12), KA(0x45FB50, Die, 0, 12), KA(0x45FB70, Attack, 0, 16),
+        KA(0x45FBC0, PickStand, 0, 0), KA(0x45FCF0, Stand, 1, 0), KA(0x45FD60, PickWalk, 0, 0), KA(0x45FE80, Walk, 1, 0),
+        KA(0x45FEF0, Turn, 1, 0), KA(0x45FFE0, PickOn, 0, 0), KA(0x4600E0, On, 1, 0), KA(0x460180, PickRun, 0, 0),
+        KA(0x460260, Run, 1, 0), KA(0x460300, PickBack, 0, 0), KA(0x4603D0, Back, 1, 0), KA(0x460470, About, 1, 0),
+        KA(0x4605D0, PickFace, 0, 0), KA(0x460710, Face, 1, 0), KA(0x460860, PickStep, 0, 0), KA(0x460910, Step, 1, 0),
+        KA(0x460A10, Roar9, 1, 0), KA(0x460AA0, Rage, 1, 0), KA(0x460B30, Roar, 1, 0), KA(0x460BD0, PickBite, 1, 0),
+        KA(0x460C20, Bite, 1, 0), KA(0x460D50, Steer13, 0, 0), KA(0x460D80, Charge, 1, 0), KA(0x460E70, Steer14, 0, 0),
+        KA(0x460EA0, Tail, 1, 0), KA(0x460F40, Sweep, 1, 0), KA(0x461000, LandBite, 0, 0), KA(0x461030, LandTail, 0, 0),
+        KA(0x461050, LandSweep, 0, 0), KA(0x461080, Hurt, 0, 8), KA(0x461310, Flinch8, 1, 0), KA(0x461390, Flinch9, 1, 0),
+        KA(0x461410, Thrown, 1, 0), KA(0x461530, Knocked, 1, 0), KA(0x4615A0, Dying, 1, 0), KA(0x461700, DyingSide, 1, 0),
+        KA(0x461920, Glow, 0, 0)};
+#undef KA
+    for (int i = 0; i < iters; i++) {
+        u32 a[5];
+        gptr o;
+        /* both copies: the states, picks and moves */
+        for (unsigned k = 0; k < 2 * sizeof fn / sizeof fn[0]; k++) {
+            const KtFn *f = &fn[k % (sizeof fn / sizeof fn[0])];
+            int c = rnd() % 2;
+            game_state(); world_setup(); mo_zones();
+            o = ka_setup(c, f->anim); a[0] = o;
+            if (f->anim) for (int j = 0; j < 0x1B; j++) U32(AN_TAB + 4 * j) = AN_DATA + 0x1000 * (rnd() % 2);   /* (which animation it starts) */
+            if (f->s55) U8(o + 0x55) = (u8)(rnd() % f->s55);
+            if (f->fn[0] == (void *)KAllo1_About || f->fn[0] == (void *)KAllo1_Step || f->fn[0] == (void *)KAllo1_Sweep
+                || f->fn[0] == (void *)KAllo1_Thrown || f->fn[0] == (void *)KAllo1_DyingSide)
+                U8(o + 0x57) = rnd() % 2;               /* (the side: a table of two) */
+            if (f->fn[0] == (void *)KAllo1_Attack && rnd() % 4) trex_spheres(o, 1 + rnd() % 4);
+            if (f->fn[0] == (void *)KAllo1_Attack && rnd() % 2) ki_close(o, O_OBJ + g_ki_foe[c] * 0x260);
+            if (f->fn[0] == (void *)KAllo1_Dying || f->fn[0] == (void *)KAllo1_DyingSide || f->fn[0] == (void *)KAllo1_Face)
+                U8(o + 0x56) = rnd() % 5;
+            if (rnd() % 2) S16(o + 0xF4) = (s16)((s16[]){0, 0x82, 0xA0, 0xDC, 0xFA, -0x64, -0x82}[rnd() % 7] + rnd() % 0x3D - 0x1E);   /* about a top speed */
+            if (f->fn[0] == (void *)KAllo1_Turn && rnd() % 2) U8(o + 0x57) = (u8)(0x12 + rnd() % 3);   /* the turn's 20 frames */
+            if (f->anim && rnd() % 2) {            /* the frames that matter */
+                static const u16 fr[] = {0x2, 0x3, 0x4, 0x5, 0x9, 0xA, 0xB, 0xC, 0xD, 0xE, 0xF, 0x10, 0x11, 0x12, 0x13, 0x14, 0x17,
+                                         0x18, 0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F, 0x20, 0x22, 0x23, 0x24, 0x25, 0x26, 0x2B,
+                                         0x2C, 0x2D, 0x30, 0x31, 0x33, 0x34, 0x35, 0x38, 0x39, 0x3A, 0x4E, 0x4F, 0x55, 0x56, 0x57};
+                U16(o + 0x92) = fr[rnd() % (sizeof fr / sizeof fr[0])];
+                U16(o + 0x102) |= 0x20;                 /* (not at its end: the frame stays) */
+            }
+            if (rnd() % 2) {                            /* each move's own frames, in the move itself */
+                static const struct { void *f; u8 n, fr[8]; } ff[] = {
+                    {KAllo1_Roar, 6, {0x30, 0x2F, 0xE, 0xD, 0x2B, 0x2C}}, {KAllo1_Bite, 8, {0x23, 0x22, 0x18, 0x19, 5, 4, 0xD, 0xE}},
+                    {KAllo1_Charge, 4, {3, 2, 0x18, 0x19}}, {KAllo1_Tail, 4, {0x1C, 0x1B, 0x18, 0x17}},
+                    {KAllo1_Sweep, 4, {0x23, 0x22, 0x1E, 0x1D}}, {KAllo1_Step, 4, {0x14, 0x13, 0xF, 0xE}},
+                    {KAllo1_Roar9, 2, {0x2C, 0x2B}}, {KAllo1_About, 2, {0x23, 0x22}}, {KAllo1_Face, 2, {0xF, 0x10}},
+                    {KAllo1_Flinch8, 2, {0x12, 0x11}}, {KAllo1_Flinch9, 2, {0x20, 0x1F}},
+                    {KAllo1_Thrown, 4, {0x1B, 0x1A, 0xC, 0xB}}, {KAllo1_Knocked, 2, {0x1D, 0x1C}},
+                    {KAllo1_Dying, 8, {0xF, 0xE, 0x30, 0x26, 0x25, 0x4E, 0x4F, 0x56}},
+                    {KAllo1_DyingSide, 8, {0xA, 9, 0x1B, 0x11, 0x10, 0x39, 0x3A, 0x34}}, {KAllo1_PickBite, 2, {0xA, 9}}};
+                for (unsigned j = 0; j < sizeof ff / sizeof ff[0]; j++)
+                    if (ff[j].f == f->fn[0]) {
+                        U16(o + 0x92) = ff[j].fr[rnd() % ff[j].n];
+                        U16(o + 0x102) |= 0x20;
+                        U8(o + 0x56) = f->fn[0] == (void *)KAllo1_Dying || f->fn[0] == (void *)KAllo1_DyingSide ? 1 + rnd() % 2 : 1;
+                    }
+            }
+            if (rnd() % 2) {                            /* the buttons that matter, held and pressed */
+                static const u16 hb[] = {8, 0x10, 0x20, 0x40, 0x1000, 0x2000, 0x4000, 0x8000};
+                u16 h = 0, p = 0;
+                for (int j = rnd() % 4; j; j--) h |= hb[rnd() % 8];
+                for (int j = rnd() % 3; j; j--) p |= (u16)(1u << (rnd() % 3));
+                U16(g_ka_v[c] + 0x50) = h; U16(g_ka_v[c]) = p;
+            }
+            if (f->fn[0] == (void *)KAllo1_PickFace && rnd() % 2) {   /* a side step away from the nearer wall */
+                ka_walls(o);
+                if (rnd() % 2) { U16(g_ka_v[c] + 0x50) = 0x4008; U16(g_ka_v[c]) = 0; }
+            }
+            if (f->fn[0] == (void *)KAllo1_Hurt && rnd() % 3 == 0)   /* hit from straight ahead or behind */
+                U16(o + 0x178) = (u16)(U16(o + 0x4A) + 0x800 + rnd() % 3 - 1);
+            U32(LOG_BASE) = 0;
+            sprintf(g_what, "kallo%d %X %s state %08X v8 %X held %X pad %X frame %u v38 %X v3A %X v3C %X", c + 1, o, f->name,
+                    U32(o + 0x54), U32(g_ka_v[c] + 8), U16(g_ka_v[c] + 0x50), U16(g_ka_v[c]), U16(o + 0x92),
+                    U16(g_ka_v[c] + 0x38), U16(g_ka_v[c] + 0x3A), U16(g_ka_v[c] + 0x3C));
+            check(f->addr[c], f->fn[c], f->name, 1, a, 0);
+        }
+        /* cut short: from a frame on, in the rage */
+        for (int k = 0; k < 4; k++) {
+            int c = rnd() % 2;
+            game_state(); world_setup();
+            o = ka_setup(c, 0); a[0] = o;
+            a[1] = rnd() % 4 ? (u32[]){0xF, 0x18, 0x1E}[rnd() % 3] : rnd() & 0x1FFFF;
+            if (rnd() % 2) U16(o + 0x92) = (u16)(a[1] + rnd() % 3 - 1);
+            a[2] = rnd();
+            U32(LOG_BASE) = 0;
+            sprintf(g_what, "kallo%d cut frame %X at %X v8 %X", c + 1, a[1], U16(o + 0x92), U32(g_ka_v[c] + 8));
+            check(0x461A50 + c * 0x2320, c ? (void *)KAllo2_Cut : (void *)KAllo1_Cut, "KAllo_Cut", 3, a, 0xFFFFFFFF);
+        }
+        /* the handler */
+        for (int k = 0; k < 4; k++) {
+            int c = rnd() % 2;
+            game_state(); world_setup(); mo_zones();
+            o = ka_setup(c, 0); a[0] = o;
+            if (rnd() % 2) trex_spheres(o, 1 + rnd() % 3);
+            U8(o + 0x54) = rnd() % 4;
+            U8(o + 0x55) %= 16;                          /* (the landing: a table of 16) */
+            if (rnd() % 2 && U8(o + 0x15F) < 16) {      /* the head about +-0x500 from the other player */
+                gptr hp = AN_PART + U8(o + 0x15F) * 0x80, foe = O_OBJ + g_ki_foe[c] * 0x260;
+                s32 d = (s32[]){0x4FF, 0x500, 0x501}[rnd() % 3] * (rnd() % 2 ? 1 : -1);
+                U16(o + 0x4A) = (u16)((Angle_XZ(hp + 0x40, foe + 0x40) - d) & 0xFFF);
+            }
+            U32(LOG_BASE) = 0;
+            sprintf(g_what, "kallo%d %X handler state %08X flags %X v8 %X v3A %X v3C %X", c + 1, o, U32(o + 0x54), U32(o + 0x50),
+                    U32(g_ka_v[c] + 8), U16(g_ka_v[c] + 0x3A), U16(g_ka_v[c] + 0x3C));
+            check(0x45F760 + c * 0x2320, c ? (void *)KAllo2_Handler : (void *)KAllo1_Handler, "KAllo_Handler", 1, a, 0);
+        }
+        /* set up: 16 parts, as its standing animation */
+        {
+            int c = rnd() % 2;
+            game_state(); world_setup(); mo_zones();
+            o = ka_setup(c, 0); a[0] = o;
+            gptr md = g_ki_m[c];
+            do model_data(md); while (U32(md + 0x14) != 16);
+            do anim_setup_at(AN_OBJ); while (U32(AN_OBJ + 0x68) != 16);
+            memcpy(MEM(o + 0x60), MEM(AN_OBJ + 0x60), 0x50);
+            U32(md + 0x2D4C + 0x16 * 4) = AN_DATA;
+            S16(o + 0x42) = (s16)(rnd() % 2 ? (s32)(rnd() % 8000) - 4000 : (s32[]){-1000, -999, -1001, 1000, 999, 0}[rnd() % 6]);   /* (its level from y) */
+            U32(LOG_BASE) = 0;
+            sprintf(g_what, "kallo%d %X init y %X", c + 1, o, U16(o + 0x42));
+            check(0x45F940 + c * 0x2320, c ? (void *)KAllo2_Init : (void *)KAllo1_Init, "KAllo_Init", 1, a, 0);
+        }
+    }
+    ka_tables_stub(0);
+    stubs_install(0);
+    g_ign_objpads = 0;
+}
+
 /* ---- the extra game's raptor (types 29/30) and oviraptor (31/32): built alike ---- */
 typedef struct { u32 addr[2]; void *fn[2]; const char *name; u8 anim, s55, s56, part; u8 run[3]; u8 fr[12]; } KrFn;
 typedef struct {
@@ -10143,7 +10370,7 @@ __declspec(dllexport) void harness_main(int argc, char **argv)
         {"flags", test_flags}, {"geometry", test_geom}, {"script values", test_script_values},
         {"script opcodes", test_script_ops}, {"script objects", test_objects},
         {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"objects 2", test_object}, {"collision", test_collision}, {"player", test_player}, {"player states", test_player2}, {"zones", test_zones}, {"loading", test_room}, {"title", test_title}, {"game task", test_game}, {"doors", test_doors}, {"frame", test_frame}, {"enemy sets", test_enemyset}, {"enemies", test_enemies}, {"raptor", test_raptor}, {"oviraptor", test_ovi}, {"allosaurus", test_allo}, {"pteranodon", test_ptera}, {"tyrannosaurus", test_trex}, {"plesiosaurus", test_plesio}, {"water plesiosaurs", test_pw}, {"roamer", test_roam}, {"giganotosaurus", test_gig},
-    {"inostrancevia", test_ino}, {"triceratops", test_tri}, {"mosasaurus", test_mosa}, {"compsognathus", test_compso}, {"duel inostrancevia", test_kof_ino}, {"duel triceratops", test_kof_tri}, {"duel raptor", test_kof_rap}, {"duel oviraptor", test_kof_ovi}, {"aot kinds", test_aot_kinds}, {"object effects", test_obj_effects}, {"effect slots", test_k2}, {"effect drops", test_k2_drops}, {"effect emitters", test_eff_slots}, {"effect slots 3", test_k2_more}, {"helpers", test_helpers}, {"draw", test_draw}, {"pc gpu", test_pcgpu}, {"pc draw", test_pcdraw}, {"pc frame", test_pcframe},
+    {"inostrancevia", test_ino}, {"triceratops", test_tri}, {"mosasaurus", test_mosa}, {"compsognathus", test_compso}, {"duel inostrancevia", test_kof_ino}, {"duel triceratops", test_kof_tri}, {"duel raptor", test_kof_rap}, {"duel oviraptor", test_kof_ovi}, {"duel allosaurus", test_kof_allo}, {"aot kinds", test_aot_kinds}, {"object effects", test_obj_effects}, {"effect slots", test_k2}, {"effect drops", test_k2_drops}, {"effect emitters", test_eff_slots}, {"effect slots 3", test_k2_more}, {"helpers", test_helpers}, {"draw", test_draw}, {"pc gpu", test_pcgpu}, {"pc draw", test_pcdraw}, {"pc frame", test_pcframe},
     };
     for (unsigned i = 0; i < sizeof T / sizeof T[0]; i++) {
         int f0 = g_fail, t0 = g_tests;
