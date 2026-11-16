@@ -146,6 +146,9 @@
  *  23 the rock of area 8; 26 the burner of area 4; 27 the insect, every area,
  *  26 in area 6; parameters from the script at o+0x1C0..; 29/30 (28/29 in area 6) the
  *  weapon and sub-weapon in hand, by G+0x10B4)
+ *  (area 0 type 24, src/game/ptera2.c: the area 0 pteranodon, the type 4
+ *  pteranodon's kin without the carry; drifts along +z at o+0x202 while not
+ *  attacking)
  *  (area 3 type 22, src/game/roamer.c: the roamer of rooms 303..305, walks a
  *  graph at o+0x1C0 {u16 points, u16 links; points of 8 bytes: s16 x, u16
  *  mark, s16 z, u8 kind, s8 flag; links: u8 a, u8 b, s16 length}, from room

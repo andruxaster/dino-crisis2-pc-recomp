@@ -6319,6 +6319,274 @@ static void test_ptera(void)
     g_ign_addr = 0; g_ign_len = 0;
 }
 
+/* ---- the area 0 pteranodon (area object type 24) ---- */
+static const u32 g_p2_tabs[][2] = {{0x720B80, 5}, {0x720BC4, 8}, {0x720BE4, 8}, {0x720C04, 4}, {0x720C14, 4}, {0x720C24, 8}};
+static u32 g_p2_saved[6][8];
+static void p2_tables_stub(int on)
+{
+    for (int k = 1; k <= 8; k++) g_stubs[k].spec = on ? "d" : "";
+    for (int t = 0; t < 6; t++)
+        for (u32 k = 0; k < g_p2_tabs[t][1]; k++) {
+            gptr a = g_p2_tabs[t][0] + 4 * k;
+            if (on) { g_p2_saved[t][k] = U32(a); U32(a) = (u32)(uintptr_t)g_recs[1 + k]; }
+            else U32(a) = g_p2_saved[t][k];
+        }
+}
+
+static u16 rand8_seed_at(u8 want, int n);
+/* Rand8's first or second value at an edge */
+static void p2_rand8(void)
+{
+    static const u8 r[] = {0x3F, 0x40, 0x41, 0, 1, 0xFF};
+    if (rnd() % 4) U16(0x87DE10) = rand8_seed_at(r[rnd() % 6], 1 + rnd() % 2);
+}
+
+/* the swoop's arc as Pt2_ThinkSwoop does it: the angle to the player then (o kept) */
+static s16 p2_swoop_angle(gptr o, gptr pl)
+{
+    u8 sv[0x50]; memcpy(sv, MEM(o + 0x40), 0x50);
+    u32 d = (u32)SquareRoot0((s32)Dist2_XZ(o + 0x40, pl + 0x40));
+    Obj_TurnToPoint(o, 0x28, pl + 0x40);
+    gptr v = Tmp_Push(8);
+    U16(v) = 0; U16(v + 2) = 0; U16(v + 4) = (u16)(U8(pl + 0x174) & 2 ? d / 30 : d / 80);
+    Vec_RotY(v, v, (u16)(Angle_XZ(o + 0x40, pl + 0x40) + U16(o + 0x1E2)));
+    U16(o + 0x44) += U16(v + 4); U16(o + 0x40) += U16(v); U16(o + 0x42) += U16(v + 2);
+    Tmp_Pop(8);
+    s16 a = (s16)Angle_DiffTo(o + 0x40, pl + 0x40, U16(o + 0x4A));
+    memcpy(MEM(o + 0x40), sv, 0x50);
+    return a;
+}
+
+static void test_ptera2(void)
+{
+    g_ign_objpads = 1;
+    g_ign_addr = 0x87B3C6; g_ign_len = 2;                   /* the GTE V0 pad: Water_Level's stack vectors' pads */
+    stubs_install(1);
+    p2_tables_stub(1);
+    player_tables_stub(1);
+    for (int i = 0; i < iters; i++) {
+        game_state();
+        gptr o = ptera_setup(), pl = U32(G() + 0x940);
+        u32 a[1] = {o};
+        U8(o + 0x57) = rnd() % 4 ? rnd() % 3 : (u8)rnd(); U16(o + 0x1DE) = (u16)(rnd() % 2 ? rnd() % 0x60 - 0x30 : rnd());
+        U16(o + 0x4C) = (u16)(rnd() % 2 ? rnd() % 0x400 - 0x200 : rnd());
+        check(0x4327D0, Pt2_Steer, "Pt2_Steer", 1, a, 0);
+        /* deciding */
+        for (int k = 0; k < 24; k++) {                      /* circling */
+            game_state();
+            o = ptera_setup(); a[0] = o; pl = U32(G() + 0x940);
+            U8(o + 0x56) = rnd() % 4 ? 1 + rnd() % 2 : (u8)rnd();
+            U8(pl + 0x54) = rnd() % 2 ? 1 : (u8)rnd(); U8(pl + 0x55) = rnd() % 2 ? 2 : (u8)rnd();
+            if (rnd() % 3 == 0) { U16(pl + 0xE8) = 0; U16(pl + 0xEC) = 0; U16(pl + 0xEA) = (u16)(1 + rnd() % 0xFF); }
+            if (rnd() % 3 == 0) { U16(o + 0xE8) = 0; U16(o + 0xEA) = 0; U16(o + 0xEC) = (u16)(rnd() % 2 ? 1 + rnd() % 0xFF : 0x100); }
+            static const s32 dd[] = {0, 1, 9999, 10000, 10001, 14999, 15000, 15001, 12000, 7999, 8000, 8001};
+            static const u16 ao[] = {0, 0x5F, 0x60, 0x61, 0xFA1, 0xFA0, 0xF9F, 0x400, 0xC00};
+            if (rnd() % 4) ptera_place(o, pl, dd[rnd() % 12], ao[rnd() % 9]);
+            if (rnd() % 4 == 0) { U16(pl + 0xE8) = U16(pl + 0xEA) = U16(pl + 0xEC) = 0; U16(pl + 0xE8 + 2 * (rnd() % 3)) = rnd() % 2 ? 0x100 : 1; }
+            if (rnd() % 4 == 0) {                           /* running straight along +z: about the 15000 and 10000 to where it will be */
+                U8(pl + 0x54) = 1; U8(pl + 0x55) = 2; U16(pl + 0xE8) = U16(pl + 0xEA) = U16(pl + 0xEC) = 0; U16(pl + 0x4A) = 0;
+                U16(o + 0x40) = U16(pl + 0x40);
+                S16(o + 0x44) = (s16)(S16(pl + 0x44) + 0x1F40 - (rnd() % 2 ? 15000 : 10000) + (s32)(rnd() % 3) - 1);
+            }
+            if (rnd() % 2) Bits_Set(0x87E974, 0, 0);
+            if (rnd() % 2) U16(o + 0x1E4) = 0;
+            p2_rand8();
+            U32(LOG_BASE) = 0;
+            sprintf(g_what, "pt2 %X think fly step %u side %u", o, U8(o + 0x56), U8(o + 0x57));
+            check(0x432480, Pt2_ThinkFly, "Pt2_ThinkFly", 1, a, 0);
+        }
+        for (int k = 0; k < 24; k++) {                      /* the swoop */
+            game_state();
+            o = ptera_setup(); a[0] = o; pl = U32(G() + 0x940);
+            U8(o + 0x56) = rnd() % 4 ? 3 : (u8)(rnd() % 4);
+            U16(o + 0x1E2) = rnd() % 3 ? (rnd() % 2 ? 0x400 : 0xFC00) : (u16)rnd();
+            static const s32 dd[] = {3000, 1500, 600, 8000, 0};
+            ptera_place(o, pl, dd[rnd() % 5], (u32)rnd() % 0x100 - 0x80);
+            U16(pl + 0x174) = rnd() % 2 ? 2 : (u16)(rnd() & 3);
+            if (rnd() % 2) U16(o + 0x1FA) = 0;
+            if (rnd() % 2) U32(o + 0x1D4) = rnd() % 3 ? 0 : 0x10000;
+            if (rnd() % 2) {                                /* the angle then at its limit */
+                static const s16 want[] = {0x5F, 0x60, 0x61, -0x5F, -0x60, -0x61};
+                s16 w = want[rnd() % 6];
+                u16 base = U16(o + 0x4A);
+                for (u32 e = 0; e < 0x200; e++) {
+                    U16(o + 0x4A) = (u16)((base + (e & 1 ? e / 2 : 0x1000 - e / 2)) & 0xFFF);
+                    if (p2_swoop_angle(o, pl) == w) break;
+                }
+            }
+            U32(LOG_BASE) = 0;
+            sprintf(g_what, "pt2 %X think swoop step %u", o, U8(o + 0x56));
+            check(0x432A10, Pt2_ThinkSwoop, "Pt2_ThinkSwoop", 1, a, 0);
+            U8(o + 0x56) = rnd() % 3 ? 1 : 0;
+            check(0x432D00, Pt2_ThinkPerch, "Pt2_ThinkPerch", 1, a, 0);
+        }
+        /* the state handlers */
+        game_state();
+        o = ptera_setup(); a[0] = o; pl = U32(G() + 0x940);
+        U8(o + 0x54) = rnd() % 5; U8(o + 0x55) = rnd() % 8; U8(o + 0x56) = rnd() % 6;
+        check(0x4323E0, Pt2_Normal, "Pt2_Normal", 1, a, 0);
+        U8(o + 0x55) = rnd() % 4;
+        check(0x432410, Pt2_Hit, "Pt2_Hit", 1, a, 0);
+        check(0x432430, Pt2_Die, "Pt2_Die", 1, a, 0);
+        U8(o + 0x55) = rnd() % 8;
+        check(0x432450, Pt2_Grab, "Pt2_Grab", 1, a, 0);
+        for (int k = 0; k < 8; k++) {
+            game_state();
+            o = ptera_setup(); a[0] = o; pl = U32(G() + 0x940);
+            U8(o + 0x54) = rnd() % 5; U8(o + 0x55) = rnd() % 8;
+            U16(G() + 0x1090) = rnd() % 2 ? 0x10C : (u16)rnd();
+            U16(o + 0xF0) = U16(o + 0xF2) = U16(o + 0xF4) = 0;
+            s16 f = (s16)Floor_Height(o + 0x40, o + 0x40, 0x40, 0);
+            static const s32 dy[] = {0, 1, -1, -0x1388, -0x1389, -0x1387, -0x3000};
+            if (rnd() % 2) S16(o + 0x42) = (s16)(f + dy[rnd() % 7]);
+            if (rnd() % 3 == 0) S16(o + 0x42) = (s16)(-0x3A98 + (s32)(rnd() % 3) - 1);
+            if (rnd() % 2) S16(pl + 0x42) = (s16)(f + (s32)(rnd() % 3) - 1 + (rnd() % 2 ? 0 : (s32)(rnd() % 0x2000) - 0x1000));
+            U32(o + 0x1D0) = rnd() % 2; U16(o + 0x1C8) = rnd() % 2 ? rnd() % 2 : (u16)rnd(); U16(o + 0x1FA) = rnd() % 2 ? rnd() % 2 : (u16)rnd();
+            U8(o + 0x17B) = rnd() % 2 ? rnd() % 2 : (u8)rnd();
+            /* the drift: its speed, the boost's frames, the far end */
+            U16(o + 0x202) = (u16)(rnd() % 2 ? (u16[]){0x64, 0x320, 0x46, 0x82, 0x302, 0x33E, 0}[rnd() % 7] : rnd());
+            U16(o + 0x204) = rnd() % 2 ? rnd() % 3 : (u16)rnd();
+            static const s16 zz[] = {0x4650, 0x4651, 0x464F, 0, -1, 1, -0x200};
+            if (rnd() % 2) S16(o + 0x44) = (s16)(zz[rnd() % 7] - (rnd() % 2 ? S16(o + 0x202) : 0));
+            if (rnd() % 3 == 0) { U16(o + 0xE8) = U16(o + 0xEA) = U16(o + 0xEC) = 0; U16((rnd() % 2 ? o + 0xEC : o + 0xE8)) = (u16)(rnd() % 2 ? 1 + rnd() % 0x1FF : (u32)0x100 << rnd() % 2); }
+            p2_rand8();
+            U8(o + 0x118) = (u8)((rnd() & 0xF0) | rnd() % (U32(U32(o + 0x64) + 0x54) ? 2 : 1));   /* (a part it has) */
+            sprintf(g_what, "pt2 %X handler state %X", o, U32(o + 0x54));
+            if (k % 3) check(0x431F80, Pt2_Handler, "Pt2_Handler", 1, a, 0);
+            else check(0x431F70, Pt2_Type, "Pt2_Type", 1, a, 0);
+        }
+        model_data(0x642348);
+        anim_setup_at(AN_OBJ); memcpy(MEM(o + 0x60), MEM(AN_OBJ + 0x60), 0x50);
+        U32(0x644924 + 0x17 * 4) = AN_DATA;                 /* its first animation */
+        U8(G() + 0x108E) = rnd() % 3; U32(0x74AF88) = rnd(); U8(0x87E747) = rnd() % 2;
+        check(0x432240, Pt2_Init, "Pt2_Init", 1, a, 0);
+        /* moving, each step */
+        static const PteraFn mv[] = {
+            {0x432680, Pt2_Fly, "Pt2_Fly", 4}, {0x432890, Pt2_Rise, "Pt2_Rise", 4}, {0x432B40, Pt2_Swoop, "Pt2_Swoop", 4},
+            {0x432D30, Pt2_Perch, "Pt2_Perch", 2}, {0x432E40, Pt2_Peck, "Pt2_Peck", 3}, {0x432FD0, Pt2_Claw, "Pt2_Claw", 3},
+            {0x433240, Pt2_Damage, "Pt2_Damage", 1}, {0x4333A0, Pt2_Knock, "Pt2_Knock", 2},
+            {0x4334D0, Pt2_KnockHard, "Pt2_KnockHard", 2}, {0x433600, Pt2_Dying, "Pt2_Dying", 4}};
+        const unsigned nm = sizeof mv / sizeof mv[0];
+        game_state(); world_setup(); enemy_state();
+        o = O_OBJ + 0x260 * (1 + rnd() % 6); a[0] = o;
+        anim_setup_at(O_OBJ);
+        do anim_setup_at(o); while (U32(o + 0x68) < 4);
+        memcpy(MEM(O_OBJ + 0x60), MEM(o + 0x60), 0x50);
+        U32(G() + 0x940) = pl = O_OBJ;
+        U32(pl + 0x128) = rnd() % 2 ? 0x720BA8 : 0; U32(o + 0x128) = 0x720BA8;
+        u8 sv[0x260]; memcpy(sv, MEM(o), 0x260);
+        for (unsigned k = 0; k < 14 * nm; k++) {
+            const PteraFn *f = &mv[k % nm];
+            memcpy(MEM(o), sv, 0x260);
+            for (u32 j = 0x1C0; j < 0x214; j += 4) U32(o + j) = rnd();
+            U32(o + 0x1C0) = rnd() & 0xF;
+            U8(o + 0x1CC) = rnd() % 4 ? 1 + rnd() % 3 : rnd() % 5; U8(o + 0x1CD) = rnd() % 3 ? rnd() % 8 : (u8)rnd();
+            for (u32 j = 0x1DE; j < 0x210; j += 2) U16(o + j) = rnd() % 3 ? rnd() % 3 : (u16)rnd();
+            U32(o + 0x1D0) = rnd() % 2 ? rnd() % 0x200 : rnd(); U32(o + 0x1D4) = rnd() % 3;
+            U8(o + 0x56) = (u8)(rnd() % 8 ? rnd() % f->steps : rnd());
+            U8(o + 0x57) = (u8)(rnd() % 4 ? rnd() % 3 : rnd());
+            static const u16 fr[] = {0, 3, 4, 5, 0xE, 0xF, 0x10, 0x11, 0x12, 0x13, 0x1D, 0x1E, 0x1F, 0x25, 0x26, 0x27, 0x2B, 0x2C, 0x2D};
+            U16(o + 0x92) = rnd() % 4 ? (u16)(fr[rnd() % 19] + rnd() % 3 - 1) : (u16)(rnd() % 0x40);
+            S16(o + 0x1F8) = (s16)(rnd() % 2 ? 0x10 - rnd() % 3 + 1 : rnd() % 0x40);
+            if (rnd() % 2) S16(o + 0x1F8) = (s16)(U16(o + 0x92) + rnd() % 3 - 1);
+            U16(o + 0x1E8) = rnd() % 3 ? (u16[]){3, 4, 5, 6, 0xFFFF, 0x8000}[rnd() % 6] : (u16)rnd();
+            S16(o + 0x1FE) = (s16)(S16(o + 0x42) + (s32)(rnd() % 0x1000) - 0x800);
+            if (rnd() % 3 == 0) S16(o + 0x1FE) = (s16)(S16(o + 0x42) + (s32)(rnd() % 3) - 1 - (rnd() % 2 ? 0x5DC : 0));
+            S16(o + 0x1F2) = (s16)(S16(o + 0x42) + (s32)(rnd() % 0x2000) - 0x1000);
+            if (rnd() % 3 == 0) S16(o + 0x1F2) = (s16)(S16(o + 0x42) + (s32)(rnd() % 3) - 1 + (s32)(u16[]){0x64, 0xBB8}[rnd() % 2]);
+            U16(o + 0x1FC) = rnd() % 2 ? rnd() % 3 : (u16)rnd();
+            U16(o + 0xE8) = rnd() % 2 ? 0 : (u16)rnd(); U16(o + 0xEA) = rnd() % 2 ? 0 : (u16)rnd(); U16(o + 0xEC) = rnd() % 2 ? 0 : (u16)rnd();
+            U16(pl + 0xE8) = rnd() % 2 ? 0 : (u16)rnd(); U16(pl + 0xEA) = rnd() % 2 ? 0 : (u16)rnd(); U16(pl + 0xEC) = rnd() % 2 ? 0 : (u16)rnd();
+            S16(pl + 0x108) = (s16)(rnd() % 2 ? rnd() % 0x100 - 0x10 : rnd());
+            U16(o + 0xD4) = (u16)rnd(); U16(o + 0x172) = rnd() % 5; U16(o + 0x176) = rnd() % 2 ? rnd() % 0x400 : (u16)rnd();
+            U16(o + 0x178) = (u16)((U16(o + 0x4A) + (u16[]){0, 0x3FF, 0x400, 0x401, 0xC01, 0xC00, 0xBFF, 0x800}[rnd() % 8] + (rnd() % 4 ? 0 : rnd())) & 0xFFF);
+            S16(o + 0x108) = (s16)(rnd() % 2 ? rnd() % 0x400 - 0x10 : rnd());
+            if (f->addr == 0x433240 && rnd() % 2) S16(o + 0x108) = (s16)((s32)U16(o + 0x176) + (s32)(rnd() % 3) - 1);
+            U8(o + 0x170) = (u8)rnd(); U8(o + 0x184) = (u8)rnd();
+            U8(o + 0x58) = (u8)(rnd() % 2 ? 0xC : rnd() % 16);
+            S16(o + 0x10E) = (s16)(rnd() % 2 ? S16(o + 0x42) + (s32)(rnd() % 3) - 1 : (s32)(rnd() % 3 == 0 ? 0 : rnd()));
+            U8(G() + 0x108E) = rnd() % 3; U8(G() + 0x108F) = rnd() % 2 ? 0 : (u8)rnd();
+            for (u32 j = 0; j < 20; j++) if (rnd() % 2) U8(O_K2 + j * 0xAC + 0x50) &= ~1;
+            if (rnd() % 2) { U16(o + 0xF0) = (u16)(rnd() % 0x600 - 0x300); U16(o + 0xF2) = (u16)(rnd() % 0x600 - 0x300); U16(o + 0xF4) = (u16)(rnd() % 0x600 - 0x300); }
+            else if (rnd() % 2) U16(o + 0xF0) = U16(o + 0xF2) = U16(o + 0xF4) = 0;
+            if (rnd() % 3 == 0) U16(o + 0x1FC) = (u16)(2 + rnd() % 0x20);
+            if (f->addr == 0x432680 && rnd() % 2) {         /* flying: the heading about its limits */
+                U16(o + 0x1DE) = (u16)(rnd() % 5 - 2); U16(o + 0x4C) = 0;
+                U16(o + 0x4A) = (u16)((u16[]){0x700, 0x6FF, 0x701, 0x900, 0x8FF, 0x901, 0x8000, 0x7FFF}[rnd() % 8] + (s32)(rnd() % 5) - 2);
+            }
+            if (f->addr == 0x432D30 && rnd() % 2) {         /* perched: the player near, about the 5000 and the 0x60 angle */
+                static const s32 dd[] = {4999, 5000, 5001, 2000, 9000};
+                static const u16 ao[] = {0, 0, 0x5F, 0x60, 0x61, 0xFA1, 0xFA0, 0xF9F};
+                U16(o + 0xF0) = U16(o + 0xF2) = U16(o + 0xF4) = 0;
+                ptera_place(o, pl, dd[rnd() % 5] + 0x2BC, ao[rnd() % 8]);
+                if (rnd() % 3 == 0) ptera_place(o, pl, 4999 + rnd() % 3, 0);   /* straight ahead, its hold point about 5000 away */
+                U8(o + 0x56) = 1; U16(o + 0x92) = U16(o + 0x1F8) + 1;
+            }
+            p2_rand8();
+            if (f->addr == 0x433600) {                      /* falling: the cliff, the water */
+                static const u16 rm[][2] = {{1, 0xC}, {0, 1}, {6, 2}, {1, 1}, {0, 2}, {6, 1}, {3, 3}};
+                int r = rnd() % 7; U8(G() + 0x1091) = (u8)rm[r][0]; U8(G() + 0x1090) = (u8)rm[r][1];
+                S16(o + 0x40) = (s16)(rnd() % 2 ? (s32)(s16)0xE0C0 - (s32)(rnd() % 3) + 1 - (rnd() % 2 ? 0x400 : 0) : (s32)rnd());
+                S16(o + 0x44) = (s16)(rnd() % 2 ? (s32)(rnd() % 3) - 1 + (rnd() % 2 ? 0x1289 : -0x4C7) : (s32)rnd());
+                S16(o + 0x42) = (s16)(rnd() % 2 ? (s32)(rnd() % 3) - 1 + (rnd() % 2 ? -0x1194 : -0x1964) : (s32)(rnd() % 0x4000) - 0x2000);
+                if (rnd() % 2) U16(o + 0x10E) = 0;
+                ptera_water(o + 0x40);
+                if (rnd() % 2 && U32(0x87DE14)) { gptr w = U32(G() + 0x948); U8(w + 1) = 3; U8(w + 0x12) = (u8)(s8)(S16(o + 0x42) / 100 + (s32)(rnd() % 3) - 1); }
+            }
+            anim_maybe_end(o);
+            if (rnd() % 2) U16(o + 0x102) |= 0x20;
+            if (f->addr == 0x432890 && rnd() % 2) {         /* rising: at the frames that end it, the height's edge */
+                U8(o + 0x56) = 2; U16(o + 0xF0) = U16(o + 0xF2) = U16(o + 0xF4) = 0;
+                U16(o + 0x92) = (u16[]){0x11, 0x12, 0x25, 0x26}[rnd() % 4];
+                S16(o + 0x1FE) = (s16)(S16(o + 0x42) - 0x5DC + (s32)(rnd() % 3) - 1);
+            }
+            if ((f->addr == 0x432E40 || f->addr == 0x432FD0) && rnd() % 2) {   /* diving: about the player's height */
+                U8(o + 0x56) = 1; U16(o + 0xF0) = U16(o + 0xF2) = U16(o + 0xF4) = 0; U16(o + 0x1FC) = (u16)(2 + rnd() % 0x20);
+                S16(o + 0x1F2) = (s16)(S16(o + 0x42) + 0x64 + (s32)(rnd() % 3) - 1);
+            }
+            if (f->addr == 0x433600 && rnd() % 2) {         /* falling: exactly at the cliff's limits, the water's surface */
+                U8(o + 0x56) = 1; U16(o + 0xF0) = U16(o + 0xF2) = U16(o + 0xF4) = 0;
+                if (rnd() % 2) {
+                    U8(G() + 0x1091) = 1; U8(G() + 0x1090) = 0xC;
+                    S16(o + 0x40) = (s16)(rnd() % 2 ? -0x1F40 + 1 - (s32)(rnd() % 3) : -0x1F41 - (s32)(rnd() % 0x400));
+                    S16(o + 0x44) = (s16)(rnd() % 2 ? -0x4C7 - (s32)(rnd() % 2) : -0x4C6);
+                    S16(o + 0x42) = (s16)((S16(o + 0x44) > -0x4C7 ? -0x1194 : -0x1964) + (s32)(rnd() % 3) - 1);
+                } else {
+                    U8(G() + 0x1091) = rnd() % 2 ? 0 : 6; U8(G() + 0x1090) = U8(G() + 0x1091) ? 2 : 1; U16(o + 0x10E) = 0;
+                    S16(o + 0x42) = (s16)(rnd() % 4 ? -100 * (s32)(1 + rnd() % 20) : (s32)(rnd() % 3) - 1);
+                    ptera_water(o + 0x40);
+                    gptr w = U32(G() + 0x948);
+                    U32(0x87DE14) = 1 + U32(0x87DE14);
+                    U8(w + 1) = 3; U8(w + 0x1A) = 1; U8(w + 0x10) = U8(w + 0x11) = 5; U16(w + 0x14) = 0;
+                    S16(w + 0xC) = (s16)(S16(o + 0x40) - 100); S16(w + 0xE) = (s16)(S16(o + 0x44) - 100);
+                    U8(w + 0x12) = (u8)(s8)(S16(o + 0x42) / 100 + (s32)(rnd() % 3) - 1);
+                }
+            }
+            U32(LOG_BASE) = 0;
+            sprintf(g_what, "pt2 %X %s step %u side %u frame %X", o, f->name, U8(o + 0x56), U8(o + 0x57), U16(o + 0x92));
+            check(f->addr, f->fn, f->name, 1, a, 0);
+        }
+        /* the attacks land */
+        static const PteraFn gh[] = {{0x433160, Pt2_PeckHit, "Pt2_PeckHit"}, {0x4331D0, Pt2_ClawHit, "Pt2_ClawHit"}};
+        for (int k = 0; k < 16; k++) {
+            memcpy(MEM(o), sv, 0x260);
+            U8(o + 0x56) = rnd() % 4 ? 1 : (u8)(rnd() % 4);
+            U8(G() + 0x108E) = rnd() % 3; U8(G() + 0x108F) = rnd() % 4;
+            U16(pl + 0x4A) = (u16)((U16(o + 0x4A) + (u16[]){0, 0x3FF, 0x400, 0x401, 0xC01, 0xC00, 0xBFF, 0x800}[rnd() % 8]) & 0xFFF);
+            S16(pl + 0x108) = (s16)(rnd() % 2 ? rnd() % 0x100 - 0x10 : rnd());
+            for (u32 j = 0; j < 20; j++) if (rnd() % 2) U8(O_K2 + j * 0xAC + 0x50) &= ~1;
+            U32(LOG_BASE) = 0;
+            sprintf(g_what, "pt2 %X %s step %u", o, gh[k % 2].name, U8(o + 0x56));
+            check(gh[k % 2].addr, gh[k % 2].fn, gh[k % 2].name, 1, a, 0);
+        }
+    }
+    player_tables_stub(0);
+    p2_tables_stub(0);
+    stubs_install(0);
+    g_ign_objpads = 0;
+    g_ign_addr = 0; g_ign_len = 0;
+}
+
 /* ---- the tyrannosaurus ---- */
 static const u32 g_tr_tabs[][2] = {{0x7201B0, 5}, {0x7201C4, 12}, {0x7201F4, 12}, {0x720224, 4}, {0x720234, 4}, {0x720244, 12}};
 static u32 g_tr_saved[6][12];
@@ -9792,6 +10060,9 @@ static void test_ao_burner(void)
         U8(g + 0x7C4) = (u8)(rnd() % 2 ? 0x27 + rnd() % 2 : rnd());
         U8(o + 0x1CE) = (u8)rnd();
         ao_lights();
+        k2_records(0x5EDC74, 2 + rnd() % 6, 0); k2_records(0x5EE4C0, 2 + rnd() % 6, 0);   /* its light's records */
+        gptr o2 = U32(g + 0x940) + 2 * 0x260;               /* (the object they hang on) */
+        if (o2 != o) U32(o2 + 0x64) = U32(o + 0x64);
         U32(LOG_BASE) = 0;
         sprintf(g_what, "burner %X handler state %u/%u B54 %X timer %u cam %u", o, U8(o + 0x54), U8(o + 0x56), U32(g + 0xB54), U16(o + 0x1C8), U8(g + 0x7C4));
         check(0x428080, Burner_Handler, "Burner_Handler", 1, a, 0);
@@ -11347,7 +11618,7 @@ __declspec(dllexport) void harness_main(int argc, char **argv)
     struct { const char *name; void (*fn)(void); } T[] = {
         {"flags", test_flags}, {"geometry", test_geom}, {"script values", test_script_values},
         {"script opcodes", test_script_ops}, {"script objects", test_objects},
-        {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"objects 2", test_object}, {"collision", test_collision}, {"player", test_player}, {"player states", test_player2}, {"zones", test_zones}, {"loading", test_room}, {"title", test_title}, {"game task", test_game}, {"doors", test_doors}, {"frame", test_frame}, {"enemy sets", test_enemyset}, {"enemies", test_enemies}, {"raptor", test_raptor}, {"oviraptor", test_ovi}, {"allosaurus", test_allo}, {"pteranodon", test_ptera}, {"tyrannosaurus", test_trex}, {"plesiosaurus", test_plesio}, {"water plesiosaurs", test_pw}, {"roamer", test_roam}, {"giganotosaurus", test_gig},
+        {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"objects 2", test_object}, {"collision", test_collision}, {"player", test_player}, {"player states", test_player2}, {"zones", test_zones}, {"loading", test_room}, {"title", test_title}, {"game task", test_game}, {"doors", test_doors}, {"frame", test_frame}, {"enemy sets", test_enemyset}, {"enemies", test_enemies}, {"raptor", test_raptor}, {"oviraptor", test_ovi}, {"allosaurus", test_allo}, {"pteranodon", test_ptera}, {"area pteranodon", test_ptera2}, {"tyrannosaurus", test_trex}, {"plesiosaurus", test_plesio}, {"water plesiosaurs", test_pw}, {"roamer", test_roam}, {"giganotosaurus", test_gig},
     {"inostrancevia", test_ino}, {"triceratops", test_tri}, {"mosasaurus", test_mosa}, {"compsognathus", test_compso}, {"duel inostrancevia", test_kof_ino}, {"duel triceratops", test_kof_tri}, {"duel raptor", test_kof_rap}, {"duel oviraptor", test_kof_ovi}, {"duel allosaurus", test_kof_allo}, {"duel tyrannosaurus", test_kof_rex}, {"duel compsognathus", test_kof_comp}, {"area falling piece", test_ao_drop}, {"area flying shell", test_ao_shell}, {"area moving piece", test_ao_mover}, {"area bird", test_ao_bird}, {"area rock", test_ao_rock}, {"area insect", test_ao_bug}, {"area poison plant", test_ao_plant}, {"area burner", test_ao_burner}, {"weapon objects", test_ao_weapons}, {"aot kinds", test_aot_kinds}, {"object effects", test_obj_effects}, {"effect slots", test_k2}, {"effect drops", test_k2_drops}, {"effect emitters", test_eff_slots}, {"effect slots 3", test_k2_more}, {"helpers", test_helpers}, {"draw", test_draw}, {"pc gpu", test_pcgpu}, {"pc draw", test_pcdraw}, {"pc frame", test_pcframe},
     };
     for (unsigned i = 0; i < sizeof T / sizeof T[0]; i++) {
