@@ -92,7 +92,7 @@ Checked under wine 9 (32-bit prefix): all 26 hooks installed; after one
 minute Lzss_Decode 23 calls, Flag_Check 62 000, Script_Run every frame,
 PointInQuad 5 000.
 
-## Reimplemented (1939)
+## Reimplemented (1983)
 
 The authoritative list is `src/hook/hooks.c`. By area:
 
@@ -121,6 +121,7 @@ The authoritative list is `src/hook/hooks.c`. By area:
 | object effects | turning, blinking (polygon shade), thrown and debris pieces, the item in the player's hand | src/game/effect.c |
 | effect slots | the slots G+0x944: motion steps, sprite animation, hidden test; sprites (init, move, fade), splashes and floating bits, both emitter kinds and their record lists; falling drops, bubbles, a sprite stuck to an effect, puffs, a glow, lone sprites, screen sparkles and bursts; the effects that fill slots from a record list or with the area's own type | src/game/k2.c |
 | frame helpers | camera reset and zone check, background masks, the damage gauge block, screen shake, fades (set, tick, draw), effect 0's trail, hidden flags of objects and effects, lights picked per model part (camera sets, nearest lights, room light) and marked lights run, pads read each frame; message slots and the message box (typing, pages, prompts, yes/no, choices); text drawing and centring; the HUD: the health gauge, the boss's gauge, the event timer, the weapon change boxes, the ammo pop-up and its numbers; the starting stock by difficulty and by game mode; menus started from the game, carried items merged and closed up; sound effects (table, pan and volume by distance, sound areas, slots, groups) and stream slots; movies started (standalone: skipped) | src/game/misc.c |
+| in-game menu | the menu task (Menu_Task 0x491950: keys with repeat, the modes, opening flash and torn lines), the pause screen (backdrop, header with its sweeps and scrolling hint, health bar, points, weapon and sub-weapon panels with their ammunition, entries and their running border, frame), leaving the menu (closing line, back to the game task); its primitives (tiles, sprites, frames of sprites, lines, triangles, quads, drawing areas), numbers, small letters, yes/no; flags 9 counted and listed, item records searched | src/game/menu.c |
 | frame drawing | Frame_Draw (0x4A7250): the view matrices of objects, parts, effects and props; models (vertices projected and lit per part, then indexed triangles and quads with depth), effect meshes and their depth rules, shadows on the floor, prop sprites and quads, background mask markers, dim bars, the rope, the text layer (message slots, the sentence and its cursor), the per-frame handlers | src/game/draw.c |
 | velociraptor | handler (damage, movement, collisions), init by level, the choice of the next state, normal sub-states (wait, walk, cry, back off, eat, entrance, feint), jumps and climbs, the attacks (pounce, lunge, side bite, leap, tail) and their hits on the player, the hits it takes (flinch, knock-back, blown back, thrown in the air, burnt, drowned), death | src/game/raptor.c |
 | oviraptor | handler, init by level, the choice of the next state, normal sub-states (walk and turn about, look about, hide, turn in place, entrance), climbs and jumps, the attacks (leap back, peck, pounce and the bites while holding the player down, lunge, kick, jump on the back) and their hits on the player, the hits it takes (staggers, knocked back, blown about, thrown in the air), death | src/game/oviraptor.c |
@@ -194,7 +195,8 @@ The script VM, the keyframe animation, the generic object handler (type 1), obje
 walks the player through its door into room 102 (`dc2 Dino2.exe ROOT/Data 3300 400:820 440:820
 2900-2932:2000 2940-2955:1000 2960-3010:20`; ROOT also holds `Speech`). The DirectSound buffers and the music streams
 are mixed in `src/pc/audio.c` (the streams are MP3, decoded with minimp3).
-Next: messages (0x4718F0), fades and menus. The PC layer's drawing is copied onto
+Next: the menu's screens (0x491E50.., the inventory 0x496930, maps, files,
+the item box: about 150 functions up to 0x4A5730). The PC layer's drawing is copied onto
 Direct3D-shaped calls and drawn by a renderer (OpenGL, the Dreamcast's PVR);
 still missing there: the background masks module (0x4BE3C0..), code 0x84,
 the PVR's read-back. The title screen stays faded out in the standalone

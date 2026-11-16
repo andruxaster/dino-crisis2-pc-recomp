@@ -218,6 +218,19 @@
  *  Movie/*.DAT: MPEG-1 program streams, 320x240 or 320x160, MPEG audio 44.1 kHz.
  *  Speech/NNNN.dat: RIFF WAVE PCM16, 18900 Hz mono (284) / 37800 Hz stereo (21).
  *
+ * ---- the in-game menu (task 0x491950, src/game/menu.c) ------------------------
+ *  M = G+0x68C: +0 mode (table 0x739C28: 0 init, 1 opening, 2 screen +1 by
+ *  entries 4.. of that table, 3 leave, ...), +2 step, +8..+0x17 key repeat
+ *  counters, +0x40 points shown (to G+0x11F4), +0x44 keys of the frame, +0x4A
+ *  health shown, +0x4D entry, +0x59 health bar shimmer, +0x5E/+0x5F hint text
+ *  letters / text, +0x60 area, +0x64 how opened (0 pause, 1 item, 3 door,
+ *  4 game over, 5 flag 2:0x20), +0x65 frames before the menu button, +0x74..
+ *  +0x7C backdrop bars, +0x80/+0x82 sweeps, +0x84 pulse, +0x8C/+0x8D flash,
+ *  +0x8E opening frames. Weapon records 0x704268 (main) and 0x704328 (sub),
+ *  12 bytes {u, v, flags: 0x20 both hands, 0x80 infinite ammunition}.
+ *  Frames of sprites: 8-byte parts {u, v, w (0: 256), h, s8 dx, s8 dy, count
+ *  (first part), flags (2: port code 0x80)}.
+ *
  * ---- flags ----------------------------------------------------------------------
  *  Flag_Set(group, bit, on) 0x46FAA0 (503 calls), Flag_Check(group, bit)
  *  0x46FB20 (465 calls); groups @ 0x723C40 = 12 x {u32 *bits, u32 count}.

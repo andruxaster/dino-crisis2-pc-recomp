@@ -882,6 +882,50 @@ void DC2CALL Timer_Draw(void);                                          /* 0x405
 void DC2CALL Boss_Bar(u32 x, u32 y);                                    /* 0x4065A0 */
 void DC2CALL Boss_Gauge(u32 x, u32 y);                                  /* 0x406520 */
 void DC2CALL Menu_Open(u32 a, u32 b, u32 c, u32 d, u32 e);              /* 0x495E90 */
+u32  DC2CALL Menu_Pad(gptr m);      /* 0x494630 */
+void DC2CALL Menu_Tile(gptr r, u32 color, u32 semi, u32 z); /* 0x494730 */
+void DC2CALL Menu_ShiftLine(u32 dx, u32 y, u32 h); /* 0x4956C0 */
+u32  DC2CALL Item_CountUsed(gptr p, u32 n); /* 0x495CE0 */
+void DC2CALL Menu_Flash(gptr m);    /* 0x491D10 */
+void DC2CALL MenuMode_Init(gptr m); /* 0x491B30 */
+void DC2CALL MenuMode_Enter(gptr m); /* 0x491C00 */
+void DC2CALL MenuMode_Screen(gptr m); /* 0x491E20 */
+void DC2CALL Menu_Task(void);       /* 0x491950 */
+void DC2CALL Menu_Sprite(gptr r, u32 u, u32 v, u32 tp, u32 color, u32 semi, u32 z); /* 0x495040 */
+void DC2CALL Menu_Sprite80(gptr r, u32 u, u32 v, u32 tp, u32 color, u32 semi, u32 z); /* 0x495130 */
+void DC2CALL Menu_DrawFrames(gptr f, u32 x, u32 y, u32 tpage, u32 tp, u32 color, u32 z); /* 0x495220 */
+void DC2CALL Menu_PolyG4(gptr v, u32 c0, u32 c1, u32 c2, u32 c3, u32 semi, u32 z); /* 0x494850 */
+void DC2CALL Menu_Line(u32 x0, u32 y0, u32 x1, u32 y1, u32 color, u32 semi, u32 z); /* 0x4949E0 */
+void DC2CALL Menu_PolyF3(gptr v, u32 color, u32 z); /* 0x495980 */
+void DC2CALL Menu_PolyG3(gptr v, u32 c0, u32 c1, u32 c2, u32 z); /* 0x495AA0 */
+void DC2CALL Menu_DrawArea(u32 x, u32 y, u32 w, u32 h, u32 z); /* 0x4946A0 */
+void DC2CALL Msg_Concat(gptr d, gptr a, gptr b); /* 0x494E80 */
+u32  DC2CALL Menu_SmallText(gptr s, u32 x, u32 y, u32 n, u32 color, u32 z); /* 0x494EE0 */
+void DC2CALL Menu_Arrows(u32 x, u32 y); /* 0x495350 */
+u32  DC2CALL Flag_CountRange(u32 from, u32 to); /* 0x495BE0 */
+void DC2CALL Flag_ListRange(u32 from, u32 to, u32 max, gptr out); /* 0x495C30 */
+u32  DC2CALL Item_FindFree(gptr p, u32 n); /* 0x495D10 */
+u32  DC2CALL Item_FindRoom(gptr p, u32 n, u32 id); /* 0x495D30 */
+u32  DC2CALL Menu_Number8(u32 x, u32 y, u32 digits, u32 lead, u32 color, u32 value, u32 z); /* 0x492E20 */
+u32  DC2CALL Menu_Number11(u32 x, u32 y, u32 digits, u32 lead, u32 color, u32 value, u32 z); /* 0x492F80 */
+u32  DC2CALL Menu_Number12(u32 x, u32 y, u32 digits, u32 lead, u32 color, u32 value, u32 z); /* 0x4930E0 */
+void DC2CALL Menu_YesNo(u32 x, u32 y, u32 sel, u32 z); /* 0x494AC0 */
+void DC2CALL Menu_Points(u32 x, u32 y, u32 color); /* 0x494150 */
+void DC2CALL Menu_PauseList(gptr m); /* 0x493F40 */
+void DC2CALL Menu_Sweep(u32 x, u32 y, u32 phase, u32 dir); /* 0x492850 */
+void DC2CALL Menu_Header(gptr m);   /* 0x492520 */
+void DC2CALL Menu_Gauges(gptr m, u32 x, u32 y); /* 0x492930 */
+void DC2CALL Menu_Frame(gptr m);    /* 0x492A80 */
+void DC2CALL Menu_Backdrop(gptr m); /* 0x492BC0 */
+void DC2CALL Menu_Panels(void);     /* 0x493C10 */
+void DC2CALL Menu_Weapons(gptr m, u32 x, u32 y, u32 z); /* 0x493240 */
+void DC2CALL Menu_Health(u32 x, u32 y); /* 0x4942E0 */
+void DC2CALL Menu_PauseScreen(gptr m); /* 0x493BC0 */
+void DC2CALL Menu_Border(gptr r, u32 pos, u32 n, u32 s, u32 color); /* 0x4957A0 */
+void DC2CALL Pause_Describe(u32 i, u32 x, u32 y, u32 w); /* 0x4920F0 */
+void DC2CALL Screen_Pause(gptr m);  /* 0x491E50 */
+void DC2CALL Screen_Leave(gptr m);  /* 0x492180 */
+void DC2CALL MenuMode_Leave(gptr m); /* 0x492330 */
 void DC2CALL Game_ModeStock(void);                                      /* 0x452450 */
 
 u32  DC2CALL Angle_DiffTo(gptr a, gptr b, u32 ang);                  /* 0x48F3E0 */
