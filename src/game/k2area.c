@@ -367,19 +367,21 @@ void DC2CALL K2_Burst21(gptr k)                                     /* 0x44C450 
     if (!--U8(k + 0x46)) K2_Detach(k);
 }
 
-void DC2CALL K2Burst21_Init(gptr k)                                 /* 0x44C490 */
+/* a burst's start by its look at base (12 bytes each); copies: kind 0 adds
+   two copies of itself, crossed, the second larger (the next look's animation) */
+static void burst_init(gptr k, gptr base, int copies)
 {
     gptr src = U32(k + 0x8C);
     U8(k + 0x54)++;
     zero_rot(k);
-    gptr rec = BURST_LOOKS + U8(k + 0x7A) * 12;
+    gptr rec = base + U8(k + 0x7A) * 12;
     U16(k + 0x6A) = U16(rec + 2);
     U16(k + 0x68) = U16(rec + 4);
     K2_SetAnim(k, U32(rec + 8));
     U32(k + 0x50) |= 2;
-    U8(k + 0x67) |= U8(BURST_LOOKS + U8(k + 0x7A) * 12);
+    U8(k + 0x67) |= U8(base + U8(k + 0x7A) * 12);
     if (src && (U8(src) & 1) && U8(src + 1) == 1) U8(src + 0x18)--;
-    if (U8(k + 0x7A)) return;
+    if (!copies || U8(k + 0x7A)) return;
     U8(k + 0x84) |= 1;
     gptr a = K2_AllocBack();
     if (!a) { K2_Unlink(k); return; }
@@ -390,18 +392,30 @@ void DC2CALL K2Burst21_Init(gptr k)                                 /* 0x44C490 
     if (!b) { K2_Unlink(k); K2_Unlink(a); return; }
     memcpy(MEM(b), MEM(k), 0xAC);
     K2_SyncParent(b);
-    K2_SetAnim(b, U32(BURST_LOOKS + 0x14 + U8(k + 0x7A) * 12));
+    K2_SetAnim(b, U32(base + 0x14 + U8(k + 0x7A) * 12));
     U16(b + 0x48) = 0x400;
     U16(b + 0x6C) = (u16)((s32)U16(k + 0x6E) * 15 / 10);
     U16(b + 0x6E) = (u16)((s32)U16(k + 0x6E) * 15 / 10);
 }
 
+/* the looks' animations: the first +0x98, each next one on by +0x9E.. (skip: a
+   look left as it is) */
+static void burst_looks(gptr k, gptr base, gptr skip)
+{
+    U32(base + 8) = U32(k + 0x98);
+    for (u32 i = 0; i < 8; i++)
+        if (base + 0x14 + 12 * i != skip) U32(base + 0x14 + 12 * i) = U32(base + 8 + 12 * i) + U16(k + 0x9E + 2 * i);
+    K2_Unlink(k);
+}
+
+void DC2CALL K2Burst21_Init(gptr k)                                 /* 0x44C490 */
+{
+    burst_init(k, BURST_LOOKS, 1);
+}
+
 void DC2CALL K2Burst21_Looks(gptr k)                                /* 0x44C620 */
 {
-    U32(BURST_LOOKS + 8) = U32(k + 0x98);
-    for (u32 i = 0; i < 8; i++)
-        U32(BURST_LOOKS + 0x14 + 12 * i) = U32(BURST_LOOKS + 8 + 12 * i) + U16(k + 0x9E + 2 * i);
-    K2_Unlink(k);
+    burst_looks(k, BURST_LOOKS, 0);
 }
 
 /* drifting by +0x7C.. until its animation ends */
@@ -523,4 +537,282 @@ void DC2CALL K2_Drops9(gptr k)                                      /* 0x44CA00 
         K2_MatrixAngles(U32(k + 0x60) + 0x20, k + 0x48);  /* turned as its owner, left behind */
         K2_Detach(k);
     }
+}
+
+/* ---- kind 16 of area 6 (0x44CE80), steps 0x721BD4: the burst of kind 21 of
+   area 8 with its own looks (0x721B68); kind 16 of area 7 (0x44D0A0), steps
+   0x721C54: one without copies (looks 0x721BE8, the sixth kept) ---- */
+
+void DC2CALL K2_Burst6(gptr k)                                      /* 0x44CE80 */
+{
+    Orig_Call1(U32(K2_MOTION + U8(k + 0x7B) * 4), k);
+    Orig_Call1(U32(0x721BD4 + U8(k + 0x54) * 4), k);
+    K2_SyncParent(k);
+    if (!--U8(k + 0x46)) K2_Detach(k);
+}
+
+void DC2CALL K2Burst6_Init(gptr k)                                  /* 0x44CEC0 */
+{
+    burst_init(k, 0x721B68, 1);
+}
+
+void DC2CALL K2Burst6_Looks(gptr k)                                 /* 0x44D050 */
+{
+    burst_looks(k, 0x721B68, 0);
+}
+
+void DC2CALL K2_Burst7(gptr k)                                      /* 0x44D0A0 */
+{
+    Orig_Call1(U32(K2_MOTION + U8(k + 0x7B) * 4), k);
+    Orig_Call1(U32(0x721C54 + U8(k + 0x54) * 4), k);
+    K2_SyncParent(k);
+    if (!--U8(k + 0x46)) K2_Detach(k);
+}
+
+void DC2CALL K2Burst7_Init(gptr k)                                  /* 0x44D0E0 */
+{
+    burst_init(k, 0x721BE8, 0);
+}
+
+void DC2CALL K2Burst7_Looks(gptr k)                                 /* 0x44D1D0 */
+{
+    burst_looks(k, 0x721BE8, 0x721C38);
+}
+
+/* ---- kind 16 of area 0 (0x44CB10), steps 0x721B58: by +0x7A (looks 0x721B08,
+   8 bytes: u8 drawing bits, u8 depth, u8 palette, animation): 2 a light (no
+   picture); 3 a thing thrown that turns over, lands with a splash (5) or is
+   shot (4, Weapon_Hit 0x18) and shrinks away after +0x9E frames; 5..9 rising
+   pieces gone above 0x7D00 ---- */
+
+#define A0_LOOKS 0x721B08u
+
+void DC2CALL K2_Thing0(gptr k)                                      /* 0x44CB10 */
+{
+    K2_SyncParent(k);
+    if (!--U8(k + 0x46)) K2_Detach(k);
+    Orig_Call1(U32(K2_MOTION + U8(k + 0x7B) * 4), k);
+    Orig_Call1(U32(0x721B58 + U8(k + 0x54) * 4), k);
+}
+
+void DC2CALL K2Thing0_Init(gptr k)                                  /* 0x44CB50 */
+{
+    U8(k + 0x54) = 1;
+    if (U8(k + 0x7A) == 2) {
+        K2_Light(k, 0);
+        U32(k + 0x50) &= ~2u;
+        return;
+    }
+    zero_rot(k);
+    K2_SetAnim(k, U32(A0_LOOKS + 4 + U8(k + 0x7A) * 8));
+    gptr rec = A0_LOOKS + U8(k + 0x7A) * 8;
+    U16(k + 0x6A) = (u16)((U8(rec + 1) << 5) | 0x19);
+    U16(k + 0x68) = (u16)(U8(rec + 2) + 0x7EC0);
+    U32(k + 0x50) |= (u32)U8(rec) | 2;
+    U8(k + 0x67) |= U8(rec);
+    switch (U8(k + 0x7A)) {
+    case 4:
+        U16(k + 0x48) = 0; U16(k + 0x4A) = 0; U16(k + 0x4C) = 0;
+        U8(k + 0x84) &= ~1;
+        break;
+    case 5: case 6: case 7: case 8:
+        if (U8(k + 0x7A) == 8) U8(k + 0x84) |= 1; else U8(k + 0x84) &= ~1;
+        U16(k + 0x48) = 0; U16(k + 0x4A) = 0; U16(k + 0x4C) = 0;
+        if (U8(k + 0x7A) == 7) { U16(k + 0x6A) = 0x27; U16(k + 0x68) = 0x7E43; }
+        else { U16(k + 0x6A) = 0x3B; U16(k + 0x68) = 0x7E40; }
+        break;
+    }
+}
+
+/* rising by d; gone above 0x7D00 or at its animation's end (twice the speed: twice) */
+static void a0_rise(gptr k, u16 d, int twice)
+{
+    u16 z = (u16)(U16(k + 0x44) + d);
+    U16(k + 0x44) = z;
+    if ((s16)z > 0x7D00) U8(k + 0x54) = 2;
+    if (twice && K2_AnimStep(k)) { U8(k + 0x54) = 2; return; }
+    if (K2_AnimStep(k)) U8(k + 0x54) = 2;
+}
+
+void DC2CALL K2Thing0_Move(gptr k)                                  /* 0x44CCB0 */
+{
+    U32(k + 0x74) = U32(k + 0x40);
+    u16 z = U16(k + 0x44);
+    U16(k + 0x42) += U16(k + 0x7E);
+    U16(k + 0x40) += U16(k + 0x7C);
+    U16(k + 0x78) = z;
+    U16(k + 0x44) = (u16)(z + U16(k + 0x80));
+    switch (U8(k + 0x7A)) {
+    case 0: case 1: case 4:
+        if (K2_AnimStep(k)) U8(k + 0x54) = 2;
+        break;
+    case 2:
+        U8(G() + 0xF) = 0;
+        K2_Unlink(k);
+        break;
+    case 3:
+        K2_AnimStep(k);
+        U16(k + 0x4C) += 0x390;
+        if (S16(k + 0x42) > 0) {                    /* into the water */
+            Se_Play(k, 0x68);
+            U8(k + 0x7A) = 5;
+            U16(k + 0x6E) = 0x16; U16(k + 0x6C) = 0x16;
+            U8(k + 0x54) = 0;
+            U16(k + 0x7C) = 0; U16(k + 0x7E) = 0; U16(k + 0x80) = 0;
+        }
+        if (Weapon_Hit(k + 0x20, k + 0x40, 0x18)) {
+            Se_Play(k, 0x67);
+            U16(k + 0x6E) = 0x32; U16(k + 0x6C) = 0x32;
+            U8(k + 0x7A) = 4;
+            U16(k + 0x7C) = 0; U16(k + 0x7E) = 0; U16(k + 0x80) = 0;
+            U8(k + 0x54) = 0;
+        }
+        if (--S16(k + 0x9E) > 0) break;
+        U16(k + 0x6C) -= 2; U16(k + 0x6E) -= 2;
+        if (!U16(k + 0x6C)) U8(k + 0x54) = 2;
+        break;
+    case 5: a0_rise(k, 0x15E, 1); break;
+    case 6: case 8: case 9: a0_rise(k, 0x1F4, 0); break;
+    case 7: a0_rise(k, 0x3E8, 0); break;
+    }
+}
+
+/* ---- kind 20 of area 8 (0x44D220), steps 0x721F50: by +0x7A (looks 0x721EE8,
+   8 bytes as area 0's): 2 a light; 3 a thing carried along with the effect
+   +0xA0 (kept at it), throwing up pieces (kinds 5..12) for its first 8 frames
+   once past x 0x1F40 / 0xE0C0, put out when shot (Weapon_Hit 0x18), after +0x9E
+   frames or beyond x +-30000; 5..12 the pieces: they fall, bounce off y -500
+   at +0x9C/256 of their speed, scattered at random, until +0x9E frames ---- */
+
+#define A8_LOOKS 0x721EE8u
+static gptr a8_fx(gptr k) { return U32(G() + 0x93C) + (u32)(s32)S16(k + 0xA0) * 0x70; }
+
+void DC2CALL K2_Thing8(gptr k)                                      /* 0x44D220 */
+{
+    K2_SyncParent(k);
+    if (!--U8(k + 0x46)) K2_Detach(k);
+    Orig_Call1(U32(K2_MOTION + U8(k + 0x7B) * 4), k);
+    Orig_Call1(U32(0x721F50 + U8(k + 0x54) * 4), k);
+}
+
+void DC2CALL K2Thing8_Init(gptr k)                                  /* 0x44D260 */
+{
+    U8(k + 0x54) = 1;
+    if (U8(k + 0x7A) == 2) {
+        K2_Light(k, 0);
+        U32(k + 0x50) &= ~2u;
+        return;
+    }
+    zero_rot(k);
+    K2_SetAnim(k, U32(A8_LOOKS + 4 + U8(k + 0x7A) * 8));
+    gptr rec = A8_LOOKS + U8(k + 0x7A) * 8;
+    U16(k + 0x6A) = (u16)((U8(rec + 1) << 5) | 0x1B);
+    U16(k + 0x68) = (u16)(U8(rec + 2) + 0x7F00);
+    U32(k + 0x50) |= (u32)U8(rec) | 2;
+    U8(k + 0x67) |= U8(rec);
+    u8 kd = U8(k + 0x7A);
+    if (kd == 3) {                                  /* its effect where it is */
+        gptr e = a8_fx(k);
+        U32(e + 0x50) |= 2;
+        U16(e + 0x40) = U16(k + 0x40); U16(e + 0x42) = U16(k + 0x42); U16(e + 0x44) = U16(k + 0x44);
+        U16(k + 0xA2) = 0;
+    } else if (kd == 4) {
+        U16(k + 0x48) = 0; U16(k + 0x4A) = 0; U16(k + 0x4C) = 0;
+        U8(k + 0x84) &= ~1;
+    } else if (kd >= 5 && kd <= 12) {
+        U16(k + 0x6A) = (u16)((U8(rec + 1) << 5) | 0x1A);
+        U16(k + 0x68) = (u16)(U8(rec + 2) + 0x7F03);
+    }
+}
+
+/* a light on the effect e */
+void DC2CALL K2Thing8_Light(gptr e)                                 /* 0x44D840 */
+{
+    gptr l = Light_Alloc();
+    if (!l) return;
+    U8(l + 1) = 2;
+    U32(l + 0x14) = e;
+    U32(l + 0xC) = 0x721C68;
+    U16(l + 0x1E) = 0x1B; U16(l + 0x1C) = 0x7F00;
+    U32(l + 0x18) |= 4;
+}
+
+/* a piece thrown up from the effect e (left: toward -x) */
+void DC2CALL K2Thing8_Piece(gptr e, u32 left)                       /* 0x44D880 */
+{
+    gptr n = K2_AllocBack();
+    if (!n) return;
+    U8(n + 0x58) = 0x14;
+    U8(n + 0x7A) = (u8)((Rand8() & 7) + 5);
+    U16(n + 0x40) = U16(e + 0x40);
+    U16(n + 0x42) = (u16)((s8)Rand8() * 4 - 0x7D0);
+    U16(n + 0x44) = (u16)((s8)Rand8() * 4 - 0x7D0 + U16(e + 0x44));
+    if (!(u8)left) U16(n + 0x7C) = (u16)((u8)Rand8() - 0x32);
+    else U16(n + 0x7C) = (u16)(0x32 - (u8)Rand8());
+    U16(n + 0x7E) = (u16)((u8)Rand8() * 4 - 0x320);
+    U16(n + 0x80) = (u16)(((u8)Rand8() - 0x20D) * 5);
+    U16(n + 0x6E) = (u16)((u8)Rand8() % 14 + 0x16);
+    u16 r = (u16)((u8)Rand8() % 14);
+    U16(n + 0x98) = 0x50; U16(n + 0x9A) = 0x19; U16(n + 0x9C) = 0x80; U16(n + 0x9E) = 0x3C;
+    U16(n + 0x6C) = (u16)(r + 0x16);
+    U16(n + 0xA0) = (u16)((u8)Rand8() * 4 % 0x258 - 0x12C);
+}
+
+/* its effect put out, the step over */
+static void a8_out(gptr k) { U32(a8_fx(k) + 0x50) &= ~2u; U8(k + 0x54) = 2; }
+
+void DC2CALL K2Thing8_Move(gptr k)                                  /* 0x44D450 */
+{
+    u32 last = U32(k + 0x40);
+    U16(k + 0x40) += U16(k + 0x7C);
+    U16(k + 0x42) += U16(k + 0x7E);
+    U32(k + 0x74) = last;
+    u16 z = U16(k + 0x44);
+    U16(k + 0x78) = z;
+    U16(k + 0x44) = (u16)(z + U16(k + 0x80));
+    u8 kd = U8(k + 0x7A);
+    if (kd > 12) return;
+    if (kd == 2) { U8(G() + 0xF) = 0; K2_Unlink(k); return; }
+    if (kd < 3 || kd == 4) { if (K2_AnimStep(k)) U8(k + 0x54) = 2; return; }
+    if (kd == 3) {
+        K2_AnimStep(k);
+        s16 n = S16(k + 0xA2);
+        if (n < 8) {                                /* its first frames: pieces past the edges */
+            U16(k + 0xA2) = (u16)(n + 1);
+            if (S16(k + 0x7C) < 0) { if (S16(k + 0x40) < (s16)0xE0C0) K2Thing8_Piece(a8_fx(k), 0); }
+            else if (S16(k + 0x40) > 0x1F40) K2Thing8_Piece(a8_fx(k), 1);
+        }
+        gptr e = a8_fx(k);
+        U16(e + 0x40) = U16(k + 0x40); U16(e + 0x42) = U16(k + 0x42); U16(e + 0x44) = U16(k + 0x44);
+        if (Weapon_Hit(k + 0x20, k + 0x40, 0x18)) {
+            K2Thing8_Light(a8_fx(k));
+            U32(k + 0x50) &= ~2u;
+            U32(a8_fx(k) + 0x50) &= ~2u;
+            Se_Play(U32(G() + 0x940), 0x60);
+            U8(k + 0x54) = 2;
+        }
+        if (--S16(k + 0x9E) <= 0) a8_out(k);
+        s16 x = S16(k + 0x40);
+        if (x > 0x7530 || x < (s16)0x8AD0) a8_out(k);
+        return;
+    }
+    /* the pieces */
+    K2_AnimStep(k);
+    U16(k + 0x44) += 0x465;
+    if (S16(k + 0x44) > 0x7530 || --S16(k + 0x9E) <= 0) { U8(k + 0x54) = 2; return; }
+    U16(k + 0x7E) += U16(k + 0x98);
+    u16 vz = U16(k + 0x80);
+    U16(k + 0x80) = (u16)(vz - (s32)S16(k + 0x9A) * (s16)vz / 256);
+    if (S16(k + 0x42) > -500) {                     /* bounced */
+        U16(k + 0x7E) = (u16)-((s32)S16(k + 0x9C) * S16(k + 0x7E) / 256);
+        switch (Rand8() & 3) {
+        case 0: U16(k + 0x7C) = (u16)(S16(k + 0x7C) / 2); U16(k + 0x4C) = (u16)-(S16(k + 0x4C) / 4); break;
+        case 1: U16(k + 0x7C) = (u16)-(S16(k + 0x7C) / 2); U16(k + 0x4C) = (u16)(S16(k + 0x4C) / 4); break;
+        case 2: U16(k + 0x7C) = (u16)-(S16(k + 0x7C) / 4); U16(k + 0x4C) = (u16)(S16(k + 0x4C) / 2); break;
+        case 3: U16(k + 0x7C) = (u16)(S16(k + 0x7C) / 8); U16(k + 0x4C) = (u16)(U16(k + 0x4C) << 1); break;
+        }
+        vz = U16(k + 0x80);
+        U16(k + 0x80) = (u16)(vz - ((s16)vz - 0x465) / 2);
+    }
+    U16(k + 0x4C) += U16(k + 0xA0);
 }

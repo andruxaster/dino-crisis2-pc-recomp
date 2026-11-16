@@ -55,7 +55,9 @@
  *    kept alive, 8 the player's shot, 12 a growing glow; area 1: 20 a swinging
  *    thing; area 4: 16 a puff, 17 a flare shot / its glow by +0x7A; area 8: 17
  *    drops, 19 a splash, 21 a burst whose looks 0x721A68 (12 bytes each) step 3
- *    rewrites; area 9: 17 drops).
+ *    rewrites, 20 a thing on the effect +0xA0 throwing pieces (looks 0x721EE8);
+ *    area 9: 17 drops; area 0: 16 by +0x7A (looks 0x721B08, 8 bytes); areas 6
+ *    and 7: 16 bursts (looks 0x721B68, 0x721BE8)).
  *  ROOM (24 bytes): u16 f0 (=1), u16 dat_file_id (STxyy.DAT), u16 dbs_file_id
  *    (STxyy.DBS), u16 f6, u8 s8_15[8], void *p10, void *p14.
  *  88 rooms in 10 areas (6,17,6,7,12,5,9,8,12,6); ST906 is not in the table.

@@ -88,7 +88,7 @@ Checked under wine 9 (32-bit prefix): all 26 hooks installed; after one
 minute Lzss_Decode 23 calls, Flag_Check 62 000, Script_Run every frame,
 PointInQuad 5 000.
 
-## Reimplemented (1918)
+## Reimplemented (1932)
 
 The authoritative list is `src/hook/hooks.c`. By area:
 
@@ -106,7 +106,7 @@ The authoritative list is `src/hook/hooks.c`. By area:
 | player | Player_Setup, Player_Handler, Player_Breath; states: init, normal (target search with MSVC-order qsort, two-gun arm aiming), hits (light, knocked down), dying, scripted; normal substates: standing, walking, turning, walking backwards, quick turn, climbing steps (ledge and step probes Wall_Ahead/Step_Ahead), pushing; damage scaling, inventory search, ammo; floor heights; effect slots; model set-up (part chains), effect removal by kind; weapon and sub-weapon set-ups; aiming (upper-body pitch toward the target) and the weapon/sub-weapon substates; shots (Weapon_Hit: targets in the weapon's cone nearest first, walls between, damage and reaction), sub-weapons in flight (homing, walls, blasts, noise); firearms: all twelve weapons - state handlers, firing (handgun, shotgun, grenades, spray, machine gun bursts, twin guns, homing missiles, shells), their aiming substates (ready, hold, lower, next target, turn back, walk, walk back, turn; the heavy weapons crouch instead of dodging), ammunition, muzzle flashes; the sub-weapons in use (blades, kick, flare, grenade, one mine or a row of them) and put back.; substate 9 (crouched aiming with the heavy weapons); standing and wading in water. All player states and substates are native | src/game/gun.c, src/game/player.c, src/game/weapon.c, src/game/object.c, src/game/crt.c |
 | zones (navigation) | the room's zone graph G+0xA50: nearest zone in sight, shortest paths to the player (Dijkstra, 0x87FCE0), each object's goal point, sight lines against the wall polygons | src/game/zone.c |
 | props | room prop type (a model playing its animation): handler, init, play modes; room change: Eff_KillRoom, Room_SoundInit | src/game/object.c, src/game/game.c |
-| area effect kinds | the effect slot kinds of some areas (*0x87F948): the shot at the player (7: bursts on a wall or off its floor, knocks the player or the one it keeps alive down), the player's shot (8: Weapon_Hit, the other player in the duel), the growing glow (12); area 1's swinging thing on a rope (20); area 4's drifting puff (16) and flare shot (17: lights up where it hits or lands; its glow kept on a light's axis); area 8's burst (21: two crossed copies, the looks table it rewrites), splash (19), drops bouncing off the floor (17, also area 9) | src/game/k2area.c |
+| area effect kinds | the effect slot kinds of some areas (*0x87F948): the shot at the player (7: bursts on a wall or off its floor, knocks the player or the one it keeps alive down), the player's shot (8: Weapon_Hit, the other player in the duel), the growing glow (12); area 1's swinging thing on a rope (20); area 4's drifting puff (16) and flare shot (17: lights up where it hits or lands; its glow kept on a light's axis); area 8's burst (21: two crossed copies, the looks table it rewrites), splash (19), drops bouncing off the floor (17, also area 9), the thing carried on an effect that throws up pieces (20); area 0's thing thrown into the water or shot (16); the bursts of areas 6 and 7 (16) | src/game/k2area.c |
 | files | File_RequestLoad/Raw, File_Tick, File_Process and the record handlers (copy, VRAM image, CLUT, sound bank, stream, LZSS, texture tiles, PC buffer), Rand8 | src/game/file.c; host files and heap: src/game/pcio.c |
 | loading and room set-up | Enemy_LoadModel, Stage_Load, File_IsBusy; Room_SetPointers, Room_AllocObjects, Room_Reset, CamZones_Init, Aot_Reset; Script_Init, Script_Tick and its skip/event modes | src/game/room.c |
 | root task and tasks | RootTask and its boot modes (boot, logo, warning, to title), Screen_LoadImage, Save_ScanTask; Task_Kill; host coroutines for the task system in standalone builds | src/game/root.c, src/game/task.c |
@@ -188,7 +188,7 @@ alone and the harness ignores them.
 The script VM, the keyframe animation, the generic object handler (type 1), object collision, the zone navigation, the player (all states and substates, all weapons and sub-weapons), the velociraptor, the oviraptor, the allosaurus, the pteranodon, the tyrannosaurus, the plesiosaurs, the giganotosaurus, the inostrancevia, the triceratops, the mosasaurus, the compsognathus and the duel's inostrancevia, triceratops, raptor, oviraptor, allosaurus, tyrannosaurus and compsognathus are complete; the standalone build plays the opening of room 101 and, with buttons held from the command line,
 walks the player through its door into room 102 (`dc2 Dino2.exe ROOT/Data 3300 400:820 440:820
 2900-2932:2000 2940-2955:1000 2960-3010:20`; ROOT also holds `Speech`). The DirectSound buffers have a
-silent stand-in there that only keeps time. Next: the effect kinds of areas 0, 6, 7 and kind 20 of area 8 (0x44CB10..0x44D500), sound/BGM (0x48C9C0..0x48CE60), messages
+silent stand-in there that only keeps time. Next: sound/BGM (0x48C9C0..0x48CE60), messages
 (0x4718F0), fades and menus. The PC layer's drawing is copied onto
 Direct3D-shaped calls and drawn by a renderer (OpenGL, the Dreamcast's PVR);
 still missing there: the background masks module (0x4BE3C0..), code 0x84,

@@ -1893,6 +1893,20 @@ void DC2CALL K2Drop_Init(gptr k);   /* 0x44CA80 */
 void DC2CALL K2Drop_Fall(gptr k);   /* 0x44C920 */
 void DC2CALL K2_Drops8(gptr k);     /* 0x44C8C0 */
 void DC2CALL K2_Drops9(gptr k);     /* 0x44CA00 */
+void DC2CALL K2_Burst6(gptr k);     /* 0x44CE80 */
+void DC2CALL K2Burst6_Init(gptr k); /* 0x44CEC0 */
+void DC2CALL K2Burst6_Looks(gptr k); /* 0x44D050 */
+void DC2CALL K2_Burst7(gptr k);     /* 0x44D0A0 */
+void DC2CALL K2Burst7_Init(gptr k); /* 0x44D0E0 */
+void DC2CALL K2Burst7_Looks(gptr k); /* 0x44D1D0 */
+void DC2CALL K2_Thing0(gptr k);     /* 0x44CB10 */
+void DC2CALL K2Thing0_Init(gptr k); /* 0x44CB50 */
+void DC2CALL K2Thing0_Move(gptr k); /* 0x44CCB0 */
+void DC2CALL K2_Thing8(gptr k);     /* 0x44D220 */
+void DC2CALL K2Thing8_Init(gptr k); /* 0x44D260 */
+void DC2CALL K2Thing8_Move(gptr k); /* 0x44D450 */
+void DC2CALL K2Thing8_Light(gptr e); /* 0x44D840 */
+void DC2CALL K2Thing8_Piece(gptr e, u32 left); /* 0x44D880 */
 
 void DC2CALL Ples12_Remove(gptr o);                /* 0x430E50 */
 void DC2CALL Ples12_Type(gptr o);                  /* 0x430360 */

@@ -10806,6 +10806,8 @@ static const u32 g_k2a_tab[] = {0x721830, 0x721930, 0x72193C, 0x7219E0, 0x721A48
 static const u8 g_k2a_n[] = {3, 3, 5, 3, 3, 2, 3};
 static const u32 g_k2b_tab[] = {0x721AD4, 0x721AE4, 0x721AF0, 0x721AFC};
 static const u8 g_k2b_n[] = {4, 5, 3, 3};
+static const u32 g_k2c_tab[] = {0x721BD4, 0x721C54, 0x721B58, 0x721F50};
+static const u8 g_k2c_n[] = {4, 4, 3, 3};
 
 /* one slot of the effect chain, as test_k2_more makes it */
 static gptr k2a_slot(void)
@@ -10902,17 +10904,78 @@ static void test_k2_area(void)
             else check(0x44CA00, K2_Drops9, "K2_Drops9", 1, a, 0);
         }
         ao_tables_stub(g_k2b_tab, g_k2b_n, 4, 0);
+        ao_tables_stub(g_k2c_tab, g_k2c_n, 4, 1);
+        for (int k = 0; k < 4; k++) {
+            game_state(); objects_setup(); world_setup();
+            kk = k2a_slot(); a[0] = kk;
+            U8(kk + 0x54) = (u8)(rnd() % g_k2c_n[k]);
+            U8(kk + 0x46) = (u8)A2_PICK(0, 1, 2, (s32)rnd());
+            sprintf(g_what, "k2 %X kind c%d step %u", kk, k, U8(kk + 0x54));
+            if (k == 0) check(0x44CE80, K2_Burst6, "K2_Burst6", 1, a, 0);
+            else if (k == 1) check(0x44D0A0, K2_Burst7, "K2_Burst7", 1, a, 0);
+            else if (k == 2) check(0x44CB10, K2_Thing0, "K2_Thing0", 1, a, 0);
+            else check(0x44D220, K2_Thing8, "K2_Thing8", 1, a, 0);
+        }
+        ao_tables_stub(g_k2c_tab, g_k2c_n, 4, 0);
+        /* area 8's thing: its start, its moves, its pieces */
+        for (int k = 0; k < 8; k++) {
+            game_state(); objects_setup(); world_setup();
+            if (k % 2) { targets_setup(); aim_desc_setup(rnd() % 2); }
+            kk = k2a_slot(); a[0] = kk; g = G();
+            ao_lights(); U32(g + 0x948) = O_K3; U16(O_K3 + 0x18) = (u16)(0x200 + rnd() % 0x900);
+            U32(g + 0x93C) = O_EFF; U16(kk + 0xA0) = (u16)(rnd() % 36);
+            U8(kk + 0x7A) = (u8)(rnd() % 2 ? (k % 2 ? (u8)A2_PICK(3, 3, 3, 0, 1, 4) : 2 + rnd() % 11) : 5 + rnd() % 8);
+            U16(0x87DE10) = (u16)rnd();
+            u32 used = rnd() % 3;                           /* free slots for the pieces */
+            if (used) for (u32 q = 0; q < 22; q++) U8(O_K2 + 0xAC * q + 0x50) |= 1;
+            if (used == 1) U8(O_K2 + 0xAC * (rnd() % 22) + 0x50) &= ~1;
+            U8(kk + 0x50) |= 1;
+            anim_maybe_end(kk);
+            if (k % 2) {
+                if (U8(kk + 0x7A) == 3) {                   /* the thing: its first frames, the edges of x */
+                    U16(kk + 0xA2) = (u16)A2_PICK(7, 8, 0, 0x8000);
+                    U16(kk + 0x7C) = (u16)(rnd() % 2 ? (s32)(rnd() % 100) : -(s32)(rnd() % 100));
+                    if (rnd() % 4 == 0) U16(kk + 0x7C) = 0;
+                    s32 ex = (s32)A2_PICK(0x1F40, 0x1F41, 0x1F3F, -0x1F40, -0x1F41, -0x1F3F, 30000, 30001, -30000, -30001, (s32)(rnd() % 2000) - 1000);
+                    S16(kk + 0x40) = (s16)(ex - S16(kk + 0x7C));
+                    U16(kk + 0x9E) = (u16)A2_PICK(1, 2, 0, (s32)rnd());
+                    if (rnd() % 2) {                        /* at one of the objects (a shot) */
+                        gptr ob = O_OBJ + 0x260 * (1 + rnd() % 15);
+                        S16(kk + 0x42) = (s16)(S16(ob + 0x42) - rnd() % 800);
+                        S16(kk + 0x44) = (s16)(S16(ob + 0x44) + rnd() % 600 - 300);
+                        U16(kk + 0x7E) = U16(kk + 0x80) = 0;
+                        if (rnd() % 2) { S16(kk + 0x40) = (s16)(S16(ob + 0x40) + rnd() % 600 - 300); U16(kk + 0x7C) = 0; }
+                    }
+                } else if (U8(kk + 0x7A) >= 5) {            /* a piece: the height's edges */
+                    U16(kk + 0x80) = 0;
+                    S16(kk + 0x44) = (s16)(rnd() % 2 ? 0x7530 - 0x465 + (s32)(rnd() % 3) - 1 : (s32)(rnd() % 20000) - 10000);
+                    U16(kk + 0x80) = (u16)(rnd() % 2 ? 0 : rnd());
+                    if (rnd() % 2) { U16(kk + 0x7E) = 0; S16(kk + 0x42) = (s16)(-500 + (s32)(rnd() % 3) - 1); }
+                    U16(kk + 0x9E) = (u16)A2_PICK(1, 2, 0, 2, 3, 40);
+                    U16(kk + 0x9A) = (u16)(rnd() % 0x100); U16(kk + 0x9C) = (u16)(rnd() % 0x200);
+                }
+                sprintf(g_what, "k2 %X thing8 move kind %u A2 %X x %d", kk, U8(kk + 0x7A), U16(kk + 0xA2), S16(kk + 0x40));
+                check(0x44D450, K2Thing8_Move, "K2Thing8_Move", 1, a, 0);
+            } else {
+                sprintf(g_what, "k2 %X thing8 init kind %u", kk, U8(kk + 0x7A));
+                check(0x44D260, K2Thing8_Init, "K2Thing8_Init", 1, a, 0);
+                u32 b[2] = {O_EFF + 0x70 * (rnd() % 36), (u32)A2_PICK(0, 1, 0x100)};
+                check(0x44D880, K2Thing8_Piece, "K2Thing8_Piece", 2, b, 0);
+                check(0x44D840, K2Thing8_Light, "K2Thing8_Light", 1, b, 0);
+            }
+        }
         /* the burst's looks (a game table it rewrites: kept) */
         {
-            static u8 looks[0x78];
-            memcpy(looks, MEM(0x721A68), 0x78);
-            for (int k = 0; k < 3; k++) {
+            static u8 looks[0x78], looks2[0xF8];
+            memcpy(looks, MEM(0x721A68), 0x78); memcpy(looks2, MEM(0x721B68), 0xF8);
+            for (int k = 0; k < 9; k++) {
                 game_state(); objects_setup(); world_setup();
                 kk = k2a_slot(); a[0] = kk;
-                for (u32 q = 0; q < 9; q++) {
-                    gptr r = 0x721A68 + 12 * q;
-                    U8(r) = (u8)rnd(); U16(r + 2) = (u16)rnd(); U16(r + 4) = (u16)rnd(); U32(r + 8) = 0x6CF900 + 8 * (rnd() % 8);
-                }
+                for (u32 b = 0; b < 3; b++)
+                    for (u32 q = 0; q < 9; q++) {
+                        gptr r = (u32[]){0x721A68, 0x721B68, 0x721BE8}[b] + 12 * q;
+                        U8(r) = (u8)rnd(); U16(r + 2) = (u16)rnd(); U16(r + 4) = (u16)rnd(); U32(r + 8) = 0x6CF900 + 8 * (rnd() % 8);
+                    }
                 U8(kk + 0x7A) = (u8)(rnd() % 2 ? 0 : rnd() % 8);
                 gptr src = U32(kk + 0x8C);
                 if (src) { U8(src) = (u8)((U8(src) & ~1) | rnd() % 2); U8(src + 1) = (u8)A2_PICK(1, 1, 0, 2); }
@@ -10923,10 +10986,43 @@ static void test_k2_area(void)
                 for (u32 q = 0; q < 8; q++) U16(kk + 0x9E + 2 * q) = (u16)(rnd() % 2 ? rnd() % 0x100 : rnd() % 0x1000);
                 U16(kk + 0x6E) = (u16)A2_PICK(0, 1, 10, 0x7FFF, 0xFFFF, (s32)rnd());
                 sprintf(g_what, "k2 %X burst kind %u used %u", kk, U8(kk + 0x7A), used);
-                if (k < 2) check(0x44C490, K2Burst21_Init, "K2Burst21_Init", 1, a, 0);
-                else check(0x44C620, K2Burst21_Looks, "K2Burst21_Looks", 1, a, 0);
+                switch (k) {
+                case 0: case 1: check(0x44C490, K2Burst21_Init, "K2Burst21_Init", 1, a, 0); break;
+                case 2: check(0x44C620, K2Burst21_Looks, "K2Burst21_Looks", 1, a, 0); break;
+                case 3: case 4: check(0x44CEC0, K2Burst6_Init, "K2Burst6_Init", 1, a, 0); break;
+                case 5: check(0x44D050, K2Burst6_Looks, "K2Burst6_Looks", 1, a, 0); break;
+                case 6: case 7: check(0x44D0E0, K2Burst7_Init, "K2Burst7_Init", 1, a, 0); break;
+                case 8: check(0x44D1D0, K2Burst7_Looks, "K2Burst7_Looks", 1, a, 0); break;
+                }
             }
-            memcpy(MEM(0x721A68), looks, 0x78);
+            memcpy(MEM(0x721A68), looks, 0x78); memcpy(MEM(0x721B68), looks2, 0xF8);
+        }
+        /* area 0's thing: its start, its moves */
+        for (int k = 0; k < 10; k++) {
+            game_state(); objects_setup(); world_setup();
+            if (k % 2) { targets_setup(); aim_desc_setup(rnd() % 2); U32(G() + 0x948) = O_K3; U16(O_K3 + 0x18) = (u16)(0x200 + rnd() % 0x900); }
+            kk = k2a_slot(); a[0] = kk;
+            ao_lights(); if (!(k % 2)) U32(G() + 0x948) = O_K3;
+            U8(kk + 0x7A) = (u8)(rnd() % 4 ? rnd() % 10 : rnd() % 2 ? 3 : 5);
+            if (k % 2 && rnd() % 2) {                       /* at one of the objects (a shot) */
+                gptr ob = O_OBJ + 0x260 * (1 + rnd() % 15);
+                S16(kk + 0x40) = (s16)(S16(ob + 0x40) + rnd() % 600 - 300); S16(kk + 0x42) = (s16)(S16(ob + 0x42) - rnd() % 800);
+                S16(kk + 0x44) = (s16)(S16(ob + 0x44) + rnd() % 600 - 300);
+                U16(kk + 0x7C) = U16(kk + 0x7E) = U16(kk + 0x80) = 0;
+            }
+            anim_maybe_end(kk);
+            if (k % 2) {
+                static const u16 up[10] = {0, 0, 0, 0, 0, 0x15E, 0x1F4, 0x3E8, 0x1F4, 0x1F4};
+                if (U8(kk + 0x7A) < 10 && up[U8(kk + 0x7A)] && rnd() % 2) { U16(kk + 0x80) = 0; S16(kk + 0x44) = (s16)(0x7D00 - up[U8(kk + 0x7A)] + (s32)(rnd() % 3) - 1); }
+                if (U8(kk + 0x7A) == 3 && rnd() % 2) { U16(kk + 0x7E) = 0; S16(kk + 0x42) = (s16)A2_PICK(0, 1, -1, 100, -100); }
+                U16(kk + 0x9E) = (u16)A2_PICK(0, 1, 2, (s32)rnd());
+                U16(kk + 0x6C) = (u16)A2_PICK(2, 3, 0x102, (s32)rnd());
+                sprintf(g_what, "k2 %X thing move kind %u", kk, U8(kk + 0x7A));
+                check(0x44CCB0, K2Thing0_Move, "K2Thing0_Move", 1, a, 0);
+            } else {
+                sprintf(g_what, "k2 %X thing init kind %u", kk, U8(kk + 0x7A));
+                check(0x44CB50, K2Thing0_Init, "K2Thing0_Init", 1, a, 0);
+            }
         }
         /* the splash, the drops */
         for (int k = 0; k < 7; k++) {
