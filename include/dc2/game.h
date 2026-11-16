@@ -1746,6 +1746,66 @@ void DC2CALL KComp2_PackHandler(gptr o);   /* 0x46B5D0 */
 void DC2CALL KComp2_PackInit(gptr o);      /* 0x46B630 */
 void DC2CALL KComp2_PackRun(gptr o);       /* 0x46B710 */
 void DC2CALL KComp2_PackSpawn(gptr o);     /* 0x46B7E0 */
+void DC2CALL Drop_Handler(gptr o);  /* 0x426C70 */
+void DC2CALL Drop_Init(gptr o);     /* 0x426710 */
+void DC2CALL Drop_Normal(gptr o);   /* 0x426C40 */
+void DC2CALL Drop_Wait(gptr o);     /* 0x426800 */
+void DC2CALL Drop_Move(gptr o);     /* 0x4269A0 */
+void DC2CALL Drop_MoveOn(gptr o);   /* 0x426C00 */
+void DC2CALL Shell_Handler(gptr o); /* 0x426E50 */
+void DC2CALL Shell_Init(gptr o);    /* 0x426D10 */
+void DC2CALL Shell_Fly(gptr o);     /* 0x426DA0 */
+void DC2CALL Shell_Flash(gptr o);   /* 0x426E00 */
+void DC2CALL Mover_Handler(gptr o); /* 0x4275B0 */
+void DC2CALL Mover_Init(gptr o);    /* 0x426EF0 */
+void DC2CALL Mover_Normal(gptr o);  /* 0x427540 */
+void DC2CALL Mover_Drop(gptr o);    /* 0x427570 */
+void DC2CALL Mover_Fly(gptr o);     /* 0x427590 */
+void DC2CALL Mover_Wait(gptr o);    /* 0x426FA0 */
+void DC2CALL Mover_Move(gptr o);    /* 0x427060 */
+void DC2CALL Mover_MoveOn(gptr o);  /* 0x4272C0 */
+u32  DC2CALL Mover_Pitch(gptr a, gptr b, u32 yaw); /* 0x4273E0 */
+void DC2CALL Mover_ToFirst(gptr o); /* 0x427300 */
+void DC2CALL Mover_ToSecond(gptr o); /* 0x427490 */
+void DC2CALL Bird_Handler(gptr o);  /* 0x427A50 */
+void DC2CALL Bird_Init(gptr o);     /* 0x427670 */
+void DC2CALL Bird_Normal(gptr o);   /* 0x427A30 */
+void DC2CALL Bird_Sit(gptr o);      /* 0x4276D0 */
+void DC2CALL Bird_ToFirst(gptr o);  /* 0x427800 */
+void DC2CALL Bird_ToSecond(gptr o); /* 0x427920 */
+void DC2CALL Rock_Handler(gptr o);  /* 0x427AD0 */
+void DC2CALL Rock_Init(gptr o);     /* 0x427B40 */
+void DC2CALL Rock_Wait(gptr o);     /* 0x427C00 */
+void DC2CALL Rock_Hit(gptr o);      /* 0x427C20 */
+u32  DC2CALL Angle_TurnMax(gptr a, gptr b, u32 cur, u32 max); /* 0x44B430 */
+void DC2CALL Bug_Handler(gptr o);   /* 0x428230 */
+void DC2CALL Bug_Init(gptr o);      /* 0x428310 */
+void DC2CALL Bug_Chase(gptr o);     /* 0x4283F0 */
+void DC2CALL Bug_Land(gptr o);      /* 0x428520 */
+void DC2CALL Bug_Leave(gptr o);     /* 0x4285D0 */
+void DC2CALL Bug_Die(gptr o);       /* 0x428650 */
+void DC2CALL Bug_Fly(gptr o, gptr t); /* 0x428790 */
+void DC2CALL Plant_Handler(gptr o); /* 0x428840 */
+void DC2CALL Plant_Init(gptr o);    /* 0x4288A0 */
+void DC2CALL Plant_Setup(gptr o);   /* 0x4288D0 */
+void DC2CALL Plant_Hidden(gptr o);  /* 0x428A10 */
+void DC2CALL Plant_Rise(gptr o);    /* 0x428B60 */
+void DC2CALL Plant_Snap(gptr o);    /* 0x428BF0 */
+void DC2CALL Plant_Sink(gptr o);    /* 0x428D70 */
+void DC2CALL Plant_Normal(gptr o);  /* 0x428DA0 */
+void DC2CALL Plant_Hit(gptr o);     /* 0x428DC0 */
+void DC2CALL Plant_SetFrames(gptr o, gptr f); /* 0x428F20 */
+void DC2CALL Plant_Matrix(gptr o);  /* 0x428F30 */
+void DC2CALL Light_Step(gptr l);    /* 0x413270 */
+void DC2CALL Burner_Handler(gptr o); /* 0x428080 */
+void DC2CALL Burner_Init(gptr o);   /* 0x427C60 */
+void DC2CALL Burner_Normal(gptr o); /* 0x427F10 */
+void DC2CALL Burner_Off(gptr o);    /* 0x427C90 */
+void DC2CALL Burner_Burn(gptr o);   /* 0x427D70 */
+void DC2CALL Burner_Cool(gptr o);   /* 0x427E70 */
+void DC2CALL Burner_Show(gptr o);   /* 0x427F30 */
+void DC2CALL WeaponObj_Type(gptr o); /* 0x4488C0 */
+void DC2CALL SubWeaponObj_Type(gptr o); /* 0x4488E0 */
 
 void DC2CALL Ples12_Remove(gptr o);                /* 0x430E50 */
 void DC2CALL Ples12_Type(gptr o);                  /* 0x430360 */

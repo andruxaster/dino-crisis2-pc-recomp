@@ -9283,6 +9283,588 @@ static void test_compso(void)
     g_ign_objpads = 0;
 }
 
+/* ---- area objects (aobj.c) ---- */
+static u32 g_ao_saved[24];
+static void ao_tables_stub(const u32 *tab, const u8 *n, int ntab, int on)
+{
+    int r = 1;
+    for (int t = 0; t < ntab; t++)
+        for (u32 k = 0; k < n[t]; k++, r++) {
+            gptr a = tab[t] + 4 * k;
+            g_stubs[r].spec = on ? "d" : "";
+            if (on) { g_ao_saved[r - 1] = U32(a); U32(a) = (u32)(uintptr_t)g_recs[r]; }
+            else U32(a) = g_ao_saved[r - 1];
+        }
+}
+
+/* one among the test objects, its parts and model */
+static gptr ao_setup(void)
+{
+    game_state(); world_setup();
+    gptr o = raptor_setup();
+    trex_parts(o);
+    U32(o + 0x60) = MODEL_DATA;
+    for (u32 k = 0x1C0; k < 0x200; k += 4) U32(o + k) = rnd();
+    U32(o + 0x50) = rnd() % 2 ? rnd() & ~0x40000000u : rnd();
+    for (u32 k = 0x48; k < 0x4E; k += 2) U16(o + k) = rnd() % 2 ? (u16)(rnd() % 0x1000) : (u16)rnd();
+    for (u32 k = 0x6C; k < 0x78; k += 4) U32(o + k) = rnd() % 2 ? 0x1000 + rnd() % 0x200 - 0x100 : rnd();
+    U16(0x87DE10) = (u16)rnd();
+    U32(LOG_BASE) = 0;
+    return o;
+}
+
+/* point p at about d from o's position */
+static void ao_away(gptr o, gptr p, s32 d)
+{
+    plesio_at(p, o + 0x40, d, rnd() % 2 ? (u32[]){0, 0x400, 0x800, 0xC00}[rnd() % 4] : rnd());
+    S16(p + 2) = rnd() % 2 ? S16(o + 0x42) : (s16)(S16(o + 0x42) + rnd() % 2000 - 1000);
+    U16(p + 6) = (u16)rnd();
+}
+
+/* type 17: the falling piece */
+static void test_ao_drop(void)
+{
+    static const u32 tab[] = {0x720284, 0x720274};
+    static const u8 n[] = {3, 4};
+    g_ign_objpads = 1;
+    stubs_install(1);
+    ao_tables_stub(tab, n, 2, 1);
+    static const u16 fl[] = {0x10, 0x80, 0, 0x20, 0x40, 0x100, 0x200, 0x60};
+    for (int i = 0; i < iters; i++) {
+        u32 a[1];
+        gptr o = ao_setup(); a[0] = o;
+        U16(o + 0x1C0) = (u16)(rnd() % 4 ? (rnd() % 6) | fl[rnd() % 8] | fl[rnd() % 8] : rnd());
+        U8(o + 0x54) = (u8)(rnd() % 3);
+        sprintf(g_what, "drop %X handler state %u flags %X", o, U8(o + 0x54), U16(o + 0x1C0));
+        check(0x426C70, Drop_Handler, "Drop_Handler", 1, a, 0);
+        o = ao_setup(); a[0] = o;
+        U16(o + 0x1C0) = (u16)(rnd() % 4 ? rnd() % 6 : rnd());
+        U8(o + 0x54) = (u8)rnd();
+        sprintf(g_what, "drop %X init flags %X", o, U16(o + 0x1C0));
+        check(0x426710, Drop_Init, "Drop_Init", 1, a, 0);
+        o = ao_setup(); a[0] = o;
+        U8(o + 0x55) = (u8)(rnd() % 4);
+        check(0x426C40, Drop_Normal, "Drop_Normal", 1, a, 0);
+        /* waiting: the timers about their ends */
+        for (int k = 0; k < 4; k++) {
+        o = ao_setup(); a[0] = o;
+        U16(o + 0x1C0) = (u16)((rnd() % 4 ? fl[rnd() % 3] : rnd()) | (rnd() % 2 ? 0x200 : 0));
+        Flag_Set(2, 0x19, rnd() % 2);
+        S16(o + 0x1C4) = (s16)(rnd() % 2 ? rnd() % 4 - 1 : rnd());
+        U16(o + 0x1D8) = (u16)(rnd() % 2 ? rnd() % 3 : rnd());
+        U8(o + 0x1DC) = (u8)(rnd() % 2 ? rnd() % 3 : rnd());
+        U8(o + 0x1DB) = (u8)(rnd() % 2 ? rnd() % 8 : rnd());
+        U8(o + 0x1DA) = (u8)(rnd() % 2 ? rnd() % 3 : rnd());
+        S16(o + 0x1CE) = (s16)(rnd() % 2 ? rnd() % 0x80 - 0x40 : rnd());
+        sprintf(g_what, "drop %X wait flags %X t %d %u %u %u %u", o, U16(o + 0x1C0), S16(o + 0x1C4),
+                U16(o + 0x1D8), U8(o + 0x1DC), U8(o + 0x1DB), U8(o + 0x1DA));
+        if (rnd() % 2) { U16(o + 0x1D8) = 1; U8(o + 0x1DC) = 1; U16(o + 0x1C0) |= 0x10; }
+        check(0x426800, Drop_Wait, "Drop_Wait", 1, a, 0);
+        }
+        /* moving: at about the distances, the angles about the quarters */
+        for (int k = 0; k < 8; k++) {
+            o = ao_setup(); a[0] = o;
+            U16(o + 0x1C0) = (u16)(rnd() % 4 ? (rnd() % 6) | fl[rnd() % 8] | (rnd() % 3 ? fl[3 + rnd() % 2] : 0) : rnd());
+            u32 at = k == 7 ? 0x1C8 : 0x1C6;
+            S16(o + at) = (s16)(rnd() % 4 ? rnd() % 6000 : rnd());
+            s32 fd = S16(o + at) < 0 ? 0 : S16(o + at) + 1000;
+            ao_away(o, o + 0x1D0, rnd() % 4 == 0 ? S16(o + at) + (s32)(rnd() % 5) - 2 : rnd() % 4 ? fd + (s32)(rnd() % 3000) : (s32)(rnd() % 8000));
+            static const u16 qa[] = {0x3FF, 0x400, 0x401, 0xBFF, 0xC00, 0xC01, 0, 0x7FF, 0x800, 0xFFF, 0x8000, 0x7FFF};
+            if (rnd() % 3 == 0) U16(o + 0x1C0) = (u16)((U16(o + 0x1C0) & ~0x6Fu) | (3 + rnd() % 2) | fl[3 + rnd() % 2]);
+            if (rnd() % 4) U16(o + 0x48) = rnd() % 2 ? qa[rnd() % 12] : (u16)(rnd() % 0x1000);
+            if (rnd() % 4) U16(o + 0x4A) = rnd() % 2 ? qa[rnd() % 12] : (u16)(rnd() % 0x1000);
+            U8(o + 0x55) = (u8)rnd(); U8(o + 0x54) = (u8)rnd();
+            sprintf(g_what, "drop %X move %d flags %X angles %X %X %X", o, k, U16(o + 0x1C0), U16(o + 0x48), U16(o + 0x4A), U16(o + 0x4C));
+            if (k == 7) check(0x426C00, Drop_MoveOn, "Drop_MoveOn", 1, a, 0);
+            else check(0x4269A0, Drop_Move, "Drop_Move", 1, a, 0);
+        }
+    }
+    ao_tables_stub(tab, n, 2, 0);
+    stubs_install(0);
+    g_ign_objpads = 0;
+}
+
+/* type 18: the flying shell */
+static void test_ao_shell(void)
+{
+    static const u32 tab[] = {0x720340};
+    static const u8 n[] = {3};
+    g_ign_objpads = 1;
+    stubs_install(1);
+    ao_tables_stub(tab, n, 1, 1);
+    for (int i = 0; i < iters; i++) {
+        u32 a[1];
+        gptr o = ao_setup(); a[0] = o;
+        U8(o + 0x54) = (u8)(rnd() % 3);
+        if (rnd() % 2) ao_away(o, o + 0x1C4, rnd() % 6000);
+        U16(o + 0x1CC) = (u16)(rnd() % 2 ? rnd() % 0x400 : rnd());
+        sprintf(g_what, "shell %X handler state %u flags %X", o, U8(o + 0x54), U32(o + 0x50));
+        check(0x426E50, Shell_Handler, "Shell_Handler", 1, a, 0);
+        o = ao_setup(); a[0] = o;
+        U8(o + 0x54) = (u8)rnd();
+        check(0x426D10, Shell_Init, "Shell_Init", 1, a, 0);
+        o = ao_setup(); a[0] = o;
+        U16(o + 0x10C) = rnd() % 2 ? 0 : (u16)rnd();
+        U16(o + 0x1C0) = rnd() % 2 ? 0 : rnd() % 2 ? (u16)(1 + rnd() % 0xFF) << 8 : (u16)rnd();
+        U32(0x87DE14) = 2 + rnd() % 12; U32(G() + 0xA74) = rnd() % 4;   /* lights, free or not */
+        for (u32 k = 0; k < 16; k++) U8(O_K3 + k * 0x34) = (u8)(rnd() % 3 ? 1 : rnd());
+        ao_away(o, o + 0x1C4, rnd() % 2 ? 1000 + (s32)(rnd() % 3) - 1 : (s32)(rnd() % 3000));
+        S16(o + 0x1C6) = (s16)rnd();                        /* (height: not counted) */
+        sprintf(g_what, "shell %X fly to %d %d", o, S16(o + 0x1C4) - S16(o + 0x40), S16(o + 0x1C8) - S16(o + 0x44));
+        check(0x426DA0, Shell_Fly, "Shell_Fly", 1, a, 0);
+        check(0x426E00, Shell_Flash, "Shell_Flash", 1, a, 0);
+    }
+    ao_tables_stub(tab, n, 1, 0);
+    stubs_install(0);
+    g_ign_objpads = 0;
+}
+
+/* type 19: the moving piece */
+static void test_ao_mover(void)
+{
+    static const u32 tab[] = {0x72036C, 0x72034C, 0x72035C};
+    static const u8 n[] = {3, 4, 4};
+    static const u16 fl[] = {0x10, 0x80, 0, 0x20, 0x40, 0x100, 0x200, 0x60};
+    g_ign_objpads = 1;
+    stubs_install(1);
+    ao_tables_stub(tab, n, 3, 1);
+    for (int i = 0; i < iters; i++) {
+        u32 a[3];
+        gptr o = ao_setup(); a[0] = o;
+        U16(o + 0x1C0) = (u16)(rnd() % 4 ? (rnd() % 8) | fl[rnd() % 8] : rnd());
+        U8(o + 0x54) = (u8)(rnd() % 3);
+        sprintf(g_what, "mover %X handler state %u flags %X", o, U8(o + 0x54), U16(o + 0x1C0));
+        check(0x4275B0, Mover_Handler, "Mover_Handler", 1, a, 0);
+        o = ao_setup(); a[0] = o;
+        U16(o + 0x1C0) = (u16)(rnd() % 4 ? rnd() % 8 : rnd());
+        check(0x426EF0, Mover_Init, "Mover_Init", 1, a, 0);
+        o = ao_setup(); a[0] = o;
+        U16(o + 0x1C0) = (u16)(rnd() % 4 ? rnd() % 8 : rnd());
+        U8(o + 0x55) = (u8)(rnd() % 4);
+        check(0x427540, Mover_Normal, "Mover_Normal", 1, a, 0);
+        check(0x427570, Mover_Drop, "Mover_Drop", 1, a, 0);
+        check(0x427590, Mover_Fly, "Mover_Fly", 1, a, 0);
+        /* waiting */
+        o = ao_setup(); a[0] = o;
+        U16(o + 0x1C0) = (u16)((rnd() % 4 ? fl[rnd() % 3] | (rnd() % 8) : rnd()) | (rnd() % 2 ? 0x200 : 0));
+        Flag_Set(2, 0x19, rnd() % 2);
+        S16(o + 0x1C4) = (s16)(rnd() % 2 ? rnd() % 4 - 1 : rnd());
+        sprintf(g_what, "mover %X wait flags %X t %d", o, U16(o + 0x1C0), S16(o + 0x1C4));
+        check(0x426FA0, Mover_Wait, "Mover_Wait", 1, a, 0);
+        /* falling: at about the distances, the angles about the quarters */
+        for (int k = 0; k < 8; k++) {
+            o = ao_setup(); a[0] = o;
+            U16(o + 0x1C0) = (u16)(rnd() % 4 ? (rnd() % 5) | fl[rnd() % 8] | (rnd() % 3 ? fl[3 + rnd() % 2] : 0) : rnd());
+            u32 at = k == 7 ? 0x1C8 : 0x1C6;
+            S16(o + at) = (s16)(rnd() % 4 ? rnd() % 6000 : rnd());
+            s32 fd = S16(o + at) < 0 ? 0 : S16(o + at) + 1000;
+            ao_away(o, o + 0x1D4, rnd() % 4 == 0 ? S16(o + at) + (s32)(rnd() % 5) - 2 : rnd() % 4 ? fd + (s32)(rnd() % 3000) : (s32)(rnd() % 8000));
+            static const u16 qa[] = {0x3FF, 0x400, 0x401, 0xBFF, 0xC00, 0xC01, 0, 0x7FF, 0x800, 0xFFF, 0x8000, 0x7FFF};
+            if (rnd() % 3 == 0) U16(o + 0x1C0) = (u16)((U16(o + 0x1C0) & ~0x6Fu) | (3 + rnd() % 2) | fl[3 + rnd() % 2]);
+            if (rnd() % 4) U16(o + 0x48) = rnd() % 2 ? qa[rnd() % 12] : (u16)(rnd() % 0x1000);
+            if (rnd() % 4) U16(o + 0x4A) = rnd() % 2 ? qa[rnd() % 12] : (u16)(rnd() % 0x1000);
+            sprintf(g_what, "mover %X move %d flags %X angles %X %X %X", o, k, U16(o + 0x1C0), U16(o + 0x48), U16(o + 0x4A), U16(o + 0x4C));
+            if (k == 7) check(0x4272C0, Mover_MoveOn, "Mover_MoveOn", 1, a, 0);
+            else check(0x427060, Mover_Move, "Mover_Move", 1, a, 0);
+        }
+        /* flying: the way left about spent, the speed about 0 */
+        for (int k = 0; k < 4; k++) {
+            o = ao_setup(); a[0] = o;
+            ao_away(o, o + 0x1D4, rnd() % 8000);
+            ao_away(o, o + 0x1C6, rnd() % 8000); ao_away(o, o + 0x1CC, rnd() % 8000);
+            u32 d = Camera_Distance(o + 0x40, o + 0x1D4);
+            U32(o + 0x1DC) = rnd() % 2 ? d + rnd() % 3 - 1 : rnd() % 2 ? rnd() % 10000 : rnd();
+            S16(o + 0xF4) = (s16)(rnd() % 2 ? rnd() % 5 - 2 : rnd());
+            S16(o + 0x1E0) = (s16)(rnd() % 2 ? rnd() % 16 - 8 : rnd());
+            sprintf(g_what, "mover %X fly %d left %u of %u speed %d", o, k, U32(o + 0x1DC), d, S16(o + 0xF4));
+            if (k % 2) check(0x427490, Mover_ToSecond, "Mover_ToSecond", 1, a, 0);
+            else check(0x427300, Mover_ToFirst, "Mover_ToFirst", 1, a, 0);
+        }
+        o = ao_setup();
+        a[0] = o + 0x40; a[1] = o + 0x1C6; a[2] = rnd() % 2 ? rnd() % 0x1000 : rnd();
+        ao_away(o, o + 0x1C6, rnd() % 2 ? rnd() % 100 : rnd() % 10000);
+        if (rnd() % 8 == 0) { U16(o + 0x1C6) = U16(o + 0x40); U16(o + 0x1C8) = U16(o + 0x42); U16(o + 0x1CA) = U16(o + 0x44); }
+        sprintf(g_what, "mover pitch yaw %X", a[2]);
+        check(0x4273E0, Mover_Pitch, "Mover_Pitch", 3, a, 0xFFFFFFFF);
+    }
+    ao_tables_stub(tab, n, 3, 0);
+    stubs_install(0);
+    g_ign_objpads = 0;
+}
+
+/* an object with a valid animation (Anim_Step) */
+static gptr ao_setup_anim(void)
+{
+    game_state(); world_setup(); enemy_state(); objects_links(); zones_setup();
+    gptr o = O_OBJ + 0x260 * (1 + rnd() % 6);
+    anim_setup_at(o);
+    for (u32 k = 0x1C0; k < 0x200; k += 4) U32(o + k) = rnd();
+    U32(LOG_BASE) = 0;
+    return o;
+}
+
+/* type 21: the bird */
+static void test_ao_bird(void)
+{
+    static const u32 tab[] = {0x7203B4, 0x7203A4};
+    static const u8 n[] = {3, 4};
+    g_ign_objpads = 1;
+    stubs_install(1);
+    ao_tables_stub(tab, n, 2, 1);
+    for (int i = 0; i < iters; i++) {
+        u32 a[1];
+        gptr o = ao_setup(); a[0] = o;
+        U8(o + 0x54) = (u8)(rnd() % 3);
+        check(0x427A50, Bird_Handler, "Bird_Handler", 1, a, 0);
+        o = ao_setup(); a[0] = o;
+        check(0x427670, Bird_Init, "Bird_Init", 1, a, 0);
+        o = ao_setup_anim(); a[0] = o;
+        U8(o + 0x55) = (u8)(rnd() % 4);
+        check(0x427A30, Bird_Normal, "Bird_Normal", 1, a, 0);
+        /* sitting: the player's state, the hop */
+        for (int k = 0; k < 4; k++) {
+            o = ao_setup(); a[0] = o;
+            gptr p = U32(G() + 0x940);
+            U8(o + 0x1C0) = (u8)rnd();
+            U16(o + 0x1D0) = rnd() % 2 ? 0 : rnd() % 2 ? (u16)(1 + rnd() % 0xFF) << 8 : (u16)rnd();
+            static const u8 st[][3] = {{1, 2}, {2, 1}, {1, 5, 5}, {1, 5, 6}, {1, 5, 4}, {1, 5, 7}, {1, 0xB}, {1, 0xB, 5}, {0, 5, 5}, {1, 0xA}, {3, 0xB}};
+            u32 s = rnd() % 11;
+            U8(p + 0x54) = st[s][0]; U8(p + 0x55) = st[s][1]; U8(p + 0x56) = st[s][2];
+            U8(o + 0x1E2) = (u8)(rnd() % 2 ? rnd() % 2 : rnd());
+            U8(o + 0x1E1) = (u8)(rnd() % 2 ? rnd() % 3 : rnd());
+            U8(o + 0x1E0) = (u8)(rnd() % 2 ? 0x13 + rnd() % 3 : rnd() % 0x16);
+            sprintf(g_what, "bird %X sit %X player %X hop %u %u %u", o, U8(o + 0x1C0), U32(p + 0x54) & 0xFFFFFF, U8(o + 0x1E0), U8(o + 0x1E1), U8(o + 0x1E2));
+            check(0x4276D0, Bird_Sit, "Bird_Sit", 1, a, 0);
+        }
+        /* flying: the way about spent */
+        for (int k = 0; k < 4; k++) {
+            o = ao_setup(); a[0] = o;
+            ao_away(o, o + 0x1D4, rnd() % 8000);
+            ao_away(o, o + 0x1C4, rnd() % 8000); ao_away(o, o + 0x1CA, rnd() % 8000);
+            u32 d = Camera_Distance(o + 0x1D4, o + 0x40);
+            U32(o + 0x1DC) = rnd() % 2 ? d + rnd() % 3 - 1 : rnd() % 2 ? rnd() % 10000 : rnd();
+            U16(o + 0x1C2) = (u16)(rnd() % 2 ? rnd() % 0x100 : rnd());
+            sprintf(g_what, "bird %X fly %d left %u of %u", o, k, U32(o + 0x1DC), d);
+            if (k % 2) check(0x427920, Bird_ToSecond, "Bird_ToSecond", 1, a, 0);
+            else check(0x427800, Bird_ToFirst, "Bird_ToFirst", 1, a, 0);
+        }
+    }
+    ao_tables_stub(tab, n, 2, 0);
+    stubs_install(0);
+    g_ign_objpads = 0;
+}
+
+/* type 23: the rock that breaks */
+static void test_ao_rock(void)
+{
+    static const u32 tab[] = {0x7203CC};
+    static const u8 n[] = {4};
+    g_ign_objpads = 1;
+    stubs_install(1);
+    ao_tables_stub(tab, n, 1, 1);
+    for (int i = 0; i < iters; i++) {
+        u32 a[1];
+        gptr o = ao_setup(); a[0] = o;
+        U8(o + 0x54) = (u8)(rnd() % 4);
+        U32(o + 0x12C) = rnd() % 2 ? 0x6D0000 : 0; U32(0x87F940) = 0;   /* (no other objects, an empty wall block) */
+        U32(0x6D0000) = 0; U32(0x6D0004) = (u32)rnd() << 16; U32(0x6D0008) = 0x00FF0100;
+        U32(o + 0x128) = rnd() % 4 ? 0x6D0000 : 0; U8(0x6D4000) = 0; U32(G() + 0xA4C) = 0x6D4000;
+        sprintf(g_what, "rock %X handler state %u flags %X", o, U8(o + 0x54), U32(o + 0x50));
+        check(0x427AD0, Rock_Handler, "Rock_Handler", 1, a, 0);
+        o = ao_setup(); a[0] = o;
+        U16(o + 0x10C) = rnd() % 2 ? 0 : (u16)rnd();
+        check(0x427B40, Rock_Init, "Rock_Init", 1, a, 0);
+        o = ao_setup(); a[0] = o;
+        U16(o + 0x174) = rnd() % 2 ? 0 : (u16)rnd();
+        check(0x427C00, Rock_Wait, "Rock_Wait", 1, a, 0);
+        U16(o + 0x10C) = rnd() % 2 ? 0 : (u16)rnd();
+        U8(o + 0x17D) = rnd() % 2 ? (u8[]){0x12, 0x13, 0x14, 0x15, 0x16, 0}[rnd() % 6] : (u8)rnd();
+        check(0x427C20, Rock_Hit, "Rock_Hit", 1, a, 0);
+    }
+    ao_tables_stub(tab, n, 1, 0);
+    stubs_install(0);
+    g_ign_objpads = 0;
+}
+
+/* type 27: the insect */
+static void test_ao_bug(void)
+{
+    static const u32 tab[] = {0x72041C};
+    static const u8 n[] = {5};
+    g_ign_objpads = 1;
+    stubs_install(1);
+    ao_tables_stub(tab, n, 1, 1);
+    for (int i = 0; i < iters; i++) {
+        u32 a[4];
+        gptr o = ao_setup(), p; a[0] = o;
+        U8(o + 0x54) = (u8)(rnd() % 5);
+        U16(o + 0x174) = (u16)(rnd() % 2 ? rnd() % 4 : rnd());
+        U8(o + 0x1C0) = (u8)(rnd() % 2 ? 0x95 + rnd() % 3 : rnd());
+        U8(G() + 0x7C4) = (u8)rnd();
+        sprintf(g_what, "bug %X handler state %u hit %X off %u flags %X", o, U8(o + 0x54), U16(o + 0x174), U8(o + 0x1C0), U32(o + 0x50));
+        check(0x428230, Bug_Handler, "Bug_Handler", 1, a, 0);
+        /* set up: its model and animation */
+        o = ao_setup(); a[0] = o;
+        static u8 keep[0x1500];                             /* (game data there: put back after) */
+        memcpy(keep, MEM(0x681500), sizeof keep);
+        do model_data(0x681500); while (U32(0x681500 + 0x14) != 16);
+        do anim_setup_at(AN_OBJ); while (U32(AN_OBJ + 0x68) != 16);
+        memcpy(MEM(o + 0x60), MEM(AN_OBJ + 0x60), 0x50);
+        memcpy(MEM(0x6819F4), MEM(AN_DATA), 0x1000);
+        U8(G() + 0x108E) = (u8)(rnd() % 2 ? rnd() % 3 : rnd());
+        U32(LOG_BASE) = 0;
+        check(0x428310, Bug_Init, "Bug_Init", 1, a, 0);
+        memcpy(MEM(0x681500), keep, sizeof keep);
+        /* flying about, leaving */
+        for (int k = 0; k < 4; k++) {
+            o = ao_setup_anim(); a[0] = o; p = U32(G() + 0x940);
+            trex_parts(o);
+            U16(o + 0x10C) = (u16)(rnd() % 4 ? 1 + rnd() % 2 : rnd() % 4);
+            U8(o + 0x1C4) = (u8)(rnd() % 2 ? (rnd() % 3) * 30 + 29 : rnd());
+            U8(o + 0x1C5) = (u8)(rnd() % 2);
+            ao_away(o, p + 0x40, rnd() % 2 ? (rnd() % 2 ? 150 : 2000) + (s32)(rnd() % 5) - 2 : (s32)(rnd() % 5000));
+            U16(o + 0x1C8) = (u16)(rnd() % 2 ? 0x3B + rnd() % 3 : rnd());
+            U16(p + 0x17E) = rnd() % 3 ? (u16)rnd() : 0;
+            U8(o + 0x1C6) = (u8)rnd(); U8(G() + 0x7C4) = rnd() % 2 ? U8(o + 0x1C6) : (u8)rnd();
+            ao_away(o, o + 0x1D8, rnd() % 5000);
+            sprintf(g_what, "bug %X %s kind %u", o, k % 2 ? "leave" : "chase", U16(o + 0x10C));
+            if (k % 2) check(0x4285D0, Bug_Leave, "Bug_Leave", 1, a, 0);
+            else check(0x4283F0, Bug_Chase, "Bug_Chase", 1, a, 0);
+        }
+        /* on the player */
+        o = ao_setup(); a[0] = o; p = U32(G() + 0x940);
+        U16(o + 0x1C8) = (u16)(rnd() % 2 ? (u16[]){0, 1, 2, 0x1E, 0x1F}[rnd() % 5] : rnd());
+        U8(p + 0x54) = rnd() % 2 ? 1 : (u8)(rnd() % 4); U8(p + 0x55) = (u8)(rnd() % 2 ? 6 + rnd() % 3 : rnd());
+        sprintf(g_what, "bug %X land %u player %u/%u", o, U16(o + 0x1C8), U8(p + 0x54), U8(p + 0x55));
+        check(0x428520, Bug_Land, "Bug_Land", 1, a, 0);
+        /* hit */
+        o = ao_setup(); a[0] = o;
+        U8(o + 0x55) = (u8)(rnd() % 3);
+        U16(o + 0x1CC) = (u16)(rnd() % 2 ? rnd() % 2 : rnd());
+        sprintf(g_what, "bug %X die %u", o, U8(o + 0x55));
+        check(0x428650, Bug_Die, "Bug_Die", 1, a, 0);
+        /* the flight, the turn */
+        o = ao_setup(); a[0] = o; a[1] = o + 0x1D8;
+        ao_away(o, o + 0x1D8, rnd() % 5000);
+        S16(o + 0x1DA) = (s16)(S16(o + 0x42) + (rnd() % 2 ? (s32)(rnd() % 5) - 2 + (rnd() % 2 ? 100 : 2000) : (s32)(rnd() % 6000) - 3000));
+        U16(o + 0x10C) = (u16)(rnd() % 3);
+        check(0x428790, Bug_Fly, "Bug_Fly", 2, a, 0);
+        a[0] = o + 0x40; a[1] = o + 0x1D8; a[2] = rnd() % 2 ? rnd() % 0x1000 : rnd(); a[3] = rnd() % 2 ? rnd() % 0x900 : rnd();
+        if (rnd() % 3 == 0) {                               /* the difference about 2 max, about 0x800 */
+            u32 ang = Angle_XZ(o + 0x40, o + 0x1D8), d = rnd() % 2 ? 0x800 + rnd() % 3 - 1 : 2 * (a[3] & 0x3FF) + rnd() % 3 - 1;
+            a[2] = (ang - (rnd() % 2 ? d : 0x1000 - d)) & 0xFFF;
+        }
+        sprintf(g_what, "turn cur %X max %X", a[2], a[3]);
+        check(0x44B430, Angle_TurnMax, "Angle_TurnMax", 4, a, 0xFFFFFFFF);
+    }
+    ao_tables_stub(tab, n, 1, 0);
+    stubs_install(0);
+    g_ign_objpads = 0;
+}
+
+/* type 22 of area 1: the poison plant */
+#define PL_FR 0x6A3000u         /* its scale frames */
+static void ao_plant_frames(gptr o)
+{
+    for (u32 k = 0; k < 0x400; k += 2) U16(PL_FR + k) = (u16)(rnd() % 2 ? 0x1000 + rnd() % 0x400 - 0x200 : rnd());
+    U32(o + 0x1D0) = rnd() % 8 ? PL_FR : 0;
+    U16(o + 0x94) = U32(o + 0x1D0) ? (u16)(rnd() % 4) : 0;   /* (no frames: none read) */
+    if (U32(o + 0x68) > 16) U32(o + 0x68) = 16;
+}
+
+/* the player inside the quad q (four x, z about o) or about its edge */
+static void ao_quad_player(gptr o, gptr q, s32 r)
+{
+    gptr p = U32(G() + 0x940);
+    s32 cx = S16(o + 0x40), cz = S16(o + 0x44);
+    static const s32 dx[4] = {1, 1, -1, -1}, dz[4] = {1, -1, -1, 1};
+    for (u32 i = 0; i < 4; i++) {
+        S16(q + i * 4) = (s16)(cx + dx[i] * (r + (s32)(rnd() % 200)));
+        S16(q + i * 4 + 2) = (s16)(cz + dz[i] * (r + (s32)(rnd() % 200)));
+    }
+    s32 w = rnd() % 2 ? r + (s32)(rnd() % 5) - 2 : (s32)(rnd() % (u32)(2 * r + 1));
+    S16(p + 0x40) = (s16)(cx + (rnd() % 2 ? w : -w)); S16(p + 0x44) = (s16)(cz + (rnd() % 2 ? (s32)(rnd() % (u32)r) : -(s32)(rnd() % (u32)r)));
+}
+
+static void test_ao_plant(void)
+{
+    static const u32 tab[] = {0x7206E0, 0x7206F4};
+    static const u8 n[] = {5, 4};
+    g_ign_objpads = 1;
+    stubs_install(1);
+    ao_tables_stub(tab, n, 2, 1);
+    for (int i = 0; i < iters; i++) {
+        u32 a[2];
+        gptr o = ao_setup(), p; a[0] = o;
+        U8(o + 0x54) = (u8)(rnd() % 5);
+        ao_plant_frames(o);
+        sprintf(g_what, "plant %X handler state %u flags %X frames %X", o, U8(o + 0x54), U32(o + 0x50), U32(o + 0x1D0));
+        check(0x428840, Plant_Handler, "Plant_Handler", 1, a, 0);
+        o = ao_setup(); a[0] = o;
+        ao_plant_frames(o);
+        check(0x428F30, Plant_Matrix, "Plant_Matrix", 1, a, 0);
+        a[1] = rnd();
+        check(0x428F20, Plant_SetFrames, "Plant_SetFrames", 2, a, 0);
+        o = ao_setup(); a[0] = o;
+        check(0x4288A0, Plant_Init, "Plant_Init", 1, a, 0);
+        /* set up: killed before or not; level (the third corner's height is not set) */
+        o = ao_setup_anim(); a[0] = o;
+        U16(o + 0x1C0) = (u16)(rnd() % 0x80);
+        Flag_Set(6, U16(o + 0x1C0), rnd() % 2);
+        U16(o + 0x48) = 0; U16(o + 0x4C) = 0; RotMatrix(o + 0x48, o + 0x20);
+        U16(o + 0x10C) = rnd() % 2 ? 0 : (u16)rnd();
+        check(0x4288D0, Plant_Setup, "Plant_Setup", 1, a, 0);
+        /* hidden: the player in its quad or not, the cloud's timer, chance */
+        for (int k = 0; k < 3; k++) {
+            o = ao_setup_anim(); a[0] = o; p = U32(G() + 0x940);
+            U16(o + 0x10C) = rnd() % 2 ? 0 : (u16)rnd();
+            ao_quad_player(o, o + 0x1F4, 300 + rnd() % 2000);
+            U8(o + 0x1C6) = (u8)(rnd() % 2 ? 0xE + rnd() % 3 : rnd());
+            U16(p + 0x174) = (u16)(rnd() % 2 ? rnd() % 2 : rnd());
+            U16(G() + 0x664) = (u16)(rnd() % 3 ? 4 * (rnd() % 2) : rnd());
+            U16(p + 0x10A) = (u16)(rnd() % 2 ? rnd() % 0x400 : rnd());
+            U16(p + 0x108) = (u16)(rnd() % 2 ? rnd() % 0x300 : rnd() % 2 ? rnd() % 3 - 1 : rnd());
+            if (rnd() % 4 == 0) U16(0x87DE10) = rand8_seed(0x7A, 0);
+            U32(LOG_BASE) = 0;
+            sprintf(g_what, "plant %X hidden kind %X timer %u", o, U16(o + 0x10C), U8(o + 0x1C6));
+            check(0x428A10, Plant_Hidden, "Plant_Hidden", 1, a, 0);
+        }
+        o = ao_setup_anim(); a[0] = o;
+        U16(o + 0x92) = (u16)(0x14 + rnd() % 3);
+        check(0x428B60, Plant_Rise, "Plant_Rise", 1, a, 0);
+        /* the snap: its quad about the player */
+        o = ao_setup_anim(); a[0] = o; p = U32(G() + 0x940);
+        for (u32 k = 0x1D4; k < 0x1F4; k += 2) S16(o + k) = (s16)(rnd() % 4 ? rnd() % 1200 - 600 : rnd());
+        if (rnd() % 2) { S16(o + 0x1D4) = 0x12C; S16(o + 0x1DC) = 0x12C; S16(o + 0x1E4) = -0x12C; S16(o + 0x1EC) = -0x12C;
+                         S16(o + 0x1D8) = 0; S16(o + 0x1F0) = 0; S16(o + 0x1E0) = (s16)-(rnd() % 3000); S16(o + 0x1E8) = S16(o + 0x1E0); }
+        ao_away(o, p + 0x40, rnd() % 3000);
+        U16(G() + 0x664) = (u16)(rnd() % 3 ? 4 * (rnd() % 2) : rnd());
+        U16(p + 0x10A) = (u16)(rnd() % 2 ? rnd() % 0x400 : rnd());
+        U16(p + 0x108) = (u16)(rnd() % 2 ? rnd() % 0x300 : rnd());
+        S16(o + 0x1C2) = (s16)(rnd() % 2 ? 9 + rnd() % 3 : rnd());
+        check(0x428BF0, Plant_Snap, "Plant_Snap", 1, a, 0);
+        o = ao_setup_anim(); a[0] = o;
+        anim_maybe_end(o);
+        check(0x428D70, Plant_Sink, "Plant_Sink", 1, a, 0);
+        U8(o + 0x55) = (u8)(rnd() % 4);
+        check(0x428DA0, Plant_Normal, "Plant_Normal", 1, a, 0);
+        /* hit: killed or not, wilting */
+        o = ao_setup_anim(); a[0] = o;
+        anim_maybe_end(o);
+        U8(o + 0x56) = (u8)(rnd() % 3);
+        U8(o + 0x170) = (u8)rnd();
+        U16(o + 0x1C0) = (u16)(rnd() % 0x80);
+        U8(o + 0x205) = (u8)(rnd() % 4);
+        S8(o + 0x207) = (s8)(rnd() % 2 ? rnd() % 3 : rnd());
+        S8(o + 0x208) = (s8)(rnd() % 2 ? 5 + rnd() % 4 : rnd());
+        { gptr q = U32(o + 0x64); if (rnd() % 3 == 0) U8(q + 0x8C) = 0; }
+        sprintf(g_what, "plant %X hit step %u kill %X", o, U8(o + 0x56), U8(o + 0x170));
+        check(0x428DC0, Plant_Hit, "Plant_Hit", 1, a, 0);
+    }
+    ao_tables_stub(tab, n, 2, 0);
+    stubs_install(0);
+    g_ign_objpads = 0;
+}
+
+/* type 26 of area 4: the burner; the light step */
+static void ao_lights(void)
+{
+    U32(0x87DE14) = 2 + rnd() % 12; U32(G() + 0xA74) = rnd() % 4;   /* lights, free or not */
+    for (u32 k = 0; k < 16; k++) { U8(O_K3 + k * 0x34) = (u8)(rnd() % 3 ? 1 : rnd()); U8(O_K3 + k * 0x34 + 3) = (u8)(rnd() % 6); }
+}
+
+static void test_ao_burner(void)
+{
+    static const u32 tab[] = {0x7203F8, 0x7203EC, 0x71E1B4};
+    static const u8 n[] = {4, 3, 6};
+    u32 slots = U32(0x87E764);
+    g_ign_objpads = 1;
+    stubs_install(1);
+    ao_tables_stub(tab, n, 3, 1);
+    for (int i = 0; i < iters; i++) {
+        u32 a[1];
+        gptr o = ao_setup(), g = G(); a[0] = o;
+        U8(o + 0x54) = (u8)(rnd() % 4); U8(o + 0x56) = rnd() % 2 ? 0 : (u8)rnd();
+        U32(g + 0xB54) = rnd() | (rnd() % 2 ? 0x40000000 : 0);
+        U16(o + 0x1C8) = (u16)(rnd() % 2 ? 0 : rnd() % 2 ? rnd() % 3 : rnd());
+        Flag_Set(4, 0xC, rnd() % 4 == 0);
+        U16(o + 0x1C6) = (u16)(rnd() % 2 ? 5 : rnd() % 8);
+        U8(g + 0x7C4) = (u8)(rnd() % 2 ? 0x27 + rnd() % 2 : rnd());
+        U8(o + 0x1CE) = (u8)rnd();
+        ao_lights();
+        U32(LOG_BASE) = 0;
+        sprintf(g_what, "burner %X handler state %u/%u B54 %X timer %u cam %u", o, U8(o + 0x54), U8(o + 0x56), U32(g + 0xB54), U16(o + 0x1C8), U8(g + 0x7C4));
+        check(0x428080, Burner_Handler, "Burner_Handler", 1, a, 0);
+        o = ao_setup(); a[0] = o;
+        check(0x427C60, Burner_Init, "Burner_Init", 1, a, 0);
+        U8(o + 0x55) = (u8)(rnd() % 3);
+        check(0x427F10, Burner_Normal, "Burner_Normal", 1, a, 0);
+        /* the steps: timers about their ends; its effect slot */
+        for (int k = 0; k < 4; k++) {
+            o = ao_setup();
+            if (k % 2) { o = player_setup_obj(); targets_setup(); aim_desc_setup(0); }   /* (the flame's targets) */
+            a[0] = o;
+            U32(0x87E764) = O_K2;
+            U16(o + 0x1C6) = (u16)(rnd() % 2 ? 5 : rnd() % 20);
+            U16(o + 0x1C0) = rnd() % 2 ? 0 : (u16)rnd();
+            U16(o + 0x1CC) = (u16)(rnd() % 2 ? rnd() % 3 : rnd());
+            static const s16 tv[] = {0, 1, 2, 8, 9, 15, 16, 17, 21, 22, 56, 57, -1, -5};
+            S16(o + 0x1C2) = rnd() % 2 ? tv[rnd() % 14] : (s16)rnd();
+            U16(o + 0x1C4) = rnd() % 2 ? 0 : (u16)rnd();
+            U16(o + 0x1CA) = rnd() % 2 ? 0 : (u16)rnd();
+            ao_lights();
+            U32(LOG_BASE) = 0;
+            sprintf(g_what, "burner %X step %d timer %d delay %u", o, k, S16(o + 0x1C2), U16(o + 0x1CC));
+            switch (k) {
+            case 0: check(0x427C90, Burner_Off, "Burner_Off", 1, a, 0); break;
+            case 1: check(0x427D70, Burner_Burn, "Burner_Burn", 1, a, 0); break;
+            case 2: check(0x427E70, Burner_Cool, "Burner_Cool", 1, a, 0); break;
+            case 3: check(0x427F30, Burner_Show, "Burner_Show", 1, a, 0); break;
+            }
+        }
+        /* the light step: at its script's end or not */
+        gptr l = O_K3 + 0x34 * (rnd() % 16);
+        U8(l + 3) = (u8)(rnd() % 6);
+        U32(l + 0xC) = 0x6A3800; U32(0x6A3800) = rnd() % 2 ? 0xFFFFFFFF : rnd();
+        a[0] = l;
+        check(0x413270, Light_Step, "Light_Step", 1, a, 0);
+    }
+    ao_tables_stub(tab, n, 3, 0);
+    stubs_install(0);
+    U32(0x87E764) = slots;
+    g_ign_objpads = 0;
+}
+
+/* the weapons' object types */
+static void test_ao_weapons(void)
+{
+    static u32 tab[2] = {0x72160C, 0x721640};
+    static const u8 n[2] = {16, 0};
+    g_ign_objpads = 1;
+    stubs_install(1);
+    ao_tables_stub(tab, n, 1, 1);
+    for (int i = 0; i < iters; i++) {
+        u32 a[1];
+        gptr o = ao_setup(); a[0] = o;
+        U16(G() + 0x10B4) = (u16)(rnd() % 16 | (rnd() % 16) << 4);
+        check(0x4488C0, WeaponObj_Type, "WeaponObj_Type", 1, a, 0);
+    }
+    ao_tables_stub(tab, n, 1, 0);
+    {   /* the sub-weapons: 0x721640 by the high byte (entries 0..15) */
+        static const u8 m[1] = {16};
+        ao_tables_stub(&tab[1], m, 1, 1);
+        for (int i = 0; i < iters; i++) {
+            u32 a[1];
+            gptr o = ao_setup(); a[0] = o;
+            U16(G() + 0x10B4) = (u16)((rnd() % 16) << 8 | (rnd() & 0xFF));
+            check(0x4488E0, SubWeaponObj_Type, "SubWeaponObj_Type", 1, a, 0);
+        }
+        ao_tables_stub(&tab[1], m, 1, 0);
+    }
+    stubs_install(0);
+    g_ign_objpads = 0;
+}
+
 /* ---- the extra game's playable dinosaurs: shared, the inostrancevia (types 41/42) ---- */
 static const u32 g_ki_t[2] = {0x722B08, 0x722C68}, g_ki_v[2] = {0x74B2D8, 0x74B330};
 static const u32 g_ki_m[2] = {0x662500, 0x638000}, g_ki_foe[2] = {2, 1};
@@ -10766,7 +11348,7 @@ __declspec(dllexport) void harness_main(int argc, char **argv)
         {"flags", test_flags}, {"geometry", test_geom}, {"script values", test_script_values},
         {"script opcodes", test_script_ops}, {"script objects", test_objects},
         {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"objects 2", test_object}, {"collision", test_collision}, {"player", test_player}, {"player states", test_player2}, {"zones", test_zones}, {"loading", test_room}, {"title", test_title}, {"game task", test_game}, {"doors", test_doors}, {"frame", test_frame}, {"enemy sets", test_enemyset}, {"enemies", test_enemies}, {"raptor", test_raptor}, {"oviraptor", test_ovi}, {"allosaurus", test_allo}, {"pteranodon", test_ptera}, {"tyrannosaurus", test_trex}, {"plesiosaurus", test_plesio}, {"water plesiosaurs", test_pw}, {"roamer", test_roam}, {"giganotosaurus", test_gig},
-    {"inostrancevia", test_ino}, {"triceratops", test_tri}, {"mosasaurus", test_mosa}, {"compsognathus", test_compso}, {"duel inostrancevia", test_kof_ino}, {"duel triceratops", test_kof_tri}, {"duel raptor", test_kof_rap}, {"duel oviraptor", test_kof_ovi}, {"duel allosaurus", test_kof_allo}, {"duel tyrannosaurus", test_kof_rex}, {"duel compsognathus", test_kof_comp}, {"aot kinds", test_aot_kinds}, {"object effects", test_obj_effects}, {"effect slots", test_k2}, {"effect drops", test_k2_drops}, {"effect emitters", test_eff_slots}, {"effect slots 3", test_k2_more}, {"helpers", test_helpers}, {"draw", test_draw}, {"pc gpu", test_pcgpu}, {"pc draw", test_pcdraw}, {"pc frame", test_pcframe},
+    {"inostrancevia", test_ino}, {"triceratops", test_tri}, {"mosasaurus", test_mosa}, {"compsognathus", test_compso}, {"duel inostrancevia", test_kof_ino}, {"duel triceratops", test_kof_tri}, {"duel raptor", test_kof_rap}, {"duel oviraptor", test_kof_ovi}, {"duel allosaurus", test_kof_allo}, {"duel tyrannosaurus", test_kof_rex}, {"duel compsognathus", test_kof_comp}, {"area falling piece", test_ao_drop}, {"area flying shell", test_ao_shell}, {"area moving piece", test_ao_mover}, {"area bird", test_ao_bird}, {"area rock", test_ao_rock}, {"area insect", test_ao_bug}, {"area poison plant", test_ao_plant}, {"area burner", test_ao_burner}, {"weapon objects", test_ao_weapons}, {"aot kinds", test_aot_kinds}, {"object effects", test_obj_effects}, {"effect slots", test_k2}, {"effect drops", test_k2_drops}, {"effect emitters", test_eff_slots}, {"effect slots 3", test_k2_more}, {"helpers", test_helpers}, {"draw", test_draw}, {"pc gpu", test_pcgpu}, {"pc draw", test_pcdraw}, {"pc frame", test_pcframe},
     };
     for (unsigned i = 0; i < sizeof T / sizeof T[0]; i++) {
         int f0 = g_fail, t0 = g_tests;

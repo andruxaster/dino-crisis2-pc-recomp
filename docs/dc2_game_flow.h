@@ -141,6 +141,11 @@
  *  (src/game/inostr.c; handler 0x437230 straight in the table, no type wrapper)
  *  (E<k>0 = entry k of the game's dinosaur list; model sizes agree);
  *  16 room prop (model inside the room block); 17..28 area objects
+ *  (src/game/aobj.c: 17 the falling piece of areas 1, 2, 8; 18 the flying shell;
+ *  19 the moving piece; 21 the bird of area 1; 22 the poison plant of area 1;
+ *  23 the rock of area 8; 26 the burner of area 4; 27 the insect, every area,
+ *  26 in area 6; parameters from the script at o+0x1C0..; 29/30 (28/29 in area 6) the
+ *  weapon and sub-weapon in hand, by G+0x10B4)
  *  (area 3 type 22, src/game/roamer.c: the roamer of rooms 303..305, walks a
  *  graph at o+0x1C0 {u16 points, u16 links; points of 8 bytes: s16 x, u16
  *  mark, s16 z, u8 kind, s8 flag; links: u8 a, u8 b, s16 length}, from room
