@@ -10106,6 +10106,349 @@ static void test_ao_burner(void)
     g_ign_objpads = 0;
 }
 
+/* ---- area objects of areas 4 and 8 (types 20, 25, 28; src/game/aobj2.c) ---- */
+static const u32 g_a20_tab[] = {0x739B60, 0x739B54};
+static const u8 g_a20_n[] = {5, 3};
+static const u32 g_a25_tab[] = {0x739BC8, 0x739BA4, 0x739BAC};
+static const u8 g_a25_n[] = {4, 2, 6};
+static const u32 g_a28_tab[] = {0x739C18, 0x739BFC, 0x739C08};
+static const u8 g_a28_n[] = {4, 2, 4};
+
+static u32 a2_pick(const s32 *v, u32 n) { return (u32)v[rnd() % n]; }
+#define A2_PICK(...) a2_pick((const s32[]){__VA_ARGS__}, sizeof((const s32[]){__VA_ARGS__}) / sizeof(s32))
+
+/* o about the origin (no s16 wrap at the distances compared) */
+static void a2_near(gptr o) { S16(o + 0x40) = (s16)(rnd() % 4000 - 2000); S16(o + 0x44) = (s16)(rnd() % 4000 - 2000); }
+/* point p (x at +0, z at +4) at d from point c, along an axis */
+static void a2_at(gptr c, gptr p, s32 d)
+{
+    static const s8 dir[4][2] = {{0, 1}, {1, 0}, {0, -1}, {-1, 0}};
+    int k = rnd() % 4;
+    s32 e = rnd() % 2 ? 0 : rnd() % 2 ? 1 : -1;               /* (or one off the axis: d*d + 1) */
+    S16(p) = (s16)(S16(c) + dir[k][0] * d + dir[k][1] * e); S16(p + 4) = (s16)(S16(c + 4) + dir[k][1] * d + dir[k][0] * e);
+}
+/* o's heading so that the angle to p less it is d (with an offset to the angle) */
+static void a2_face(gptr o, gptr p, s32 d, s32 off) { U16(o + 0x4A) = (u16)((s32)Angle_XZ(o + 0x40, p) + off - d) & 0xFFF; }
+/* about its facing after a turn of up to m, or anywhere */
+static void a2_facing(gptr o, gptr p, s32 m)
+{
+    if (rnd() % 4 == 0) return;
+    a2_face(o, p, A2_PICK(-(m + 0x1E), -(m + 0x1F), -(m + 0x1D), m, m + 1, 0, -0x1E, 0x200), 0);
+}
+/* the health: about its half (hit: about what a hit takes) */
+static void a2_health(int hit)
+{
+    if (rnd() % 4 == 0) U16(G() + 0x928) = (u16)A2_PICK(0, 1, 0x708, (s32)(rnd() & 0xFFFF));
+    else if (hit) U16(G() + 0x928) = (u16)A2_PICK(100, 101, 99, 250, 251, 249, 0x104, 0x105, 0x103);
+    else U16(G() + 0x928) = (u16)A2_PICK(0x384, 0x385, 0x383);
+}
+/* the other objects about: live, dying or not; how many there are */
+static void a2_others(gptr o)
+{
+    gptr pl = U32(G() + 0x940);
+    u32 room = (O_OBJ + 16 * 0x260 - pl) / 0x260;
+    U32(0x87F940) = 1 + rnd() % room;
+    for (u32 k = 1; k < room; k++) {
+        gptr p = pl + k * 0x260;
+        U8(p + 0x50) = (u8)((U8(p + 0x50) & ~1) | (rnd() % 4 == 0));
+        U8(p + 0x54) = (u8)A2_PICK(3, 3, 1, 2, 0);
+    }
+    if (rnd() % 2) U8(o + 0x50) |= 1;
+    if (rnd() % 2) Flag_Set(7, 0x1F, rnd() % 4 == 0);
+}
+/* a wall across its way (Wall_Ahead) */
+static void a2_wall(gptr o)
+{
+    gptr w = 0x6CFC00u, pg = w + 0x10;
+    U8(w) = 1; U32(w + 8) = 0x10;
+    double a = U16(o + 0x4A) * 3.14159265358979 / 2048, d = rnd() % 2 ? 500 : 900;
+    double cx = S16(o + 0x40) + d * sin(a), cz = S16(o + 0x44) + d * cos(a), ex = 800 * cos(a), ez = -800 * sin(a);
+    int sw = rnd() % 2;
+    U8(pg) = 1; U8(pg + 1) = 1; U8(pg + 3) = 0; U16(pg + 4) = 0xFFFF; U8(pg + 8) = 0x81;
+    S16(pg + 0xC + 4 * sw) = (s16)(cx + ex); S16(pg + 0xE + 4 * sw) = (s16)(cz + ez);
+    S16(pg + 0x10 - 4 * sw) = (s16)(cx - ex); S16(pg + 0x12 - 4 * sw) = (s16)(cz - ez);
+    U32(G() + 0xA4C) = w;
+}
+/* the camera zones: about o or not, its level at their edges */
+static void a2_zones(gptr o)
+{
+    gptr g = G();
+    U32(g + 0xA44) = O_ZONE; U32(g + 0xA48) = rnd() % 8;
+    s16 lv = (s16)A2_PICK(0, 1, 2, 3, -1, 0x100);
+    if (rnd() % 4) S16(o + 0x5A) = lv;
+    for (u32 k = 0; k < 8; k++) {
+        gptr e = O_ZONE + k * 0x2C;
+        for (u32 j = 0; j < 0x2C; j += 4) U32(e + j) = rnd();
+        U8(e) = (u8)A2_PICK(0, 0, 0, 0x80, 1); U8(e + 4) = (u8)(rnd() % 4 ? rnd() % 4 : rnd());
+        s32 lo = (s32)A2_PICK(lv, lv + 1, lv - 1, 0, lv - 2), sp = rnd() % 3;
+        if (lo < 0) lo = 0;
+        if (rnd() % 3 == 0) sp = lv - lo + (s32)(rnd() % 3) - 1;
+        U8(e + 6) = (u8)lo; U8(e + 7) = (u8)(sp < 0 ? 0 : sp);
+        s16 cx = (s16)(S16(o + 0x40) + (s16)(rnd() % 1000 - 500)), cz = (s16)(S16(o + 0x44) + (s16)(rnd() % 1000 - 500)), r = (s16)(50 + rnd() % 900);
+        if (k && rnd() % 3 == 0) cx = (s16)(cx + 3000);
+        U16(e + 0xC) = (u16)(cx + r); U16(e + 0xE) = (u16)(cz + r); U16(e + 0x10) = (u16)(cx + r); U16(e + 0x12) = (u16)(cz - r);
+        U16(e + 0x14) = (u16)(cx - r); U16(e + 0x16) = (u16)(cz - r); U16(e + 0x18) = (u16)(cx - r); U16(e + 0x1A) = (u16)(cz + r);
+    }
+    U16(o + 0x1CC) = (u16)A2_PICK(0, 1, 2, 3, 0x100, 0x101, 0x102, 0x103, 0xFFFF);
+}
+
+/* one with a working animation; for an init, a model with no more parts than it */
+static gptr a2_obj(int model)
+{
+    gptr o = ao_setup_anim();
+    for (u32 j = 1; j < 8; j++) if (j != 2) anim_data(AN_DATA + 0x800 * j, U32(o + 0x68), 1 + rnd() % 8);
+    for (u32 k = 0; k < 0x40; k++) U32(AN_TAB + 4 * k) = AN_DATA + 0x800 * (k < 8 ? k : (k - 5) & 7);   /* animations apart */
+    if (model) {
+        model_data(MODEL_DATA);
+        if (U32(MODEL_DATA + 0x14) > U32(o + 0x68)) U32(MODEL_DATA + 0x14) = U32(o + 0x68);
+        U32(o + 0x60) = MODEL_DATA;
+    }
+    return o;
+}
+
+static void test_aobj2(void)
+{
+    g_ign_objpads = 1;
+    stubs_install(1);
+    for (int i = 0; i < iters; i++) {
+        u32 a[4];
+        gptr o, pl;
+        /* ---- type 20 ---- */
+        ao_tables_stub(g_a20_tab, g_a20_n, 2, 1);
+        o = ao_setup(); a[0] = o;
+        U8(o + 0x54) = (u8)(rnd() % 5);
+        Flag_Set(7, 0x13, rnd() % 2);
+        sprintf(g_what, "a20 %X handler state %u", o, U8(o + 0x54));
+        check(0x490670, Ao20_Handler, "Ao20_Handler", 1, a, 0);
+        o = ao_setup_anim(); a[0] = o;
+        U8(o + 0x55) = (u8)(rnd() % 3);
+        check(0x490630, Ao20_Normal, "Ao20_Normal", 1, a, 0);
+        ao_tables_stub(g_a20_tab, g_a20_n, 2, 0);
+        o = a2_obj(1); a[0] = o;
+        U16(o + 0x1C0) = (u16)A2_PICK(0, 1, 0x100, (s32)rnd());
+        check(0x490290, Ao20_Init, "Ao20_Init", 1, a, 0);
+        for (int k = 0; k < 6; k++) {
+            o = ao_setup(); a[0] = o; pl = U32(G() + 0x940);
+            a2_near(o);
+            a2_at(o + 0x40, pl + 0x40, (s32)A2_PICK(500, 1500, 3000, 2500));
+            gptr p = rnd() % 2 ? pl + 0x40 : o + 0xD8;
+            a2_at(o + 0x40, o + 0xD8, 100 + rnd() % 3000);
+            a[1] = (u32)A2_PICK(0x1E, 0x20, 0, 0x1001E); a[2] = p;
+            a2_face(o, p, A2_PICK(0, 1, -1, 0x1E, -0x1E, 0x1F, 0x100), 0);
+            sprintf(g_what, "a20 %X turn max %X", o, a[1]);
+            check(0x490450, Ao20_Turn, "Ao20_Turn", 3, a, 0xFF);
+        }
+        for (int k = 0; k < 18; k++) {
+            o = a2_obj(0); a[0] = o; pl = U32(G() + 0x940);
+            a2_near(o);
+            U8(o + 0x56) = (u8)(rnd() % 4 ? rnd() % 3 : rnd());
+            if (rnd() % 2) U8(o + 0x56) = k % 3 == 2 ? 1 : 2;           /* where it decides */
+            U16(o + 0x10C) = (u16)A2_PICK(0, 1, 0x100, (s32)rnd());
+            U16(o + 0xF4) = (u16)rnd();
+            U8(o + 0x1C8) = (u8)A2_PICK(0, 1, (s32)rnd()); U8(o + 0x1C9) = (u8)rnd();
+            if (rnd() % 2) U16(o + 0x10C) = rnd() % 2;
+            a2_at(o + 0x40, o + 0xD8, 100 + rnd() % 3000);
+            u32 f = k % 3;
+            if (f == 0) {                                   /* watching: the player about 2500 */
+                a2_at(o + 0x40, pl + 0x40, (s32)A2_PICK(2500, 2499, 2501, 1000, 4000));
+                if (U8(o + 0x56) == 2) a2_face(o, pl + 0x40, A2_PICK(0, 0, 1, 0x1E, -0x40), 0);
+                else a2_facing(o, pl + 0x40, 0x1E);
+            } else if (f == 1) {                            /* home: the player about 2000 */
+                a2_at(o + 0x40, pl + 0x40, (s32)A2_PICK(2000, 1999, 2001, 500, 5000));
+                a2_facing(o, o + 0xD8, 0x1E);
+            } else {                                        /* away: the player about 5000, its place about 1500 */
+                a2_at(o + 0x40, pl + 0x40, (s32)A2_PICK(5000, 4999, 5001, 2000, 1000));
+                a2_at(o + 0x40, o + 0x1C0, (s32)A2_PICK(1500, 1499, 1501, 800, 3000));
+                a2_facing(o, o + 0xD8, 0x1E);
+            }
+            anim_maybe_end(o);
+            sprintf(g_what, "a20 %X mode %u step %u param %X", o, f, U8(o + 0x56), U16(o + 0x10C));
+            if (f == 0) check(0x490300, Ao20_Watch, "Ao20_Watch", 1, a, 0);
+            else if (f == 1) check(0x490490, Ao20_Home, "Ao20_Home", 1, a, 0);
+            else check(0x490570, Ao20_Away, "Ao20_Away", 1, a, 0);
+        }
+        /* ---- type 25 ---- */
+        ao_tables_stub(g_a25_tab, g_a25_n, 3, 1);
+        for (int k = 0; k < 6; k++) {
+            if (k) {                                        /* bumping into the player (bit 0 of o+0x130) */
+                coll_setup(); U32(LOG_BASE) = 0;
+                U32(G() + 0x940) = pl = O_OBJ; o = O_OBJ + 0x260 * (1 + rnd() % 15); a[0] = o;
+                U32(0x87F940) = 16;
+                U32(o + 0x50) = (U32(o + 0x50) & ~0xC20u) | 1 | (rnd() % 4 ? 0 : 0x20) | (rnd() % 2 ? 0x400 : 0);   /* (0x400: not pushed) */ U32(pl + 0x50) = (U32(pl + 0x50) & ~0x820u) | 1;
+                if (!U32(o + 0x12C)) U32(o + 0x12C) = CL_CYL + (o - O_OBJ) / 0x260 * 0x40;
+                if (!U32(pl + 0x12C)) U32(pl + 0x12C) = CL_CYL;
+            } else { o = ao_setup(); a[0] = o; pl = U32(G() + 0x940); a2_near(o); }
+            U8(o + 0x54) = (u8)(rnd() % 4);
+            a2_health(0); a2_zones(o);
+            if (k || rnd() % 2) { S16(pl + 0x40) = (s16)(S16(o + 0x40) + rnd() % 200 - 100); S16(pl + 0x44) = (s16)(S16(o + 0x44) + rnd() % 200 - 100); S16(pl + 0x42) = S16(o + 0x42); }
+            if (k || rnd() % 2) a2_face(o, pl + 0x40, A2_PICK(0x400, 0x400, 0x400, 0x401, 0x3FF, -0x400, -0x401, 0), 0);
+            if (k && rnd() % 2) U16(o + 0xF0) = U16(o + 0xF2) = U16(o + 0xF4) = 0;   /* (standing: the angle stays) */
+            U32(o + 0x1C0) = (rnd() & ~0xFu) | (rnd() & 0xF); U32(o + 0x1C4) = rnd();
+            if (k && rnd() % 2) { U8(o + 0x54) = 1; U32(o + 0x1C0) &= ~1u; }
+            if (rnd() % 2) U8(o + 0x130) |= 1;
+            U16(o + 0x1C8) = (u16)A2_PICK(0x2B, 0x2C, 0x2C, 0x2C, 0x2D, 0, 0xFF, 0x12C, (s32)rnd());
+            if (k && rnd() % 2) U8(o + 0x1C0) |= 8;                 /* blocked the frame before */
+            if (rnd() % 2) U8(o + 0x54) = 1;
+            sprintf(g_what, "a25 %X handler state %u bits %X/%X count %u", o, U8(o + 0x54), U32(o + 0x1C0), U32(o + 0x1C4), U16(o + 0x1C8));
+            check(0x4912F0, Ao25_Handler, "Ao25_Handler", 1, a, 0);
+        }
+        o = ao_setup(); a[0] = o;
+        U8(o + 0x55) = (u8)(rnd() % 2);
+        check(0x490880, Ao25_Start, "Ao25_Start", 1, a, 0);
+        o = ao_setup_anim(); a[0] = o;
+        U16(o + 0x10C) = (u16)(rnd() % 4 ? rnd() % 2 : 0x100);
+        U8(o + 0x55) = (u8)(rnd() % 6);
+        check(0x490FB0, Ao25_Normal, "Ao25_Normal", 1, a, 0);
+        ao_tables_stub(g_a25_tab, g_a25_n, 3, 0);
+        o = ao_setup(); a[0] = o;
+        a2_near(o); a2_zones(o);
+        sprintf(g_what, "a25 %X zone level %d of %u cam %X", o, S16(o + 0x5A), U32(G() + 0xA48), U16(o + 0x1CC));
+        check(0x491450, Ao25_Zone, "Ao25_Zone", 1, a, 0);
+        o = ao_setup(); a[0] = o;
+        a2_others(o);
+        sprintf(g_what, "a25 %X others %u", o, U32(0x87F940));
+        check(0x490B40, Ao25_Other, "Ao25_Other", 1, a, 0xFFFFFFFF);
+        for (int k = 0; k < 6; k++) {
+            o = ao_setup(); a[0] = o; pl = U32(G() + 0x940);
+            a2_near(o);
+            a2_at(o + 0x40, pl + 0x40, (s32)A2_PICK(500, 1500, 3000));
+            a[1] = (u32)A2_PICK(0x1E, 0x3C, 9, 10, 11, 0x1001E); a[2] = pl + 0x40; a[3] = (u32)A2_PICK(0, 1, 2, 0x101);
+            a2_face(o, pl + 0x40, A2_PICK(0, 9, 10, 11, -9, -10, -11, 0x100, -0x100), (u8)a[3] == 1 ? -0x300 : 0);
+            sprintf(g_what, "a25 %X turn max %X mode %X", o, a[1], a[3]);
+            check(0x490B90, Ao25_Turn, "Ao25_Turn", 4, a, 0xFF);
+        }
+        o = a2_obj(1); a[0] = o;
+        U16(o + 0x1C0) = (u16)A2_PICK(0, 1, 0x100, (s32)rnd()); a2_health(0);
+        sprintf(g_what, "a25 %X init param %X health %d", o, U16(o + 0x1C0), S16(G() + 0x928));
+        check(0x490720, Ao25_Init, "Ao25_Init", 1, a, 0);
+        for (int k = 0; k < 4; k++) {
+            o = a2_obj(0); a[0] = o;
+            U8(o + 0x56) = (u8)A2_PICK(0, 0, 0, 1, 2, (s32)rnd());
+            U16(o + 0x1CA) = (u16)A2_PICK(1, 1, 2, 0, (s32)rnd());
+            U16(o + 0x10C) = (u16)A2_PICK(0, 0, 1, 0x100, 0x100);
+            anim_maybe_end(o);
+            sprintf(g_what, "a25 %X wait step %u timer %u param %X", o, U8(o + 0x56), U16(o + 0x1CA), U16(o + 0x10C));
+            check(0x490810, Ao25_Wait, "Ao25_Wait", 1, a, 0);
+        }
+        for (int k = 0; k < 16; k++) {                      /* following, walking on */
+            o = a2_obj(0); a[0] = o; pl = U32(G() + 0x940);
+            a2_health(0);
+            int walk = k % 2;
+            U16(o + 0x10C) = (u16)(rnd() % 4 ? rnd() % 2 : 0x100);
+            if (walk && rnd() % 2) a2_at(0x739B78 + (U16(o + 0x10C) & 1) * 8, o + 0x40, (s32)A2_PICK(1000, 999, 1001, 500, 2000));
+            else a2_near(o);
+            U8(o + 0x56) = (u8)(rnd() % 4 ? rnd() % (walk ? 3 : 4) : rnd());
+            if (walk && rnd() % 2) U8(o + 0x56) = 2;
+            U8(o + 0x1D0) = (u8)A2_PICK(0x1E, 0x3C, (s32)rnd());
+            U8(o + 0x1CE) = (u8)A2_PICK(0, 1, (s32)rnd()); U8(o + 0x1CF) = (u8)rnd();
+            U32(o + 0x1C0) = (rnd() & ~0xFu) | (rnd() % 2 ? rnd() & 0xE : rnd() & 0xF);
+            if (!walk && rnd() % 2) { U8(o + 0x56) = 3; U8(o + 0x1C0) = (u8)((U8(o + 0x1C0) & ~5) | 1); }
+            a2_at(o + 0x40, pl + 0x40, (s32)(walk ? A2_PICK(5000, 4999, 5001, 1000) : A2_PICK(2500, 2499, 2501, 1000, 6000)));
+            a2_at(o + 0x40, o + 0xD8, 300 + rnd() % 3000);
+            if (walk) {
+                a2_facing(o, o + 0xD8, U8(o + 0x1D0));
+                U32(G() + 4) = (u32)A2_PICK(0, 5, 10, 1, 4, (s32)rnd());
+                if (rnd() % 2) a2_wall(o);
+            } else {
+                u8 hale = S16(G() + 0x928) > 0x384;
+                a2_face(o, pl + 0x40, A2_PICK(0, 5, 9, 10, -10, 11, 0x200), U8(o + 0x56) == 1 && hale ? -0x300 : 0);
+            }
+            a2_others(o);
+            anim_maybe_end(o);
+            sprintf(g_what, "a25 %X %s step %u health %d bits %X", o, walk ? "walk" : "follow", U8(o + 0x56), S16(G() + 0x928), U32(o + 0x1C0));
+            if (walk) check(0x490BF0, Ao25_Walk, "Ao25_Walk", 1, a, 0);
+            else check(0x4908A0, Ao25_Follow, "Ao25_Follow", 1, a, 0);
+        }
+        for (int k = 0; k < 8; k++) {                       /* frightened, cowering, down a ledge, blocked */
+            o = a2_obj(0); a[0] = o; pl = U32(G() + 0x940);
+            a2_near(o); a2_health(0);
+            U8(o + 0x56) = (u8)A2_PICK(0, 1, 1, (s32)rnd());
+            U16(o + 0x5A) = (u16)A2_PICK(0, 1, 0x7FFF, (s32)rnd());
+            a2_at(o + 0x40, pl + 0x40, (s32)A2_PICK(1000, 999, 1001, 300, 3000));
+            a2_others(o);
+            anim_maybe_end(o);
+            sprintf(g_what, "a25 %X mode %d step %u", o, 2 + k % 4, U8(o + 0x56));
+            switch (k % 4) {
+            case 0: check(0x490DC0, Ao25_Fright, "Ao25_Fright", 1, a, 0); break;
+            case 1: check(0x490E10, Ao25_Cower, "Ao25_Cower", 1, a, 0); break;
+            case 2: check(0x490E60, Ao25_Drop, "Ao25_Drop", 1, a, 0); break;
+            case 3: check(0x490F00, Ao25_Blocked, "Ao25_Blocked", 1, a, 0); break;
+            }
+        }
+        for (int k = 0; k < 8; k++) {
+            o = a2_obj(0); a[0] = o;
+            a2_health(1);
+            U8(o + 0x55) = (u8)(rnd() % 4 ? rnd() % 4 : rnd());
+            U16(o + 0x170) = (u16)A2_PICK(0xFFFF, 0xFFFF, 0, 0xFF, (s32)rnd());
+            if (rnd() % 2) U8(o + 0x55) = 0;
+            U16(o + 0x178) = (u16)(rnd() % 4);
+            U16(o + 0x1CA) = (u16)A2_PICK(0, 1, 0x100, (s32)rnd());
+            U16(o + 0xF4) = (u16)A2_PICK(0, 3, 4, 5, 5, 8, 0x8000, (s32)rnd());
+            anim_maybe_end(o);
+            sprintf(g_what, "a25 %X hit step %u health %d", o, U8(o + 0x55), S16(G() + 0x928));
+            check(0x490FE0, Ao25_Hit, "Ao25_Hit", 1, a, 0);
+        }
+        for (int k = 0; k < 2; k++) {
+            o = a2_obj(0); a[0] = o; pl = U32(G() + 0x940);
+            draw_safe();
+            U8(o + 0x55) = (u8)A2_PICK(0, 0, 1, (s32)rnd());
+            U8(G() + 0x7C4) = (u8)(rnd() % 4);
+            U16(o + 0x1CC) = (u16)A2_PICK(U8(G() + 0x7C4), U8(G() + 0x7C4) + 0x100, (s32)(rnd() % 4));
+            U32(G() + 0x93C) = O_EFF; U32(0x87DE04) = rnd() % 37;
+            for (u32 j = 0; j < 36; j++) {
+                gptr e = O_EFF + j * 0x70;
+                U8(e + 0x50) = (u8)(rnd() % 2); U8(e + 0x4E) = (u8)A2_PICK(3, 3, 2, 4, (s32)rnd());
+                U8(e + 0x4F) = (u8)A2_PICK(2, 3, 4, 0x10, 0x80, 0x7F, (s32)rnd());
+            }
+            anim_maybe_end(o);
+            sprintf(g_what, "a25 %X dying step %u cam %u/%X", o, U8(o + 0x55), U8(G() + 0x7C4), U16(o + 0x1CC));
+            check(0x4911C0, Ao25_Die, "Ao25_Die", 1, a, 0);
+        }
+        /* ---- type 28 ---- */
+        ao_tables_stub(g_a28_tab, g_a28_n, 3, 1);
+        o = ao_setup(); a[0] = o;
+        U8(o + 0x54) = (u8)(rnd() % 4);
+        check(0x4918D0, Ao28_Handler, "Ao28_Handler", 1, a, 0);
+        U8(o + 0x55) = (u8)(rnd() % 2);
+        check(0x491750, Ao28_Normal, "Ao28_Normal", 1, a, 0);
+        U8(o + 0x55) = (u8)(rnd() % 4);
+        check(0x491840, Ao28_Hit, "Ao28_Hit", 1, a, 0);
+        ao_tables_stub(g_a28_tab, g_a28_n, 3, 0);
+        o = a2_obj(1); a[0] = o;
+        check(0x491510, Ao28_Init, "Ao28_Init", 1, a, 0);
+        for (int k = 0; k < 4; k++) {
+            o = a2_obj(0); a[0] = o;
+            a2_health(0);
+            int back = k % 2;
+            a2_at(0x739BD8, o + 0x40, (s32)(back ? A2_PICK(700, 699, 701, 300, 2000) : A2_PICK(1000, 999, 1001, 300, 3000)));
+            U8(o + 0x56) = (u8)(rnd() % 4 ? rnd() % 3 : rnd());
+            a2_facing(o, 0x739BD8, 0x3C);
+            U16(o + 0x92) = (u16)(A2_PICK(0, 1, 2, 3, 4, 8) % (U16(o + 0x90) ? U16(o + 0x90) : 1));
+            anim_maybe_end(o);
+            sprintf(g_what, "a28 %X %s step %u", o, back ? "back" : "stay", U8(o + 0x56));
+            if (back) check(0x491680, Ao28_Back, "Ao28_Back", 1, a, 0);
+            else check(0x4915B0, Ao28_Stay, "Ao28_Stay", 1, a, 0);
+        }
+        for (int k = 0; k < 2; k++) {
+            o = a2_obj(0); a[0] = o;
+            a2_health(1);
+            U8(o + 0x56) = (u8)A2_PICK(0, 0, 1, (s32)rnd());
+            Flag_Set(7, 0x18, rnd() % 3 == 0);
+            U16(o + 0x178) = (u16)(rnd() % 4);
+            anim_maybe_end(o);
+            sprintf(g_what, "a28 %X hurt step %u health %d", o, U8(o + 0x56), S16(G() + 0x928));
+            check(0x491770, Ao28_Hurt, "Ao28_Hurt", 1, a, 0);
+        }
+        o = a2_obj(0); a[0] = o;
+        draw_safe();
+        U8(o + 0x55) = (u8)A2_PICK(0, 0, 1, (s32)rnd());
+        anim_maybe_end(o);
+        check(0x491860, Ao28_Die, "Ao28_Die", 1, a, 0);
+    }
+    stubs_install(0);
+    g_ign_objpads = 0;
+}
+
 /* the weapons' object types */
 static void test_ao_weapons(void)
 {
@@ -11619,7 +11962,7 @@ __declspec(dllexport) void harness_main(int argc, char **argv)
         {"flags", test_flags}, {"geometry", test_geom}, {"script values", test_script_values},
         {"script opcodes", test_script_ops}, {"script objects", test_objects},
         {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"objects 2", test_object}, {"collision", test_collision}, {"player", test_player}, {"player states", test_player2}, {"zones", test_zones}, {"loading", test_room}, {"title", test_title}, {"game task", test_game}, {"doors", test_doors}, {"frame", test_frame}, {"enemy sets", test_enemyset}, {"enemies", test_enemies}, {"raptor", test_raptor}, {"oviraptor", test_ovi}, {"allosaurus", test_allo}, {"pteranodon", test_ptera}, {"area pteranodon", test_ptera2}, {"tyrannosaurus", test_trex}, {"plesiosaurus", test_plesio}, {"water plesiosaurs", test_pw}, {"roamer", test_roam}, {"giganotosaurus", test_gig},
-    {"inostrancevia", test_ino}, {"triceratops", test_tri}, {"mosasaurus", test_mosa}, {"compsognathus", test_compso}, {"duel inostrancevia", test_kof_ino}, {"duel triceratops", test_kof_tri}, {"duel raptor", test_kof_rap}, {"duel oviraptor", test_kof_ovi}, {"duel allosaurus", test_kof_allo}, {"duel tyrannosaurus", test_kof_rex}, {"duel compsognathus", test_kof_comp}, {"area falling piece", test_ao_drop}, {"area flying shell", test_ao_shell}, {"area moving piece", test_ao_mover}, {"area bird", test_ao_bird}, {"area rock", test_ao_rock}, {"area insect", test_ao_bug}, {"area poison plant", test_ao_plant}, {"area burner", test_ao_burner}, {"weapon objects", test_ao_weapons}, {"aot kinds", test_aot_kinds}, {"object effects", test_obj_effects}, {"effect slots", test_k2}, {"effect drops", test_k2_drops}, {"effect emitters", test_eff_slots}, {"effect slots 3", test_k2_more}, {"helpers", test_helpers}, {"draw", test_draw}, {"pc gpu", test_pcgpu}, {"pc draw", test_pcdraw}, {"pc frame", test_pcframe},
+    {"inostrancevia", test_ino}, {"triceratops", test_tri}, {"mosasaurus", test_mosa}, {"compsognathus", test_compso}, {"duel inostrancevia", test_kof_ino}, {"duel triceratops", test_kof_tri}, {"duel raptor", test_kof_rap}, {"duel oviraptor", test_kof_ovi}, {"duel allosaurus", test_kof_allo}, {"duel tyrannosaurus", test_kof_rex}, {"duel compsognathus", test_kof_comp}, {"area falling piece", test_ao_drop}, {"area flying shell", test_ao_shell}, {"area moving piece", test_ao_mover}, {"area bird", test_ao_bird}, {"area rock", test_ao_rock}, {"area insect", test_ao_bug}, {"area poison plant", test_ao_plant}, {"area burner", test_ao_burner}, {"weapon objects", test_ao_weapons}, {"area 4/8 objects", test_aobj2}, {"aot kinds", test_aot_kinds}, {"object effects", test_obj_effects}, {"effect slots", test_k2}, {"effect drops", test_k2_drops}, {"effect emitters", test_eff_slots}, {"effect slots 3", test_k2_more}, {"helpers", test_helpers}, {"draw", test_draw}, {"pc gpu", test_pcgpu}, {"pc draw", test_pcdraw}, {"pc frame", test_pcframe},
     };
     for (unsigned i = 0; i < sizeof T / sizeof T[0]; i++) {
         int f0 = g_fail, t0 = g_tests;

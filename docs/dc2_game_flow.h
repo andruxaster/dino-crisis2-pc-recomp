@@ -149,6 +149,10 @@
  *  (area 0 type 24, src/game/ptera2.c: the area 0 pteranodon, the type 4
  *  pteranodon's kin without the carry; drifts along +z at o+0x202 while not
  *  attacking)
+ *  (src/game/aobj2.c: area 8 type 20 keeps to o+0xD8 and turns after the
+ *  player, o+0x10C its reaction; area 4 types 25 and 28 must be kept alive,
+ *  health G+0x928 of G+0x92A, flag 7:0x1D when 25 reaches its point 0x739B78
+ *  + 8 * o+0x10C, 28 keeps to 0x739BD8; at 0 the game is over)
  *  (area 3 type 22, src/game/roamer.c: the roamer of rooms 303..305, walks a
  *  graph at o+0x1C0 {u16 points, u16 links; points of 8 bytes: s16 x, u16
  *  mark, s16 z, u8 kind, s8 flag; links: u8 a, u8 b, s16 length}, from room

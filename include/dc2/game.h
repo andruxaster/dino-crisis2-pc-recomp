@@ -1829,6 +1829,37 @@ void DC2CALL Pt2_Damage(gptr o);    /* 0x433240 */
 void DC2CALL Pt2_Knock(gptr o);     /* 0x4333A0 */
 void DC2CALL Pt2_KnockHard(gptr o); /* 0x4334D0 */
 void DC2CALL Pt2_Dying(gptr o);     /* 0x433600 */
+void DC2CALL Ao20_Handler(gptr o);  /* 0x490670 */
+void DC2CALL Ao20_Init(gptr o);     /* 0x490290 */
+void DC2CALL Ao20_Normal(gptr o);   /* 0x490630 */
+u32  DC2CALL Ao20_Turn(gptr o, u32 max, gptr p); /* 0x490450 */
+void DC2CALL Ao20_Watch(gptr o);    /* 0x490300 */
+void DC2CALL Ao20_Home(gptr o);     /* 0x490490 */
+void DC2CALL Ao20_Away(gptr o);     /* 0x490570 */
+void DC2CALL Ao25_Handler(gptr o);  /* 0x4912F0 */
+void DC2CALL Ao25_Zone(gptr o);     /* 0x491450 */
+u32  DC2CALL Ao25_Other(gptr o);    /* 0x490B40 */
+u32  DC2CALL Ao25_Turn(gptr o, u32 max, gptr p, u32 mode); /* 0x490B90 */
+void DC2CALL Ao25_Start(gptr o);    /* 0x490880 */
+void DC2CALL Ao25_Init(gptr o);     /* 0x490720 */
+void DC2CALL Ao25_Wait(gptr o);     /* 0x490810 */
+void DC2CALL Ao25_Follow(gptr o);   /* 0x4908A0 */
+void DC2CALL Ao25_Walk(gptr o);     /* 0x490BF0 */
+void DC2CALL Ao25_Fright(gptr o);   /* 0x490DC0 */
+void DC2CALL Ao25_Cower(gptr o);    /* 0x490E10 */
+void DC2CALL Ao25_Drop(gptr o);     /* 0x490E60 */
+void DC2CALL Ao25_Blocked(gptr o);  /* 0x490F00 */
+void DC2CALL Ao25_Normal(gptr o);   /* 0x490FB0 */
+void DC2CALL Ao25_Hit(gptr o);      /* 0x490FE0 */
+void DC2CALL Ao25_Die(gptr o);      /* 0x4911C0 */
+void DC2CALL Ao28_Handler(gptr o);  /* 0x4918D0 */
+void DC2CALL Ao28_Init(gptr o);     /* 0x491510 */
+void DC2CALL Ao28_Normal(gptr o);   /* 0x491750 */
+void DC2CALL Ao28_Stay(gptr o);     /* 0x4915B0 */
+void DC2CALL Ao28_Back(gptr o);     /* 0x491680 */
+void DC2CALL Ao28_Hit(gptr o);      /* 0x491840 */
+void DC2CALL Ao28_Hurt(gptr o);     /* 0x491770 */
+void DC2CALL Ao28_Die(gptr o);      /* 0x491860 */
 
 void DC2CALL Ples12_Remove(gptr o);                /* 0x430E50 */
 void DC2CALL Ples12_Type(gptr o);                  /* 0x430360 */
