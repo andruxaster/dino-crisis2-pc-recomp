@@ -1907,6 +1907,13 @@ void DC2CALL K2Thing8_Init(gptr k); /* 0x44D260 */
 void DC2CALL K2Thing8_Move(gptr k); /* 0x44D450 */
 void DC2CALL K2Thing8_Light(gptr e); /* 0x44D840 */
 void DC2CALL K2Thing8_Piece(gptr e, u32 left); /* 0x44D880 */
+void DC2CALL Snd_ClearSlots(void);  /* 0x48C040 */
+void DC2CALL Strm_HaltAll(void);    /* 0x48C060 */
+void DC2CALL Snd_Duck(void);        /* 0x48C8D0 */
+void DC2CALL Snd_Unduck(void);      /* 0x48C950 */
+void DC2CALL Snd_FadeOutAll(void);  /* 0x48CBA0 */
+void DC2CALL Snd_PauseAll(void);    /* 0x48CF60 */
+void DC2CALL Snd_ResumeAll(void);   /* 0x48CFB0 */
 
 void DC2CALL Ples12_Remove(gptr o);                /* 0x430E50 */
 void DC2CALL Ples12_Type(gptr o);                  /* 0x430360 */

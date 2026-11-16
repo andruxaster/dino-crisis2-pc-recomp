@@ -42,6 +42,11 @@ void DC2CALL JPEG_Decode(gptr d, gptr s, u32 n, u32 m) { ORIG(0x4D2990, void (DC
 void DC2CALL Pc_MasksUpload(u32 a)              { ORIG(0x4BEAC0, void (DC2CALL *)(u32))(a); }
 void DC2CALL Snd_SetPan(u32 h, u32 p)           { ORIG(0x4BFA60, void (DC2CALL *)(u32, u32))(h, p); }
 void DC2CALL Strm_Close(u32 h)                  { ORIG(0x4C0050, void (DC2CALL *)(u32))(h); }
+u32  DC2CALL Strm_Open(gptr d, u32 n, u32 l)    { return ORIG(0x4BFC10, u32 (DC2CALL *)(gptr, u32, u32))(d, n, l); }
+void DC2CALL Snd_Pause(u32 h)                   { ORIG(0x4BFB00, void (DC2CALL *)(u32))(h); }
+void DC2CALL Snd_Resume(u32 h)                  { ORIG(0x4BFB40, void (DC2CALL *)(u32))(h); }
+void DC2CALL Strm_Pause(u32 h)                  { ORIG(0x4BFFD0, void (DC2CALL *)(u32))(h); }
+void DC2CALL Strm_Resume(u32 h)                 { ORIG(0x4C0010, void (DC2CALL *)(u32))(h); }
 u32  DC2CALL Movie_Open(gptr n, u32 w, u32 h)   { return ORIG(0x4BF3A0, u32 (DC2CALL *)(gptr, u32, u32))(n, w, h); }
 void DC2CALL Masks_CreateVB(u32 n, gptr p)      { ORIG(0x4BE3C0, void (DC2CALL *)(u32, gptr))(n, p); }
 void DC2CALL Masks_SetQuad(u32 i, u32 x, u32 y, u32 z) { ORIG(0x4BE430, void (DC2CALL *)(u32, u32, u32, u32))(i, x, y, z); }
@@ -139,44 +144,9 @@ void DC2CALL Crt_sprintf1(gptr b, gptr f, u32 a)
     else sprintf((char *)MEM(b), (const char *)MEM(f), (int)a);
 }
 
-/* silent sound buffers: the length of the wave's data in frames (30 per
-   second, G+4 counts the frames); handle 0 is the voice's */
-static struct { u32 used, frames, start, playing; } g_snd[0x400];
-u32 DC2CALL Snd_CreateBuffer(gptr w, u32 voice)
-{
-    u32 h = 0;
-    if (!voice) {
-        for (h = 1; h < 0x400 && g_snd[h].used; h++) {}
-        if (h == 0x400) return 0xFFFFFFFF;
-    }
-    u32 bps = U32(w + 0x1C), c = w + 0x14 + U32(w + 0x10), size = 0;
-    for (int k = 0; k < 16; k++, c += 8 + U32(c + 4))
-        if (!memcmp(MEM(c), "data", 4)) { size = U32(c + 4); break; }
-    g_snd[h].used = 1; g_snd[h].playing = 0;
-    g_snd[h].frames = bps ? (u32)((unsigned long long)size * 30 / bps) + 1 : 1;
-    return h;
-}
-void DC2CALL Snd_Play(u32 h, u32 a, u32 loop)
-{
-    (void)a;
-    if (h >= 0x400) return;
-    g_snd[h].start = U32(G() + 4); g_snd[h].playing = loop ? 2 : 1;
-}
-void DC2CALL Snd_SetVolume(u32 h, s32 v) { (void)h; (void)v; }
-u32 DC2CALL Snd_IsPlaying(u32 h)
-{
-    if (h >= 0x400 || !g_snd[h].playing) return 0;
-    return g_snd[h].playing == 2 || U32(G() + 4) - g_snd[h].start < g_snd[h].frames;
-}
-void DC2CALL Snd_Stop(u32 h) { if (h < 0x400) g_snd[h].playing = 0; }
-void DC2CALL Snd_Free(u32 h) { if (h < 0x400) g_snd[h].used = g_snd[h].playing = 0; }
-void DC2CALL Strm_SetVolume(u32 h, s32 v) { (void)h; (void)v; }
-void DC2CALL Strm_Play(u32 h) { (void)h; }
-void DC2CALL Strm_Stop(u32 h) { (void)h; }
+/* the sound buffers and streams: src/pc/audio.c */
 u16 g_pad_raw[2];
 void DC2CALL Input_ReadPad(u32 p) { if (p < 2) U16(0x87DC42 + p * 0x24) = g_pad_raw[p]; }
-void DC2CALL Snd_SetPan(u32 h, u32 p) { (void)h; (void)p; }
-void DC2CALL Strm_Close(u32 h) { (void)h; }
 u32 DC2CALL Movie_Open(gptr name, u32 w, u32 h) { (void)name; (void)w; (void)h; return 1; }
 void DC2CALL Masks_CreateVB(u32 n, gptr p) { (void)n; (void)p; }
 void DC2CALL Masks_SetQuad(u32 i, u32 x, u32 y, u32 z) { (void)i; (void)x; (void)y; (void)z; }

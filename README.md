@@ -57,7 +57,11 @@ keyboard as well (arrows, Z confirm, X back, C action, Enter start; Escape
 quits). `DC2_STATS=1` prints each frame in numbers (draws, vertices, texture
 uploads, mean colour, share of lit pixels), `DC2_DRAWLOG=F` (and
 `DC2_DRAWLOG_N`) every draw of frames F.., `DC2_FAST=1` runs without frame
-pacing, `DC2_SCALE=n` enlarges the window. `src/port/dc/render_pvr.c` needs
+pacing, `DC2_SCALE=n` enlarges the window. It plays the sound effects, the voice
+and the rooms' music (the MP3 streams of the room files, decoded with
+[minimp3](https://github.com/lieff/minimp3), CC0, in `third_party/`);
+`DC2_MUTE=1` silences it, `DC2_WAV=file.wav` writes the mixed sound to a
+file (also with the headless `dc2`), `DC2_SNDLOG=1` prints the sound calls. `src/port/dc/render_pvr.c` needs
 KallistiOS; without a KOS toolchain it can be syntax-checked with
 `sh4-linux-gnu-gcc -fsyntax-only` against KOS's headers.
 
@@ -88,7 +92,7 @@ Checked under wine 9 (32-bit prefix): all 26 hooks installed; after one
 minute Lzss_Decode 23 calls, Flag_Check 62 000, Script_Run every frame,
 PointInQuad 5 000.
 
-## Reimplemented (1932)
+## Reimplemented (1939)
 
 The authoritative list is `src/hook/hooks.c`. By area:
 
@@ -112,7 +116,7 @@ The authoritative list is `src/hook/hooks.c`. By area:
 | root task and tasks | RootTask and its boot modes (boot, logo, warning, to title), Screen_LoadImage, Save_ScanTask; Task_Kill; host coroutines for the task system in standalone builds | src/game/root.c, src/game/task.c |
 | title | TitleTask, menu (new game / load / options), difficulty choice, opening movie and attract demo, animated labels and their sprites | src/game/title.c |
 | game task | Game_Start, opening task, new-game state, game task modes init / area tables / room enter / play / game over ("Will you continue?"), room / door / armour / music loads, checkpoint copy, room sound tables | src/game/game.c |
-| frame of play | Game_Frame (0x472FD0): the trigger areas (Aot_Tick, AOT_Check, all their kinds: door, event, message, flag, item, effects, menus), the object, prop and effect loops; the camera zones and loading a camera's view (Camera_Load); sound each frame and the voice (Snd_Tick, Voice_Play/Stop); the enemy sets that bring enemies in (EnemySet_Tick, EnemySet_Small) | src/game/game.c, src/game/room.c, src/game/camera.c, src/game/sound.c, src/game/enemyset.c |
+| frame of play | Game_Frame (0x472FD0): the trigger areas (Aot_Tick, AOT_Check, all their kinds: door, event, message, flag, item, effects, menus), the object, prop and effect loops; the camera zones and loading a camera's view (Camera_Load); sound each frame and the voice (Snd_Tick, Voice_Play/Stop), all the sound slots at once (clear, duck and back, fade out, pause and resume); the enemy sets that bring enemies in (EnemySet_Tick, EnemySet_Small) | src/game/game.c, src/game/room.c, src/game/camera.c, src/game/sound.c, src/game/enemyset.c |
 | enemies (shared) | attack spheres against the player (Enemy_AttackHit, Sphere_Hit), kill and event scores with the combo, bleeding, hit directions, death fade, flashes and props they leave, the game over start | src/game/enemy.c |
 | object effects | turning, blinking (polygon shade), thrown and debris pieces, the item in the player's hand | src/game/effect.c |
 | effect slots | the slots G+0x944: motion steps, sprite animation, hidden test; sprites (init, move, fade), splashes and floating bits, both emitter kinds and their record lists; falling drops, bubbles, a sprite stuck to an effect, puffs, a glow, lone sprites, screen sparkles and bursts; the effects that fill slots from a record list or with the area's own type | src/game/k2.c |
@@ -139,6 +143,7 @@ The authoritative list is `src/hook/hooks.c`. By area:
 | PC layer: JPEG | the rooms' backgrounds (0x4D2990): a baseline decoder that gives libjpeg 6b's pixels as the port set it up (float IDCT, fancy upsampling, 15-bit output with blue high); checked on every camera picture of the DBS files, also cut short and damaged | src/pc/jpeg.c |
 | PC layer: drawing | DrawOTag (0x4B50F0) and all it draws with: the packet drawers (polygons flat/gouraud/textured, lines, tiles, sprites, the font's text quads, the frame copy, background mask groups), vertex colour, fog, blending, depth and shading states, the texture cache (VRAM pages and palettes converted into 256x256 textures, found again by palette and window, reloaded when VRAM or a palette changes, released or marked when VRAM is written), the glyph cache, the pixel converters, VRAM copies, the frame grab. Copied call for call onto the Direct3D 6 calls of `include/dc2/gpudev.h` (COM in-process, a renderer standalone); the harness runs the original and the copy against a fake Direct3D that logs every call. The frame around it: the background image (0x4BDC90 and its upload), present and clear, fog colour and switch, the viewport's background colour, PutDispEnv/PutDrawEnv, the font buffer. Not yet: code 0x84 (a sprite composed from parts; not seen in the game's frames so far), the background masks module (0x4BE3C0..) | src/pc/drawot.c, src/pc/gpudev.c, include/dc2/pcdraw.h, include/dc2/gpudev.h |
 | PC layer: renderers | standalone only, not compared with the original: `src/pc/gpusoft.c` stands in for Direct3D 6 / DirectDraw 4 (surfaces as pixel buffers, render and texture-stage states, Blt/Lock/Flip, the PC layer's globals as its initialisation leaves them, fog per vertex) and hands draws to a `Renderer` (`include/dc2/render.h`): OpenGL 1.4 + SDL2 on the PC (`src/port/render_gl.c`), the PowerVR2 through KOS on the Dreamcast (`src/port/dc/render_pvr.c`: one translucent list in submission order, depth on 1/w, twiddled ARGB1555 textures; no alpha test, no read-back yet). `dc2` runs the main loop's graphics part (0x47053E) and its start (0x470980) | src/pc/gpusoft.c, src/port/render_gl.c, src/port/dc/render_pvr.c, src/port/dc2.c |
+| PC layer: sound | standalone only: the DirectSound buffers (0x4BF720..: WAVE PCM copied, volume v/127*30 dB - 30 dB, pan, replay rate, looping, pause) and the MP3 streams (0x4BFC10..: decoded whole at open, looping) mixed to stereo 44.1 kHz; `dc2gl` queues each frame's samples to SDL | src/pc/audio.c, third_party/minimp3 |
 
 The game runs as cooperative tasks (4 slots, `Task_Sleep(n)` gives up the
 CPU for n frames). In-process the original scheduler switches stacks; the
@@ -187,9 +192,9 @@ alone and the harness ignores them.
 
 The script VM, the keyframe animation, the generic object handler (type 1), object collision, the zone navigation, the player (all states and substates, all weapons and sub-weapons), the velociraptor, the oviraptor, the allosaurus, the pteranodon, the tyrannosaurus, the plesiosaurs, the giganotosaurus, the inostrancevia, the triceratops, the mosasaurus, the compsognathus and the duel's inostrancevia, triceratops, raptor, oviraptor, allosaurus, tyrannosaurus and compsognathus are complete; the standalone build plays the opening of room 101 and, with buttons held from the command line,
 walks the player through its door into room 102 (`dc2 Dino2.exe ROOT/Data 3300 400:820 440:820
-2900-2932:2000 2940-2955:1000 2960-3010:20`; ROOT also holds `Speech`). The DirectSound buffers have a
-silent stand-in there that only keeps time. Next: sound/BGM (0x48C9C0..0x48CE60), messages
-(0x4718F0), fades and menus. The PC layer's drawing is copied onto
+2900-2932:2000 2940-2955:1000 2960-3010:20`; ROOT also holds `Speech`). The DirectSound buffers and the music streams
+are mixed in `src/pc/audio.c` (the streams are MP3, decoded with minimp3).
+Next: messages (0x4718F0), fades and menus. The PC layer's drawing is copied onto
 Direct3D-shaped calls and drawn by a renderer (OpenGL, the Dreamcast's PVR);
 still missing there: the background masks module (0x4BE3C0..), code 0x84,
 the PVR's read-back. The title screen stays faded out in the standalone

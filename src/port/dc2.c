@@ -73,6 +73,37 @@ static void gl_stats(RenderGlStats *s)
 }
 #endif
 
+#ifdef DC2_GL
+/* the sound: each frame's samples queued (not past a fifth of a second
+   ahead, so that running fast does not pile them up) */
+static SDL_AudioDeviceID g_audio;
+static void audio_sink(const s16 *lr, u32 frames)
+{
+    if (!g_audio || SDL_GetQueuedAudioSize(g_audio) > 44100 * 4 / 5) return;
+    SDL_QueueAudio(g_audio, lr, frames * 4);
+}
+static void audio_open(void)
+{
+    if (getenv("DC2_MUTE") || SDL_InitSubSystem(SDL_INIT_AUDIO) != 0) return;
+    SDL_AudioSpec want = {0}, got;
+    want.freq = 44100; want.format = AUDIO_S16SYS; want.channels = 2; want.samples = 1024;
+    g_audio = SDL_OpenAudioDevice(NULL, 0, &want, &got, 0);
+    if (!g_audio) { fprintf(stderr, "SDL audio: %s\n", SDL_GetError()); return; }
+    PcAudio_Init(44100, audio_sink);
+    SDL_PauseAudioDevice(g_audio, 0);
+}
+#endif
+
+/* DC2_WAV=file: the sound written to a wave file (also headless) */
+static FILE *g_wav;
+static u32 g_wav_frames;
+static void wav_header(void)
+{
+    u32 bytes = g_wav_frames * 4, h[11] = {0x46464952, 36 + bytes, 0x45564157, 0x20746D66, 16, 0x00020001, 44100, 44100 * 4, 0x00100004, 0x61746164, bytes};
+    fseek(g_wav, 0, SEEK_SET); fwrite(h, 4, 11, g_wav); fseek(g_wav, 0, SEEK_END);
+}
+static void wav_sink(const s16 *lr, u32 frames) { fwrite(lr, 4, frames, g_wav); g_wav_frames += frames; }
+
 /* the game part of one frame of WinMain's loop (graphics and timing left out) */
 static void game_frame(void)
 {
@@ -106,7 +137,8 @@ static void game_reset(void)
 {
     SetGeomOffset(160, 120);
     SetGeomScreen(320);
-    memset(MEM(G()), 0, 0x53B * 4);
+    memset(MEM(G()), 0, 0x540 * 4);
+    memcpy(MEM(G() + 0x14EC), MEM(0x723CCC), 16);   /* the options' defaults: stereo, music and sound volume 15 */
     PcGpu_SetDefDrawEnv(0x87DCD4, 0, 0, 320, 240);
     PcGpu_SetDefDispEnv(0x87DCC0, 0, 256, 320, 240);
     PcGpu_SetDefDrawEnv(0x87DD64, 0, 256, 320, 240);
@@ -155,8 +187,10 @@ int main(int argc, char **argv)
     g_rend = rend;
     int quit = 0;
     if (getenv("DC2_STATS")) RenderGl_Stats()->on_present = gl_stats;
+    audio_open();
     int log_from = getenv("DC2_DRAWLOG") ? atoi(getenv("DC2_DRAWLOG")) : -1;
 #endif
+    if (getenv("DC2_WAV") && (g_wav = fopen(getenv("DC2_WAV"), "wb"))) { wav_header(); PcAudio_Init(44100, wav_sink); }
     PcDraw_InitStandalone(rend, 640, 480);
 
     U32(A_G_PTR) = A_G_STATIC;
@@ -194,6 +228,7 @@ int main(int argc, char **argv)
 #endif
         g_pad_raw[0] = (u16)held;                   /* read by Input_Frame (0x478BF0) */
         game_frame();
+        PcAudio_Frame(U32(0x87DE00));                  /* the frame's sound */
         draw_frame();
 #ifdef DC2_GL
         u32 want = 1000 * (U32(0x87DE00) ? U32(0x87DE00) : 1) / 60, dt = SDL_GetTicks() - t0;
@@ -245,5 +280,6 @@ int main(int argc, char **argv)
         if (tasks != last_tasks) { printf("frame %4d: tasks running %X\n", f, tasks); last_tasks = tasks; }
         if (!tasks) { printf("frame %4d: no task left\n", f); break; }
     }
+    if (g_wav) { wav_header(); fclose(g_wav); }
     return 0;
 }

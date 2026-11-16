@@ -94,3 +94,65 @@ void DC2CALL Voice_Play(u32 kind, u32 id)                           /* 0x48D070 
     Snd_SetVolume(U32(A_VOICE), Voice_Volume(kind));
     Flag_Set(2, 0, 1);
 }
+
+/* ---- all the slots at once ---- */
+
+void DC2CALL Snd_ClearSlots(void)                                   /* 0x48C040 */
+{
+    memset(MEM(A_SLOTS), 0, 0x200);
+}
+
+void DC2CALL Strm_HaltAll(void)                                     /* 0x48C060 */
+{
+    for (u32 i = 0; i < 4; i++) Strm_Halt(i);
+}
+
+/* the streams down to 0x5A (their volume kept at +0xE, else 0xFFFF), the
+   sounds playing down to 0x32 */
+void DC2CALL Snd_Duck(void)                                         /* 0x48C8D0 */
+{
+    for (u32 i = 0; i < 4; i++) {
+        gptr s = A_STREAMS + i * 0x14;
+        U16(s + 0xE) = 0xFFFF;
+        if (S16(s + 0xC) > 0x5A && !(U8(s + 0x10) & 0x80)) {
+            U16(s + 0xE) = U16(s + 0xC);
+            Strm_SetFade(i, 1, 0x5A, 1);
+        }
+    }
+    for (u32 i = 0; i < 0x20; i++) {
+        gptr s = A_SLOTS + i * 0x10;
+        if (U8(s + 8) && Snd_IsPlaying(U32(s)) && !(U8(s + 0xA) & 0x80)) Snd_SetFade(i, 4, 0x32, 1);
+    }
+}
+
+/* back up: the streams to the volume kept, the sounds to 0x7F */
+void DC2CALL Snd_Unduck(void)                                       /* 0x48C950 */
+{
+    for (u32 i = 0; i < 4; i++) {
+        u16 v = U16(A_STREAMS + i * 0x14 + 0xE);
+        if (v != 0xFFFF) Strm_SetFade(i, 2, v, 2);
+    }
+    for (u32 i = 0; i < 0x20; i++) {
+        gptr s = A_SLOTS + i * 0x10;
+        if (U8(s + 8) && Snd_IsPlaying(U32(s)) && !(U8(s + 0xA) & 0x80)) Snd_SetFade(i, 4, 0x7F, 2);
+    }
+}
+
+/* every sound fading out, stopped at the end */
+void DC2CALL Snd_FadeOutAll(void)                                   /* 0x48CBA0 */
+{
+    for (u32 i = 0; i < 0x20; i++)
+        if (U8(A_SLOTS + i * 0x10 + 8)) Snd_SetFade(i, 5, 0, 0x80);
+}
+
+void DC2CALL Snd_PauseAll(void)                                     /* 0x48CF60 */
+{
+    for (gptr s = A_SLOTS; s < A_STREAMS; s += 0x10) if (U8(s + 8)) Snd_Pause(U32(s));
+    for (gptr s = A_STREAMS; s < A_STREAMS + 0x50; s += 0x14) if (U8(s + 8)) Strm_Pause(U32(s));
+}
+
+void DC2CALL Snd_ResumeAll(void)                                    /* 0x48CFB0 */
+{
+    for (gptr s = A_SLOTS; s < A_STREAMS; s += 0x10) if (U8(s + 8)) Snd_Resume(U32(s));
+    for (gptr s = A_STREAMS; s < A_STREAMS + 0x50; s += 0x14) if (U8(s + 8)) Strm_Resume(U32(s));
+}

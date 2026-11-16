@@ -35,7 +35,8 @@
  *      type 2 0x404680 CLUT -> LoadImage_IfChanged 0x4B4DB0
  *      type 3 0x4046C0 sound-effect bank -> slot 0x87FBE0[arg]: 32 x 8-byte
  *             descriptors, then 32 x {offset, size} RIFF WAVE PCM16 mono 22050 Hz
- *      type 4 0x404770 streamed sound -> slot 0x87FB84 (Strm_Open)
+ *      type 4 0x404770 streamed sound -> slot 0x87FB84 (Strm_Open): MPEG-1
+ *             layer III, 44.1 kHz (the room's music; rec +0xC 1: looping)
  *      type 5 0x4047F0 / type 6 0x404810 -> 0x4041F0 (unpack, scratch 0x5A0000)
  *      type 7 0x4048F0 buffer 0x87F944 -> PC_SetBuffer
  *    flags 0x87FFEE bits 1/2/3 seek inside archives by index*5 / *33 / *7 sectors.
@@ -44,6 +45,8 @@
  *  +0x67A u16 loaded CORE file id    +0x67C u16 area (set by area fn)
  *  +0x67E u16 loaded room file id    +0x804 fade/screen-effect block
  *  +0x108F u8 stage (CORE00..12 = file 0x16 + stage)
+ *  +0x14EC options (16 bytes, defaults 0x723CCC set by 0x470907): u8 stereo,
+ *    s8 music volume (0..15), s8 sound volume, +0x14EF ...
  *  +0x1090 u8 room                   +0x1091 u8 area
  *
  * ---- rooms ------------------------------------------------------------------

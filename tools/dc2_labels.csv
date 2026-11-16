@@ -103,15 +103,15 @@ address,kind,name,category,confidence,notes
 0x4BFBD0,func,Snd_Free,sound,medium,Stop + Release
 0x4BFA20,func,Snd_SetVolume,sound,low,or SetPan; check vtbl offset
 0x4BFA60,func,Snd_SetPan,sound,low,
-0x4BFB00,func,Snd_Unknown_B00,sound,low,
-0x4BFB40,func,Snd_PauseResume,sound,low,flag 0x8
+0x4BFB00,func,Snd_Pause,sound,high,"if playing: Stop, flag 8 (paused)"
+0x4BFB40,func,Snd_Resume,sound,high,"if flag 8: Play again (looping by flag 1), flag 8 cleared"
 0x4BF720,func,Snd_CreateFromWav,sound,medium,"(RIFF*, flags) -> DirectSound buffer handle"
 0x4BFC10,func,Strm_Open,stream,medium,"CreateEventA, table 0x866190 (stride 24)"
 0x4BFEE0,func,Strm_Play,stream,medium,"Play(0,0,LOOPING)"
 0x4BFF20,func,Strm_SetVolume,stream,low,
 0x4BFFA0,func,Strm_Stop,stream,medium,
-0x4BFFD0,func,Strm_Unknown_FD0,stream,low,
-0x4C0010,func,Strm_PauseResume,stream,low,
+0x4BFFD0,func,Strm_Pause,stream,high,"if playing: Stop, flag 8"
+0x4C0010,func,Strm_Resume,stream,high,"if flag 8: Play looping, flag 8 cleared"
 0x4C0050,func,Strm_Close,stream,medium,CloseHandle
 0x4BE3C0,func,Masks_CreateVB,masks,high,"(count*6, pixels): D3D vertex buffer FVF 0x1C4, 6 TL vertices per mask"
 0x4BE430,func,Masks_SetQuad,masks,high,"(i, x, y, z): 16x16 screen tile, scaled by screen scale 0x8644BC"
@@ -2181,3 +2181,10 @@ address,kind,name,category,confidence,notes
 0x44D450,func,K2Thing8_Move,effect,high,"area 8 kind 20 step 1: the thing (pieces, shot, out of range) or a piece bouncing; rewritten: src/game/k2area.c"
 0x44D840,func,K2Thing8_Light,effect,high,"(e): a light on the effect e (0x721C68); rewritten: src/game/k2area.c"
 0x44D880,func,K2Thing8_Piece,effect,high,"(e, left): a piece thrown up from the effect e, at random; rewritten: src/game/k2area.c"
+0x48C040,func,Snd_ClearSlots,sound,high,"clears the 32 sound slots 0x87F980; rewritten: src/game/sound.c"
+0x48C060,func,Strm_HaltAll,sound,high,"the 4 streams halted; rewritten: src/game/sound.c"
+0x48C8D0,func,Snd_Duck,sound,high,"streams down to 0x5A (kept at +0xE), sounds playing down to 0x32; rewritten: src/game/sound.c"
+0x48C950,func,Snd_Unduck,sound,high,"streams back to the volume kept, sounds to 0x7F; rewritten: src/game/sound.c"
+0x48CBA0,func,Snd_FadeOutAll,sound,high,"every sound fading out (step 5), stopped at the end; rewritten: src/game/sound.c"
+0x48CF60,func,Snd_PauseAll,sound,high,"the sounds and streams on, paused; rewritten: src/game/sound.c"
+0x48CFB0,func,Snd_ResumeAll,sound,high,"the sounds and streams on, resumed; rewritten: src/game/sound.c"

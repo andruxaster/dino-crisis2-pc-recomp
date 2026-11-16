@@ -669,6 +669,7 @@ static Stub g_stubs[] = {
     {0x4BFA60, "dd"}, {0x4BFFA0, "d"},           /* 130: Snd_SetPan, Strm_Stop */
     {0x4BEF40, "d"},                             /* 132: Input_ReadPad */
     {0x4C06E0, "dp", {8}},                       /* 133: Gpu_SetDrawArea */
+    {0x4BFB00, "d"}, {0x4BFB40, "d"}, {0x4BFFD0, "d"}, {0x4C0010, "d"},   /* 134: Snd_Pause, Snd_Resume, Strm_Pause, Strm_Resume */
 };
 #define STUB_GAME 71
 #define STUB_LOAD 50
@@ -727,6 +728,7 @@ REC(94) REC(95) REC(96) REC(97) REC(98) REC(99) REC(100) REC(101)
 REC(102) REC(103) REC(104) REC(105) REC(106) REC(107) REC(108) REC(109) REC(110)
 REC(111) REC(112) REC(113) REC(114) REC(115) REC(116) REC(117) REC(118) REC(119) REC(120) REC(121)
 REC(122) REC(123) REC(124) REC(125) REC(126) REC(127) REC(128) REC(129) REC(130) REC(131) REC(132) REC(133)
+REC(134) REC(135) REC(136) REC(137)
 static void *const g_recs[] = {rec0, rec1, rec2, rec3, rec4, rec5, rec6, rec7, rec8, rec9, rec10,
     rec11, rec12, rec13, rec14, rec15, rec16, rec17, rec18, rec19, rec20, rec21, rec22, rec23,
     rec24, rec25, rec26, rec27, rec28, rec29, rec30, rec31, rec32, rec33, rec34, rec35, rec36, rec37,
@@ -736,7 +738,8 @@ static void *const g_recs[] = {rec0, rec1, rec2, rec3, rec4, rec5, rec6, rec7, r
     rec78, rec79, rec80, rec81, rec82, rec83, rec84, rec85, rec86, rec87, rec88, rec89, rec90, rec91, rec92, rec93,
     rec94, rec95, rec96, rec97, rec98, rec99, rec100, rec101, rec102, rec103, rec104, rec105,
     rec106, rec107, rec108, rec109, rec110, rec111, rec112, rec113, rec114, rec115, rec116, rec117, rec118, rec119, rec120, rec121,
-    rec122, rec123, rec124, rec125, rec126, rec127, rec128, rec129, rec130, rec131, rec132, rec133};
+    rec122, rec123, rec124, rec125, rec126, rec127, rec128, rec129, rec130, rec131, rec132, rec133,
+    rec134, rec135, rec136, rec137};
 _Static_assert(sizeof g_recs / sizeof g_recs[0] >= sizeof g_stubs / sizeof g_stubs[0], "a recorder per stub");
 /* Task_Sleep: the file loader "runs" while the task sleeps */
 static u32 __cdecl ts_sleep(u32 n)
@@ -10449,6 +10452,43 @@ static void test_aobj2(void)
     g_ign_objpads = 0;
 }
 
+/* ---- the sound slots all at once (sound.c) ---- */
+static void test_snd_slots(void)
+{
+    stubs_install(1);
+    for (int i = 0; i < iters; i++) {
+        game_state();
+        {   /* the volumes about the ducking's 0x5A, ramps stopping or not */
+        static const struct { u32 addr; void *fn; const char *name; } S[] = {
+            {0x48C040, Snd_ClearSlots, "Snd_ClearSlots"}, {0x48C060, Strm_HaltAll, "Strm_HaltAll"}, {0x48C8D0, Snd_Duck, "Snd_Duck"},
+            {0x48C950, Snd_Unduck, "Snd_Unduck"}, {0x48CBA0, Snd_FadeOutAll, "Snd_FadeOutAll"}, {0x48CF60, Snd_PauseAll, "Snd_PauseAll"},
+            {0x48CFB0, Snd_ResumeAll, "Snd_ResumeAll"}};
+        for (unsigned j = 0; j < sizeof S / sizeof S[0]; j++) {
+            for (u32 k = 0; k < 4; k++) {
+                gptr q = 0x87FB80 + k * 0x14;
+                for (u32 b = 0; b < 0x14; b += 4) U32(q + b) = rnd();
+                U32(q) = rnd() % 8; U32(q + 4) = rnd() % 4 ? 0x6DDC40 : 0; U8(q + 8) = (u8)(rnd() % 4 ? rnd() % 2 : rnd());
+                U8(q + 0x10) = (u8)(rnd() % 2 ? rnd() % 2 : 0x80 | rnd());
+                U16(q + 0xC) = (u16)(rnd() % 2 ? (u32[]){0x59, 0x5A, 0x5B, 0x7F, 0, 0x8000, 0x15A}[rnd() % 7] : rnd());
+                U16(q + 0xE) = (u16)(rnd() % 3 ? 0xFFFF : rnd() % 2 ? rnd() % 0x80 : rnd());
+            }
+            for (u32 k = 0; k < 0x20; k++) {
+                gptr q = 0x87F980 + k * 0x10;
+                for (u32 b = 0; b < 0x10; b += 4) U32(q + b) = rnd();
+                U32(q) = rnd() % 8; U8(q + 8) = (u8)(rnd() % 4 ? rnd() % 2 : rnd());
+                U8(q + 0xA) = (u8)(rnd() % 2 ? rnd() % 2 : 0x80 | rnd());
+            }
+            for (u32 b = 0; b < 0x14; b += 4) U32(0x87FBD0 + b) = rnd() % 2 ? rnd() : 0x01010101u * (1 + rnd() % 0x7F);   /* (past the 4 streams) */
+            if (rnd() % 2) U8(0x87FBD8) = 1;
+            stub_at(0x4BFAA0)->ret = rnd() % 2;
+            U32(LOG_BASE) = 0;
+            check(S[j].addr, S[j].fn, S[j].name, 0, NULL, 0);
+        }
+    }
+    }
+    stubs_install(0);
+}
+
 /* the weapons' object types */
 static void test_ao_weapons(void)
 {
@@ -12337,7 +12377,7 @@ __declspec(dllexport) void harness_main(int argc, char **argv)
         {"flags", test_flags}, {"geometry", test_geom}, {"script values", test_script_values},
         {"script opcodes", test_script_ops}, {"script objects", test_objects},
         {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"objects 2", test_object}, {"collision", test_collision}, {"player", test_player}, {"player states", test_player2}, {"zones", test_zones}, {"loading", test_room}, {"title", test_title}, {"game task", test_game}, {"doors", test_doors}, {"frame", test_frame}, {"enemy sets", test_enemyset}, {"enemies", test_enemies}, {"raptor", test_raptor}, {"oviraptor", test_ovi}, {"allosaurus", test_allo}, {"pteranodon", test_ptera}, {"area pteranodon", test_ptera2}, {"tyrannosaurus", test_trex}, {"plesiosaurus", test_plesio}, {"water plesiosaurs", test_pw}, {"roamer", test_roam}, {"giganotosaurus", test_gig},
-    {"inostrancevia", test_ino}, {"triceratops", test_tri}, {"mosasaurus", test_mosa}, {"compsognathus", test_compso}, {"duel inostrancevia", test_kof_ino}, {"duel triceratops", test_kof_tri}, {"duel raptor", test_kof_rap}, {"duel oviraptor", test_kof_ovi}, {"duel allosaurus", test_kof_allo}, {"duel tyrannosaurus", test_kof_rex}, {"duel compsognathus", test_kof_comp}, {"area falling piece", test_ao_drop}, {"area flying shell", test_ao_shell}, {"area moving piece", test_ao_mover}, {"area bird", test_ao_bird}, {"area rock", test_ao_rock}, {"area insect", test_ao_bug}, {"area poison plant", test_ao_plant}, {"area burner", test_ao_burner}, {"weapon objects", test_ao_weapons}, {"area 4/8 objects", test_aobj2}, {"area effects", test_k2_area}, {"aot kinds", test_aot_kinds}, {"object effects", test_obj_effects}, {"effect slots", test_k2}, {"effect drops", test_k2_drops}, {"effect emitters", test_eff_slots}, {"effect slots 3", test_k2_more}, {"helpers", test_helpers}, {"draw", test_draw}, {"pc gpu", test_pcgpu}, {"pc draw", test_pcdraw}, {"pc frame", test_pcframe},
+    {"inostrancevia", test_ino}, {"triceratops", test_tri}, {"mosasaurus", test_mosa}, {"compsognathus", test_compso}, {"duel inostrancevia", test_kof_ino}, {"duel triceratops", test_kof_tri}, {"duel raptor", test_kof_rap}, {"duel oviraptor", test_kof_ovi}, {"duel allosaurus", test_kof_allo}, {"duel tyrannosaurus", test_kof_rex}, {"duel compsognathus", test_kof_comp}, {"area falling piece", test_ao_drop}, {"area flying shell", test_ao_shell}, {"area moving piece", test_ao_mover}, {"area bird", test_ao_bird}, {"area rock", test_ao_rock}, {"area insect", test_ao_bug}, {"area poison plant", test_ao_plant}, {"area burner", test_ao_burner}, {"weapon objects", test_ao_weapons}, {"area 4/8 objects", test_aobj2}, {"area effects", test_k2_area}, {"sound slots", test_snd_slots}, {"aot kinds", test_aot_kinds}, {"object effects", test_obj_effects}, {"effect slots", test_k2}, {"effect drops", test_k2_drops}, {"effect emitters", test_eff_slots}, {"effect slots 3", test_k2_more}, {"helpers", test_helpers}, {"draw", test_draw}, {"pc gpu", test_pcgpu}, {"pc draw", test_pcdraw}, {"pc frame", test_pcframe},
     };
     for (unsigned i = 0; i < sizeof T / sizeof T[0]; i++) {
         int f0 = g_fail, t0 = g_tests;

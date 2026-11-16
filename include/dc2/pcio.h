@@ -18,8 +18,8 @@ void DC2CALL Crt_free(gptr p);                          /* 0x4DD628 */
 void DC2CALL Crt_sprintf1(gptr buf, gptr fmt, u32 a);   /* 0x4DD5D6: sprintf with one argument */
 void DC2CALL Crt_sprintf3(gptr buf, gptr fmt, u32 a, u32 b, u32 c);   /* ... with three numbers */
 
-/* DirectSound buffers (0x4BF720..): in the standalone builds a silent
- * stand-in that only keeps time, so the game sees sounds start and end */
+/* DirectSound buffers and the MP3 streams (0x4BF720..): in the standalone
+ * builds a mixer (src/pc/audio.c) that the port pulls samples from */
 u32  DC2CALL Snd_CreateBuffer(gptr wave, u32 voice);   /* 0x4BF720: handle (0 for the voice) or -1 */
 void DC2CALL Snd_Play(u32 h, u32 a, u32 loop);          /* 0x4BF970 */
 void DC2CALL Snd_SetVolume(u32 h, s32 vol);             /* 0x4BFA20 */
@@ -31,6 +31,19 @@ void DC2CALL Strm_Play(u32 h);                          /* 0x4BFEE0 */
 void DC2CALL Strm_Stop(u32 h);                          /* 0x4BFFA0 */
 void DC2CALL Snd_SetPan(u32 h, u32 pan);                /* 0x4BFA60 */
 void DC2CALL Strm_Close(u32 h);                         /* 0x4C0050 */
+void DC2CALL Snd_Pause(u32 h);                          /* 0x4BFB00: stopped where it is, if playing */
+void DC2CALL Snd_Resume(u32 h);                         /* 0x4BFB40: on from there, if paused */
+void DC2CALL Strm_Pause(u32 h);                         /* 0x4BFFD0 */
+void DC2CALL Strm_Resume(u32 h);                        /* 0x4C0010 */
+u32  DC2CALL Strm_Open(gptr mp3, u32 size, u32 loop);  /* 0x4BFC10: handle or -1 */
+
+#ifndef DC2_IN_PROCESS
+/* the mixer's output: stereo s16 at rate; PcAudio_Frame mixes the samples of
+ * one frame of play (n sixtieths of a second) and hands them to the sink */
+void PcAudio_Init(u32 rate, void (*sink)(const s16 *lr, u32 frames));
+void PcAudio_Frame(u32 sixtieths);
+void PcAudio_Mix(s16 *lr, u32 frames);
+#endif
 
 /* movies (standalone: none, the game goes on as if the file were missing) */
 u32  DC2CALL Movie_Open(gptr name, u32 w, u32 h);       /* 0x4BF3A0: 0 when it plays */
