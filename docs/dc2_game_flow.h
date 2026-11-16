@@ -50,6 +50,12 @@
  *  g_areas @ 0x73825C: 10 x 24 bytes { ROOM *rooms; void (*set_tables)();
  *    u32 0; u16 ...; void *p }; set_tables 0x48D170 + 0x40*area sets G+0x67C
  *    and per-area table pointers 0x87DCA0 / 0x87F948 / 0x87DC8C / 0x87F320.
+ *    0x87F948: effect slot kinds (G+0x944, 0xAC each); kinds past the common
+ *    ones differ by area (src/game/k2area.c: 7 a shot at the player or the one
+ *    kept alive, 8 the player's shot, 12 a growing glow; area 1: 20 a swinging
+ *    thing; area 4: 16 a puff, 17 a flare shot / its glow by +0x7A; area 8: 17
+ *    drops, 19 a splash, 21 a burst whose looks 0x721A68 (12 bytes each) step 3
+ *    rewrites; area 9: 17 drops).
  *  ROOM (24 bytes): u16 f0 (=1), u16 dat_file_id (STxyy.DAT), u16 dbs_file_id
  *    (STxyy.DBS), u16 f6, u8 s8_15[8], void *p10, void *p14.
  *  88 rooms in 10 areas (6,17,6,7,12,5,9,8,12,6); ST906 is not in the table.

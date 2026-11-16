@@ -10801,6 +10801,285 @@ static gptr kt_setup(int c, int anim)
     return o;
 }
 
+/* ---- effect slot kinds of some areas (src/game/k2area.c) ---- */
+static const u32 g_k2a_tab[] = {0x721830, 0x721930, 0x72193C, 0x7219E0, 0x721A48, 0x721A60, 0x721A54};
+static const u8 g_k2a_n[] = {3, 3, 5, 3, 3, 2, 3};
+static const u32 g_k2b_tab[] = {0x721AD4, 0x721AE4, 0x721AF0, 0x721AFC};
+static const u8 g_k2b_n[] = {4, 5, 3, 3};
+
+/* one slot of the effect chain, as test_k2_more makes it */
+static gptr k2a_slot(void)
+{
+    gptr g = G();
+    U32(0x87DC88) = 22;
+    gptr kk = O_K2 + 0xAC * (rnd() % 20);
+    for (u32 a = 0x20; a < 0xAC; a += 4) U32(kk + a) = rnd() % 3 ? rnd() % 0x10000 : rnd();
+    U8(kk + 0x50) |= 1; U8(kk + 0x87) = (u8)((kk - O_K2) / 0xAC); U8(kk + 0x86) = rnd() % 4 ? (u8)(rnd() % 20) : 0xFF;
+    U8(g + 0x852) = rnd() % 4 ? (u8)(rnd() % 20) : 0xFF;
+    gptr src = 0x6CF000 + 0x40 * (rnd() % 4);
+    U8(src) = (u8)rnd(); U8(src + 1) = rnd() % 2; U8(src + 0x18) = (u8)rnd();
+    U32(kk + 0x8C) = rnd() % 3 ? src : 0;
+    u32 pr = rnd() % 4;
+    U32(kk + 0x60) = pr == 0 ? 0 : pr == 1 ? kk : pr == 2 ? O_OBJ + 0x260 * (rnd() % 16) : O_K2 + 0xAC * (rnd() % 20);
+    gptr an = 0x6CF900;
+    for (u32 a = 0; a < 0x80; a += 4) U32(an + a) = rnd();
+    for (u32 q = 0; q < 16; q++) { U8(an + 8 * q + 4) = (u8)((rnd() % 4 == 0 ? 0x20 * (rnd() % 8) : 0) | (rnd() % 16)); U8(an + 8 * q + 5) = rnd() % 3; }
+    U32(kk + 0x90) = an; U32(kk + 0x94) = an + 8 * (rnd() % 8); U16(kk + 0x82) = rnd() % 3;
+    U32(kk + 0x70) = an + 8 * (rnd() % 8);
+    U8(kk + 0x7B) = rnd() % 10; U8(kk + 0x7A) = rnd() % 9; U8(kk + 0x46) = rnd() % 3;
+    U32(kk + 0xA4) = O_OBJ + 0x260 * (rnd() % 16);
+    Flag_Set(3, 0xA, rnd() % 4 == 0); U32(g + 0x7BC) = rnd() % 2 ? 0 : O_ZONE;
+    for (int q = 0; q < 3; q++) {
+        U16(g + 0x798 + 2 * q) = (u16)rnd(); U16(g + 0x7A0 + 2 * q) = (u16)(rnd() % 8000 - 4000);
+        U16(g + 0x7A8 + 2 * q) = (u16)(rnd() % 4000 - 2000);
+    }
+    for (int q = 0; q < 9; q++) S16(g + 0x778 + 2 * q) = (s16)((q % 4 == 0 ? 0x1000 : 0) + (s32)(rnd() % 0x400) - 0x200);
+    SetGeomScreen(0x100 + rnd() % 0x100); SetGeomOffset(160, 120);
+    U8(g + 0xB4B) = rnd() % 4 ? 2 + rnd() % 2 : (u8)rnd();
+    U32(0x87DC98) = 0x6D0000; U32(0x87F94C) = 0x6CF800; U32(0x87DE0C) = rnd() & 1;
+    Flag_Set(2, 0x10, rnd() % 4 == 0);
+    U8(g + 0x7C4) = (u8)rnd(); if (rnd() % 2) U8(kk + 0x59) = U8(g + 0x7C4);
+    U32(0x87F948) = TYPE_TAB;                                   /* the kinds' handlers (a burst spawned): recorders */
+    for (int k = 0; k < 256; k++) U32(TYPE_TAB + 4 * k) = (u32)(uintptr_t)g_recs[STUB_TYPE];
+    U32(LOG_BASE) = 0;
+    return kk;
+}
+
+/* the shot k about to move; its moved place */
+static void k2a_moved(gptr k, gptr p)
+{
+    U16(p) = (u16)(U16(k + 0x40) + U16(k + 0x7C)); U16(p + 2) = (u16)(U16(k + 0x42) + U16(k + 0x7E)); U16(p + 4) = (u16)(U16(k + 0x44) + U16(k + 0x80));
+}
+
+/* the hit direction Enemy_HitDir gives obj for a shot from angle a */
+static u16 k2a_dir(u16 a, gptr obj)
+{
+    s32 d = (s32)(((a + 0x200) >> 10) & 3) - (s32)(((U16(obj + 0x4A) + 0x200) >> 10) & 3);
+    return U8(0x7034A7 + d);
+}
+
+static void test_k2_area(void)
+{
+    g_ign_objpads = 1;
+    stubs_install(1);
+    for (int i = 0; i < iters; i++) {
+        u32 a[1];
+        gptr g, kk;
+        /* the handlers */
+        ao_tables_stub(g_k2a_tab, g_k2a_n, 7, 1);
+        for (int k = 0; k < 7; k++) {
+            game_state(); objects_setup(); world_setup();
+            kk = k2a_slot(); a[0] = kk;
+            U8(kk + 0x54) = (u8)(rnd() % g_k2a_n[k]);
+            U8(kk + 0x46) = (u8)(rnd() % 4 ? 1 + rnd() % 2 : rnd());
+            U8(kk + 0x7A) = (u8)(rnd() % 2 ? 0 : rnd());
+            Flag_Set(2, 0x18, rnd() % 2);
+            sprintf(g_what, "k2 %X kind %d step %u motion %u", kk, k, U8(kk + 0x54), U8(kk + 0x7B));
+            if (k == 0) check(0x449930, K2_EShot, "K2_EShot", 1, a, 0);
+            else if (k == 1) check(0x449BB0, K2_PShot, "K2_PShot", 1, a, 0);
+            else if (k == 2) check(0x449DB0, K2_Flare, "K2_Flare", 1, a, 0);
+            else if (k == 3) { if (rnd() % 2) U32(kk + 0x50) ^= 0x40000000; check(0x44B2C0, K2_Swing, "K2_Swing", 1, a, 0); }
+            else if (k == 4) { U8(kk + 0x46) = (u8)A2_PICK(0, 1, 2, (s32)rnd()); if (rnd() % 2) U32(kk + 0x60) = 0; check(0x44BFA0, K2_Fume, "K2_Fume", 1, a, 0); }
+            else if (k == 5) { U8(kk + 0x7A) = (u8)(rnd() % 2); check(0x44C420, K2_Flare17, "K2_Flare17", 1, a, 0); }
+            else check(0x44C2D0, K2_FlareShot, "K2_FlareShot", 1, a, 0);
+        }
+        ao_tables_stub(g_k2a_tab, g_k2a_n, 7, 0);
+        ao_tables_stub(g_k2b_tab, g_k2b_n, 4, 1);
+        for (int k = 0; k < 4; k++) {
+            game_state(); objects_setup(); world_setup();
+            kk = k2a_slot(); a[0] = kk;
+            U8(kk + 0x54) = (u8)(rnd() % g_k2b_n[k]);
+            U8(kk + 0x46) = (u8)A2_PICK(0, 1, 2, (s32)rnd());
+            if (rnd() % 2) U32(kk + 0x60) = 0;
+            gptr src = U32(kk + 0x8C);
+            if (src && rnd() % 2) U8(src) &= ~1;
+            if (rnd() % 2) U8(kk + 0x84) &= ~8;
+            if (!src) U32(kk + 0x90) += 8;                  /* (the byte after +0x8C not 0) */
+            sprintf(g_what, "k2 %X kind b%d step %u", kk, k, U8(kk + 0x54));
+            if (k == 0) check(0x44C450, K2_Burst21, "K2_Burst21", 1, a, 0);
+            else if (k == 1) check(0x44C670, K2_Splash19, "K2_Splash19", 1, a, 0);
+            else if (k == 2) check(0x44C8C0, K2_Drops8, "K2_Drops8", 1, a, 0);
+            else check(0x44CA00, K2_Drops9, "K2_Drops9", 1, a, 0);
+        }
+        ao_tables_stub(g_k2b_tab, g_k2b_n, 4, 0);
+        /* the burst's looks (a game table it rewrites: kept) */
+        {
+            static u8 looks[0x78];
+            memcpy(looks, MEM(0x721A68), 0x78);
+            for (int k = 0; k < 3; k++) {
+                game_state(); objects_setup(); world_setup();
+                kk = k2a_slot(); a[0] = kk;
+                for (u32 q = 0; q < 9; q++) {
+                    gptr r = 0x721A68 + 12 * q;
+                    U8(r) = (u8)rnd(); U16(r + 2) = (u16)rnd(); U16(r + 4) = (u16)rnd(); U32(r + 8) = 0x6CF900 + 8 * (rnd() % 8);
+                }
+                U8(kk + 0x7A) = (u8)(rnd() % 2 ? 0 : rnd() % 8);
+                gptr src = U32(kk + 0x8C);
+                if (src) { U8(src) = (u8)((U8(src) & ~1) | rnd() % 2); U8(src + 1) = (u8)A2_PICK(1, 1, 0, 2); }
+                u32 used = rnd() % 3;                       /* free slots: two, one, none */
+                if (used) for (u32 q = 0; q < 22; q++) U8(O_K2 + 0xAC * q + 0x50) |= 1;
+                if (used == 1) U8(O_K2 + 0xAC * (rnd() % 22) + 0x50) &= ~1;
+                U8(kk + 0x50) |= 1;
+                for (u32 q = 0; q < 8; q++) U16(kk + 0x9E + 2 * q) = (u16)(rnd() % 2 ? rnd() % 0x100 : rnd() % 0x1000);
+                U16(kk + 0x6E) = (u16)A2_PICK(0, 1, 10, 0x7FFF, 0xFFFF, (s32)rnd());
+                sprintf(g_what, "k2 %X burst kind %u used %u", kk, U8(kk + 0x7A), used);
+                if (k < 2) check(0x44C490, K2Burst21_Init, "K2Burst21_Init", 1, a, 0);
+                else check(0x44C620, K2Burst21_Looks, "K2Burst21_Looks", 1, a, 0);
+            }
+            memcpy(MEM(0x721A68), looks, 0x78);
+        }
+        /* the splash, the drops */
+        for (int k = 0; k < 7; k++) {
+            game_state(); objects_setup(); world_setup();
+            if (k >= 5) coll_setup();
+            kk = k2a_slot(); a[0] = kk;
+            U16(kk + 0x98) = (u16)A2_PICK(0, 1, 0x100, (s32)rnd());
+            U16(kk + 0x9A) = (u16)A2_PICK(0, 1, -1, 0x7FFF, 0x8000, (s32)(rnd() % 0x400) - 0x200);
+            U16(kk + 0x7E) = (u16)A2_PICK(0, 1, -1, 0x8000, (s32)(rnd() % 0x400) - 0x200);
+            U16(kk + 0x9C) = (u16)rnd(); U16(kk + 0x9E) = (u16)(rnd() % 0x40);
+            U16(kk + 0x74) = (u16)(rnd() % 0x2000 - 0x1000); U16(kk + 0x78) = (u16)(rnd() % 0x2000 - 0x1000);
+            if (rnd() % 4 == 0) U16(kk + 0x6C) = (u16)A2_PICK(0xFF, 0x1FF, 0xFFFF);
+            gptr src = U32(kk + 0x8C);
+            if (src && rnd() % 2) U32(kk + 0x8C) = 0;
+            anim_maybe_end(kk);
+            if (k == 6) {                                   /* falling onto a floor */
+                gptr pl = U32(G() + 0x940);
+                S16(kk + 0x40) = (s16)(S16(pl + 0x40) + rnd() % 400 - 200); S16(kk + 0x44) = (s16)(S16(pl + 0x44) + rnd() % 400 - 200);
+                S16(kk + 0x42) = (s16)(S16(pl + 0x42) - rnd() % 300);
+                U16(kk + 0x7C) = U16(kk + 0x80) = 0; U16(kk + 0x7E) = (u16)(rnd() % 600);
+            }
+            sprintf(g_what, "k2 %X drop %d 98 %X 9A %X 7E %X", kk, k, U16(kk + 0x98), U16(kk + 0x9A), U16(kk + 0x7E));
+            switch (k) {
+            case 0: check(0x44D190, K2_Drift, "K2_Drift", 1, a, 0); break;
+            case 1: check(0x44C6B0, K2Splash19_Init, "K2Splash19_Init", 1, a, 0); break;
+            case 2: check(0x44C7B0, K2Splash19_Rise, "K2Splash19_Rise", 1, a, 0); break;
+            case 3: check(0x44C810, K2Splash19_Spread, "K2Splash19_Spread", 1, a, 0); break;
+            case 4: check(0x44CA80, K2Drop_Init, "K2Drop_Init", 1, a, 0); break;
+            case 5: case 6: check(0x44C920, K2Drop_Fall, "K2Drop_Fall", 1, a, 0); break;
+            }
+        }
+        /* the swinging thing, the puff, the flare: starts, a light, the glow */
+        for (int k = 0; k < 7; k++) {
+            game_state(); objects_setup(); world_setup();
+            kk = k2a_slot(); a[0] = kk; g = G();
+            u32 b[2] = {kk, (u32)A2_PICK(0, 1, 2, 0x100)};
+            ao_lights(); U32(g + 0x948) = O_K3;
+            switch (k) {
+            case 0: check(0x44B2F0, K2Swing_Init, "K2Swing_Init", 1, a, 0); break;
+            case 1:
+                U16(kk + 0xA2) = (u16)A2_PICK(0, 0, 1, 2, 0x100, (s32)rnd()); U16(kk + 0xA8) = (u16)A2_PICK(0, 1, 2, 3, (s32)rnd());
+                U16(kk + 0xA4) = (u16)A2_PICK(0, 1, 2, 0x101); U16(kk + 0x98) = (u16)A2_PICK(0, 0, 1, 0x100, (s32)rnd());
+                U16(kk + 0xA0) = (u16)A2_PICK(0x10, 0x40, 0, (s32)rnd()); U16(kk + 0x9E) = (u16)(rnd() % 0x100);
+                sprintf(g_what, "k2 %X swing A2 %X A8 %X A4 %X", kk, U16(kk + 0xA2), U16(kk + 0xA8), U16(kk + 0xA4));
+                check(0x44B320, K2Swing_Move, "K2Swing_Move", 1, a, 0); break;
+            case 2: U16(kk + 0x9E) = (u16)A2_PICK(1, 0, 2, 0x101); check(0x44C000, K2Fume_Init, "K2Fume_Init", 1, a, 0); break;
+            case 3: check(0x44C0E0, K2_Gone, "K2_Gone", 1, a, 0); check(0x44C0F0, K2FlareShot_Init, "K2FlareShot_Init", 1, a, 0); break;
+            case 4: sprintf(g_what, "k2 %X light %X lights %u", kk, b[1], U32(0x87DE14)); check(0x44C260, K2FlareShot_Light, "K2FlareShot_Light", 2, b, 0); break;
+            case 5: case 6:
+                U8(kk + 0x54) = (u8)A2_PICK(0, 1, 2, (s32)rnd());
+                S16(O_K3 + 0x34 + 0x18) = (s16)rnd(); S16(O_K3 + 0x34 + 0x1A) = (s16)rnd();
+                sprintf(g_what, "k2 %X glow step %u", kk, U8(kk + 0x54));
+                check(0x44C300, K2_FlareGlow, "K2_FlareGlow", 1, a, 0); break;
+            }
+        }
+        /* the shot's start: its source an effect or not */
+        game_state(); objects_setup(); world_setup();
+        kk = k2a_slot(); a[0] = kk; g = G();
+        U32(g + 0x93C) = O_EFF; U32(0x87DE04) = rnd() % 37;
+        {
+            u32 end = O_EFF + U32(0x87DE04) * 0x70;
+            U32(kk + 0x60) = A2_PICK(O_EFF, O_EFF - 1, (s32)end, (s32)end + 1, (s32)end - 0x70, (s32)U32(kk + 0x60));
+        }
+        sprintf(g_what, "k2 %X shot init from %X", kk, U32(kk + 0x60));
+        check(0x449BF0, K2Shot_Init, "K2Shot_Init", 1, a, 0);
+        /* the shots moving: walls, the floor, who they meet */
+        for (int k = 0; k < 12; k++) {
+            game_state(); objects_setup(); world_setup();
+            coll_setup();
+            int duel = 0;
+            if (k % 2 && rnd() % 3 == 0) {                  /* the duel: the other player */
+                ki_setup(rnd() % 2, 0);
+                targets_setup(); aim_desc_setup(rnd() % 2);
+                U32(G() + 0x948) = O_K3; U16(O_K3 + 0x18) = (u16)(0x200 + rnd() % 0x900);
+                duel = 1;
+            } else if (k % 2) { targets_setup(); aim_desc_setup(rnd() % 2); U32(G() + 0x948) = O_K3; U16(O_K3 + 0x18) = (u16)(0x200 + rnd() % 0x900); }
+            kk = k2a_slot(); a[0] = kk; g = G();
+            gptr pl = U32(g + 0x940);
+            U8(kk + 0x54) = 1;
+            U8(kk + 0x7A) = (u8)(rnd() % 4 ? 1 + rnd() % 3 : 0);
+            U8(kk + 0x84) = (u8)rnd();
+            anim_maybe_end(kk);
+            for (int q = 0; q < 3; q++) U16(kk + 0x7C + 2 * q) = (u16)(rnd() % 2 ? rnd() % 400 - 200 : 0);
+            gptr nb = rnd() % 2 ? pl : O_OBJ + 0x260 * (1 + rnd() % 15);
+            S16(kk + 0x40) = (s16)(S16(nb + 0x40) + rnd() % 1200 - 600);
+            S16(kk + 0x42) = (s16)(S16(nb + 0x42) - 0x348 + rnd() % 1200 - 600);
+            S16(kk + 0x44) = (s16)(S16(nb + 0x44) + rnd() % 1200 - 600);
+            U8(g + 0x927) = (u8)(duel ? 2 : A2_PICK(0, 0, 1, 2 + (rnd() % 2)));
+            if (duel) U8(U32(kk + 0xA4) + 0xFF) = (u8)A2_PICK(1, 2, (s32)rnd());
+            if (k % 2 == 0) {                               /* at the player or the one it keeps alive */
+                U16(pl + 0x174) = (u16)(rnd() % 3 ? 0 : rnd());
+                gptr b = rnd() % 3 ? 0 : O_OBJ + 0x260 * (1 + rnd() % 15);
+                if (b) {                                    /* (the player out of reach) */
+                    U16(b + 0x174) = (u16)(rnd() % 3 ? 0 : rnd());
+                    S16(pl + 0x40) = (s16)(S16(kk + 0x40) + 6000); S16(pl + 0x44) = (s16)(S16(kk + 0x44) + 6000);
+                    if (rnd() % 2) { S16(b + 0x40) = S16(kk + 0x40); S16(b + 0x44) = S16(kk + 0x44); S16(b + 0x42) = (s16)(S16(kk + 0x42) + 0x348); }
+                }
+                U32(g + 0xB50) = b;
+                if (rnd() % 3 == 0) {                       /* at the height's edge of the target's sphere */
+                    gptr t = b ? b : pl;
+                    U16(kk + 0x7C) = U16(kk + 0x7E) = U16(kk + 0x80) = 0;
+                    S16(kk + 0x40) = S16(t + 0x40); S16(kk + 0x44) = S16(t + 0x44);
+                    S16(kk + 0x42) = (s16)(S16(t + 0x42) - 0x348 + (rnd() % 2 ? 1 : -1) * (0x4D8 + (s32)(rnd() % 3) - 1));
+                }
+                /* Enemy_HitDir's stand-in has its +0x184 unset (stack): both who it may turn already turned */
+                gptr t = b ? b : pl, mp = G_SCR;
+                k2a_moved(kk, mp);
+                u16 an = (u16)Angle_XZ(mp, t + 0x40);
+                U16(pl + 0x178) = k2a_dir(an, pl);
+                if (b) U16(b + 0x178) = k2a_dir(an, b);
+            }
+            U32(LOG_BASE) = 0;
+            sprintf(g_what, "k2 %X shot %d kind %u duel %u at %d,%d,%d", kk, k % 2, U8(kk + 0x7A), U8(g + 0x927), S16(kk + 0x40), S16(kk + 0x42), S16(kk + 0x44));
+            if (k % 4 == 3) {                               /* the flare shot (kind 17) */
+                ao_lights(); U32(g + 0x948) = O_K3;
+                U8(kk + 0x98) = (u8)A2_PICK(9, 8, 0xFF, (s32)rnd());
+                if (rnd() % 2) {                            /* coming down onto the floor */
+                    gptr t = U32(g + 0x940);
+                    S16(kk + 0x40) = (s16)(S16(t + 0x40) + rnd() % 400 - 200); S16(kk + 0x44) = (s16)(S16(t + 0x44) + rnd() % 400 - 200);
+                    S16(kk + 0x42) = (s16)(S16(t + 0x42) - (s32)(rnd() % 200));
+                    U16(kk + 0x7C) = U16(kk + 0x80) = 0; U16(kk + 0x7E) = (u16)(100 + rnd() % 400);
+                }
+                sprintf(g_what, "k2 %X flare count %u at %d,%d,%d", kk, U8(kk + 0x98), S16(kk + 0x40), S16(kk + 0x42), S16(kk + 0x44));
+                check(0x44C130, K2FlareShot_Fly, "K2FlareShot_Fly", 1, a, 0);
+            } else if (k % 2) check(0x449CA0, K2PShot_Move, "K2PShot_Move", 1, a, 0);
+            else check(0x449970, K2EShot_Move, "K2EShot_Move", 1, a, 0);
+        }
+        /* the glow */
+        for (int k = 0; k < 6; k++) {
+            game_state(); objects_setup(); world_setup();
+            kk = k2a_slot(); a[0] = kk; g = G();
+            U8(g + 0x927) = (u8)A2_PICK(0, 0, 1, 2);
+            U8(kk + 0x7A) = (u8)A2_PICK(0, 1, 2, 3, (s32)rnd());
+            U16(kk + 0x9E) = (u16)A2_PICK(0, 1, 2, 3, 0x8000, (s32)rnd());
+            U16(kk + 0xA2) = (u16)A2_PICK(0, 1, 2, 3, 0x7FFF, 0xFFFF);
+            U16(kk + 0x9C) = (u16)A2_PICK(0, 1, 2, -1, (s32)rnd());
+            S16(kk + 0x9A) = (s16)A2_PICK(0, 10, 0x100, -1, (s32)rnd());
+            U16(kk + 0x6E) = (u16)(rnd() % 2 ? S16(kk + 0x9A) + rnd() % 3 - 1 : rnd());
+            if (k % 3 == 2) U16(kk + 0xA2) = (u16)(U16(kk + 0x9E) + rnd() % 3 - 1);
+            if (k % 3 == 1 && rnd() % 2) {                  /* still growing, at the frame's edge */
+                U8(kk + 0x7A) = (u8)A2_PICK(0, 1, 3); S16(kk + 0x9A) = (s16)(100 + rnd() % 100); U16(kk + 0x6E) = (u16)(rnd() % 100);
+                U16(kk + 0xA2) = (u16)(U16(kk + 0x9C) + rnd() % 3 - 2);
+            }
+            sprintf(g_what, "k2 %X glow %d kind %u 9E %X A2 %X 6E %X 9A %X", kk, k % 3, U8(kk + 0x7A), U16(kk + 0x9E), U16(kk + 0xA2), U16(kk + 0x6E), U16(kk + 0x9A));
+            if (k % 3 == 0) check(0x449DF0, K2Flare_Init, "K2Flare_Init", 1, a, 0);
+            else if (k % 3 == 1) check(0x449F00, K2Flare_Grow, "K2Flare_Grow", 1, a, 0);
+            else check(0x449F70, K2Flare_Wait, "K2Flare_Wait", 1, a, 0);
+        }
+    }
+    stubs_install(0);
+    g_ign_objpads = 0;
+}
+
 typedef struct { u32 addr[2]; void *fn[2]; const char *name; u8 anim, s55; } KtFn;
 
 static void test_kof_tri(void)
@@ -11962,7 +12241,7 @@ __declspec(dllexport) void harness_main(int argc, char **argv)
         {"flags", test_flags}, {"geometry", test_geom}, {"script values", test_script_values},
         {"script opcodes", test_script_ops}, {"script objects", test_objects},
         {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"objects 2", test_object}, {"collision", test_collision}, {"player", test_player}, {"player states", test_player2}, {"zones", test_zones}, {"loading", test_room}, {"title", test_title}, {"game task", test_game}, {"doors", test_doors}, {"frame", test_frame}, {"enemy sets", test_enemyset}, {"enemies", test_enemies}, {"raptor", test_raptor}, {"oviraptor", test_ovi}, {"allosaurus", test_allo}, {"pteranodon", test_ptera}, {"area pteranodon", test_ptera2}, {"tyrannosaurus", test_trex}, {"plesiosaurus", test_plesio}, {"water plesiosaurs", test_pw}, {"roamer", test_roam}, {"giganotosaurus", test_gig},
-    {"inostrancevia", test_ino}, {"triceratops", test_tri}, {"mosasaurus", test_mosa}, {"compsognathus", test_compso}, {"duel inostrancevia", test_kof_ino}, {"duel triceratops", test_kof_tri}, {"duel raptor", test_kof_rap}, {"duel oviraptor", test_kof_ovi}, {"duel allosaurus", test_kof_allo}, {"duel tyrannosaurus", test_kof_rex}, {"duel compsognathus", test_kof_comp}, {"area falling piece", test_ao_drop}, {"area flying shell", test_ao_shell}, {"area moving piece", test_ao_mover}, {"area bird", test_ao_bird}, {"area rock", test_ao_rock}, {"area insect", test_ao_bug}, {"area poison plant", test_ao_plant}, {"area burner", test_ao_burner}, {"weapon objects", test_ao_weapons}, {"area 4/8 objects", test_aobj2}, {"aot kinds", test_aot_kinds}, {"object effects", test_obj_effects}, {"effect slots", test_k2}, {"effect drops", test_k2_drops}, {"effect emitters", test_eff_slots}, {"effect slots 3", test_k2_more}, {"helpers", test_helpers}, {"draw", test_draw}, {"pc gpu", test_pcgpu}, {"pc draw", test_pcdraw}, {"pc frame", test_pcframe},
+    {"inostrancevia", test_ino}, {"triceratops", test_tri}, {"mosasaurus", test_mosa}, {"compsognathus", test_compso}, {"duel inostrancevia", test_kof_ino}, {"duel triceratops", test_kof_tri}, {"duel raptor", test_kof_rap}, {"duel oviraptor", test_kof_ovi}, {"duel allosaurus", test_kof_allo}, {"duel tyrannosaurus", test_kof_rex}, {"duel compsognathus", test_kof_comp}, {"area falling piece", test_ao_drop}, {"area flying shell", test_ao_shell}, {"area moving piece", test_ao_mover}, {"area bird", test_ao_bird}, {"area rock", test_ao_rock}, {"area insect", test_ao_bug}, {"area poison plant", test_ao_plant}, {"area burner", test_ao_burner}, {"weapon objects", test_ao_weapons}, {"area 4/8 objects", test_aobj2}, {"area effects", test_k2_area}, {"aot kinds", test_aot_kinds}, {"object effects", test_obj_effects}, {"effect slots", test_k2}, {"effect drops", test_k2_drops}, {"effect emitters", test_eff_slots}, {"effect slots 3", test_k2_more}, {"helpers", test_helpers}, {"draw", test_draw}, {"pc gpu", test_pcgpu}, {"pc draw", test_pcdraw}, {"pc frame", test_pcframe},
     };
     for (unsigned i = 0; i < sizeof T / sizeof T[0]; i++) {
         int f0 = g_fail, t0 = g_tests;
