@@ -10740,6 +10740,28 @@ static gptr pickup_state(void)
     U32(LOG_BASE) = 0;
     return m;
 }
+/* mode 11's state: where the player is (G+0x10AA), the target, the screen opening */
+static gptr dest_state(void)
+{
+    gptr m = map_state();
+    U8(m + 2) = (u8)A2_PICK(0, 1, 1, 2, 2, 3, 10, (s32)(4 + rnd() % 6));
+    U8(m + 0x4F) = (u8)A2_PICK(0, 1, (s32)rnd()); U8(m + 0x4E) = (u8)A2_PICK(0, 1);
+    U16(m + 0x92) = (u16)A2_PICK(0, 1, 2, 3, 0x100, (s32)rnd());
+    U16(m + 0x94) = (u16)A2_PICK(0, 1, 0x10, 0x11, 0x105, (s32)(rnd() % 0x12));
+    U16(m + 0x96) = (u16)A2_PICK(0, 4, 0x4C, 0x50, 0x120, (s32)(rnd() % 0x54));
+    U16(m + 0x98) = (u16)A2_PICK(0, 1, 0x64, 0x65, 0x100, 0x130, (s32)(rnd() % 0x66));
+    U16(m + 0x9A) = (u16)A2_PICK(0, 0x1F, 0xC7, 0xC8, 0x18F, 0x190, 0x257, 0x258, (s32)(rnd() % 0x259), (s32)rnd());
+    U16(m + 0x8E) = (u16)A2_PICK(0, 0, 1, 0x1E, (s32)(rnd() % 0x20));
+    U16(m + 0x38) = (u16)A2_PICK(0, 1, 0x100, (s32)rnd());
+    U8(G() + 0x10AA) = (u8)A2_PICK(0, 1, 2, 0, 1, 2, 3);
+    U16(m + 0x80) = (u16)A2_PICK(0, 1, 0x12, 0x13, 0x1F, 0x20, 0x59, 0x5A, 0x7F, 0x80, (s32)(rnd() % 0x82));
+    U16(m + 0x82) = (u16)A2_PICK(0, 0x105, 0x1F, 0x20, 0x59, 0x5A, 0x64, 0x65, 0x7F, 0x80, 0xA0, 0xC8, 0xC9, (s32)(rnd() % 0xCA));
+    for (u32 q = 0; q < 0x100; q += 4) U32(0x6C1500 + q) = rnd();   /* (the picture's pixels shown as figures) */
+    U16(m + 0x44) = (u16)A2_PICK(0, 0, 0x1000, 0x2000, 0x8000, 0x100, (s32)rnd());
+    U32(0x87DC00) = (u32)A2_PICK(0, 0x20, 0x40, 1, (s32)rnd());
+    U32(LOG_BASE) = 0;
+    return m;
+}
 static u8 g_menu_frames[0x3000], g_map_frames[0x1000];
 static void test_menu(void)
 {
@@ -11348,6 +11370,26 @@ static void test_menu(void)
                 if (q) for (u32 b = 0x74; b < 0x80; b++) Flag_Set(0xB, b, rnd() % 5 == 0);   /* (one or two found) */
                 check(0x49B7A0, Map_NextArea, "Map_NextArea", 1, a, 0xFFFF);
                 check(0x49B810, Map_PrevArea, "Map_PrevArea", 1, a, 0xFFFF);
+            }
+        }
+        /* mode 11: the destination */
+        {
+            static const struct { u32 addr; void *fn; const char *name; } D[] = {
+                {0x49FA50, MenuMode_Dest, "MenuMode_Dest"}, {0x49FB80, Dest_Init, "Dest_Init"}, {0x49FBE0, Dest_Choose, "Dest_Choose"},
+                {0x49FC90, Dest_Confirm, "Dest_Confirm"}, {0x49FD80, Dest_Route, "Dest_Route"}, {0x4A1B10, Dest_Leave, "Dest_Leave"},
+                {0x4A1B20, Dest_Frame, "Dest_Frame"}, {0x4A1DF0, Dest_Panel0, "Dest_Panel0"}, {0x4A2530, Dest_Panel1, "Dest_Panel1"},
+                {0x4A2990, Dest_Panel2, "Dest_Panel2"}, {0x4A1F70, Dest_View1, "Dest_View1"}, {0x4A2250, Dest_View2, "Dest_View2"},
+                {0x4A26A0, Dest_View3, "Dest_View3"}, {0x49FBE0, Dest_Choose, "Dest_Choose"}, {0x49FC90, Dest_Confirm, "Dest_Confirm"},
+                {0x4A0280, Dest_Base, "Dest_Base"}, {0x49FE10, Dest_Route4, "Dest_Route4"}, {0x4A0460, Dest_Route5, "Dest_Route5"},
+                {0x4A08C0, Dest_Route6, "Dest_Route6"}, {0x4A0D60, Dest_Route7, "Dest_Route7"}, {0x4A1210, Dest_Route8, "Dest_Route8"},
+                {0x4A1690, Dest_Route9, "Dest_Route9"}};
+            for (unsigned k = 0; k < sizeof D / sizeof D[0]; k++) {
+                m = dest_state();
+                if (k == 13 || k == 14) { U16(m + 0x44) = (u16)A2_PICK(0, 0x1000, 0x8000, 0x2000); U32(0x87DC00) = (u32)A2_PICK(0x20, 0x20, 0x40, 0); }
+                sprintf(g_what, "2 %X at %X 80 %X 82 %X 4F %X 4E %X 92 %X 94 %X 96 %X 98 %X 9A %X 8E %X 38 %X keys %X pad %X", U8(m + 2), U8(G() + 0x10AA), U16(m + 0x80), U16(m + 0x82),
+                        U8(m + 0x4F), U8(m + 0x4E), U16(m + 0x92), U16(m + 0x94), U16(m + 0x96), U16(m + 0x98), U16(m + 0x9A), U16(m + 0x8E),
+                        U16(m + 0x38), U16(m + 0x44), U32(0x87DC00));
+                check(D[k].addr, D[k].fn, D[k].name, 1, a, 0);
             }
         }
         /* mode 10: an item picked up */

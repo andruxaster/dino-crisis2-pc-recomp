@@ -245,6 +245,13 @@
  *  global index {u32 scale, u16 size, -, frames, u16 x, u16 y}; doors
  *  0x73A3B0 (zoomed) and per area {room, -, flag 8 open, flag 9 key, key
  *  id (G+0x108F), x, y, w, h}.
+ *  Mode 10 (an item picked up): M+0x38 item, +0x3C its flag 5, +0x3E zone
+ *  (low byte) and object (high byte) cleared, 0xFF none.
+ *  Mode 11 ("Set the destination", steps 0x73AF80): G+0x10AA the point the
+ *  player is at (0 a, 1 b, 2 c); M+0x4F the other point chosen, +0x38 the
+ *  vehicle working, +0x92 opening stage (+0x94/+0x96/+0x98 its lines and
+ *  letters), +0x9A camera view frames, +0x8E shake; steps 4..9 the routes
+ *  (M+0x80 marker, +0x82 frames to arrival).
  *
  * ---- flags ----------------------------------------------------------------------
  *  Flag_Set(group, bit, on) 0x46FAA0 (503 calls), Flag_Check(group, bit)

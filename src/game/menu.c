@@ -3216,3 +3216,309 @@ void DC2CALL MenuMode_Pickup(gptr m)                                /* 0x49F270 
     Tmp_Pop(0x200);
     Menu_Frame(m);
 }
+
+/* ---- mode 11: "Set the destination" (steps 0x73AF80 by M+2; G+0x10AA where
+ * the player is: 0, 1, 2; M+0x4F the target chosen of the two others) ---- */
+
+/* a target's view: lines growing out from its mark (M+0x94, M+0x96), its
+ * name typed (M+0x98), the area's name, three pictures of it in turn
+ * (M+0x9A, 200 frames each, fading in) */
+struct dest_view {
+    u16 ax, ay; s8 adx, ady; u16 bx, by;
+    gptr label; u16 lx, ly; gptr frame; u16 fx, fy; gptr name;
+    u16 rx, ry; u8 uv[3][2]; u16 clut, tpage; u8 all;   /* all: the third picture stays to the end */
+};
+static const struct dest_view g_dest_views[3] = {
+    {0x78, 0x4C, -1, -1, 0x68, 0x3C, 0x73AFBC, 0x1C, 0x3E, 0x65F768, 0x1D, 0x33, 0x72772C, 0x29, 0x44,
+     {{0, 0}, {0x40, 0}, {0, 0x40}}, 0x7C40, 0x87, 0},
+    {0xAD, 0x5B, 1, -1, 0xBD, 0x4B, 0x73AFCC, 0xC1, 0x4D, 0x65F758, 0xC2, 0x38, 0x727FEE, 0xD8, 0x52,
+     {{0x40, 0x40}, {0, 0x80}, {0x40, 0x80}}, 0x7C40, 0x87, 1},
+    {0xC7, 0x6F, 1, 1, 0xD7, 0x7F, 0x73AFAC, 0xDB, 0x81, 0x65F770, 0xDC, 0x76, 0x72856E, 0xDA, 0x44,
+     {{0, 0x80}, {0x40, 0x80}, {0, 0xC0}}, 0x7C00, 0x86, 0}};
+
+static void dest_view(gptr m, const struct dest_view *v)
+{
+    u16 a = U16(m + 0x94), b = U16(m + 0x96);
+    if (a) Menu_Line(v->ax, v->ay, (u32)(v->ax + v->adx * a), (u32)(v->ay + v->ady * a), 0xC0, 0, 0x32);
+    if (b) Menu_Line(v->bx, v->by, (u32)(v->bx + (v->adx < 0 ? -b : b)), v->by, 0xC0, 0, 0x32);
+    draw_mode(0xC, 0x32);
+    if (U16(m + 0x98)) {
+        Menu_SmallText(v->label, v->lx, v->ly, U16(m + 0x98), 0x808080, 1);
+        Menu_DrawFrames(v->frame, v->fx, v->fy, 0x26, 0x7C0E, 0x808080, 0x64);
+    }
+    Text_Draw(v->name, 0x70, 0xA8, 0x64, 0x808080, 0xA, 0);
+    U16(m + 0x9A)++;
+    if (S16(m + 0x9A) > 0x258) U16(m + 0x9A) = 0;
+    s16 t = S16(m + 0x9A);
+    s32 p = t % 200;
+    u32 c = p < 0x20 ? (u32)p << 10 | (u32)p << 18 | (u32)p << 2 : 0x808080;
+    int k = t < 0xC8 ? 0 : t < 0x190 ? 1 : (t < 0x258 || v->all) ? 2 : -1;
+    if (k >= 0) {
+        gptr r = Tmp_Push(8);
+        U16(r) = v->rx; U16(r + 2) = v->ry; U16(r + 4) = 0x40; U16(r + 6) = 0x30;
+        if (p < 0x20) Menu_Sprite(r, v->uv[k][0], v->uv[k][1], v->clut, c, 1, 0x64);
+        else Menu_Sprite(r, v->uv[k][0], v->uv[k][1], v->clut, 0x808080, 0, 0x64);
+        Tmp_Pop(8);
+    }
+    draw_mode(v->tpage, 0x64);
+}
+
+void DC2CALL Dest_View1(gptr m) { dest_view(m, &g_dest_views[0]); }  /* 0x4A1F70 */
+void DC2CALL Dest_View2(gptr m) { dest_view(m, &g_dest_views[1]); }  /* 0x4A2250 */
+void DC2CALL Dest_View3(gptr m) { dest_view(m, &g_dest_views[2]); }  /* 0x4A26A0 */
+
+/* the panel for where the player is: three marks (his own lit), the two
+ * targets blinking by which is chosen, its view */
+struct dest_mark { u32 frame; u16 x, y; u8 tp, which; };
+static void dest_panel(gptr m, const u32 dots[3], void (DC2CALL *v1)(gptr), void (DC2CALL *v0)(gptr),
+                       const struct dest_mark mk[5])
+{
+    static const u16 pos[3][2] = {{0xC8, 0x70}, {0x78, 0x4C}, {0xAE, 0x5C}};
+    for (u32 i = 0; i < 3; i++) Menu_DrawFrames(0x65F708, pos[i][0], pos[i][1], 5, 0x7C0E, dots[i], 0x1E);
+    u32 c[4] = {0x80203010, 0x80000020, 0x80203010, 0x80000020};   /* esi, edi, ebx, ebp */
+    if (U8(m + 0x4F)) {
+        c[2] = Color_Pulse(0x80A0C040, 0x80607030, 4);
+        c[3] = Color_Pulse(0x80000070, 0x80000030, 5);
+        v1(m);
+    } else {
+        c[0] = Color_Pulse(0x80A0C040, 0x80607030, 4);
+        c[1] = Color_Pulse(0x80000070, 0x80000030, 5);
+        v0(m);
+    }
+    for (u32 i = 0; i < 5; i++)
+        Menu_DrawFrames(mk[i].frame, mk[i].x, mk[i].y, mk[i].tp, 0x7C0E, mk[i].which < 4 ? c[mk[i].which] : 0x80005050,
+                        mk[i].tp == 0x26 ? 0x104 : 0xC8);
+}
+
+void DC2CALL Dest_Panel0(gptr m)                                    /* 0x4A1DF0 */
+{
+    static const u32 dots[3] = {0x80, 0x8000, 0x8000};
+    static const struct dest_mark mk[5] = {{0x65F720, 0x78, 0x4B, 0x26, 0}, {0x65F528, 0x28, 0x2A, 0x25, 1},
+        {0x65F738, 0xAA, 0x5F, 0x26, 2}, {0x65F530, 0xA3, 0x58, 0x25, 3}, {0x65F520, 0xBD, 0x30, 0x25, 4}};
+    dest_panel(m, dots, Dest_View2, Dest_View1, mk);
+}
+
+void DC2CALL Dest_Panel1(gptr m)                                    /* 0x4A2530 */
+{
+    static const u32 dots[3] = {0x8000, 0x80, 0x8000};
+    static const struct dest_mark mk[5] = {{0x65F718, 0x7C, 0x48, 0x26, 0}, {0x65F520, 0xBD, 0x30, 0x25, 1},
+        {0x65F730, 0x7C, 0x40, 0x26, 2}, {0x65F530, 0xA3, 0x58, 0x25, 3}, {0x65F528, 0x28, 0x2A, 0x25, 4}};
+    dest_panel(m, dots, Dest_View2, Dest_View3, mk);
+}
+
+void DC2CALL Dest_Panel2(gptr m)                                    /* 0x4A2990 */
+{
+    static const u32 dots[3] = {0x8000, 0x8000, 0x80};
+    static const struct dest_mark mk[5] = {{0x65F740, 0xAB, 0x62, 0x26, 0}, {0x65F520, 0xBD, 0x30, 0x25, 1},
+        {0x65F728, 0x7A, 0x41, 0x26, 2}, {0x65F528, 0x28, 0x2A, 0x25, 3}, {0x65F530, 0xA3, 0x58, 0x25, 4}};
+    dest_panel(m, dots, Dest_View1, Dest_View3, mk);
+}
+
+static void dest_frames(void);
+
+/* the screen: lines opening (M+0x92: 0x94 to 16, 0x96 to 80, 0x98 to 100),
+ * the frame, the panel for G+0x10AA, the credits in small letters */
+void DC2CALL Dest_Frame(gptr m)                                     /* 0x4A1B20 */
+{
+    u16 st = U16(m + 0x92);
+    switch ((s16)st) {
+    case 0: U16(m + 0x94)++; if (S16(m + 0x94) > 0x10) { U16(m + 0x94) = 0x10; U16(m + 0x92) = (u16)(st + 1); } break;
+    case 1: U16(m + 0x96) += 4; if (S16(m + 0x96) > 0x50) { U16(m + 0x96) = 0x50; U16(m + 0x92) = (u16)(st + 1); } break;
+    case 2: U16(m + 0x98)++; if (S16(m + 0x98) > 0x64) { U16(m + 0x98) = 0x64; U16(m + 0x92) = (u16)(st + 1); } break;
+    }
+    gptr r = Tmp_Push(8);
+    U16(r) = 0x20; U16(r + 2) = 0x20; U16(r + 4) = 0x100; U16(r + 6) = 0x88;
+    Menu_Sprite(r, 0, 0, 0x7C0D, 0x808080, 0, 0x1F4);
+    Tmp_Pop(8);
+    draw_mode(5, 0x1F4);
+    Menu_DrawFrames(0x65F500, 0x110, 0x68, 5, 0x7C0E, 0x80B0C040, 0x12C);
+    Menu_DrawFrames(0x65F510, 0x10, 0x68, 5, 0x7C0E, 0x80B0C040, 0x12C);
+    u8 at = U8(G() + 0x10AA);
+    if (at == 0) Dest_Panel0(m);
+    else if (at == 1) Dest_Panel1(m);
+    else Dest_Panel2(m);
+    dest_frames();
+    Menu_SmallText(0x73AFDC, 0x10, 0x50, 0x3E8, 0x606060, 0x104);   /* (a copy of it in the original) */
+}
+
+/* the step, the grid, the screen shaken while M+0x8E counts down */
+void DC2CALL MenuMode_Dest(gptr m)                                  /* 0x49FA50 */
+{
+    U8(m + 0x65) = 2;
+    Orig_Call1(U32(0x73AF80 + (s8)U8(m + 2) * 4), m);
+    for (u32 i = 1; i < 0x13; i++) Menu_Line(i << 4, 0, i << 4, 0xF0, 0x101010, 1, 0xA);
+    for (u32 i = 1; i < 0xF; i++) Menu_Line(0, i << 4, 0x140, i << 4, 0x101010, 1, 0xA);
+    draw_mode(0x25, 0xA);
+    if (!U16(m + 0x8E)) return;
+    for (u8 i = 0; (s32)i < S16(m + 0x8E) * 3; i++) {
+        s32 y = (s32)(Rand8() & 0xFF) % 0x88;
+        s32 dx = (s32)(Rand8() & 0xFF) % 4 - 2;
+        Menu_ShiftLine((u32)dx, (u32)(y + 0x20), 1);
+    }
+    U16(m + 0x8E)--;
+}
+
+static void dest_reset(gptr m)
+{
+    U16(m + 0x92) = 0; U16(m + 0x94) = 0; U16(m + 0x96) = 0; U16(m + 0x98) = 0;
+    U16(m + 0x9A) = 0; U16(m + 0x9C) = 0; U16(m + 0x8E) = 0x1E;
+}
+
+/* step 0 */
+void DC2CALL Dest_Init(gptr m)                                      /* 0x49FB80 */
+{
+    U8(m + 2) = 1; U8(m + 0x4F) = 0; U8(m + 0x4E) = 0;
+    dest_reset(m);
+    U16(m + 0x80) = 0; U16(m + 0x82) = 0; U16(m + 0x90) = 0;
+    Dest_Frame(m);
+}
+
+/* step 1: the pad switches the target; select asks, cancel leaves */
+void DC2CALL Dest_Choose(gptr m)                                    /* 0x49FBE0 */
+{
+    if (U8(m + 0x45) & 0xF0) {
+        Se_Play(0, 0xD);
+        U8(m + 0x4F) ^= 1;
+        dest_reset(m);
+    } else if (U8(0x87DC00) & 0x40) {
+        U32(m) = 0x502; U8(m + 0x64) = 0;
+    } else if (U8(0x87DC00) & 0x20) {
+        U16(m + 0x8E) = 0x1E; U8(m + 2) = 2; U8(m + 0x4E) = 0;
+        Se_Play(0, 2);
+    }
+    Text_Draw(0x724744, 0x20, 0xBC, 0x64, 0x808080, 2, 0);
+    Dest_Frame(m);
+}
+
+/* step 2: "Are you sure?"; yes with the vehicle working (M+0x38) sets off
+ * (G+0x10AA the target, step 10), without it step 3 */
+void DC2CALL Dest_Confirm(gptr m)                                   /* 0x49FC90 */
+{
+    Text_Draw(0x724502, 0x20, 0xBC, 0x64, 0x808080, 2, 0);
+    Menu_YesNo(0xB4, 0xCC, (u32)(s32)(s8)U8(m + 0x4E), 1);
+    Dest_Frame(m);
+    if (U8(m + 0x45) & 0xA0) { Se_Play(0, 0); U8(m + 0x4E) ^= 1; return; }
+    u8 pad = U8(0x87DC00);
+    if (pad & 0x40) { U16(m + 0x8E) = 0x1E; Se_Play(0, 1); U8(m + 2) = 1; return; }
+    if (!(pad & 0x20)) return;
+    U8(m + 2) = 1;
+    if (U8(m + 0x4E)) { Se_Play(0, 1); return; }
+    if (!U16(m + 0x38)) { U8(m + 2) = 3; return; }
+    Se_Play(0, 2);
+    U8(G() + 0x10AA) = U8(m + 0x4F) ? 2 : 0;
+    U8(m + 2) = 0xA;
+}
+
+/* step 3: the route shown (steps 4..9 by where from and which target) */
+void DC2CALL Dest_Route(gptr m)                                     /* 0x49FD80 */
+{
+    U16(m + 0x80) = 0; U16(m + 0x82) = 0;
+    u8 at = U8(G() + 0x10AA), t = U8(m + 0x4F);
+    if (at == 0) U8(m + 2) = t ? 7 : 6;
+    else if (at == 1) U8(m + 2) = t ? 5 : 4;
+    else if (at == 2) U8(m + 2) = t ? 8 : 9;
+    Dest_Frame(m);
+}
+
+/* step 10 */
+void DC2CALL Dest_Leave(gptr m)                                     /* 0x4A1B10 */
+{
+    U32(m) = 0x502;
+}
+
+/* the screen without its opening or panel (under the routes) */
+static void dest_frames(void)
+{
+    Menu_DrawFrames(0x65F748, 0xF0, 0x13, 6, 0x7C0F, 0x808080, 0xC8);
+    Menu_DrawFrames(0x65F538, 0xD8, 0x10, 5, 0x7C0E, 0x80B0C040, 0xC8);
+    Menu_DrawFrames(0x65F558, 0x70, 0x10, 5, 0x7C0E, 0x80B0C040, 0xC8);
+    Menu_DrawFrames(0x65F750, 0x10, 0xAE, 6, 0x7C0F, 0x808080, 0xC8);
+    Menu_DrawFrames(0x65F628, 8, 0xB2, 5, 0x7C0E, 0x80B0C040, 0xC8);
+    Menu_DrawFrames(0x65F680, 0xD0, 0xB2, 5, 0x7C0E, 0x80B0C040, 0xC8);
+    Menu_DrawFrames(0x65F6D8, 0x60, 0xCC, 5, 0x7C0E, 0x80B0C040, 0x118);
+    Menu_DrawFrames(0x65F6D8, 0xE8, 0xCC, 5, 0x7C0E, 0x80B0C040, 0x118);
+}
+
+void DC2CALL Dest_Base(gptr m)                                      /* 0x4A0280 */
+{
+    gptr r = Tmp_Push(8);
+    U16(r) = 0x20; U16(r + 2) = 0x20; U16(r + 4) = 0x100; U16(r + 6) = 0x88;
+    Menu_Sprite(r, 0, 0, 0x7C0D, 0x808080, 0, 0x1F4);
+    Tmp_Pop(8);
+    draw_mode(5, 0x1F4);
+    Menu_DrawFrames(0x65F500, 0x110, 0x68, 5, 0x7C0E, 0x80B0C040, 0x12C);
+    Menu_DrawFrames(0x65F510, 0x10, 0x68, 5, 0x7C0E, 0x80B0C040, 0x12C);
+    dest_frames();
+}
+
+/* the three places on the route screen: mark, two lines to it, name, frame */
+struct dest_place { u32 mark; u16 mx, my, l0[4], l1[4]; u32 label; u16 lx, ly; u32 frame; u16 fx, fy; };
+static const struct dest_place g_dest_places[3] = {
+    {0x65F528, 0x28, 0x2A, {0x78, 0x4C, 0x68, 0x3C}, {0x18, 0x3C, 0x68, 0x3C}, 0x73AFBC, 0x1C, 0x3E, 0x65F768, 0x1D, 0x33},
+    {0x65F530, 0xA3, 0x58, {0xAD, 0x5B, 0xBD, 0x4B}, {0xBD, 0x4B, 0x10D, 0x4B}, 0x73AFCC, 0xC1, 0x4D, 0x65F758, 0xC2, 0x38},
+    {0x65F520, 0xBD, 0x30, {0xC7, 0x6F, 0xD7, 0x7F}, {0xD7, 0x7F, 0x127, 0x7F}, 0x73AFAC, 0xDB, 0x81, 0x65F770, 0xDC, 0x76}};
+
+static void dest_place(const struct dest_place *p, u32 n)
+{
+    Menu_DrawFrames(p->mark, p->mx, p->my, 0x25, 0x7C0E, 0x80008080, 0xC8);
+    Menu_Line(p->l0[0], p->l0[1], p->l0[2], p->l0[3], 0xC0, 0, 0x32);
+    Menu_Line(p->l1[0], p->l1[1], p->l1[2], p->l1[3], 0xC0, 0, 0x32);
+    Menu_SmallText(p->label, p->lx, p->ly, n, 0x808080, 1);   /* (a copy of it in the original) */
+    Menu_DrawFrames(p->frame, p->fx, p->fy, 0x26, 0x7C0E, 0x808080, 0x64);
+}
+
+/* a route from place `from` to `to` (G+0x10AA set to `at` meanwhile): the
+ * marker gliding from its start by M+0x80 * (kx, ky) / div with the offset
+ * shown (vm: 0 as is, 1 negated, 2 as u16), cross-hairs, the column of
+ * figures (0x6C1500), until M+0x82 passes `end`: arrived (G+0x10AA `at`) */
+struct dest_route { s8 set; u8 from, to, at; s16 kx, ky, div; u8 vm; u16 lim, end; };
+static void dest_route(gptr m, const struct dest_route *rt)
+{
+    if (rt->set >= 0) U8(G() + 0x10AA) = (u8)rt->set;
+    dest_place(&g_dest_places[rt->from], rt->from == 2 ? U16(m + 0x98) : 0x64);   /* (point c's name always typed) */
+    dest_place(&g_dest_places[rt->to], rt->to == 2 ? U16(m + 0x98) : 0x64);
+    Dest_Base(m);
+    s32 c = S16(m + 0x80);
+    s32 dx = c * rt->kx / rt->div, dy = c * rt->ky / rt->div;
+    s32 sx = g_dest_places[rt->from].l0[0], sy = g_dest_places[rt->from].l0[1];
+    u32 col = Color_Pulse(0x808080, 0x202020, 4);
+    Menu_DrawFrames(0x65F710, (u32)(sx + dx), (u32)(sy + dy), 5, 0x7C0E, col, 0x1E);
+    u32 vx = rt->vm == 0 ? (u32)(s32)(s16)dx : rt->vm == 1 ? (u32)-(s32)(s16)dx : (u16)dx;
+    u32 vy = rt->vm == 0 ? (u32)(s32)(s16)dy : rt->vm == 1 ? (u32)-(s32)(s16)dy : (u16)dy;
+    Menu_Number8((u32)(sx + dx), (u32)(sy + dy + (rt->from == 1 ? 0x11 : 0x10)), 4, 1, 0x707070, vx, 2);
+    Menu_Number8((u32)(sx + dx + 0x10), (u32)(sy + dy - 6), 4, 1, 0x707070, vy, 2);
+    s32 px = sx + dx, py = sy + dy;
+    Menu_Line(sx, sy, px, py, 0x800000, 0, 0x32);
+    Menu_Line(px - 8, py - 8, px + 8, py - 8, 0xC0C0C0, 1, 0x32);
+    Menu_Line(px - 8, py + 8, px + 8, py + 8, 0xC0C0C0, 1, 0x32);
+    Menu_Line(px - 8, py - 8, px - 8, py + 8, 0xC0C0C0, 1, 0x32);
+    Menu_Line(px + 8, py - 8, px + 8, py + 8, 0xC0C0C0, 1, 0x32);
+    Menu_Line(0, py, 0x140, py, 0x808080, 1, 0x32);
+    Menu_Line(px, 0x20, px, 0xA8, 0x808080, 1, 0x32);
+    draw_mode(5, 0x32);
+    Menu_DrawArea(0, 0, 0x140, 0xF0, 2);
+    gptr fig = 0x6C1500;
+    for (u16 i = 0; (s32)i < S16(m + 0x80); i++, fig += 2) {
+        u32 y = (u32)((i >> 1) * 8 + 0x5E);
+        if (S16(m + 0x80) > 0x12) y += (u32)(0x12 - S16(m + 0x80));
+        Menu_Number8((u32)((i % 2) * 32 + 0x30), y & 0xFFFF, 4, 1, 0x80606060, U16(fig) % 9999, 2);
+    }
+    Menu_DrawArea(0x30, 0x60, 0x48, 0x48, 2);
+    if (S16(m + 0x82) < (s16)rt->lim) Se_Play(0, 0xC);
+    U16(m + 0x80)++;
+    if (S16(m + 0x80) > (s16)rt->lim) U16(m + 0x80) = rt->lim;
+    U16(m + 0x82)++;
+    if (S16(m + 0x82) > (s16)rt->end) { U8(m + 2) = 0xA; U8(G() + 0x10AA) = rt->at; }
+}
+
+static const struct dest_route g_dest_routes[6] = {
+    {-1, 0, 2, 0, 79, 35, 128, 0, 0x80, 0xC8}, {2, 0, 1, 2, 53, 15, 90, 0, 0x5A, 0xA0},
+    {1, 2, 0, 1, -79, -35, 128, 1, 0x80, 0xC8}, {2, 2, 1, 2, -26, -20, 32, 1, 0x20, 0x64},
+    {1, 1, 0, 1, -53, -15, 90, 2, 0x5A, 0xA0}, {0, 1, 2, 0, 26, 20, 32, 2, 0x20, 0x5A}};
+
+void DC2CALL Dest_Route4(gptr m) { dest_route(m, &g_dest_routes[0]); }   /* 0x49FE10 */
+void DC2CALL Dest_Route5(gptr m) { dest_route(m, &g_dest_routes[1]); }   /* 0x4A0460 */
+void DC2CALL Dest_Route6(gptr m) { dest_route(m, &g_dest_routes[2]); }   /* 0x4A08C0 */
+void DC2CALL Dest_Route7(gptr m) { dest_route(m, &g_dest_routes[3]); }   /* 0x4A0D60 */
+void DC2CALL Dest_Route8(gptr m) { dest_route(m, &g_dest_routes[4]); }   /* 0x4A1210 */
+void DC2CALL Dest_Route9(gptr m) { dest_route(m, &g_dest_routes[5]); }   /* 0x4A1690 */

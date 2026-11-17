@@ -1009,6 +1009,26 @@ void DC2CALL Map_Area8(gptr m);     /* 0x49F050 */
 void DC2CALL Map_Area9(gptr m);     /* 0x49F1C0 */
 void DC2CALL MenuMode_Pickup(gptr m); /* 0x49F270 */
 void DC2CALL Pickup_Clear(u32 v);   /* 0x49F9F0 */
+void DC2CALL MenuMode_Dest(gptr m); /* 0x49FA50 */
+void DC2CALL Dest_Init(gptr m);     /* 0x49FB80 */
+void DC2CALL Dest_Choose(gptr m);   /* 0x49FBE0 */
+void DC2CALL Dest_Confirm(gptr m);  /* 0x49FC90 */
+void DC2CALL Dest_Route(gptr m);    /* 0x49FD80 */
+void DC2CALL Dest_Leave(gptr m);    /* 0x4A1B10 */
+void DC2CALL Dest_Frame(gptr m);    /* 0x4A1B20 */
+void DC2CALL Dest_Panel0(gptr m);   /* 0x4A1DF0 */
+void DC2CALL Dest_Panel1(gptr m);   /* 0x4A2530 */
+void DC2CALL Dest_Panel2(gptr m);   /* 0x4A2990 */
+void DC2CALL Dest_View1(gptr m);    /* 0x4A1F70 */
+void DC2CALL Dest_View2(gptr m);    /* 0x4A2250 */
+void DC2CALL Dest_View3(gptr m);    /* 0x4A26A0 */
+void DC2CALL Dest_Base(gptr m);     /* 0x4A0280 */
+void DC2CALL Dest_Route4(gptr m);   /* 0x49FE10 */
+void DC2CALL Dest_Route5(gptr m);   /* 0x4A0460 */
+void DC2CALL Dest_Route6(gptr m);   /* 0x4A08C0 */
+void DC2CALL Dest_Route7(gptr m);   /* 0x4A0D60 */
+void DC2CALL Dest_Route8(gptr m);   /* 0x4A1210 */
+void DC2CALL Dest_Route9(gptr m);   /* 0x4A1690 */
 void DC2CALL Game_ModeStock(void);                                      /* 0x452450 */
 
 u32  DC2CALL Angle_DiffTo(gptr a, gptr b, u32 ang);                  /* 0x48F3E0 */
