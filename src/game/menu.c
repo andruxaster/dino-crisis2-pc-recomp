@@ -3085,3 +3085,134 @@ void DC2CALL Map_Area9(gptr m)                                      /* 0x49F1C0 
     Map_Rooms(9, 5);
     page_end(m);
 }
+
+/* ---- mode 10: an item picked up (M+0x38 the item, +0x3C its flag 5, +0x3E its zone and object) ---- */
+
+/* the item's zone (low byte, 0xFF none) disabled and its object (high
+ * byte, 0xFF none) cleared */
+void DC2CALL Pickup_Clear(u32 v)                                    /* 0x49F9F0 */
+{
+    if ((u8)v != 0xFF) U8(U32(G() + 0xA5C) + (v & 0xFF) * 40) = 0;
+    if ((v & 0xFF00) != 0xFF00) U32(U32(G() + 0x93C) + ((v & 0xFFFF) >> 8) * 0x70 + 0x50) = 0;
+}
+
+/* a line of text typed out (M+0x92 letters) centred at 0x78; nonzero once all shown */
+static u32 pickup_text(gptr m, gptr t)
+{
+    return Text_Draw(t, Text_Left(t), 0x78, U16(m + 0x92), 0x808080, 1, 1);
+}
+
+/* the item's picture, the letters counted on every other frame up to 200 */
+static void pickup_picture(gptr m)
+{
+    gptr r = Tmp_Push(8);
+    U16(r) = 0x60; U16(r + 2) = 0x28; U16(r + 4) = 0x80; U16(r + 6) = 0x40;
+    Menu_Sprite(r, 0, 0xC0, 0x7C40, 0x808080, 0, 1);
+    Tmp_Pop(8);
+    draw_mode(0x8C, 1);
+    if (U8(G() + 4) & 1) U16(m + 0x92)++;
+    if (S16(m + 0x92) > 0xC8) U16(m + 0x92) = 0xC8;
+}
+
+/* "You got the ..." */
+static gptr you_got(gptr buf, u32 id)
+{
+    Msg_Concat(buf, 0x724446, U32(0x704260 + id * 12));
+    Msg_Concat(buf, buf, 0x723FCC);
+    return buf;
+}
+
+static void picked_up(gptr m)
+{
+    Pickup_Clear(U16(m + 0x3E));
+    U32(m) = 0x502; U8(m + 0x64) = 0;
+}
+
+/* step 0 the screen torn while the picture loads; 1 the item: a medicine
+ * asks whether to take it (none if no room), a memo is read at once
+ * (screen 3), anything else is just had (the 0x2F ammunition box fills
+ * the weapons); 2 the medicine taken */
+void DC2CALL MenuMode_Pickup(gptr m)                                /* 0x49F270 */
+{
+    U8(m + 0x65) = 2;
+    U32(G() + 0xB14) = U32(m + 0x68);
+    gptr buf = Tmp_Push(0x200);
+    switch ((s8)U8(m + 2)) {
+    case 0:
+        for (u32 i = 0; i < 0x1E; i++) {
+            s32 y = (s32)(Rand8() & 0xFF) % 0xF0;
+            s32 dx = (s32)(Rand8() & 0xFF) % 4 - 2;
+            Menu_ShiftLine((u32)dx, (u32)y, 1);
+        }
+        if (!File_IsBusy()) { U16(m + 0x92) = 0; U8(m + 0x4E) = 0; U8(m + 2)++; }
+        break;
+    case 1: {
+        pickup_picture(m);
+        u16 id = U16(m + 0x38);
+        if (id >= 0x1A && id < 0x20) {
+            if ((s8)Item_FindRoom(G() + 0x11AC, 6, (u8)id) < 0) {
+                Msg_Concat(buf, 0x724468, 0x723FC8);
+                if (pickup_text(m, buf) && (U8(0x87DC00) & 0x60)) { U32(m) = 0x502; U8(m + 0x64) = 0; }
+                break;
+            }
+            Msg_Concat(buf, 0x724420, U32(0x704260 + id * 12));
+            Msg_Concat(buf, buf, 0x723FD0);
+            if (!pickup_text(m, buf)) break;
+            if (U8(m + 0x45) & 0xA0) {
+                U8(m + 0x4E) ^= 1;
+                Se_Play(0, 0);
+            } else if (U8(0x87DC00) & 0x40) {
+                U32(m) = 0x502; U8(m + 0x64) = 0;
+            } else if (U8(0x87DC00) & 0x20) {
+                if (U8(m + 0x4E)) { U32(m) = 0x502; U8(m + 0x64) = 0; }
+                else { Se_Play(0, 2); U8(m + 2) = 2; U16(m + 0x92) = 0; }
+            }
+            Menu_YesNo(0xB4, 0x8C, (u32)(s32)(s8)U8(m + 0x4E), 1);
+        } else if (id >= 0x50 && id < 0x80) {
+            Flag_Set(9, id, 1);
+            Flag_Set(5, U16(m + 0x3C), 1);
+            Pickup_Clear(U16(m + 0x3E));
+            U8(m) = 2; U8(m + 1) = 3; U8(m + 2) = 2; U8(m + 3) = 0;
+            U8(m + 0x57) = (u8)(U8(m + 0x38) - 0x50);
+            u8 n = 0;
+            for (u8 b = 0x50; (u16)b < U16(m + 0x38); b++) if (Flag_Check(9, b)) n++;
+            U8(m + 0x55) = 0; U8(m + 0x56) = n;
+            Game_Start(3);
+            U8(G() + 0xB48) = 3;
+        } else {
+            if (!pickup_text(m, you_got(buf, id)) || !(U8(0x87DC00) & 0x60)) break;
+            Flag_Set(5, U16(m + 0x3C), 1);
+            if (U16(m + 0x38) == 0x2F) {
+                gptr g = G();
+                if ((u8)Item_Find(g + 0x10BC, 0x14, 0x2F) == 0xFF) {
+                    gptr w = G() + ((s8)Item_FindFree(G() + 0x10BC, 0x14) + 0x165) * 12;
+                    U8(w) = 1; U8(w + 1) = 0x19; U16(w + 2) = 0; U32(w + 4) = 0;
+                    U16(w + 8) = 9999; U16(w + 0xA) = 9999;
+                }
+                static const u16 slot[3][2] = {{0x10B4, 0x902}, {0x10B6, 0x902}, {0x10B8, 0x901}};
+                for (u32 k = 0; k < 3; k++) {
+                    gptr s = G() + slot[k][0];
+                    u16 v = U16(s);
+                    U16(s) = (U8(0x70426A + (v & 0xFF) * 12) & 3) ? slot[k][1] : (u16)((v & 0xFF) | 0x900);
+                }
+            } else Flag_Set(9, U16(m + 0x38), 1);
+            picked_up(m);
+        }
+        break; }
+    case 2: {
+        pickup_picture(m);
+        u8 s = (u8)Item_FindRoom(G() + 0x11AC, 6, U8(m + 0x38));
+        U8(m + 0x4F) = s;
+        if (!pickup_text(m, you_got(buf, U16(m + 0x38))) || !(U8(0x87DC00) & 0x60)) break;
+        gptr it = G() + ((s8)s + 0x179) * 12;
+        U8(it) = 1; U16(it + 8)++; U8(it + 1) = U8(m + 0x38); U16(it + 2) = 0; U32(it + 4) = 0;
+        u8 d = U8(G() + 0x108E);
+        U16(it + 0xA) = d == 0 ? 5 : d == 1 ? 2 : 1;
+        Flag_Set(9, U16(m + 0x38), 1);
+        Flag_Set(5, U16(m + 0x3C), 1);
+        picked_up(m);
+        break; }
+    }
+    Tmp_Pop(0x200);
+    Menu_Frame(m);
+}

@@ -10711,6 +10711,35 @@ static gptr map_state(void)
     U8(0x87DDFC) |= U8(0x87DC00);
     return m;
 }
+/* mode 10's state: the item picked up, its flag and zone/object, room left */
+static gptr pickup_state(void)
+{
+    gptr m = items_state(), g = G();
+    U8(m + 2) = (u8)A2_PICK(0, 1, 1, 1, 2, 2, (s32)rnd());
+    U16(m + 0x38) = (u16)A2_PICK(0x1A, 0x1C, 0x1F, 0x2F, 0x2F, 0x50, 0x51, (s32)(0x50 + rnd() % 0x30), (s32)(rnd() % 0x50));
+    if (U8(m + 2) == 2) U16(m + 0x38) = (u16)(0x1A + rnd() % 6);   /* (only a medicine is taken so) */
+    U16(m + 0x3C) = (u16)(rnd() % U32(A_FLAG_GROUPS + 5 * 8 + 4));
+    U16(m + 0x3E) = (u16)A2_PICK(0xFFFF, (s32)(0xFF00 | rnd() % 0x20), (s32)((rnd() % 8) << 8 | 0xFF), (s32)((rnd() % 8) << 8 | rnd() % 0x20));
+    U16(m + 0x92) = (u16)A2_PICK(0, 1, 0xC7, 0xC8, 0xC8, 0xC8, (s32)(rnd() % 0x100));
+    U8(m + 0x4E) = (u8)A2_PICK(0, 1);
+    U16(m + 0x44) = (u16)A2_PICK(0, 0, 0x2000, 0x8000, 0x100, (s32)rnd());
+    U32(0x87DC00) = (u32)A2_PICK(0, 0x20, 0x40, 0x60, (s32)rnd());
+    U32(m + 0x68) = rnd();
+    U8(g + 0x108E) = (u8)A2_PICK(0, 1, 2, (s32)rnd());
+    for (u32 q = 0; q < 0x14; q++) {
+        gptr w = g + 0x10BC + 12 * q;
+        U8(w) = (u8)(rnd() % 3 ? 1 : 0); U8(w + 1) = (u8)A2_PICK(0x2F, (s32)(rnd() % 0x30));
+    }
+    if (rnd() % 2) for (u32 q = 0; q < 0x14; q++) if (U8(g + 0x10BC + 12 * q + 1) == 0x2F) U8(g + 0x10BC + 12 * q + 1) = 0;
+    for (u32 q = 0; q < 3; q++) U16(g + 0x10B4 + 2 * q) = (u16)((rnd() % 0x10) | (rnd() % 2 ? 0x900 : rnd() << 8));
+    if (rnd() % 3 == 0) for (u32 q = 0; q < 6; q++) U8(g + 0x11AC + 12 * q) = 1;   /* (no room) */
+    if (rnd() % 4 == 0) for (u32 q = 0; q < 0x14; q++) U8(g + 0x10BC + 12 * q) = 1;  /* (no weapon slot) */
+    U8(g + 0x11F4) = (u8)A2_PICK(0, 1, (s32)rnd());
+    U8(U32(g + 0xA5C) + 0xFF * 40) = (u8)(rnd() | 1);           /* (zone 0xFF, object 0xFF: not to be touched) */
+    U32(U32(g + 0x93C) + 0xFF * 0x70 + 0x50) = rnd() | 1;
+    U32(LOG_BASE) = 0;
+    return m;
+}
 static u8 g_menu_frames[0x3000], g_map_frames[0x1000];
 static void test_menu(void)
 {
@@ -11320,6 +11349,22 @@ static void test_menu(void)
                 check(0x49B7A0, Map_NextArea, "Map_NextArea", 1, a, 0xFFFF);
                 check(0x49B810, Map_PrevArea, "Map_PrevArea", 1, a, 0xFFFF);
             }
+        }
+        /* mode 10: an item picked up */
+        for (int q = 0; q < 3; q++) {
+            m = pickup_state();
+            sprintf(g_what, "2 %X id %X 3C %X 3E %X 92 %X 4E %X keys %X pad %X diff %X", U8(m + 2), U16(m + 0x38), U16(m + 0x3C), U16(m + 0x3E),
+                    U16(m + 0x92), U8(m + 0x4E), U16(m + 0x44), U32(0x87DC00), U8(G() + 0x108E));
+            g_ign_objpads = 1;
+            check(0x49F270, MenuMode_Pickup, "MenuMode_Pickup", 1, a, 0);
+            g_ign_objpads = 0;
+        }
+        m = pickup_state();
+        {
+            u32 c[1] = {(u32)A2_PICK(0xFFFF, 0xFF05, 0x3FF, 0x0305, (s32)((rnd() % 8) << 8 | rnd() % 0x20 | (rnd() << 16)))};
+            g_ign_objpads = 1;
+            check(0x49F9F0, Pickup_Clear, "Pickup_Clear", 1, c, 0);
+            g_ign_objpads = 0;
         }
         /* flags 9 and items */
         m = menu_state();

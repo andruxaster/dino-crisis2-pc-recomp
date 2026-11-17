@@ -1532,6 +1532,8 @@ const Hook g_hooks[] = {
     {0x49EF50, (void *)Map_Area7,               "Map_Area7"},
     {0x49F050, (void *)Map_Area8,               "Map_Area8"},
     {0x49F1C0, (void *)Map_Area9,               "Map_Area9"},
+    {0x49F270, (void *)MenuMode_Pickup,         "MenuMode_Pickup"},
+    {0x49F9F0, (void *)Pickup_Clear,            "Pickup_Clear"},
     {0x452450, (void *)Game_ModeStock, "Game_ModeStock"},
     {0x450E00, (void *)Game_NewState,       "Game_NewState"},
     {0x4510D0, (void *)Game_ClearState,     "Game_ClearState"},

@@ -1007,6 +1007,8 @@ void DC2CALL Map_Area6(gptr m);     /* 0x49E9B0 */
 void DC2CALL Map_Area7(gptr m);     /* 0x49EF50 */
 void DC2CALL Map_Area8(gptr m);     /* 0x49F050 */
 void DC2CALL Map_Area9(gptr m);     /* 0x49F1C0 */
+void DC2CALL MenuMode_Pickup(gptr m); /* 0x49F270 */
+void DC2CALL Pickup_Clear(u32 v);   /* 0x49F9F0 */
 void DC2CALL Game_ModeStock(void);                                      /* 0x452450 */
 
 u32  DC2CALL Angle_DiffTo(gptr a, gptr b, u32 ang);                  /* 0x48F3E0 */
