@@ -45,8 +45,13 @@ void PcAudio_Frame(u32 sixtieths);
 void PcAudio_Mix(s16 *lr, u32 frames);
 #endif
 
-/* movies (standalone: none, the game goes on as if the file were missing) */
+/* movies (standalone: none; each "plays" for no time, as if it ended at once) */
 u32  DC2CALL Movie_Open(gptr name, u32 w, u32 h);       /* 0x4BF3A0: 0 when it plays */
+void DC2CALL Movie_Ctl1(void);                          /* 0x4BF650: plays */
+void DC2CALL Movie_Ctl0(void);                          /* 0x4BF670: stops */
+u32  DC2CALL Movie_Poll(void);                          /* 0x4BF690: nonzero when it has ended */
+void DC2CALL Movie_Close(void);                         /* 0x4BF340 */
+void DC2CALL Movie_Clear(u32 mode);                     /* 0x4B4F90: the screen cleared (PcDraw_Clear) */
 
 /* the background masks as Direct3D quads (standalone: not drawn yet) */
 void DC2CALL Masks_CreateVB(u32 nverts, gptr pixels);   /* 0x4BE3C0 */

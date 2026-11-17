@@ -695,6 +695,45 @@ void DC2CALL Movie_Tick(void)                                       /* 0x4731F0 
     Orig_Call1(U32(0x73762C + U32(0x74DB88) * 4), 0);
 }
 
+/* the movie's steps (Movie_Tick by 0x74DB88): start (the screen cleared,
+   faded in at once; 0x87DCEC/0x87DD7C off for those without +6), play until it ends
+   or (+0xA) a button skips it, then the screen cleared and faded out (not
+   movie 0, the title's, nor 10) and the root mode back */
+void DC2CALL Movie_StepStart(void)                                  /* 0x473210 */
+{
+    gptr e = 0x7375A8 + U32(0x74DB84) * 0xC;
+    U32(0x74DB88)++;
+    if (!U16(e + 6)) { U8(0x87DCEC) = 0; U8(0x87DD7C) = 0; }
+    Movie_Clear(1);
+    Movie_Ctl1();
+    Fade_Set(0, 1, 1);
+}
+
+void DC2CALL Movie_StepPlay(void)                                   /* 0x473260 */
+{
+    if (!Movie_Poll()) {
+        if (!U16(0x7375A8 + U32(0x74DB84) * 0xC + 0xA) || !U16(0x87DC00)) return;
+        Movie_Ctl0();
+        Flag_Set(2, 0x1E, 1);
+    }
+    U32(0x74DB88)++;
+}
+
+void DC2CALL Movie_StepEnd(void)                                    /* 0x4732A0 */
+{
+    int fade = 1;
+    if (Flag_Check(2, 0x1E)) { U8(0x87DCEC) = 1; U8(0x87DD7C) = 1; }
+    else {
+        Movie_Close();
+        u32 n = U32(0x74DB84);
+        if (n == 0xA) fade = 0;
+        else { U8(0x87DCEC) = 1; U8(0x87DD7C) = 1; fade = n != 0; }
+    }
+    if (fade) { Movie_Clear(1); Fade_Set(1, 1, 1); }
+    Flag_Set(2, 0x17, 0);
+    U32(0x87DE00) = U32(0x74DB80);
+}
+
 /* ---- sound effects: 0x6EED00 the table of sounds (8 bytes), banks 0x87FBE0 ------ */
 
 /* a sound's record unpacked into 13 bytes: bank, group, first, ..., count */

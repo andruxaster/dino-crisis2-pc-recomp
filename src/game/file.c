@@ -57,6 +57,47 @@ u8 DC2CALL File_RequestRaw(u32 id, gptr dest)                       /* 0x403E90 
     return 1;
 }
 
+/* an archive entry (file id, entry, bytes, flags 2/4/8) by its records
+   {type, size, x, y, w, h} (VRAM rectangles; type 2 the CLUT), "dumm" after
+   them. The records' last 16 bytes are left as they were (the original
+   copies stack garbage there). */
+static u8 load_entry(u32 id, u32 idx, u32 left, u16 flags, const u32 (*rec)[6], u32 n)
+{
+    if (!File_RequestLoad(id)) return 0;
+    U16(A_FILE_INDEX) = (u16)idx;
+    U32(A_FILE_LEFT) = left;
+    U16(A_FILE_FLAGS) = flags;
+    gptr r = FILE_HDR;
+    for (u32 k = 0; k < n; k++, r += 0x20) {
+        U32(r) = rec[k][0]; U32(r + 4) = rec[k][1];
+        for (u32 j = 0; j < 4; j++) U16(r + 8 + 2 * j) = (u16)rec[k][2 + j];
+    }
+    U32(r) = 0x6D6D7564;
+    U32(A_FILE_REC) = FILE_HDR;
+    return 1;
+}
+
+/* ITEM.DAT entry: a 128x64 8bpp icon -> VRAM 768,192, its CLUT row 497 */
+u8 DC2CALL Item_LoadIcon(u32 idx)                                   /* 0x403EE0 */
+{
+    static const u32 rec[2][6] = {{1, 0x2000, 0x300, 0xC0, 0x40, 0x40}, {2, 0x200, 0, 0x1F1, 0x100, 1}};
+    return load_entry(0x79, idx, 0x2800, 2, rec, 2);
+}
+
+/* MAP.DAT entry: two 256x256 4bpp pages -> VRAM 448,0 and 384,0, CLUT row 500 */
+u8 DC2CALL Map_LoadPage(u32 idx)                                    /* 0x403FD0 */
+{
+    static const u32 rec[3][6] = {{1, 0x8000, 0x1C0, 0, 0x40, 0x100}, {1, 0x8000, 0x180, 0, 0x40, 0x100}, {2, 0x200, 0, 0x1F4, 0x10, 1}};
+    return load_entry(0x8A, idx, 0x10800, 4, rec, 3);
+}
+
+/* FILE.DAT entry: a 128x96 8bpp picture -> VRAM 384,256, CLUT row 497 */
+u8 DC2CALL File_LoadPicture(u32 idx)                                /* 0x404100 */
+{
+    static const u32 rec[2][6] = {{1, 0x3000, 0x180, 0x100, 0x40, 0x60}, {2, 0x200, 0, 0x1F1, 0x100, 1}};
+    return load_entry(0x77, idx, 0x3800, 8, rec, 2);
+}
+
 /* ---- record handlers ------------------------------------------------------------ */
 void DC2CALL File_Copy(gptr rec, gptr src)                          /* 0x4044C0  type 0 */
 {

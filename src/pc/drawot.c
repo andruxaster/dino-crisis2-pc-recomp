@@ -703,6 +703,9 @@ static void vram_copy(gptr r, s32 x, s32 y)                          /* 0x4B4A60
     PcDraw_InvalidateRect(r, 1);
 }
 
+/* the same, called directly by game code (the vehicle gun's sight) */
+void PcDraw_VramCopy(gptr r, s32 x, s32 y) { vram_copy(r, x, y); }   /* 0x4B4A60 */
+
 /* rows of rect moved to x, y where they differ, their palettes converted again */
 static void vram_move(gptr r, s32 x, s32 y)                          /* 0x4B4B30 */
 {

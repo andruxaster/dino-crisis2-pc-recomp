@@ -249,6 +249,9 @@ void DC2CALL Player_AnimReset(void);                                    /* 0x48E
 u8   DC2CALL Rand8(void);                                               /* 0x48F750 */
 u8   DC2CALL File_RequestLoad(u32 id);                                  /* 0x403E50 */
 u8   DC2CALL File_RequestRaw(u32 id, gptr dest);                        /* 0x403E90 */
+u8   DC2CALL Item_LoadIcon(u32 idx); /* 0x403EE0 */
+u8   DC2CALL Map_LoadPage(u32 idx); /* 0x403FD0 */
+u8   DC2CALL File_LoadPicture(u32 idx); /* 0x404100 */
 void DC2CALL File_Tick(void);                                           /* 0x403E40 */
 void DC2CALL File_Process(void);                                        /* 0x404290 */
 void DC2CALL File_Copy(gptr rec, gptr src);                             /* 0x4044C0 */
@@ -805,6 +808,9 @@ gptr DC2CALL Message_Show(u32 x, u32 y, gptr text, u32 kind);           /* 0x471
 void DC2CALL Msg_Flush(void);                                           /* 0x471AC0 */
 void DC2CALL Movie_Start(u32 n);                                        /* 0x473130 */
 void DC2CALL Movie_Tick(void);                                          /* 0x4731F0 */
+void DC2CALL Movie_StepStart(void); /* 0x473210 */
+void DC2CALL Movie_StepPlay(void);  /* 0x473260 */
+void DC2CALL Movie_StepEnd(void);   /* 0x4732A0 */
 void DC2CALL MsgSlot_Step(gptr s);                                      /* 0x470D30 */
 void DC2CALL Box_Type(void);                                            /* 0x470D50 */
 void DC2CALL Box_Wait(void);                                            /* 0x470F40 */
@@ -1029,6 +1035,50 @@ void DC2CALL Dest_Route6(gptr m);   /* 0x4A08C0 */
 void DC2CALL Dest_Route7(gptr m);   /* 0x4A0D60 */
 void DC2CALL Dest_Route8(gptr m);   /* 0x4A1210 */
 void DC2CALL Dest_Route9(gptr m);   /* 0x4A1690 */
+void DC2CALL Target_Next(gptr o);   /* 0x47BF70 */
+void DC2CALL Hum_Handler(gptr o);   /* 0x4A2B10 */
+void DC2CALL Hum_Attack(gptr o);    /* 0x4A3120 */
+void DC2CALL Hum_Init(gptr o);      /* 0x4A2E70 */
+void DC2CALL Hum_Normal(gptr o);    /* 0x4A3060 */
+void DC2CALL Hum_Hit(gptr o);       /* 0x4A30E0 */
+void DC2CALL Hum_Die(gptr o);       /* 0x4A3100 */
+void DC2CALL Hum_StandCtl(gptr o);  /* 0x4A31F0 */
+void DC2CALL Hum_WalkCtl(gptr o);   /* 0x4A3390 */
+void DC2CALL Hum_RunCtl(gptr o);    /* 0x4A35D0 */
+void DC2CALL Hum_DashCtl(gptr o);   /* 0x4A3780 */
+void DC2CALL Hum_BackCtl(gptr o);   /* 0x4A3910 */
+void DC2CALL Hum_SuperCtl(gptr o);  /* 0x4A3AA0 */
+void DC2CALL Hum_Gun9Ctl(gptr o);   /* 0x4A3DD0 */
+void DC2CALL Hum_Gun10Ctl(gptr o);  /* 0x4A3EE0 */
+void DC2CALL Hum_Gun11Ctl(gptr o);  /* 0x4A3FF0 */
+void DC2CALL Hum_Stand(gptr o);     /* 0x4A3300 */
+void DC2CALL Hum_Walk(gptr o);      /* 0x4A3480 */
+void DC2CALL Hum_Turn(gptr o);      /* 0x4A34F0 */
+void DC2CALL Hum_Run(gptr o);       /* 0x4A36A0 */
+void DC2CALL Hum_Dash(gptr o);      /* 0x4A3830 */
+void DC2CALL Hum_Back(gptr o);      /* 0x4A39C0 */
+void DC2CALL Hum_Super(gptr o);     /* 0x4A3AD0 */
+void DC2CALL Hum_Taunt(gptr o);     /* 0x4A3BC0 */
+void DC2CALL Hum_Machete(gptr o);   /* 0x4A3C30 */
+void DC2CALL Hum_Gun9(gptr o);      /* 0x4A3E00 */
+void DC2CALL Hum_Gun10(gptr o);     /* 0x4A3F10 */
+void DC2CALL Hum_Gun11(gptr o);     /* 0x4A4020 */
+void DC2CALL Hum_Spark4(gptr o);    /* 0x4A41B0 */
+void DC2CALL Hum_Spark9(gptr o);    /* 0x4A40C0 */
+void DC2CALL Hum_Spark10(gptr o);   /* 0x4A4110 */
+void DC2CALL Hum_Spark11(gptr o);   /* 0x4A4160 */
+void DC2CALL Hum_Hurt(gptr o);      /* 0x4A41D0 */
+void DC2CALL Hum_Down1(gptr o);     /* 0x4A4440 */
+void DC2CALL Hum_Down2(gptr o);     /* 0x4A4550 */
+void DC2CALL Hum_Away(gptr o);      /* 0x4A4660 */
+void DC2CALL Hum_Dead(gptr o);      /* 0x4A47E0 */
+void DC2CALL Vgun_Handler(gptr o);  /* 0x4A4940 */
+void DC2CALL Vgun_Init(gptr o);     /* 0x4A4A80 */
+void DC2CALL Vgun_Normal(gptr o);   /* 0x4A4C70 */
+void DC2CALL Vgun_Hit(gptr o);      /* 0x4A5430 */
+void DC2CALL Vgun_Die(gptr o);      /* 0x4A5660 */
+void DC2CALL Vgun_Still(gptr o);    /* 0x4A56E0 */
+void DC2CALL Vgun_Turn(gptr o);     /* 0x4A5700 */
 void DC2CALL Game_ModeStock(void);                                      /* 0x452450 */
 
 u32  DC2CALL Angle_DiffTo(gptr a, gptr b, u32 ang);                  /* 0x48F3E0 */

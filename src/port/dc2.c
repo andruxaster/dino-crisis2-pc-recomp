@@ -7,7 +7,8 @@
  * Input_Frame 0x478BF0) holds MASK for one frame with FRAME:MASK (0x820
  * confirm, 0x40 back, 0x1000 up, 0x4000 down) or over frames FROM..TO with
  * FROM-TO:MASK (0x1000 forward, 0x4000 back, 0x2000/0x8000 turn, 0x20 action).
- * DC2_TRACE=1 prints the player every 50 frames and the room's trigger areas.
+ * DC2_TRACE=1 prints the player every 50 frames, the room's trigger areas and
+ * the screen's fades.
  *   usage: dc2 Dino2.exe DATA_DIR [FRAMES] [FRAME:MASK | FROM-TO:MASK ...] */
 #include <stdio.h>
 #include <stdlib.h>
@@ -241,6 +242,12 @@ int main(int argc, char **argv)
         if (U16(G() + 0x76C) && title != last_title) {        /* once the title runs */
             printf("frame %4d: title screen %u step %u/%u cursor %d\n", f, title & 0xFF, (title >> 8) & 0xFF, title >> 16, S8(0x759EF2));
             last_title = title;
+        }
+        static u32 last_fade = 0xFFFFFFFF;                  /* the screen's fade: kind, level (0 clear .. 0xFF0000 black) */
+        u32 fade = U8(G() + 0x814) | (U32(G() + 0x810) >> 16) << 8;
+        if (getenv("DC2_TRACE") && fade != last_fade && (fade & 0xFF) != 0xFF) {
+            printf("frame %4d: fade %d level %u\n", f, (s8)fade, fade >> 8);
+            last_fade = fade;
         }
         static u32 last_game = 0xFFFFFFFF;
         u32 gm = U16(G() + 0x664) | U8(G() + 0x1091) << 16 | U8(G() + 0x1090) << 8;

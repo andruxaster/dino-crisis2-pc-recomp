@@ -48,6 +48,11 @@ void DC2CALL Snd_Resume(u32 h)                  { ORIG(0x4BFB40, void (DC2CALL *
 void DC2CALL Strm_Pause(u32 h)                  { ORIG(0x4BFFD0, void (DC2CALL *)(u32))(h); }
 void DC2CALL Strm_Resume(u32 h)                 { ORIG(0x4C0010, void (DC2CALL *)(u32))(h); }
 u32  DC2CALL Movie_Open(gptr n, u32 w, u32 h)   { return ORIG(0x4BF3A0, u32 (DC2CALL *)(gptr, u32, u32))(n, w, h); }
+void DC2CALL Movie_Ctl1(void)                   { ORIG(0x4BF650, void (DC2CALL *)(void))(); }
+void DC2CALL Movie_Ctl0(void)                   { ORIG(0x4BF670, void (DC2CALL *)(void))(); }
+u32  DC2CALL Movie_Poll(void)                   { return ORIG(0x4BF690, u32 (DC2CALL *)(void))(); }
+void DC2CALL Movie_Clear(u32 m)                 { ORIG(0x4B4F90, void (DC2CALL *)(u32))(m); }
+void DC2CALL Movie_Close(void)                  { ORIG(0x4BF340, void (DC2CALL *)(void))(); }
 void DC2CALL Masks_CreateVB(u32 n, gptr p)      { ORIG(0x4BE3C0, void (DC2CALL *)(u32, gptr))(n, p); }
 void DC2CALL Masks_SetQuad(u32 i, u32 x, u32 y, u32 z) { ORIG(0x4BE430, void (DC2CALL *)(u32, u32, u32, u32))(i, x, y, z); }
 void DC2CALL Masks_BuildTexture(void)           { ORIG(0x4BE6E0, void (DC2CALL *)(void))(); }
@@ -147,7 +152,12 @@ void DC2CALL Crt_sprintf1(gptr b, gptr f, u32 a)
 /* the sound buffers and streams: src/pc/audio.c */
 u16 g_pad_raw[2];
 void DC2CALL Input_ReadPad(u32 p) { if (p < 2) U16(0x87DC42 + p * 0x24) = g_pad_raw[p]; }
-u32 DC2CALL Movie_Open(gptr name, u32 w, u32 h) { (void)name; (void)w; (void)h; return 1; }
+u32 DC2CALL Movie_Open(gptr name, u32 w, u32 h) { (void)name; (void)w; (void)h; return 0; }
+void DC2CALL Movie_Ctl1(void) {}
+void DC2CALL Movie_Ctl0(void) {}
+u32 DC2CALL Movie_Poll(void) { return 1; }
+void DC2CALL Movie_Clear(u32 m) { extern void PcDraw_Clear(u32); PcDraw_Clear(m); }
+void DC2CALL Movie_Close(void) {}
 void DC2CALL Masks_CreateVB(u32 n, gptr p) { (void)n; (void)p; }
 void DC2CALL Masks_SetQuad(u32 i, u32 x, u32 y, u32 z) { (void)i; (void)x; (void)y; (void)z; }
 void DC2CALL Masks_BuildTexture(void) {}

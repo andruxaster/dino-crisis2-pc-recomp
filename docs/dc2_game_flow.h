@@ -176,6 +176,13 @@
  *  one per player of the duel (the pads 0x87DC94/0x87DC08 and 0x87DC92/0x87DE0A, the
  *  other player object 2 or 1, own tables, variables and model at 0x662500/0x638000).
  *  Their attacks: Kof_Attack 0x47CB20 (spheres +0xA0 -> weapon record 0x1F).
+ *  Area 9 type 23 (src/game/kof_human.c): the duel's human, the dinosaurs'
+ *  scheme with one copy (states 0x73B0B0, moves 0x73B0C0/0x73B0F0, the foe
+ *  0x759EE0, damage counters 0x759EA0.. towards knock-downs). Type 43
+ *  (src/game/vgun.c, PS1 overlay WEP0C): the vehicle's gun, the player at
+ *  the gun (G+0x927 the heavier mount); px+0x7B missile cool-down, px+0x7C
+ *  missiles left, 0x759EE8/0x759EEA the sight's bars (copied in VRAM from
+ *  0x280,0x1B8/0x1DC to 0x380,0xB8/0xDC), 0x759EEE the gun's pitch.
  *  Placed by the room script only: obj_spawn (op 0x1A) and enemy_set (op 0x4F,
  *  random spawner EnemySet_Tick 0x472230). ENEMY SET: u8 zones, u8 type,
  *  u8 cap, u8 room limit, u8 variant, u8, u8 point choice, u8; zones of 32

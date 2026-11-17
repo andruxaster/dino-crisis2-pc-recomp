@@ -7,6 +7,7 @@
 void PcDraw_DrawOTag(gptr ot);                                   /* 0x4B50F0 */
 void PcDraw_ClutRowConvert(u32 x, u32 row, s32 n);               /* 0x4B4BF0 */
 void PcDraw_InvalidateRect(gptr rect, u32 mark);                 /* 0x4B4790 */
+void PcDraw_VramCopy(gptr rect, s32 x, s32 y);                   /* 0x4B4A60 */
 void PcDraw_Background(gptr img, u32 scroll);                     /* 0x4BDC90 */
 void PcDraw_SetFarColor(u32 rgb, u32 start, u32 end);              /* 0x4B4E60 */
 void PcDraw_SetFogEnable(u32 on);

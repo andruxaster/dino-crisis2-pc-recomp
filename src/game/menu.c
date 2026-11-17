@@ -114,7 +114,7 @@ void DC2CALL MenuMode_Init(gptr m)                                  /* 0x491B30 
     switch (U8(m + 0x64)) {
     case 1:                                 /* an item: its picture */
         while (File_IsBusy()) Task_Sleep(1);
-        if (U16(m + 0x38) != 0x1F) Orig_Call1(0x403EE0, (m & 0xFFFF0000) | U16(m + 0x38));
+        if (U16(m + 0x38) != 0x1F) Item_LoadIcon(U16(m + 0x38));
         break;
     case 4:
         Game_Start(4);
@@ -1323,7 +1323,7 @@ void DC2CALL Equip_WeaponSel(gptr m)                                /* 0x496EB0 
         Se_Play(0, 2);
         if (U8(m + 0x4E)) {
             while (File_IsBusy()) Task_Sleep(1);
-            Orig_Call1(0x403EE0, U8(G() + U8(m + 0x18 + (s8)U8(m + 0x4C)) * 12 + 0x10BD));
+            Item_LoadIcon(U8(G() + U8(m + 0x18 + (s8)U8(m + 0x4C)) * 12 + 0x10BD));
             U8(m + 2) = 4; U16(m + 0x94) = 0;
         } else {
             gptr g = G();
@@ -1359,7 +1359,7 @@ void DC2CALL Equip_SubSel(gptr m)                                   /* 0x497310 
         Se_Play(0, 2);
         if (U8(m + 0x4E)) {
             while (File_IsBusy()) Task_Sleep(1);
-            Orig_Call1(0x403EE0, U8(G() + U8(m + 0x20 + (s8)U8(m + 0x4C)) * 12 + 0x10BD));
+            Item_LoadIcon(U8(G() + U8(m + 0x20 + (s8)U8(m + 0x4C)) * 12 + 0x10BD));
             U8(m + 2) = 7; U16(m + 0x94) = 0;
         } else {
             gptr g = G();
@@ -1613,7 +1613,7 @@ void DC2CALL Items_Draw(gptr m)                                     /* 0x499770 
             while (File_IsBusy()) Task_Sleep(1);
             s32 k = (s8)U8(m + 0x4F);
             u8 id = U8(G() + k * 12 + 0x11AD);
-            if (id != 0x1F) Orig_Call1(0x403EE0, ((u32)k & 0xFFFF0000) | id);
+            if (id != 0x1F) Item_LoadIcon(id);
         }
     } else if (!File_IsBusy()) {
         pic = 1;
@@ -1935,7 +1935,7 @@ void DC2CALL Files_Sel(gptr m)                                      /* 0x499260 
     } else if (U8(0x87DC00) & 0x20) {
         if (U8(m + 0x4E)) {
             while (File_IsBusy()) Task_Sleep(1);
-            Orig_Call1(0x403EE0, (u16)(s16)(s8)U8(m + 0x53));
+            Item_LoadIcon((u16)(s16)(s8)U8(m + 0x53));
             U8(m + 2) = 8;
             Se_Play(0, 2);
         } else if (Flag_Check(0xA, (u32)(s32)(s8)U8(m + 0x53)) && Zone_FileSpot(U8(m + 0x53))) {
@@ -2074,7 +2074,7 @@ void DC2CALL Memos_Read(gptr m)                                     /* 0x49A740 
     switch ((s8)U8(m + 3)) {
     case 0:
         if (!File_IsBusy()) {
-            Orig_Call1(0x404100, (u16)(s16)(s8)U8(m + 0x57));
+            File_LoadPicture((u16)(s16)(s8)U8(m + 0x57));
             U8(m + 3)++;
         }
         break;
@@ -2435,7 +2435,7 @@ void DC2CALL Map_ZoomLoad(gptr m)                                   /* 0x49BBC0 
     gptr g = G();
     u16 k = (u8)Room_GlobalIndex(U8(g + 0x1091), U8(g + 0x1090));
     if ((u32)k != (u32)(s32)(s8)U8(m + 0x61)) {
-        Orig_Call1(0x403FD0, k);
+        Map_LoadPage(k);
         U8(m + 0x61) = (u8)k;
     }
     Orig_Call1(U32(0x73A360 + U8(m + 0x62) * 4), m);
