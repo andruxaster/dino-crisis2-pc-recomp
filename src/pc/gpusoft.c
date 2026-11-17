@@ -191,9 +191,21 @@ static u32 unlock(u32 s, const void *rect) { (void)rect; Obj *o = obj(s); if (o)
 static u32 restore(u32 s) { (void)s; return 0; }
 static u32 set_color_key(u32 s, u32 f, const void *k) { (void)s; (void)f; (void)k; return 0; }
 
+static u32 create_vb(const void *desc, u32 *out)
+{
+    u32 n = ((const u32 *)desc)[3], h = obj_new(K_VB);
+    if (!h) { *out = 0; return 1; }
+    g_obj[h].verts = calloc(n ? n : 1, sizeof(RVertex)); g_obj[h].nverts = n;
+    *out = h;
+    return 0;
+}
+static u32 vb_lock(u32 vb, void **p) { Obj *o = obj(vb); if (!o || o->kind != K_VB) return 1; *p = o->verts; return 0; }
+static u32 vb_unlock(u32 vb) { (void)vb; return 0; }
+
 static const GpuDev k_soft = {
     begin_scene, end_scene, set_rs, draw, draw_vb, set_texture, set_tss, vp_clear, vp_set_background, set_material,
     create_surface, query_interface, release, blt, flip, lock, restore, set_color_key, unlock,
+    create_vb, vb_lock, vb_unlock,
 };
 
 /* ---- the PC layer's globals, as 0x4BBA30 and the device set-up leave them -------------------- */

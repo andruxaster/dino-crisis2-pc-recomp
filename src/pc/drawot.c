@@ -16,6 +16,8 @@
 #include "dc2/gpudev.h"
 #include "dc2/pcio.h"
 #include "dc2/pcdraw.h"
+#include "dc2/orig.h"
+#include "dc2/game.h"
 
 #define F32(a)      (*(float *)MEM(a))
 
@@ -628,7 +630,7 @@ static void screen_quad(gptr p)                                      /* 0x4B9EA0
 /* a group of background mask tiles: their vertex buffer from +8, count +0xC, texture +0xE */
 static void mask_marker(gptr p)                                      /* 0x4BA120 (code 0x88) */
 {
-    if (!U32(0x86449C)) { Dev_EndScene(); Pc_MasksUpload(0); Dev_BeginScene(); }
+    if (!U32(0x86449C)) { Dev_EndScene(); PcDraw_MasksUpload(0); Dev_BeginScene(); }
     Dev_EndScene();
     Dev_BeginScene();
     depth(0x400);
@@ -1051,4 +1053,199 @@ void PcDraw_PutDrawEnv(gptr env)                                     /* 0x4C07A0
     if (U8(0x87BAF9) != U8(env + 0x19) || U8(0x87BAFA) != U8(env + 0x1A) || U8(0x87BAFB) != U8(env + 0x1B))
         PcDraw_SetBackground(U8(env + 0x19), U8(env + 0x1A), U8(env + 0x1B));
     memcpy(MEM(0x87BAE0), MEM(env), 0x5C);
+}
+
+/* ---- the background masks (0x4BE330..0x4BEC80) ------------------------------------------------
+ * Tiles of the room's background drawn over the models: 16x16 screen
+ * squares, two triangles each (6 TL vertices of 0x20 in the array
+ * 0x864490, count 0x864494, copied into the vertex buffer 0x86449C), their
+ * pixels 18x18 (a border) from 0x864498, packed 14x14 to a 256x256 texture
+ * page (0x8644A0 surfaces, 0x8644AC textures; one 512x512 texture of four
+ * pages when the device allows it, 0x865E74). The vertices' specular words
+ * keep the tile: v0 x, v1 y, v2 its page, v3 its depth, v4 (on a group's
+ * first tile) the vertices of the group (tiles of one page and depth). */
+#define MK_VERTS 0x864490u
+#define MK_N     0x864494u
+#define MK_PIX   0x864498u
+#define MK_VB    0x86449Cu
+
+/* the vertex buffer and textures released (all: the arrays too) */
+static void masks_release(u32 all)                                   /* 0x4BE330 */
+{
+    if (all) {
+        if (U32(MK_VERTS)) { Crt_free(U32(MK_VERTS)); U32(MK_VERTS) = 0; }
+        if (U32(MK_PIX)) { Crt_free(U32(MK_PIX)); U32(MK_PIX) = 0; }
+    }
+    if (U32(MK_VB)) { Obj_Release(U32(MK_VB)); U32(MK_VB) = 0; }
+    for (gptr s = 0x8644A0; s < 0x8644AC; s += 4) {
+        if (U32(s + 0xC)) { Obj_Release(U32(s + 0xC)); U32(s + 0xC) = 0; }
+        if (U32(s)) { Obj_Release(U32(s)); U32(s) = 0; }
+    }
+}
+
+static void masks_vb(u32 n)
+{
+    u32 desc[4] = {0x10, 0x10000, 0x1C4, n};
+    D3D_CreateVertexBuffer(desc, (u32 *)MEM(MK_VB));
+}
+
+void PcDraw_MasksCreate(u32 n, gptr pixels)                          /* 0x4BE3C0 */
+{
+    masks_release(1);
+    masks_vb(n);
+    U32(MK_VERTS) = Crt_malloc(n * 0x20);
+    U32(MK_N) = n;
+    U32(MK_PIX) = pixels;
+}
+
+/* (int * float, rounded to float as the x87 stores it) */
+static float mk_mul(s32 a, gptr k) { return (float)((long double)a * F32(k)); }
+
+/* tile i at screen x, y (320x240) and depth z: its 6 vertices */
+void PcDraw_MasksSetQuad(u32 i, u32 x, u32 y, u32 z)                /* 0x4BE430 */
+{
+    gptr v = U32(MK_VERTS) + i * 0xC0;
+    float X = mk_mul((s32)x, 0x8644BC), Y = mk_mul((s32)y, 0x8644B8);
+    float X2 = mk_mul((s32)x + 16, 0x8644BC), Y2 = mk_mul((s32)y + 16, 0x8644B8);
+    F32(v + 0x80) = X; F32(v + 0x40) = X; F32(v) = X;
+    F32(v + 0x64) = Y; F32(v + 0x24) = Y; F32(v + 4) = Y;
+    F32(v + 0xA0) = X2; F32(v + 0x60) = X2; F32(v + 0x20) = X2;
+    F32(v + 0xA4) = Y2; F32(v + 0x84) = Y2; F32(v + 0x44) = Y2;
+    s32 si = (s32)i, page = si / 196;
+    s32 u0 = (si % 14) * 18 + 1, v0 = ((si % 196) / 14) * 18 + 1;
+    float U0, V0, U1, V1;
+    if (U32(0x865E74) == 0x100) {                       /* a texture per page */
+        U0 = mk_mul(u0, 0x704BAC); V0 = mk_mul(v0, 0x704BAC);
+        U1 = mk_mul(u0 + 16, 0x704BAC); V1 = mk_mul(v0 + 16, 0x704BAC);
+        U32(v + 0x54) = (u32)page;
+    } else {                                            /* four pages in one 512x512 */
+        u0 += (page % 2) << 8; v0 += (page / 2) << 8;
+        U32(v + 0x54) = 0;
+        U0 = mk_mul(u0, 0x704BA8); V0 = mk_mul(v0, 0x704BA8);
+        U1 = mk_mul(u0 + 16, 0x704BA8); V1 = mk_mul(v0 + 16, 0x704BA8);
+    }
+    F32(v + 0x7C) = V0; F32(v + 0x3C) = V0; F32(v + 0x1C) = V0;
+    F32(v + 0x78) = U1; F32(v + 0xB8) = U1; F32(v + 0x38) = U1;
+    F32(v + 0xBC) = V1; F32(v + 0x5C) = V1; F32(v + 0x9C) = V1;
+    F32(v + 0x98) = U0; F32(v + 0x58) = U0; F32(v + 0x18) = U0;
+    for (u32 k = 0; k < 6; k++) { U32(v + 0x10 + 0x20 * k) = 0xFFFFFFFF; U32(v + 8 + 0x20 * k) = 0x3C23D70A; U32(v + 0xC + 0x20 * k) = 0x41200000; }
+    U32(v + 0x14) = x; U32(v + 0x34) = y; U32(v + 0x74) = z; U32(v + 0x94) = 0;
+}
+
+/* all tiles d lines lower */
+void PcDraw_MasksShift(u32 d)                                        /* 0x4BE6A0 */
+{
+    float f = mk_mul((s32)d, 0x8644B8);
+    for (s32 i = 0; i < S32(MK_N); i++) { gptr y = U32(MK_VERTS) + 0x20 * i + 4; F32(y) = (float)((long double)F32(y) - f); }
+}
+
+/* tiles by page, then nearest last (qsort comparator) */
+s32 DC2CALL Masks_Compare(gptr a, gptr b)                           /* 0x4BEA80 */
+{
+    if (U32(a + 0x54) > U32(b + 0x54)) return 1;
+    if (U32(a + 0x54) < U32(b + 0x54)) return -1;
+    if (U32(a + 0x74) < U32(b + 0x74)) return 1;
+    return U32(a + 0x74) > U32(b + 0x74) ? -1 : 0;
+}
+
+/* the tiles' pixels into a 256x768 surface, 14x14 to a page, then each page
+   into its texture (or its quarter of the 512x512 one) */
+static void masks_pack(void)                                         /* 0x4BE770 */
+{
+    gptr ss = Tmp_Push(4);
+    u8 desc[SD_SIZE];
+    surface_create(0x100, 0x300, ss, 0);
+    memset(desc, 0, sizeof desc); *(u32 *)desc = SD_SIZE; *(u32 *)(desc + SD_PIXFMT) = 0x20;
+    Surf_Lock(U32(ss), 0, desc, 1);
+    u8 *base = *(u8 **)(desc + SD_SURFACE);
+    s32 pitch = *(s32 *)(desc + SD_PITCH);
+    gptr src = U32(MK_PIX);
+    s32 page = 0, pbase = 0, col = 0, row = 0;
+    for (s32 q = 0; q < S32(MK_N) / 6; q++) {
+        u32 bpp = U8(0x87BB43);
+        u8 *d = base + (pbase + row) * pitch + bpp * col;
+        for (int r = 0; r < 18; r++, d += pitch) {
+            u8 *o = d;
+            for (int c = 0; c < 18; c++) {
+                u32 p = U16(src); src += 2;
+                u32 v = ((p & 0x3E0) << 14 >> U32(0x87BB48) & U32(0x87BB54)) | ((p & 0x1F) << 19 >> U32(0x87BB44) & U32(0x87BB50))
+                      | ((p & 0x7C00) << 9 >> U32(0x87BB4C) & U32(0x87BB58)) | (p & 0x8000 ? U32(0x87BB5C) : 0);
+                if (U8(0x87BB43) == 2) *(u16 *)o = (u16)v; else *(u32 *)o = v;
+                o += U8(0x87BB43);
+            }
+        }
+        if ((col += 18) == 0xFC) {
+            col = 0;
+            if ((row += 18) == 0xFC) { row = 0; page++; pbase += 0x100; }
+        }
+    }
+    Surf_Unlock(U32(ss), 0);
+    for (s32 i = 0; i <= page; i++) {
+        s32 sr[4] = {0, i << 8, 0x100, (i << 8) + 0x100}, dr[4];
+        if (U32(0x865E74) == 0x100) {
+            tex_create_surface(0x100, 0x100, 0x8644A0 + 4 * i, 0x8644AC + 4 * i, 0);
+            dr[0] = 0; dr[1] = 0;
+        } else {
+            if (!i) tex_create_surface(0x200, 0x200, 0x8644A0, 0x8644AC, 0);
+            dr[0] = (i << 8) % 512; dr[1] = (i / 2) << 8;
+        }
+        dr[2] = dr[0] + 0x100; dr[3] = dr[1] + 0x100;
+        Surf_Blt(U32(U32(0x865E74) == 0x100 ? 0x8644A0 + 4 * i : 0x8644A0), dr, U32(ss), sr, 0x1000000, 0);
+    }
+    Obj_Release(U32(ss));
+    Tmp_Pop(4);
+}
+
+/* the tiles sorted, grouped (the vertex count on a group's first tile), their textures made */
+void PcDraw_MasksBuild(void)                                         /* 0x4BE6E0 */
+{
+    Crt_qsort(U32(MK_VERTS), (u32)(S32(MK_N) / 6), 0xC0, 0x4BEA80);
+    gptr head = U32(MK_VERTS), next = head + 0xC0;
+    for (s32 k = 0; k < S32(MK_N); k += 6, next += 0xC0) {
+        U32(head + 0x94) += 6;
+        if (k != S32(MK_N) - 6 && U32(head + 0x54) == U32(next + 0x54) && U32(head + 0x74) == U32(next + 0x74)) continue;
+        head = next;
+    }
+    masks_pack();
+}
+
+/* after the device was lost: the vertex buffer and textures again, the
+   tiles placed for the screen's scale */
+static void masks_recreate(void)                                     /* 0x4BEB30 */
+{
+    masks_release(0);
+    masks_vb(U32(MK_N));
+    for (s32 k = 0; k < S32(MK_N); k += 6) {
+        gptr v = U32(MK_VERTS) + k * 0x20;
+        long double x = (long double)U32(v + 0x14);
+        float y = (float)(long double)U32(v + 0x34);
+        float X = (float)(F32(0x8644BC) * x), Y = (float)(F32(0x8644B8) * (long double)y);
+        F32(v + 0x80) = X; F32(v + 0x40) = X; F32(v) = X;
+        F32(v + 0x64) = Y; F32(v + 0x24) = Y; F32(v + 4) = Y;
+        float X2 = (float)((x + F32(0x7031B0)) * F32(0x8644BC)), Y2 = (float)(((long double)y + F32(0x7031B0)) * F32(0x8644B8));
+        F32(v + 0xA0) = X2; F32(v + 0x60) = X2; F32(v + 0x20) = X2;
+        F32(v + 0xA4) = Y2; F32(v + 0x84) = Y2; F32(v + 0x44) = Y2;
+    }
+    masks_pack();
+}
+
+/* the vertices into the vertex buffer (made again when asked or missing) */
+void PcDraw_MasksUpload(u32 again)                                   /* 0x4BEAC0 */
+{
+    if (!U32(A_DEVICE) || !U32(MK_N)) return;
+    if (!U32(MK_VB) || again) masks_recreate();
+    void *p = 0;
+    VB_Lock(U32(MK_VB), 0x20, &p);
+    memcpy(p, MEM(U32(MK_VERTS)), U32(MK_N) * 0x20);
+    VB_Unlock(U32(MK_VB));
+}
+
+/* the 0x88 packet of the group at vertex i: its vertices and texture; its depth */
+u32 PcDraw_MasksMarker(u32 i, gptr p)                                /* 0x4BEC40 */
+{
+    gptr v = U32(MK_VERTS) + i * 0x20;
+    U32(p + 8) = i;
+    U16(p + 0xE) = U16(v + 0x54);
+    U16(p + 0xC) = U16(v + 0x94);
+    return U32(v + 0x74);
 }

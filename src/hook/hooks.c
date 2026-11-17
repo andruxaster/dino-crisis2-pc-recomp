@@ -1336,6 +1336,7 @@ const Hook g_hooks[] = {
     {0x473210, (void *)Movie_StepStart,         "Movie_StepStart"},
     {0x473260, (void *)Movie_StepPlay,          "Movie_StepPlay"},
     {0x4732A0, (void *)Movie_StepEnd,           "Movie_StepEnd"},
+    {0x4BEA80, (void *)Masks_Compare,           "Masks_Compare"},
     {0x470D30, (void *)MsgSlot_Step,      "MsgSlot_Step"},
     {0x470D50, (void *)Box_Type,          "Box_Type"},
     {0x470F40, (void *)Box_Wait,          "Box_Wait"},

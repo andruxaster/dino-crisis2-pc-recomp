@@ -92,7 +92,7 @@ address,kind,name,category,confidence,notes
 0x4B4E60,func,SetFarColor,d3d,medium,"stores rgb, D3D3 SetRenderState(FOGCOLOR=0x22); rewritten: src/pc/drawot.c"
 0x4B4F50,func,PC_SetFogEnable,d3d,high,"SetRenderState(FOGENABLE=0x1C, on/off); rewritten: src/pc/drawot.c"
 0x4B4F90,func,PC_DDrawClear,d3d,low,"DDBLTFX fill; called from 0x473210/0x4732C0; rewritten: src/pc/drawot.c"
-0x4BEAC0,func,Masks_Upload,masks,low,called after build / depth shift
+0x4BEAC0,func,Masks_Upload,masks,high,"(again): vertices into the vertex buffer (made again when asked or missing: 0x4BEB30); rewritten: src/pc/drawot.c"
 0x4BB8D0,func,PC_TexSlot,d3d,low,"slot table 0x75DEFC, stride 0x164"
 0x4C24C0,func,PC_DrawSpecial,d3d,low,768 bytes x87; called once from 0x410710
 0x4C0490,func,PCcreat,libsn,medium,
@@ -113,11 +113,11 @@ address,kind,name,category,confidence,notes
 0x4BFFD0,func,Strm_Pause,stream,high,"if playing: Stop, flag 8"
 0x4C0010,func,Strm_Resume,stream,high,"if flag 8: Play looping, flag 8 cleared"
 0x4C0050,func,Strm_Close,stream,medium,CloseHandle
-0x4BE3C0,func,Masks_CreateVB,masks,high,"(count*6, pixels): D3D vertex buffer FVF 0x1C4, 6 TL vertices per mask"
-0x4BE430,func,Masks_SetQuad,masks,high,"(i, x, y, z): 16x16 screen tile, scaled by screen scale 0x8644BC"
-0x4BE6A0,func,Masks_ShiftDepth,masks,medium,re-depths all masks when G+0xC27 changes
-0x4BE6E0,func,Masks_BuildTexture,masks,medium,packs 18x18 tiles into textures (callback 0x4BEA80)
-0x4BEC40,func,Masks_FillMarker,masks,medium,"(i, packet): mask index/range into the 0x88 packet"
+0x4BE3C0,func,Masks_CreateVB,masks,high,"(count*6, pixels): D3D vertex buffer FVF 0x1C4, 6 TL vertices per mask; rewritten: src/pc/drawot.c"
+0x4BE430,func,Masks_SetQuad,masks,high,"(i, x, y, z): 16x16 screen tile, scaled by 0x8644BC/B8; specular words keep x, y, page, z, group count; rewritten: src/pc/drawot.c"
+0x4BE6A0,func,Masks_ShiftDepth,masks,high,"(d): every vertex d*0x8644B8 higher on screen (y); rewritten: src/pc/drawot.c"
+0x4BE6E0,func,Masks_BuildTexture,masks,high,"tiles sorted (0x4BEA80), grouped by page and depth, packed (0x4BE770); rewritten: src/pc/drawot.c"
+0x4BEC40,func,Masks_FillMarker,masks,high,"(i, packet): the group at vertex i into the 0x88 packet; its depth; rewritten: src/pc/drawot.c"
 0x4BF3A0,func,Movie_Open,movie,medium,CoCreateInstance + MultiByteToWideChar (DirectShow)
 0x4BF340,func,Movie_Close,movie,medium,
 0x4BF650,func,Movie_Ctl1,movie,low,vtbl+0x1C(1)
@@ -2382,3 +2382,7 @@ address,kind,name,category,confidence,notes
 0x473210,func,Movie_StepStart,game,high,"movie step 0: screen cleared, Movie_Ctl1, faded in at once (+6 0: 0x87DCEC/0x87DD7C off)"
 0x473260,func,Movie_StepPlay,game,high,"movie step 1: until Movie_Poll, or skipped by a button (+0xA): flag 2:0x1E"
 0x4732A0,func,Movie_StepEnd,game,high,"movie step 2: cleared and faded out (not movies 0 and 10), root mode back"
+0x4BEA80,func,Masks_Compare,masks,high,"masks' qsort order: by texture page, then deeper first (v2/v3 specular words)"
+0x4BE330,func,Masks_Release,masks,high,"(all): vertex buffer and textures released (all: the vertex and pixel arrays freed); rewritten: src/pc/drawot.c"
+0x4BE770,func,Masks_Pack,masks,high,"18x18 tiles into a 256x768 surface (14x14 a page), blitted into the pages' textures; rewritten: src/pc/drawot.c"
+0x4BEB30,func,Masks_Recreate,masks,high,"after a lost device: vertex buffer, positions, textures again; rewritten: src/pc/drawot.c"

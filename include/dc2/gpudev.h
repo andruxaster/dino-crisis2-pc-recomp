@@ -12,6 +12,7 @@
 #define A_PRIMARY   0x865EC0u      /* the front surface */
 #define A_BACK      0x865EC4u      /* the back buffer */
 #define A_STAGING   0x865ECCu      /* the 256x256 system-memory surface textures are filled through */
+#define A_D3D       0x865ED4u      /* IDirect3D3 */
 #define A_DEVICE    0x865ED8u      /* IDirect3DDevice3 */
 #define A_VIEWPORT  0x865EDCu      /* IDirect3DViewport3 */
 #define A_MATERIAL  0x865EE0u      /* IDirect3DMaterial3 (the viewport's background; its handle 0x75DEE8) */
@@ -30,6 +31,10 @@ u32 Vp_SetBackground(u32 vp, u32 mat_handle);                       /* +0x20 */
 u32 Mat_SetMaterial(u32 mat, const void *desc);                     /* +0x0C (D3DMATERIAL, 0x50) */
 /* DirectDraw */
 u32 DD_CreateSurface(void *desc, u32 *surf);                        /* +0x18 (no outer) */
+/* Direct3D: vertex buffers (D3DVERTEXBUFFERDESC {size, caps, fvf, count}) */
+u32 D3D_CreateVertexBuffer(const void *desc, u32 *vb);              /* +0x24 (flags 4, no outer) */
+u32 VB_Lock(u32 vb, u32 flags, void **p);                           /* +0x0C */
+u32 VB_Unlock(u32 vb);                                              /* +0x10 */
 /* surfaces (and the textures' Release) */
 u32 Obj_QueryInterface(u32 o, const void *iid, u32 *out);          /* +0x00 */
 u32 Obj_Release(u32 o);                                             /* +0x08 */
@@ -72,6 +77,9 @@ struct GpuDev {
     u32 (*restore)(u32 s);
     u32 (*set_color_key)(u32 s, u32 flags, const void *key);
     u32 (*unlock)(u32 s, const void *rect);
+    u32 (*create_vb)(const void *desc, u32 *vb);
+    u32 (*vb_lock)(u32 vb, void **p);
+    u32 (*vb_unlock)(u32 vb);
 };
 extern const GpuDev *g_gpudev;
 #endif

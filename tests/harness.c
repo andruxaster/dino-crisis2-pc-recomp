@@ -1832,6 +1832,7 @@ static void test_player2(void)
                 gptr ob = O_OBJ + j * 0x260, d = U32(ob + 0x134);
                 if (!d || rnd() % 3 == 0) continue;
                 U32(ob + 0x50) |= 8; U8(ob + 0x17B) = rnd() % 6 ? 0 : 1;
+                if (rnd() % 2) U8(ob + 0x58) = (u8)(rnd() % 2 ? 0x17 : 0x18);   /* (its own sound when hit) */
                 for (int q = 0; q < 4; q++, d += 0xC) {
                     gptr pp = Obj_Part(U32(ob + 0x64), U8(d + 0xA));
                     U16(d) = 0; U16(d + 2) = 0; U16(d + 4) = 0;
@@ -1842,11 +1843,17 @@ static void test_player2(void)
                 }
             }
             if (rnd() % 2) a[2] = (u32[]){2, 0x10, 0x11, 0x1D, 0x1E, 0x1F, 0x22, 5}[rnd() % 8];
-            if (a[2] == 2 && rnd() % 2) U16(0x87DE10) = rand8_seed((u8)(0xEE + rnd() % 4), 0);   /* (the critical hit at 0xF0) */
+            if (a[2] == 2 && rnd() % 2) U16(0x87DE10) = rand8_seed((u8)(rnd() % 2 ? 0xF0 : 0xEE + rnd() % 4), 0);   /* (the critical hit at 0xF0) */
             if (rnd() % 3 == 0) { U8(0x87E747) = 1; U8(G() + 0x108F) = (u8)(u32[]){4, 7, 8, 3}[rnd() % 4]; }
+            if (a[2] == 5 && rnd() % 2) U16(O_K3 + 0x18) = (u16)(0x897 + rnd() % 4);   /* (the light's reach about its limit) */
         }
         sprintf(g_what, "objs %u kind %X rot %X/%X/%X", U32(0x87F940), a[2], U16(G_SCR + 0x60), U16(G_SCR + 0x62), U16(G_SCR + 0x64));
         check(0x47B430, Weapon_Hit, "Weapon_Hit", 3, a, 0xFFFFFFFF);
+        if (getenv("HITSTAT")) {                         /* (how often shots land: the targets marked hit) */
+            static int shots, landed;
+            int h = 0; for (u32 j = 1; j < 16; j++) if (U8(O_OBJ + j * 0x260 + 0x17B) == 1 && (U8(O_OBJ + j * 0x260 + 0x174) & 1)) h = 1;
+            shots++; landed += h; if (shots % 50 == 0) printf("weapon hits: %d of %d shots\n", landed, shots);
+        }
         { u32 n = 1 + rnd() % 24;
           for (u32 k = 0; k < n * 4; k++) U32(0x74E380 + 4 * k) = rnd() % 4 ? (u32)rnd() : rnd() % 8;
           a[0] = 0x74E380; a[1] = 0; a[2] = n - 1;
@@ -4430,7 +4437,7 @@ typedef struct Fake { void **vt; u32 kind, id, w, h, bpp; u8 *pix; } Fake;
 static Fake g_fo[512];
 static u8 *g_fpix[512];
 static u32 g_fcap[512];
-static void *g_fvt[6][48];   /* kinds: 0 material, 1 device, 2 DirectDraw, 3 surface, 4 texture, 5 viewport (and others) */
+static void *g_fvt[8][48];   /* kinds: 0 material, 1 device, 2 DirectDraw, 3 surface, 4 texture, 5 viewport (and others), 6 Direct3D, 7 vertex buffer */
 
 static void fk_log(u32 v) { u32 n = U32(FK_LOGN); if (n < FK_LOGMAX) { U32(FK_LOG + n) = v; U32(FK_LOGN) = n + 4; } }
 static void fk_logmem(const void *p, u32 n) { for (u32 i = 0; i < n; i += 4) { u32 v = 0; memcpy(&v, (const u8 *)p + i, n - i < 4 ? n - i : 4); fk_log(v); } }
@@ -4522,6 +4529,19 @@ static u32 ST vp_clear(Fake *t, u32 n, const u32 *r, u32 fl) { (void)t; fk_log(0
 static u32 ST vp_setbg(Fake *t, u32 h) { (void)t; fk_log(0x50020); fk_log(h); return 0; }
 static u32 ST mat_set(Fake *t, const u8 *d) { fk_log(0x6000C); fk_log(t->id); fk_logmem(d, 0x50); return 0; }
 
+/* Direct3D's vertex buffers: their vertices in the object's pixel buffer */
+static u32 ST d3_cvb(Fake *t, const u32 *desc, u32 *pp, u32 fl, u32 outer)
+{
+    (void)t;
+    fk_log(0x70024); fk_logmem(desc, 16); fk_log(fl); fk_log(outer);
+    Fake *f = fk_new(7, desc[3] * 8 + 1, 1);
+    *pp = (u32)(uintptr_t)f;
+    return 0;
+}
+static u32 ST vb_lock(Fake *t, u32 fl, void **p, u32 *sz) { fk_log(0x8000C); fk_log(t->id); fk_log(fl); fk_log(sz ? 1 : 0); *p = t->pix; return 0; }
+static u32 ST vb_unlock(Fake *t) { fk_log(0x80010); fk_log(t->id); fk_log(fk_hash(t->pix, (t->w - 1) * 4)); return 0; }
+static void __cdecl fk_det_free(u32 p) { fk_log(0x90000); fk_log(p); }
+
 /* any other method: reported, then the harness stops (its arguments are unknown) */
 static u32 ST fk_trap(Fake *t)
 {
@@ -4539,7 +4559,9 @@ static u32 __cdecl fk_det_malloc(u32 n)
 /* the objects of a fresh Direct3D, the texture cache and palettes empty */
 static void fk_reset(void)
 {
-    for (int k = 0; k < 6; k++) for (int i = 0; i < 48; i++) g_fvt[k][i] = (void *)fk_trap;
+    for (int k = 0; k < 8; k++) for (int i = 0; i < 48; i++) g_fvt[k][i] = (void *)fk_trap;
+    g_fvt[6][0x24 / 4] = d3_cvb;
+    g_fvt[7][0x08 / 4] = s_release; g_fvt[7][0x0C / 4] = vb_lock; g_fvt[7][0x10 / 4] = vb_unlock;
     void **d = g_fvt[1];
     d[0x24 / 4] = d_begin; d[0x28 / 4] = d_end; d[0x58 / 4] = d_rs; d[0x70 / 4] = d_dp; d[0x88 / 4] = d_dpvb;
     d[0x98 / 4] = d_st; d[0xA0 / 4] = d_tss;
@@ -4555,6 +4577,7 @@ static void fk_reset(void)
     U32(FK_NOBJ) = 0; U32(FK_LOGN) = 0; U32(FK_HEAPN) = 0;
     U32(0x865EBC) = (u32)(uintptr_t)fk_new(2, 0, 0);
     U32(0x865ED8) = (u32)(uintptr_t)fk_new(1, 0, 0);
+    U32(0x865ED4) = (u32)(uintptr_t)fk_new(6, 0, 0);
     U32(0x865EC0) = (u32)(uintptr_t)fk_new(3, 640, 480);
     U32(0x865EC4) = (u32)(uintptr_t)fk_new(3, 640, 480);
     U32(0x865ECC) = (u32)(uintptr_t)fk_new(3, 256, 256);
@@ -4819,6 +4842,56 @@ static void test_pcdraw(void)
         }
     }
     memcpy(c, saved, 5);
+    _controlfp(fpu, _MCW_PC);
+}
+
+/* the background masks against the fake Direct3D: tiles made, placed,
+   sorted and packed into textures, uploaded, shifted, their markers */
+static void test_pcmasks(void)
+{
+    unsigned fpu = _controlfp(0, 0);
+    _controlfp(_PC_24, _MCW_PC);
+    u8 saved[5], saved2[5]; u8 *c = MEM(0x4DD711), *c2 = MEM(0x4DD628);
+    memcpy(saved, c, 5); memcpy(saved2, c2, 5);
+    c[0] = 0xE9; *(u32 *)(c + 1) = (u32)(uintptr_t)fk_det_malloc - (0x4DD711 + 5);
+    c2[0] = 0xE9; *(u32 *)(c2 + 1) = (u32)(uintptr_t)fk_det_free - (0x4DD628 + 5);
+    gptr pix = 0x4F0000;                                /* (the tiles' pixels: 18x18 each) */
+    for (int i = 0; i < iters; i++) {
+        fk_reset(); fk_pixfmt(rnd() % 2);
+        U32(0x86449C) = 0; for (u32 k = 0; k < 6; k++) U32(0x8644A0 + 4 * k) = rnd() % 4 ? 0 : (u32)(uintptr_t)fk_new(3, 0, 0);
+        U32(0x864490) = 0; U32(0x864498) = rnd() % 2 ? 0 : 0x4E0000; U32(0x864494) = 0;
+        F32(0x8644BC) = rnd() % 2 ? 2.0f : rndf(0.5f, 3.0f); F32(0x8644B8) = rnd() % 2 ? 2.0f : rndf(0.5f, 3.0f);
+        U32(0x865E74) = (u32[]){0x100, 0x200, 1024}[rnd() % 3];
+        u32 q = rnd() % 4 ? 1 + rnd() % 60 : (u32[]){195, 196, 197, 392, 250}[rnd() % 5];
+        for (u32 k = 0; k < q * 18 * 18; k++) U16(pix + 2 * k) = (u16)rnd();
+        U32(FK_LOGN) = 0;
+        u32 a[4] = {q * 6, pix, 0, 0};
+        sprintf(g_what, "iteration %d: %u tiles, max %u", i, q, U32(0x865E74));
+        check_fk(0x4BE3C0, PcDraw_MasksCreate, "PcDraw_MasksCreate", 2, a);
+        for (u32 k = 0; k < q; k++) {                   /* the tiles placed (pages and depths that group) */
+            u32 b[4] = {k, (rnd() % 20) << 4, (rnd() % 15) << 4, rnd() % 3 ? (u32)(rnd() % 4) * 100 : rnd()};
+            if (rnd() % 4) check_fk(0x4BE430, PcDraw_MasksSetQuad, "PcDraw_MasksSetQuad", 4, b);
+            else PcDraw_MasksSetQuad(b[0], b[1], b[2], b[3]);
+        }
+        {   /* the comparator alone */
+            gptr t0 = U32(0x864490) + 0xC0 * (rnd() % q), t1 = U32(0x864490) + 0xC0 * (rnd() % q);
+            u32 b[2] = {t0, t1};
+            if (rnd() % 2) U32(t1 + 0x74) = U32(t0 + 0x74);
+            check(0x4BEA80, Masks_Compare, "Masks_Compare", 2, b, 0xFFFFFFFF);
+        }
+        U32(FK_LOGN) = 0;
+        check_fk(0x4BE6E0, PcDraw_MasksBuild, "PcDraw_MasksBuild", 0, a);
+        u32 b[2] = {rnd() % 3 == 0, 0};
+        if (rnd() % 3 == 0) U32(0x86449C) = 0;          /* (no vertex buffer: made again) */
+        if (rnd() % 8 == 0) U32(0x865ED8) = 0;          /* (no device: nothing) */
+        check_fk(0x4BEAC0, PcDraw_MasksUpload, "PcDraw_MasksUpload", 1, b);
+        U32(0x865ED8) = U32(0x865ED8) ? U32(0x865ED8) : (u32)(uintptr_t)fk_new(1, 0, 0);
+        b[0] = (u32)(rnd() % 2 ? (s32)(rnd() % 64) - 32 : (s32)rnd());
+        check_fk(0x4BE6A0, PcDraw_MasksShift, "PcDraw_MasksShift", 1, b);
+        u32 m[2] = {6 * (rnd() % q), DO_OT};
+        check_fk(0x4BEC40, PcDraw_MasksMarker, "PcDraw_MasksMarker", 2, m);
+    }
+    memcpy(c, saved, 5); memcpy(c2, saved2, 5);
     _controlfp(fpu, _MCW_PC);
 }
 
@@ -5498,11 +5571,15 @@ static void test_ovi(void)
             ovi_aim(o, O_OBJ);
             U32(e + 4) = rnd() % 2 ? Dist2_XZ(o + 0x40, O_OBJ + 0x40) : (u32[]){0x3D08FF, 0x3D0900, 0x7A11FF, 0x7A1200, 0x989680, 0x989681}[rnd() % 6];
             U16(e + 0x2A) = rnd() % 2 ? rnd() % 2 : (u16)rnd();
-            if (U16(o + 0x90))                                  /* the frames it blends between: of its animation (not left at 0) */
+            if (U16(o + 0x90)) {                                /* the frames it blends between: of its animation (not left at 0) */
                 for (u32 j = 0x78; j <= 0x84; j += 4) U32(o + j) = U32(o + 0x8C) + (rnd() % U16(o + 0x90)) * U8(o + 0xAC);
+                if (U16(o + 0x94) >= U16(o + 0x90)) U16(o + 0x94) = (u16)(rnd() % U16(o + 0x90));   /* (its key inside it: left by the sub-state before) */
+            }
             U32(LOG_BASE) = 0;
             anim_maybe_end(o);
             sprintf(g_what, "ovi %X step %u level %02X", o, U8(o + 0x56), U8(o + 0x18C));
+            if (getenv("OVIDBG")) sprintf(g_what + strlen(g_what), " k %X %X %X %X n %u pos %u fr %u t %u fl %X parts %u tab3 %X tab4 %X data %X", U32(o + 0x78), U32(o + 0x7C), U32(o + 0x80), U32(o + 0x84),
+                                          U16(o + 0x90), U16(o + 0x94), U16(o + 0x92), U16(o + 0x98), U16(o + 0x102), U32(o + 0x68), U32(U32(o + 0x88) + 12), U32(U32(o + 0x88) + 16), U32(o + 0x8C));
             check(st[k % 5].addr, st[k % 5].fn, st[k % 5].name, 1, a, 0);
         }
         { u32 c[3] = {o, rnd() % 0x100, O_OBJ + 0x40}; check(0x48F440, Obj_TurnToPoint, "Obj_TurnToPoint", 3, c, 0); }
@@ -13152,13 +13229,15 @@ static gptr hum_setup(void)
     U16(0x759E88) = kr_bits(pb, 10); U16(0x759EE4) = kr_bits(hb, 10);
     S16(0x759EE6) = (s16)A2_PICK(0, 1, -1, 0x4FF, 0x500, -0x4FF, -0x500, (s32)rnd());
     gptr foe = O_OBJ + 0x260 * (1 + rnd() % 15);
-    if (foe == o) foe += 0x260;
+    if (foe == o) foe = o == O_OBJ + 0x260 ? O_OBJ + 0x4C0 : O_OBJ + 0x260;   /* (another of the 16) */
     U32(0x759EE0) = rnd() % 4 ? foe : o;
     U8(foe + 0x58) = (u8)A2_PICK(3, 8, 0x21, 0x26, 0x27, 4, 0x1D, (s32)rnd());
     for (u32 k = 0; k < 16 || (k < U32(0x87F940) && k < 64); k++) {   /* (whichever it targets: the head looks at its first part, its index o's) */
-        gptr p = U32(G() + 0x940) + 0x260 * k;
-        U8(p + 0xFF) = (u8)((o - U32(G() + 0x940)) / 0x260);
-        if (p != o) U32(p + 0x134) = rnd() % 4 ? 0x6CFD80 : 0;
+        for (int b = 0; b < 2; b++) {                   /* (in both object tables: the game's and the tests') */
+            gptr p = (b ? O_OBJ : U32(G() + 0x940)) + 0x260 * k;
+            U8(p + 0xFF) = (u8)((o - U32(G() + 0x940)) / 0x260);
+            if (p != o) U32(p + 0x134) = rnd() % 4 ? 0x6CFD80 : 0;
+        }
     }
     U8(0x6CFD8A) = 0; U8(0x6CFD8B) = 0;                 /* (one sphere, on the first part) */
     U32(0x87FD60) = o + 0x1C0;
@@ -13676,7 +13755,7 @@ __declspec(dllexport) void harness_main(int argc, char **argv)
         {"flags", test_flags}, {"geometry", test_geom}, {"script values", test_script_values},
         {"script opcodes", test_script_ops}, {"script objects", test_objects},
         {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"objects 2", test_object}, {"collision", test_collision}, {"player", test_player}, {"player states", test_player2}, {"zones", test_zones}, {"loading", test_room}, {"title", test_title}, {"game task", test_game}, {"doors", test_doors}, {"frame", test_frame}, {"enemy sets", test_enemyset}, {"enemies", test_enemies}, {"raptor", test_raptor}, {"oviraptor", test_ovi}, {"allosaurus", test_allo}, {"pteranodon", test_ptera}, {"area pteranodon", test_ptera2}, {"tyrannosaurus", test_trex}, {"plesiosaurus", test_plesio}, {"water plesiosaurs", test_pw}, {"roamer", test_roam}, {"giganotosaurus", test_gig},
-    {"inostrancevia", test_ino}, {"triceratops", test_tri}, {"mosasaurus", test_mosa}, {"compsognathus", test_compso}, {"duel inostrancevia", test_kof_ino}, {"duel triceratops", test_kof_tri}, {"duel raptor", test_kof_rap}, {"duel oviraptor", test_kof_ovi}, {"duel allosaurus", test_kof_allo}, {"duel tyrannosaurus", test_kof_rex}, {"duel compsognathus", test_kof_comp}, {"duel human", test_kof_human}, {"vehicle gun", test_vgun}, {"area falling piece", test_ao_drop}, {"area flying shell", test_ao_shell}, {"area moving piece", test_ao_mover}, {"area bird", test_ao_bird}, {"area rock", test_ao_rock}, {"area insect", test_ao_bug}, {"area poison plant", test_ao_plant}, {"area burner", test_ao_burner}, {"weapon objects", test_ao_weapons}, {"area 4/8 objects", test_aobj2}, {"area effects", test_k2_area}, {"sound slots", test_snd_slots}, {"menus", test_menu}, {"aot kinds", test_aot_kinds}, {"object effects", test_obj_effects}, {"effect slots", test_k2}, {"effect drops", test_k2_drops}, {"effect emitters", test_eff_slots}, {"effect slots 3", test_k2_more}, {"helpers", test_helpers}, {"draw", test_draw}, {"pc gpu", test_pcgpu}, {"pc draw", test_pcdraw}, {"pc frame", test_pcframe},
+    {"inostrancevia", test_ino}, {"triceratops", test_tri}, {"mosasaurus", test_mosa}, {"compsognathus", test_compso}, {"duel inostrancevia", test_kof_ino}, {"duel triceratops", test_kof_tri}, {"duel raptor", test_kof_rap}, {"duel oviraptor", test_kof_ovi}, {"duel allosaurus", test_kof_allo}, {"duel tyrannosaurus", test_kof_rex}, {"duel compsognathus", test_kof_comp}, {"duel human", test_kof_human}, {"vehicle gun", test_vgun}, {"area falling piece", test_ao_drop}, {"area flying shell", test_ao_shell}, {"area moving piece", test_ao_mover}, {"area bird", test_ao_bird}, {"area rock", test_ao_rock}, {"area insect", test_ao_bug}, {"area poison plant", test_ao_plant}, {"area burner", test_ao_burner}, {"weapon objects", test_ao_weapons}, {"area 4/8 objects", test_aobj2}, {"area effects", test_k2_area}, {"sound slots", test_snd_slots}, {"menus", test_menu}, {"aot kinds", test_aot_kinds}, {"object effects", test_obj_effects}, {"effect slots", test_k2}, {"effect drops", test_k2_drops}, {"effect emitters", test_eff_slots}, {"effect slots 3", test_k2_more}, {"helpers", test_helpers}, {"draw", test_draw}, {"pc gpu", test_pcgpu}, {"pc draw", test_pcdraw}, {"pc masks", test_pcmasks}, {"pc frame", test_pcframe},
     };
     for (unsigned i = 0; i < sizeof T / sizeof T[0]; i++) {
         int f0 = g_fail, t0 = g_tests;

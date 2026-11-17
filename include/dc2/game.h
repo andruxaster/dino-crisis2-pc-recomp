@@ -811,6 +811,7 @@ void DC2CALL Movie_Tick(void);                                          /* 0x473
 void DC2CALL Movie_StepStart(void); /* 0x473210 */
 void DC2CALL Movie_StepPlay(void);  /* 0x473260 */
 void DC2CALL Movie_StepEnd(void);   /* 0x4732A0 */
+s32  DC2CALL Masks_Compare(gptr a, gptr b); /* 0x4BEA80 */
 void DC2CALL MsgSlot_Step(gptr s);                                      /* 0x470D30 */
 void DC2CALL Box_Type(void);                                            /* 0x470D50 */
 void DC2CALL Box_Wait(void);                                            /* 0x470F40 */

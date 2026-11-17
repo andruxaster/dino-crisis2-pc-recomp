@@ -3,6 +3,7 @@
 #include "dc2/game.h"
 #include "dc2/gte.h"
 #include "dc2/gpu.h"
+#include "dc2/pcdraw.h"
 
 #ifdef DC2_IN_PROCESS
 #define ORIG(addr, type) ((type)(uintptr_t)(addr))
@@ -39,7 +40,6 @@ void DC2CALL Gpu_LoadImage(gptr r, gptr p)      { ORIG(0x4B4D20, void (DC2CALL *
 void DC2CALL Gpu_LoadImageIfChanged(gptr r, gptr p) { ORIG(0x4B4DB0, void (DC2CALL *)(gptr, gptr))(r, p); }
 void DC2CALL Gpu_StoreImage(gptr r, gptr p)     { ORIG(0x4B49F0, void (DC2CALL *)(gptr, gptr))(r, p); }
 void DC2CALL JPEG_Decode(gptr d, gptr s, u32 n, u32 m) { ORIG(0x4D2990, void (DC2CALL *)(gptr, gptr, u32, u32))(d, s, n, m); }
-void DC2CALL Pc_MasksUpload(u32 a)              { ORIG(0x4BEAC0, void (DC2CALL *)(u32))(a); }
 void DC2CALL Snd_SetPan(u32 h, u32 p)           { ORIG(0x4BFA60, void (DC2CALL *)(u32, u32))(h, p); }
 void DC2CALL Strm_Close(u32 h)                  { ORIG(0x4C0050, void (DC2CALL *)(u32))(h); }
 u32  DC2CALL Strm_Open(gptr d, u32 n, u32 l)    { return ORIG(0x4BFC10, u32 (DC2CALL *)(gptr, u32, u32))(d, n, l); }
@@ -158,23 +158,16 @@ void DC2CALL Movie_Ctl0(void) {}
 u32 DC2CALL Movie_Poll(void) { return 1; }
 void DC2CALL Movie_Clear(u32 m) { extern void PcDraw_Clear(u32); PcDraw_Clear(m); }
 void DC2CALL Movie_Close(void) {}
-void DC2CALL Masks_CreateVB(u32 n, gptr p) { (void)n; (void)p; }
-void DC2CALL Masks_SetQuad(u32 i, u32 x, u32 y, u32 z) { (void)i; (void)x; (void)y; (void)z; }
-void DC2CALL Masks_BuildTexture(void) {}
-void DC2CALL Masks_Upload(u32 a) { (void)a; }
-/* the mask table 0x864490 (0x20 a mask, count 0x864494; none while the masks are not built) */
-void DC2CALL Masks_ShiftDepth(u32 d)
-{
-    float f = (float)((long double)(s32)d * F32(0x8644B8));
-    for (s32 i = 0; i < S32(0x864494); i++) { gptr z = U32(0x864490) + 0x20 * i + 4; F32(z) = (float)((long double)F32(z) - f); }
-}
+/* the masks: src/pc/drawot.c (the marker: none while no masks are built) */
+void DC2CALL Masks_CreateVB(u32 n, gptr p) { PcDraw_MasksCreate(n, p); }
+void DC2CALL Masks_SetQuad(u32 i, u32 x, u32 y, u32 z) { PcDraw_MasksSetQuad(i, x, y, z); }
+void DC2CALL Masks_BuildTexture(void) { PcDraw_MasksBuild(); }
+void DC2CALL Masks_Upload(u32 a) { PcDraw_MasksUpload(a); }
+void DC2CALL Masks_ShiftDepth(u32 d) { PcDraw_MasksShift(d); }
 u32 DC2CALL Masks_FillMarker(u32 i, gptr p)
 {
-    gptr t = U32(0x864490) + 0x20 * i;
-    U32(p + 8) = i;
-    if (!U32(0x864490)) { U16(p + 0xE) = 0; U16(p + 0xC) = 0x7FFF; return 0; }
-    U16(p + 0xE) = U16(t + 0x54); U16(p + 0xC) = U16(t + 0x94);
-    return U32(t + 0x74);
+    if (!U32(0x864490)) { U32(p + 8) = i; U16(p + 0xE) = 0; U16(p + 0xC) = 0x7FFF; return 0; }
+    return PcDraw_MasksMarker(i, p);
 }
 void DC2CALL SetMaskMarker(gptr p) { PcGpu_SetMaskMarker(p); }
 void DC2CALL Gpu_AddPrim(gptr o, gptr p) { PcGpu_AddPrim(o, p); }
@@ -189,5 +182,4 @@ void DC2CALL Gpu_LoadImage(gptr r, gptr p) { PcGpu_LoadImage(r, p); }
 void DC2CALL Gpu_LoadImageIfChanged(gptr r, gptr p) { PcGpu_LoadImageIfChanged(r, p); }
 void DC2CALL Gpu_StoreImage(gptr r, gptr p) { PcGpu_StoreImage(r, p); }
 void DC2CALL JPEG_Decode(gptr d, gptr s, u32 n, u32 m) { PcJpeg_Decode(d, s, n, m); }
-void DC2CALL Pc_MasksUpload(u32 a) { (void)a; }   /* TODO: the masks module */
 #endif

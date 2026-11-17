@@ -53,7 +53,7 @@ u32  DC2CALL Movie_Poll(void);                          /* 0x4BF690: nonzero whe
 void DC2CALL Movie_Close(void);                         /* 0x4BF340 */
 void DC2CALL Movie_Clear(u32 mode);                     /* 0x4B4F90: the screen cleared (PcDraw_Clear) */
 
-/* the background masks as Direct3D quads (standalone: not drawn yet) */
+/* the background masks as Direct3D quads (standalone: src/pc/drawot.c) */
 void DC2CALL Masks_CreateVB(u32 nverts, gptr pixels);   /* 0x4BE3C0 */
 void DC2CALL Masks_SetQuad(u32 i, u32 x, u32 y, u32 z); /* 0x4BE430 */
 void DC2CALL Masks_BuildTexture(void);                  /* 0x4BE6E0 */
@@ -76,7 +76,6 @@ void DC2CALL Gpu_LoadImage(gptr rect, gptr p);              /* 0x4B4D20 */
 void DC2CALL Gpu_LoadImageIfChanged(gptr rect, gptr p);     /* 0x4B4DB0 */
 void DC2CALL Gpu_StoreImage(gptr rect, gptr p);             /* 0x4B49F0 */
 /* the background masks' vertex buffer and textures made (masks module, 0x4BEAC0) */
-void DC2CALL Pc_MasksUpload(u32 a);                         /* 0x4BEAC0 */
 /* a JPEG (size bytes) to dst; mode 2: 15-bit RGB, width*2 bytes a row */
 void DC2CALL JPEG_Decode(gptr dst, gptr src, u32 size, u32 mode); /* 0x4D2990 */
 

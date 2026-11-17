@@ -35,6 +35,10 @@ u32 Surf_Lock(u32 s, const void *rect, void *desc, u32 flags)
 u32 Surf_Restore(u32 s) { return COM0(s, 0x6C); }
 u32 Surf_SetColorKey(u32 s, u32 flags, const void *key) { return COM(s, 0x74, (u32, u32, const void *), flags, key); }
 u32 Surf_Unlock(u32 s, const void *rect) { return COM(s, 0x80, (u32, const void *), rect); }
+u32 D3D_CreateVertexBuffer(const void *desc, u32 *vb)
+{ u32 d = U32(A_D3D); return COM(d, 0x24, (u32, const void *, u32 *, u32, u32), desc, vb, 4, 0); }
+u32 VB_Lock(u32 vb, u32 flags, void **p) { return COM(vb, 0x0C, (u32, u32, void **, u32 *), flags, p, 0); }
+u32 VB_Unlock(u32 vb) { return COM0(vb, 0x10); }
 
 #else
 const GpuDev *g_gpudev;
@@ -60,4 +64,7 @@ u32 Surf_Lock(u32 s, const void *rect, void *desc, u32 flags) { if (!g_gpudev ||
 u32 Surf_Restore(u32 s) { return CALL(restore, s); }
 u32 Surf_SetColorKey(u32 s, u32 flags, const void *key) { return CALL(set_color_key, s, flags, key); }
 u32 Surf_Unlock(u32 s, const void *rect) { return CALL(unlock, s, rect); }
+u32 D3D_CreateVertexBuffer(const void *desc, u32 *vb) { if (!g_gpudev || !g_gpudev->create_vb) { *vb = 0; return 1; } return g_gpudev->create_vb(desc, vb); }
+u32 VB_Lock(u32 vb, u32 flags, void **p) { (void)flags; if (!g_gpudev || !g_gpudev->vb_lock) return 1; return g_gpudev->vb_lock(vb, p); }
+u32 VB_Unlock(u32 vb) { return CALL(vb_unlock, vb); }
 #endif
