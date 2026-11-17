@@ -10501,7 +10501,7 @@ static void test_snd_slots(void)
 static const u32 g_menu_tab[] = {0x739C28};
 static const u8 g_menu_n[] = {12};
 /* the menu's own callees not rewritten yet, recorded only here */
-static const u32 g_menu_stubs[] = {0x403EE0};
+static const u32 g_menu_stubs[] = {0x403EE0, 0x404100};
 #define STUB_MENU 138
 static int g_task_n;                    /* frames a task under test runs */
 /* the menu's modes while the task runs: logged, then the mode and the wait
@@ -10632,6 +10632,32 @@ static gptr items_state(void)
     }
     U8(pl + 0x55) = (u8)A2_PICK(0xA, 0, (s32)rnd());
     U32(LOG_BASE) = 0;
+    return m;
+}
+
+/* screen 3's state: memos found (flags 9:0x50..0x7F), the one read and its page */
+static u32 memo_pages(u32 id)
+{
+    u32 n = 1;
+    for (gptr t = U32(0x70462C + id * 8); (U16(t) & 0xF000) != 0xF000; t += 2)
+        if ((U16(t) & 0xF000) == 0x5000) n++;
+    return n;
+}
+static gptr memos_state(void)
+{
+    gptr m = items_state();
+    U8(m + 0x54) = (u8)A2_PICK(0, 1, 5, 6, 7, 12, (s32)Flag_CountRange(0x50, 0x80));
+    for (u32 q = 0; q < 8; q++) U8(m + 0x30 + q) = (u8)(0x50 + rnd() % 0x30);
+    U8(m + 0x55) = (u8)A2_PICK(0, 1, 5, 6, (s32)(rnd() % 6));
+    U8(m + 0x56) = (u8)A2_PICK(0, 1, 2, (s32)(rnd() % 8));
+    U8(m + 0x57) = (u8)A2_PICK(0x10, 0x12, 0x24, (s32)(rnd() % 0x30));
+    u32 n = memo_pages(U8(m + 0x57));
+    U8(m + 0x58) = (u8)A2_PICK(0, (s32)(n - 1), (s32)(rnd() % n));
+    U16(m + 0x92) = (u16)A2_PICK(0, 1, 5, 50, 999, 1000, (s32)(rnd() % 1200));
+    U16(m + 0x94) = (u16)A2_PICK(0, 1, 1, 0x100, (s32)rnd());
+    U8(m + 0x64) = (u8)A2_PICK(0, 1, 5);
+    U8(m + 3) = (u8)A2_PICK(0, 1, 2, 2, (s32)rnd());
+    for (u32 q = 0; q < 8; q++) U8(G() + 0x1204 + q) = (u8)(rnd() % 10);
     return m;
 }
 static u8 g_menu_frames[0x3000];
@@ -11052,6 +11078,68 @@ static void test_menu(void)
                 check(0x48B280, Zone_FileSpot, "Zone_FileSpot", 1, e, 0xFFFFFFFF);
                 g_ign_objpads = 0;
             }
+        }
+        /* screen 3: memos */
+        {
+            static const struct { u32 addr; void *fn; const char *name; } I[] = {
+                {0x49A570, Memos_Init, "Memos_Init"}, {0x49A5C0, Memos_List, "Memos_List"},
+                {0x49A740, Memos_Read, "Memos_Read"}, {0x49A900, Memos_None, "Memos_None"},
+                {0x49A9A0, Memos_Back, "Memos_Back"}, {0x49A9F0, Memos_Draw, "Memos_Draw"},
+                {0x49AFA0, Memos_Frame, "Memos_Frame"}, {0x49A540, Screen_Memos, "Screen_Memos"},
+                {0x49A5C0, Memos_List, "Memos_List"}, {0x49A740, Memos_Read, "Memos_Read"}, {0x49A740, Memos_Read, "Memos_Read"},
+                {0x49A5C0, Memos_List, "Memos_List"}, {0x49A5C0, Memos_List, "Memos_List"}};
+            for (unsigned k = 0; k < sizeof I / sizeof I[0]; k++) {
+                m = memos_state();
+                if (I[k].addr == 0x49A540) U8(m + 2) = (u8)(rnd() % 5);
+                if (I[k].addr == 0x49A570 && rnd() % 2) for (u32 q = 0x50; q < 0x80; q++) Flag_Set(9, q, rnd() % 16 == 0);
+                if (k >= 8) {
+                    U16(m + 0x44) = (u16)A2_PICK(0, 0, 0x1000, 0x4000, 0x20, 0x4020, 1);
+                    U32(0x87DC00) = (u32)A2_PICK(0x20, 0x40, 0x40, 0x1000, 0);
+                    if (rnd() % 2) U8(m + 0x55) = (u8)(((s8)U8(m + 0x54) < 6 ? (s8)U8(m + 0x54) : 6) - 1 - rnd() % 2);
+                    if (I[k].addr == 0x49A740) U8(m + 3) = 2;
+                    if (I[k].addr == 0x49A5C0 && rnd() % 2) {   /* at the list's ends */
+                        U8(m + 0x54) = (u8)Flag_CountRange(0x50, 0x80);
+                        if (rnd() % 2) { U8(m + 0x55) = 1; U8(m + 0x56) = (u8)(rnd() % 3); U16(m + 0x44) = 0x1000; }
+                        else { U8(m + 0x55) = 5; U8(m + 0x56) = (u8)((s8)U8(m + 0x54) - 6 - rnd() % 2); U16(m + 0x44) = 0x4000; }
+                    }
+                }
+                sprintf(g_what, "2 %X 3 %X 54 %X 55 %X 56 %X 57 %X 58 %X 64 %X 92 %X 94 %X keys %X pad %X", U8(m + 2), U8(m + 3), U8(m + 0x54), U8(m + 0x55),
+                        U8(m + 0x56), U8(m + 0x57), U8(m + 0x58), U8(m + 0x64), U16(m + 0x92), U16(m + 0x94), U16(m + 0x44), U32(0x87DC00));
+                g_ign_objpads = 1;
+                check(I[k].addr, I[k].fn, I[k].name, 1, a, 0);
+                g_ign_objpads = 0;
+            }
+            m = memos_state();
+            u32 c[1] = {U32(0x70462C + (rnd() % 0x30) * 8)};
+            if (rnd() % 2) {
+                gptr t = 0x6CF600;
+                u32 len = rnd() % 0x40;
+                for (u32 q = 0; q < len; q++) U16(t + 2 * q) = (u16)(A2_PICK(0, 0x4000, 0x5000, 0x5000, (s32)rnd()) | (rnd() % 2 ? rnd() & 0xFFF : 0));
+                for (u32 q = 0; q < len; q++) if (U16(t + 2 * q) >> 12 == 0xF) U16(t + 2 * q) ^= 0x8000;
+                U16(t + 2 * len) = (u16)(0xF000 | (rnd() % 2 ? rnd() & 0xFFF : 0));
+                c[0] = t;
+            }
+            check(0x49A8D0, Text_Pages, "Text_Pages", 1, c, 0xFFFFFFFF);
+            /* typed text: a memo's, or made up with every code */
+            m = memos_state();
+            u32 id = rnd() % 0x30, n = memo_pages(id);
+            u32 d[8] = {U32(0x70462C + id * 8), rnd() % 0x140, (u32)A2_PICK(0x3C, 0xFFFF0028, (s32)(rnd() % 0xF0)), rnd() % n,
+                        (u32)A2_PICK(0, 1, 0x64, 1000, 0x10000, 0xFFFF, (s32)(rnd() % 400)), rnd(), 1 + rnd() % 0x3FE, (u32)A2_PICK(0, 1, 0x10000, (s32)rnd())};
+            if (rnd() % 2) {
+                gptr t = 0x6CF600;
+                u32 len = 8 + rnd() % 0x70, pg = 0;
+                for (u32 q = 0; q < len; q++) {
+                    u16 ch = (u16)A2_PICK(0x0006, 0x4006, 0x1000, 0x1001, 0x1002, 0x1003, 0x1014, 0x1007, 0x2000, 0x4041, 0x5000, 0x3041,
+                                          (s32)(0x20 + rnd() % 0x60), (s32)(0x20 + rnd() % 0x60), (s32)(rnd() & 0xF0FF));
+                    if (ch >> 12 == 0x1) ch = (u16)(0x1000 | (ch & 7));
+                    if (ch >> 12 == 0x5) { pg++; if (rnd() % 2) ch = (u16)(0x5000 | (rnd() & 0xFFF)); }
+                    U16(t + 2 * q) = ch;
+                }
+                U16(t + 2 * len) = (u16)(0xF000 | (rnd() % 2 ? rnd() & 0xFFF : 0));
+                d[0] = t; d[3] = rnd() % (pg + 1);
+            }
+            sprintf(g_what, "x %X y %X page %X count %X z %X arrows %X blink %X", d[1], d[2], d[3], d[4], d[6], d[7], U8(G() + 4));
+            check(0x49B270, Memo_Type, "Memo_Type", 8, d, 0xFFFFFFFF);
         }
         /* flags 9 and items */
         m = menu_state();

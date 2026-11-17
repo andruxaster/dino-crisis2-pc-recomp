@@ -963,6 +963,16 @@ void DC2CALL Files_Draw(gptr m);    /* 0x499F80 */
 void DC2CALL Menu_Ring(u32 angle, u32 x, u32 y, u32 r1, u32 r2, u32 color); /* 0x495410 */
 void DC2CALL Text_Ascii(u32 x, u32 y, u32 col, gptr s); /* 0x471B30 */
 u32  DC2CALL Zone_FileSpot(u32 id); /* 0x48B280 */
+void DC2CALL Screen_Memos(gptr m);  /* 0x49A540 */
+void DC2CALL Memos_Init(gptr m);    /* 0x49A570 */
+void DC2CALL Memos_List(gptr m);    /* 0x49A5C0 */
+void DC2CALL Memos_Read(gptr m);    /* 0x49A740 */
+u32  DC2CALL Text_Pages(gptr t);    /* 0x49A8D0 */
+void DC2CALL Memos_None(gptr m);    /* 0x49A900 */
+void DC2CALL Memos_Back(gptr m);    /* 0x49A9A0 */
+void DC2CALL Memos_Draw(gptr m);    /* 0x49A9F0 */
+void DC2CALL Memos_Frame(gptr m);   /* 0x49AFA0 */
+u32  DC2CALL Memo_Type(gptr t, u32 x, u32 y, u32 page, u32 count, u32 color, u32 z, u32 arrows); /* 0x49B270 */
 void DC2CALL Game_ModeStock(void);                                      /* 0x452450 */
 
 u32  DC2CALL Angle_DiffTo(gptr a, gptr b, u32 ang);                  /* 0x48F3E0 */

@@ -230,6 +230,12 @@
  *  12 bytes {u, v, flags: 0x20 both hands, 0x80 infinite ammunition}.
  *  Frames of sprites: 8-byte parts {u, v, w (0: 256), h, s8 dx, s8 dy, count
  *  (first part), flags (2: port code 0x80)}.
+ *  Memos (screen 3): flags 9:0x50..0x7F found; M+0x30 the six listed, +0x54
+ *  count, +0x55 cursor, +0x56 first shown, +0x57 memo read, +0x58 its page,
+ *  +0x92 letters typed, +0x94 page out. Records 0x704628 + 8*memo {title,
+ *  text}: 16-bit codes, low 12 bits a letter (tpage, widths 0x723D4C) or 6 a
+ *  digit of G+0x1204..; high nibble 1 color, 2 the picture, 4 newline, 5 page
+ *  end, F text end (Memo_Type 0x49B270).
  *
  * ---- flags ----------------------------------------------------------------------
  *  Flag_Set(group, bit, on) 0x46FAA0 (503 calls), Flag_Check(group, bit)

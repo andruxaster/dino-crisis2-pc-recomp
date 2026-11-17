@@ -2009,3 +2009,296 @@ void DC2CALL Items_Back(gptr m)                                     /* 0x4996C0 
     screen_bottom();
     Text_Draw(0x724208, 0x20, 0xC5, 0x64, 0x707070, 0x64, 0);
 }
+
+/* ---- screen 3: memos (steps 0x739DBC by M+2) ---- */
+
+/* M+0x54 memos found (flags 9:0x50..0x7F) */
+void DC2CALL Screen_Memos(gptr m)                                   /* 0x49A540 */
+{
+    U8(m + 0x54) = (u8)Flag_CountRange(0x50, 0x80);
+    Orig_Call1(U32(0x739DBC + (s8)U8(m + 2) * 4), m);
+    Menu_Frame(m);
+}
+
+/* step 0 */
+void DC2CALL Memos_Init(gptr m)                                     /* 0x49A570 */
+{
+    U8(m + 2) = U8(m + 0x54) ? 1 : 3;
+    U8(m + 3) = 0; U32(m + 4) = 0;
+    U8(m + 0x55) = 0; U8(m + 0x56) = 0; U8(m + 0x57) = 0; U8(m + 0x58) = 0; U8(m + 0x4E) = 0;
+    U16(m + 0x92) = 0;
+    U32(m + 0x30) = 0; U32(m + 0x34) = 0;
+    Memos_Draw(m);
+}
+
+/* step 1: the memos listed; up/down move M+0x55 and scroll M+0x56 */
+void DC2CALL Memos_List(gptr m)                                     /* 0x49A5C0 */
+{
+    u8 max = (u8)(((s8)U8(m + 0x54) < 6 ? (s8)U8(m + 0x54) : 6) - 1);
+    u8 o55 = U8(m + 0x55), o56 = U8(m + 0x56);
+    u16 k = U16(m + 0x44);
+    if (k & 0x1000) {
+        U8(m + 0x55) = (u8)(o55 - 1);
+        if ((s8)U8(m + 0x55) < 0) {
+            U8(m + 0x55) = 0;
+            if ((s8)o56 > 0) U8(m + 0x56) = (u8)(o56 - 1);
+        }
+    } else if (k & 0x4000) {
+        U8(m + 0x55) = (u8)(o55 + 1);
+        if ((s8)U8(m + 0x55) > (s32)max) {
+            U8(m + 0x55) = max;
+            if ((s8)o56 < (s8)U8(m + 0x54) - 6) U8(m + 0x56) = (u8)(o56 + 1);
+        }
+    } else if (U8(0x87DC00) & 0x40) {
+        Se_Play(0, 1);
+        U8(m + 2) = 4;
+    } else if (U8(0x87DC00) & 0x20) {
+        Se_Play(0, 2);
+        U8(m + 2) = 2; U8(m + 3) = 0;
+        U8(m + 0x57) = (u8)(U8(m + 0x30 + (s8)U8(m + 0x55)) - 0x50);
+        U8(m + 0x58) = 0;
+        U16(m + 0x92) = 0;
+    }
+    Memos_Draw(m);
+    Menu_DrawFrames(0x684A40, 0x60, 0xC0, 0xD, 0x7C8E, 0x80808080, 3);
+    Menu_DrawFrames(0x684B60, 0xE8, 0xC0, 0xD, 0x7C8E, 0x80808080, 3);
+    Text_Draw(0x72490A, 0x20, 0xC1, 0x64, 0x808080, 2, 0);
+    if ((u32)o55 != (u32)(s32)(s8)U8(m + 0x55) || (u32)o56 != (u32)(s32)(s8)U8(m + 0x56)) Se_Play(0, 0);
+}
+
+/* step 2: reading memo M+0x57 (records 0x704628: title, text), its picture
+ * loaded first; page M+0x58, typed out M+0x92 letters at a time, M+0x94 set
+ * once the page is all out; cancel back (or out, when opened for the memo) */
+void DC2CALL Memos_Read(gptr m)                                     /* 0x49A740 */
+{
+    switch ((s8)U8(m + 3)) {
+    case 0:
+        if (!File_IsBusy()) {
+            Orig_Call1(0x404100, (u16)(s16)(s8)U8(m + 0x57));
+            U8(m + 3)++;
+        }
+        break;
+    case 1:
+        if (!File_IsBusy()) U8(m + 3)++;
+        break;
+    case 2: {
+        gptr text = U32(0x70462C + (s8)U8(m + 0x57) * 8);
+        s16 old = (s8)U8(m + 0x58);
+        if (U16(m + 0x94)) {
+            u16 k = U16(m + 0x44);
+            if (k & 0x1000) {
+                U8(m + 0x58)--;
+                if ((s8)U8(m + 0x58) < 0) U8(m + 0x58) = 0;
+            } else if (k & 0x4020) {
+                s16 n = (s16)Text_Pages(text);
+                U8(m + 0x58)++;
+                if (n <= (s8)U8(m + 0x58)) U8(m + 0x58) = (u8)(n - 1);
+            } else if (U8(0x87DC00) & 0x40) {
+                if (U8(m + 0x64) == 1) { U32(m) = 0x502; U8(m + 0x64) = 0; }
+                else { Se_Play(0, 1); U8(m + 2) = 1; U8(m + 3) = 0; }
+            }
+        }
+        s16 page = (s8)U8(m + 0x58);
+        if (page != old) U16(m + 0x92) = 0;
+        if (!U16(m + 0x94)) {
+            u16 c = (u16)(U16(m + 0x92) + 1);
+            U16(m + 0x92) = c;
+            if (U32(0x87DC00) & 0x5060) U16(m + 0x92) = (u16)(c + 1000);
+            if (S16(m + 0x92) > 1000) U16(m + 0x92) = 1000;
+        }
+        U16(m + 0x94) = (u16)Memo_Type(text, 0x38, 0x3C, (u16)page, U16(m + 0x92), 0x808080, 5, 1);
+        break; }
+    }
+    Memos_Frame(m);
+}
+
+/* a text's pages: one more than its page breaks (0x5xxx) before the end (0xFxxx) */
+u32 DC2CALL Text_Pages(gptr t)                                      /* 0x49A8D0 */
+{
+    u32 n = 1;
+    for (;; t += 2) {
+        u32 c = U16(t) & 0xF000;
+        if (c == 0xF000) return n;
+        if (c == 0x5000) n++;
+    }
+}
+
+/* step 3: no memos */
+void DC2CALL Memos_None(gptr m)                                     /* 0x49A900 */
+{
+    u8 pad = U8(0x87DC00);
+    if (pad & 0x60) { Se_Play(0, pad & 0x40 ? 1 : 2); U8(m + 2) = 4; }
+    notice(m, 0x724354);
+}
+
+/* step 4: back to the pause menu */
+void DC2CALL Memos_Back(gptr m)                                     /* 0x49A9A0 */
+{
+    U8(m + 1) = 0; U8(m + 2) = 0; U8(m + 3) = 0;
+    Menu_Header(m);
+    Menu_Weapons(m, 0x80, 0x18, 2);
+    Menu_Health(0x10, 0x58);
+    Menu_Points(0x80, 0x58, 0x808080);
+    Menu_PauseList(m);
+}
+
+/* the memos page (M+0x30.. the six shown from page M+0x56, M+0x55 the cursor) */
+void DC2CALL Memos_Draw(gptr m)                                     /* 0x49A9F0 */
+{
+    Menu_DrawFrames(0x6853F0, 0xD6, 0x21, 0xC, 0x7C8F, 0x808080, 2);
+    Menu_Line(0xCC, 0x20, 0x100, 0x20, 0x75E533, 1, 4);
+    Menu_Line(0xCC, 0x30, 0x100, 0x30, 0x75E533, 1, 4);
+    draw_mode(0xC, 4);
+    Menu_DrawFrames(0x6857B0, 0x1C, 0x18, 0xC, 0x7C8E, 0x80808080, 2);
+    Menu_DrawFrames(0x6857C0, 0x68, 0x18, 0xC, 0x7C8E, 0x80808080, 3);
+    Menu_DrawFrames(0x6857C8, 0x34, 0x28, 0xC, 0x7C8E, 0x80808080, 2);
+    Menu_DrawFrames(0x6857D0, 0x24, 0x18, 0xC, 0x7C8F, 0x2060C0, 2);
+    Menu_DrawFrames(0x685400, 0x3A, 0x1D, 0xC, 0x7C8F, 0x808080, 2);
+    Menu_Number11(0x55, 0x1B, 2, 1, 0x104080, (u32)((s8)U8(m + 0x56) + (s8)U8(m + 0x55) + 1), 5);
+    Menu_DrawFrames(0x685080, 0x88, 0x24, 0xC, 0x7C8E, 0x80808080, 2);
+    for (u32 k = 0; k < 6; k++) {
+        u32 v = (u8)(0x80 - (k << 4));
+        u32 c = ((((v | 0xFFFF8000u) << 8) | v) << 8) | v;
+        Menu_DrawFrames(0x685060, 0x68 + 5 * k, 0x2C, 0xC, 0x7C8E, c, 2);
+        Menu_DrawFrames(0x685028, 0xC0 - 5 * k, 0x24, 0xC, 0x7C8E, c, 2);
+    }
+    Menu_DrawFrames(0x6857D8, 0x58, 0x38, 0xC, 0x7C8E, 0x80808080, 2);
+    Menu_DrawFrames(0x6858D8, 0xE0, 0x38, 0xC, 0x7C8E, 0x80808080, 2);
+    Menu_DrawFrames(0x685858, 0x58, 0xAE, 0xC, 0x7C8E, 0x80808080, 2);
+    Menu_DrawFrames(0x685958, 0xE0, 0xAE, 0xC, 0x7C8E, 0x80808080, 2);
+    u8 k = U8(m + 0x56), b = 0x50;
+    for (;;) {
+        if (Flag_Check(9, b) && (s8)--k < 0) break;
+        if (++b >= 0x80) break;
+    }
+    Flag_ListRange(b, 0x80, 6, m + 0x30);
+    u32 n = (u8)((s8)U8(m + 0x54) < 6 ? U8(m + 0x54) : 6), i;
+    gptr v = Tmp_Push(0x10);
+    for (i = 0; i < n; i++) {
+        u32 y = 0x48 + 0x11 * i, s = 0x11 * i;
+        if ((s8)U8(m + 0x55) == (s32)i) {
+            Menu_DrawFrames(0x6850C0, 0x38, y, 0xC, 0x7C8F, 0x1060C0, 2);
+            U16(v) = U16(v + 8) = 0x20; U16(v + 4) = U16(v + 0xC) = 0x124;
+            U16(v + 2) = U16(v + 6) = (u16)(s + 0x47); U16(v + 0xA) = U16(v + 0xE) = (u16)(s + 0x58);
+            Menu_PolyG4(v, 0, 0x80, 0, 0x80, 1, 0xA);
+        } else {
+            U16(v) = U16(v + 8) = 0x40; U16(v + 4) = U16(v + 0xC) = 0x124;
+            U16(v + 2) = U16(v + 6) = (u16)(s + 0x47); U16(v + 0xA) = U16(v + 0xE) = (u16)(s + 0x58);
+            Menu_PolyG4(v, 0x100000, 0x800000, 0x100000, 0x800000, 1, 0xA);
+        }
+        Menu_Number12(0x24, y + 2, 2, 1, 0x808080, (u32)((s8)U8(m + 0x56) + (s32)i + 1), 3);
+        Menu_DrawFrames(0x6859D8, 0x18, y, 0xC, 0x7C8E, 0x80808080, 3);
+        Menu_DrawFrames(0x6859E0, 0x11E, y, 0xC, 0x7C8E, 0x80808080, 3);
+        Menu_Line(0x18, s + 0x58, 0x124, s + 0x58, 0x75E533, 1, 4);
+        draw_mode(0xC, 4);
+        Memo_Type(U32(0x7043A8 + U8(m + 0x30 + i) * 8), 0x40, s + 0x48, 0, 0x64, 0x808080, 3, 0);
+    }
+    Tmp_Pop(0x10);
+    if (i < 6)
+        for (u32 y = 0x11 * i + 0x48; y < 0xAE; y += 0x11) {
+            Menu_DrawFrames(0x6859D8, 0x18, y, 0xC, 0x7C8E, 0x80808080, 3);
+            Menu_DrawFrames(0x6859E0, 0x1D, y, 0xC, 0x7C8E, 0x80808080, 3);
+        }
+    if ((s8)U8(m + 0x56) > 0)
+        Menu_DrawFrames(0x685070, 0x9C, 0x3E, 0xC, 0x7C8F, Color_Pulse(0x4040, 0xC0C0, 5), 3);
+    if ((s8)U8(m + 0x56) < (s8)U8(m + 0x54) - 6)
+        Menu_DrawFrames(0x685068, 0x9C, 0xB0, 0xC, 0x7C8F, Color_Pulse(0x4040, 0xC0C0, 5), 3);
+}
+
+/* the memo page's frame: number, title, "PAGE n/m" and the scroll bar */
+void DC2CALL Memos_Frame(gptr m)                                    /* 0x49AFA0 */
+{
+    Menu_DrawFrames(0x685400, 0x3A, 0x1D, 0xC, 0x7C8F, 0x808080, 2);
+    Menu_Number11(0x55, 0x1B, 2, 1, 0x104080, (u32)((s8)U8(m + 0x56) + (s8)U8(m + 0x55) + 1), 5);
+    Menu_DrawFrames(0x6857B0, 0x1C, 0x18, 0xC, 0x7C8E, 0x80808080, 2);
+    Menu_DrawFrames(0x6857C0, 0x68, 0x18, 0xC, 0x7C8E, 0x80808080, 3);
+    Menu_DrawFrames(0x6857C8, 0x114, 0x28, 0xC, 0x7C8E, 0x80808080, 2);
+    Menu_DrawFrames(0x6857D0, 0x24, 0x18, 0xC, 0x7C8F, 0x2060C0, 2);
+    Menu_DrawFrames(0x6857D8, 0x58, 0x38, 0xC, 0x7C8E, 0x80808080, 2);
+    Menu_DrawFrames(0x685BB8, 0xE0, 0x38, 0xC, 0x7C8E, 0x80808080, 2);
+    Menu_DrawFrames(0x685858, 0x58, 0xC8, 0xC, 0x7C8E, 0x80808080, 2);
+    Menu_DrawFrames(0x685C30, 0xE0, 0xC8, 0xC, 0x7C8E, 0x80808080, 2);
+    s32 id = (s8)U8(m + 0x57);
+    Memo_Type(U32(0x704628 + id * 8), 0x40, 0x28, 0, 0x64, 0x808080, 3, 0);
+    s32 pages = (s16)Text_Pages(U32(0x70462C + id * 8));
+    Text_Ascii(0x100, 0x18, 0xFF06, 0x739DD8);
+    gptr r = Tmp_Push(0x10), buf = r + 8;
+    s32 page = (s8)U8(m + 0x58);
+    Crt_sprintf3(buf, 0x739DD0, (u32)(page + 1), (u32)pages, 0);
+    Text_Ascii(0x108, 0x20, 0xFF00, buf);
+    U16(r) = 0x11D; U16(r + 4) = 8;
+    U16(r + 2) = (u16)(page * 0x92 / pages + 0x3F);
+    U16(r + 6) = (u16)(0x92 / pages);
+    Menu_Tile(r, 0x75E533, 0, 4);
+    Tmp_Pop(0x10);
+    Menu_Line(0x11C, 0x3E, 0x125, 0x3E, 0x75E533, 1, 4);
+    Menu_Line(0x11C, 0x3E, 0x11C, 0xD0, 0x75E533, 1, 4);
+    Menu_Line(0x125, 0x3E, 0x125, 0xD0, 0x75E533, 1, 4);
+    Menu_Line(0x11C, 0xD0, 0x125, 0xD0, 0x75E533, 1, 4);
+    draw_mode(0xC, 4);
+}
+
+/* typed text (16-bit codes) from page `page`, at most `count` codes: letters
+ * 14x14 (tpage = the code, widths 0x723D4C), 0x?006 a digit of G+0x1204..,
+ * 0x1xxx a color (the given one, red, green, yellow, blue..), 0x2xxx the
+ * picture, 0x4xxx a newline after its letter, 0x5xxx the page's end, 0xFxxx
+ * the text's end; returns 1 once the page is out, then (arrows) blinks the
+ * arrows for the pages before and after */
+u32 DC2CALL Memo_Type(gptr t, u32 x, u32 y, u32 page, u32 count, u32 color, u32 z, u32 arrows) /* 0x49B270 */
+{
+    u32 x16 = x & 0xFFFF, digits = 0, done = 0, last = 0;
+    float xc = (float)(s32)x16;
+    u32 col[8] = { (color & 0xFFFFFF) | 0x6C000000, 0x6C2A2A80, 0x6C008000, 0x6C808000,
+                   0x6C205080, 0x6C205080, 0x6C205080, 0x6C205080 };
+    u32 cur = col[0];
+    for (u16 p = (u16)page; p; t += 2)
+        if ((U16(t) & 0xF000) == 0x5000) p--;
+    while ((s16)--count >= 0) {
+        u32 ch = U16(t), hi = ch >> 12, g = ch & 0xFFF;
+        t += 2;
+        if (g == 6) {
+            g = U8(G() + (digits & 0xFFFF) + 0x1204) + 0x30;
+            digits++;
+        } else if (hi == 2) {
+            gptr r = Tmp_Push(8);
+            U16(r) = 0x58; U16(r + 2) = 0x48; U16(r + 4) = 0x80; U16(r + 6) = 0x60;
+            Menu_Sprite(r, 0, 0, 0x7C40, 0x707070, 0, 1);
+            Tmp_Pop(8);
+            draw_mode(0x96, 1);
+            continue;
+        } else if (hi == 1) {
+            cur = col[g & 7];               /* 8..15 read past the table in the original */
+            continue;
+        } else if (hi == 0xF) {
+            last = 1; done = 1; break;
+        } else if (hi == 5) {
+            done = 1; break;
+        }
+        gptr q = U32(0x87DC98);
+        u32 yy = y & 0xFFFF;
+        float x1 = (float)((long double)xc + F32(0x703454));
+        float fy0 = (float)(s32)yy, fy1 = (float)(s32)(yy + 0xE);
+        U32(q + 4) = cur;
+        F32(q + 8) = xc; F32(q + 0xC) = fy0;
+        F32(q + 0x14) = x1; F32(q + 0x18) = fy0;
+        F32(q + 0x20) = xc; F32(q + 0x24) = fy1;
+        F32(q + 0x2C) = x1; F32(q + 0x30) = fy1;
+        U8(q + 0x10) = 0; U8(q + 0x11) = 0;
+        U8(q + 0x1C) = 0xE; U8(q + 0x1D) = 0;
+        U8(q + 0x28) = 0; U8(q + 0x29) = 0xE;
+        U8(q + 0x34) = 0xE; U8(q + 0x35) = 0xE;
+        U16(q + 0x1E) = (u16)g;
+        U16(q + 0x12) = 0x7DCC;
+        ot_link(q, 2, z);
+        xc = (float)((long double)xc + F32(0x723D4C + g * 4));
+        U32(0x87DC98) = q + 0x38;
+        if (hi == 4) { xc = (float)(s32)x16; y += 0xF; }
+    }
+    if ((u16)arrows && done) {
+        if ((u16)page && (U8(G() + 4) & 0x10))
+            Menu_DrawFrames(0x685070, 0x24, 0x40, 0xC, 0x7C8F, 0x808080, 3);
+        if (!last && (U8(G() + 4) & 0x10))
+            Menu_DrawFrames(0x685068, 0x24, 0xC8, 0xC, 0x7C8F, 0x808080, 3);
+    }
+    return done;
+}
