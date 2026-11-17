@@ -236,6 +236,15 @@
  *  text}: 16-bit codes, low 12 bits a letter (tpage, widths 0x723D4C) or 6 a
  *  digit of G+0x1204..; high nibble 1 color, 2 the picture, 4 newline, 5 page
  *  end, F text end (Memo_Type 0x49B270).
+ *  Map (screen 4): flags 11:0x75..0x7F maps found, flags 11 by global room
+ *  index the rooms seen; M+0x60 area wanted (+5: its file), +0x61 MAP.DAT
+ *  page loaded, +0x62 page shown (0..10: areas 0..4, 4's rooms 8..10, 5..9;
+ *  pages 0x73A360), +0x63 cursor's room, +0x7E band of the torn screen,
+ *  +0x92 zoom / fade, +0x94 paper fade, +0x96 cursor glide frames, +0x9A/
+ *  +0x9C cursor, +0x9E/+0xA0 zoomed page's centre. Rooms 0x739DE0 + 16 *
+ *  global index {u32 scale, u16 size, -, frames, u16 x, u16 y}; doors
+ *  0x73A3B0 (zoomed) and per area {room, -, flag 8 open, flag 9 key, key
+ *  id (G+0x108F), x, y, w, h}.
  *
  * ---- flags ----------------------------------------------------------------------
  *  Flag_Set(group, bit, on) 0x46FAA0 (503 calls), Flag_Check(group, bit)

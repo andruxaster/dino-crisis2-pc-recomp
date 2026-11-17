@@ -2302,3 +2302,786 @@ u32 DC2CALL Memo_Type(gptr t, u32 x, u32 y, u32 page, u32 count, u32 color, u32 
     }
     return done;
 }
+
+/* ---- screen 4: the map (steps 0x73A38C by M+2, the areas' pages 0x73A360 by M+0x62) ---- */
+
+/* a two-code text (a button's sign) at x, y */
+static void sign(u32 code, u32 x, u32 y, u32 color)
+{
+    gptr t = Tmp_Push(4);
+    U16(t) = (u16)code; U16(t + 2) = 0xF000;
+    Text_Draw(t, x, y, 0x64, color, 2, 0);
+    Tmp_Pop(4);
+}
+
+/* the room's record in 0x739DE0 (16 bytes: +0 the map's spot, +4, +8 a map) */
+static gptr map_room(void)
+{
+    gptr g = G();
+    return 0x739DE0 + ((u8)Room_GlobalIndex(U8(g + 0x1091), U8(g + 0x1090)) << 4);
+}
+
+/* the grid behind, the button signs, then the step */
+void DC2CALL Screen_Map(gptr m)                                     /* 0x49B620 */
+{
+    U32(0x87DE00) = 2;
+    for (u32 i = 1; i < 0x13; i++) Menu_Line(i << 4, 0, i << 4, 0xF0, 0x204020, 1, 0x30C);
+    for (u32 i = 1; i < 0xF; i++) Menu_Line(0, i << 4, 0x140, i << 4, 0x204020, 1, 0x30C);
+    draw_mode(0xC, 0x30C);
+    if (U8(m + 2) != 7) {
+        sign(0x1B, 0x86, 0xD8, 0x404040);
+        if (U8(m + 2) != 6 && U8(m + 0x64) == 3) Menu_DrawFrames(0x6850B8, 0x9A, 0xDB, 0xC, 0x7C8F, 0x8068C040, 2);
+        else Menu_DrawFrames(0x685040, 0x98, 0xDB, 0xC, 0x7C8F, 0x8068C040, 2);
+    }
+    Orig_Call1(U32(0x73A38C + (s8)U8(m + 2) * 4), m);
+}
+
+/* the areas whose maps were found (flags 11:0x75..0x7F), less one */
+u32 DC2CALL Map_CountAreas(void)                                    /* 0x49B770 */
+{
+    u32 n = 0;
+    for (u32 b = 0x75; b < 0x80; b++) if (Flag_Check(0xB, b)) n++;
+    return n - 1;
+}
+
+/* the next area with its map after M+0x62 (round), or M+0x62 */
+u32 DC2CALL Map_NextArea(gptr m)                                    /* 0x49B7A0 */
+{
+    s16 a;
+    for (a = (s16)(U8(m + 0x62) + 1); a <= 10; a++) if (Flag_Check(0xB, (u32)(a + 0x75))) return (u16)a;
+    for (a = 0; (s32)a <= (s32)U8(m + 0x62) - 1; a++) if (Flag_Check(0xB, (u32)(a + 0x75))) return (u16)a;
+    return U8(m + 0x62);
+}
+
+/* the one before (round) */
+u32 DC2CALL Map_PrevArea(gptr m)                                    /* 0x49B810 */
+{
+    s16 a;
+    for (a = (s16)(U8(m + 0x62) - 1); a >= 0; a--) if (Flag_Check(0xB, (u32)(a + 0x75))) return (u16)a;
+    for (a = 10; (s32)a >= (s32)U8(m + 0x62) + 1; a--) if (Flag_Check(0xB, (u32)(a + 0x75))) return (u16)a;
+    return U8(m + 0x62);
+}
+
+/* step 0: the screen's colors; once loaded, the map (or step 7: none here) */
+void DC2CALL Map_Init(gptr m)                                       /* 0x49B880 */
+{
+    gptr r = map_room(), g = G();
+    U8(g + 0xB58) = 0x80; U8(g + 0xB59) = 0x80; U8(g + 0xB5A) = 0x80; U8(g + 0xB5B) = 0; U8(g + 0xB5C) = 0;
+    DrawSync(0);
+    if (File_IsBusy()) return;
+    U16(m + 0x9A) = 4; U16(m + 0x9C) = 0x34;
+    U16(m + 0x92) = 0; U16(m + 0x94) = 0; U16(m + 0x96) = 0x1E;
+    U8(m + 2) = U32(r + 8) ? 1 : 7;
+}
+
+/* step 1: an area's map; L/R the other areas found, select zooms on the
+ * player when the map is his area's */
+void DC2CALL Map_View(gptr m)                                       /* 0x49B940 */
+{
+    Orig_Call1(U32(0x73A360 + U8(m + 0x62) * 4), m);
+    u16 n = (u16)Map_CountAreas();
+    gptr r = map_room(), g = G();
+    u16 area = (u8)Area_SoundArea(U8(g + 0x1091), U8(g + 0x1090));
+    if (n && (U8(G() + 4) & 8)) {
+        gptr v = Tmp_Push(0x10);
+        U16(v) = 0x120; U16(v + 2) = 0x6C; U16(v + 4) = 0x130; U16(v + 6) = 0x78;
+        U16(v + 8) = 0x120; U16(v + 0xA) = 0x84; U16(v + 0xC) = 0; U16(v + 0xE) = 0;
+        Menu_PolyF3(v, 0x800070C0, 0x64);
+        U16(v) = 0x10; U16(v + 2) = 0x78; U16(v + 4) = 0x20; U16(v + 6) = 0x6C;
+        U16(v + 8) = 0x20; U16(v + 0xA) = 0x84;
+        Menu_PolyF3(v, 0x800070C0, 0x64);
+        Tmp_Pop(0x10);
+        draw_mode(0xC, 0x64);
+    }
+    u32 pad = U32(0x87DC00);
+    if ((pad & 0x2000) && n) {
+        Se_Play(0, 0xD);
+        U8(m + 0x60) = (u8)(Map_NextArea(m) + 5);
+        U8(m + 2) = 2; U16(m + 0x92) = 0; U16(m + 0x94) = 0;
+    } else if ((pad & 0x8000) && n) {
+        Se_Play(0, 0xD);
+        U8(m + 0x60) = (u8)(Map_PrevArea(m) + 5);
+        U8(m + 2) = 2; U16(m + 0x92) = 0; U16(m + 0x94) = 0;
+    } else if (pad & 0x40) {
+        U8(m + 2) = 8;
+    } else if ((pad & 0x20) && U32(r) && area == U8(m + 0x62)) {
+        U8(m + 2) = 4;
+        Se_Play(0, 0xE);
+    }
+    if (U32(r) && area == U8(m + 0x62)) {
+        sign(0x1A, 0x18, 0x22, 0x808080);
+        Text_Draw(0x7276C0, 0x28, 0x22, 0x64, 0x707070, 0x1F4, 0);
+    }
+}
+
+/* step 2: another area's map wanted (M+0x60, its file) */
+void DC2CALL Map_Other(gptr m)                                      /* 0x49BB80 */
+{
+    Game_Start((u32)(s32)(s8)U8(m + 0x60));
+    U8(G() + 0xB48) = U8(m + 0x60);
+    U8(m + 2) = 3;
+    U8(m + 0x62) = (u8)(U8(m + 0x60) - 5);
+}
+
+/* step 3 */
+void DC2CALL Map_Shown(gptr m)                                      /* 0x49BBB0 */
+{
+    U8(m + 2) = 1;
+}
+
+/* step 4: the player's room's page of MAP.DAT (once, M+0x61) */
+void DC2CALL Map_ZoomLoad(gptr m)                                   /* 0x49BBC0 */
+{
+    gptr g = G();
+    u16 k = (u8)Room_GlobalIndex(U8(g + 0x1091), U8(g + 0x1090));
+    if ((u32)k != (u32)(s32)(s8)U8(m + 0x61)) {
+        Orig_Call1(0x403FD0, k);
+        U8(m + 0x61) = (u8)k;
+    }
+    Orig_Call1(U32(0x73A360 + U8(m + 0x62) * 4), m);
+    U8(m + 2) = 5;
+}
+
+/* step 5: until it is loaded */
+void DC2CALL Map_ZoomWait(gptr m)                                   /* 0x49BC20 */
+{
+    Orig_Call1(U32(0x73A360 + U8(m + 0x62) * 4), m);
+    if (!File_IsBusy()) { U16(m + 0x92) = 0; U8(m + 2) = 6; U8(m + 3) = 0; }
+}
+
+/* step 6: the room's page grows in (M+0x92 to 0x46) centred on the player
+ * (M+0x9E, M+0xA0), the pad moves it; cancel shrinks it back */
+void DC2CALL Map_Zoom(gptr m)                                       /* 0x49BC50 */
+{
+    gptr g = G();
+    Orig_Call1(U32(0x73A360 + U8(m + 0x62) * 4), m);
+    Map_ZoomDraw(m);
+    switch ((s8)U8(m + 3)) {
+    case 0: {
+        U8(g + 0xB58) = 0x80; U8(g + 0xB59) = 0x80; U8(g + 0xB5A) = 0x80; U8(g + 0xB5B) = 0; U8(g + 0xB5C) = 0;
+        DrawSync(0);
+        U16(m + 0x92) += 4;
+        if (S16(m + 0x92) <= 0x46) break;
+        gptr r = map_room(), pl = U32(G() + 0x940), out = Tmp_Push(0x10);
+        U8(m + 3) = 1;
+        U16(m + 0x92) = 0x46; U16(m + 0x9E) = 0x58; U16(m + 0xA0) = 0x82;
+        Map_Locate(m, U16(pl + 0x4A), U16(pl + 0x40), U16(pl + 0x44), U32(r), U16(r + 4), out);
+        U16(m + 0x9E) += (u16)(0x58 - U16(out + 0xC));
+        U16(m + 0xA0) += (u16)(0x82 - U16(out + 0xE));
+        Tmp_Pop(0x10);
+        s16 x = S16(m + 0x9E);
+        if (S16(m + 0xA0) < 0x49) U16(m + 0xA0) = 0x49;
+        if (S16(m + 0xA0) > 0xBB) U16(m + 0xA0) = 0xBB;
+        if (x < 0x1F) U16(m + 0x9E) = 0x1F;
+        if (S16(m + 0x9E) > 0x91) U16(m + 0x9E) = 0x91;
+        break; }
+    case 1: {
+        Menu_Line(0x11, 0x3B, 0x11, 0xC9, 0x806060, 0, 0xBE);
+        Menu_Line(0x11, 0x3B, 0x9F, 0x3B, 0x806060, 0, 0xBE);
+        Menu_Line(0x9F, 0x3B, 0x9F, 0xC9, 0x806060, 0, 0xBE);
+        Menu_Line(0x11, 0xC9, 0x9F, 0xC9, 0x806060, 0, 0xBE);
+        u32 k = U32(0x87DDFC);
+        if (!(k & 0xF000)) {
+            if (U8(0x87DC00) & 0x40) { U8(m + 3) = 2; Se_Play(0, 0xD); }
+            break;
+        }
+        int moved = 0;
+        if (k & 0x4000) {
+            U16(m + 0xA0) -= 3;
+            if (S16(m + 0xA0) < 0x49) U16(m + 0xA0) = 0x49; else moved = 1;
+        }
+        if (U32(0x87DDFC) & 0x1000) {
+            U16(m + 0xA0) += 3;
+            if (S16(m + 0xA0) > 0xBB) U16(m + 0xA0) = 0xBB; else moved = 1;
+        }
+        if (U32(0x87DDFC) & 0x2000) {
+            U16(m + 0x9E) -= 3;
+            if (S16(m + 0x9E) < 0x1F) U16(m + 0x9E) = 0x1F; else moved = 1;
+        }
+        if (U32(0x87DDFC) & 0x8000) {
+            U16(m + 0x9E) += 3;
+            if (S16(m + 0x9E) > 0x91) U16(m + 0x9E) = 0x91; else moved = 1;
+        }
+        if (moved) Se_Play(0, 0xC);
+        break; }
+    case 2:
+        U16(m + 0x92) -= 4;
+        if (S16(m + 0x92) <= 0) { U8(m + 2) = 1; U8(m + 3) = 0; U16(m + 0x92) = 0; }
+        break;
+    }
+}
+
+/* step 7: no map here: the screen torn by lines shifted at random, a band
+ * rolling down (M+0x7E), a notice; either button back */
+void DC2CALL Map_None(gptr m)                                       /* 0x49BF90 */
+{
+    for (u32 i = 0; i < 100; i++) {
+        s32 y = (s32)(Rand8() & 0xFF) % 0xEF;
+        s32 dx = (s32)(Rand8() & 0xFF) % 0xF;
+        Menu_ShiftLine((u32)(dx - 8), (u32)y, 1);
+    }
+    if (U8(G() + 4) & 1) U16(m + 0x7E) += 2;
+    s16 y = (s16)(S16(m + 0x7E) % 0xEF);
+    U16(m + 0x7E) = (u16)y;
+    gptr r = Tmp_Push(8);
+    U16(r) = 0; U16(r + 2) = (u16)y; U16(r + 4) = 0x140;
+    if (y > 0x8B) {
+        U16(r + 6) = (u16)(0xEF - y);
+        Menu_Tile(r, 0x101010, 1, 2);
+        U16(r + 2) = 0; U16(r + 6) = (u16)(U16(m + 0x7E) - 0x8B);
+        Menu_Tile(r, 0x101010, 1, 2);
+        Menu_ShiftLine(1, U16(m + 0x7E), (u32)(0xEF - U16(m + 0x7E)));
+        Menu_ShiftLine(1, 0, (u16)(U16(m + 0x7E) - 0x8B));
+    } else {
+        U16(r + 6) = 0x64;
+        Menu_Tile(r, 0x101010, 1, 1);
+        Menu_ShiftLine(1, U16(m + 0x7E), 0x64);
+    }
+    Tmp_Pop(8);
+    Text_Draw(0x7246CC, Text_Left(0x7246CC), 0x64, 0x64, 0x707070, 2, 0);
+    if (U8(0x87DC00) & 0x60) U8(m + 2) = 8;
+    Menu_Frame(m);
+}
+
+/* step 8: back (or out, when opened for the map) */
+void DC2CALL Map_Back(gptr m)                                       /* 0x49C110 */
+{
+    if (U8(m + 0x64) == 3) { U32(m) = 0x502; U8(m + 0x64) = 0; return; }
+    Se_Play(0, 0xD);
+    U8(m + 1) = 0; U8(m + 2) = 0; U8(m + 3) = 0;
+    U32(0x87DE00) = 0;
+}
+
+/* the player's arrow on the zoomed page: turned by his angle ry, at x, z
+ * scaled by size / scale round the page (M+0x9E, M+0xA0); out: 3 corners,
+ * +0xC/+0xE the centre (the room's own turn: 0x40A 0x800, 0x204 0xC18) */
+void DC2CALL Map_Locate(gptr m, u32 ry, u32 x, u32 z, u32 scale, u32 size, gptr out) /* 0x49CEB0 */
+{
+    static const s16 box[4][2] = {{0, 0x5DC}, {0x1F4, 0x64}, {-0x1F4, 0x64}, {0, 0}};
+    static const s16 arrow[4][2] = {{0, 0}, {0, -1000}, {300, -300}, {-300, -300}};
+    gptr f = Tmp_Push(0x40), r = f, sv = f + 8, mt = f + 0x28;
+    u16 room = U16(G() + 0x1090);
+    U16(r) = 0; U16(r + 2) = (u16)ry; U16(r + 4) = 0;
+    RotMatrix(r, mt);
+    for (u32 i = 0; i < 4; i++) {
+        gptr v = sv + 8 * i;
+        U16(v) = (u16)box[i][0]; U16(v + 2) = 0; U16(v + 4) = (u16)box[i][1];
+        ApplyMatrixSV(mt, v, v);
+    }
+    U16(r) = 0; U16(r + 4) = 0;
+    U16(r + 2) = room == 0x40A ? 0x800 : room == 0x204 ? 0xC18 : 0;
+    RotMatrix(r, mt);
+    for (u32 i = 0; i < 4; i++) {
+        gptr v = sv + 8 * i;
+        U16(v) += (u16)x; U16(v + 2) = 0; U16(v + 4) += (u16)z;
+        ApplyMatrixSV(mt, v, v);
+    }
+    gptr c = sv + 0x18;
+    U16(out + 0xC) = (u16)((s32)((u32)(S16(c) * (s32)size) * 68) / (s32)scale + U16(m + 0x9E));
+    U16(out + 0xE) = (u16)(U16(m + 0xA0) - (s32)((u32)(S16(c + 4) * (s32)size) * 68) / (s32)scale);
+    U16(r) = 0;
+    s16 a = (s16)-S16(U32(G() + 0x940) + 0x4A);
+    U16(r + 2) = (u16)(room == 0x40A ? a + 0xF800 : room == 0x204 ? a + 0xF3E8 : a);
+    RotMatrix(r, mt);
+    for (u32 i = 0; i < 4; i++) {
+        gptr v = sv + 8 * i;
+        U16(v) = (u16)arrow[i][0]; U16(v + 2) = 0; U16(v + 4) = (u16)arrow[i][1];
+        ApplyMatrixSV(mt, v, v);
+        U16(v) = (u16)(S16(v) / 100 + U16(out + 0xC));
+        U16(v + 2) = 0;
+        U16(v + 4) = (u16)(S16(v + 4) / 100 + U16(out + 0xE));
+    }
+    for (u32 i = 0; i < 3; i++) { U16(out + 4 * i) = U16(sv + 8 * (i + 1)); U16(out + 4 * i + 2) = U16(sv + 8 * (i + 1) + 4); }
+    Tmp_Pop(0x40);
+}
+
+/* the zoomed page's doors (0x73A3B0, 31 x {room, flag 8: open, flag 9 or
+ * G+0x108F: the key, x, y, w, h}): red open, blinking if the key is had, blue shut */
+void DC2CALL Map_Doors(gptr m)                                      /* 0x49CD20 */
+{
+    gptr r = Tmp_Push(8);
+    for (gptr d = 0x73A3B0; d < 0x73A3B0 + 0x1F * 0x10; d += 0x10) {
+        gptr g = G();
+        u16 room = U16(d);
+        if (U16(g + 0x1090) != room) continue;
+        s16 part = S16(U32(g + 0x940) + 0x5A);
+        if (room == 0x603 && part == 5) continue;
+        if (room == 0x705 && part == 0) continue;
+        if (room == 0x706 && part < 5) continue;
+        int st;
+        if (!U16(d + 2) || Flag_Check(8, U16(d + 2))) st = 1;
+        else if (U16(d + 6) == U8(G() + 0x108F) || Flag_Check(9, U16(d + 4))) st = 2;
+        else st = 0;
+        U16(r) = (u16)(U16(d + 8) + U16(m + 0x9E) - 0x80);
+        U16(r + 2) = (u16)(U16(d + 0xA) + U16(m + 0xA0) - 0x80);
+        U16(r + 4) = U16(d + 0xC); U16(r + 6) = U16(d + 0xE);
+        if (st == 0) Menu_Tile(r, 0x1010D0, 0, 0xC8);
+        else if (st == 1) Menu_Tile(r, 0xB03030, 0, 0xC8);
+        else if (U8(G() + 4) & 4) Menu_Tile(r, Color_Pulse(0x3030A0, 0x80830, 3), 0, 0xC8);
+    }
+    Tmp_Pop(8);
+}
+
+/* the room's page (0x7D00), part of it hidden in some rooms by the player's
+ * part of the room or a flag */
+static int zoom_page_hidden(u16 room)
+{
+    s16 part = S16(U32(G() + 0x940) + 0x5A);
+    switch (room) {
+    case 0x402: return part == 4;
+    case 0x603: return part == 1;
+    case 0x700: case 0x705: return part == 0;
+    case 0x703: return part <= 2;
+    case 0x704: return part < 3;
+    case 0x706: return part < 5;
+    default: return 1;
+    }
+}
+
+/* the zoomed page: room name, bands, grid, scroll arrows, the page with
+ * the doors and the player, all within a growing drawing area */
+void DC2CALL Map_ZoomDraw(gptr m)                                   /* 0x49C150 */
+{
+    gptr g = G(), pl = U32(g + 0x940), rec = map_room();
+    s32 z = S16(m + 0x92);
+    u32 c = (u32)(z << 9 | z << 17 | z * 2), c3 = (u32)(3 * z << 8 | 3 * z << 16 | 3 * z);
+    Text_Draw(Room_Name(U8(g + 0x1091), U8(g + 0x1090)), 0x12, 0x1C, 0x64, c, 0xC8, 0);
+    Menu_Line(0x10, 0x2C, 0x130, 0x2C, (u32)(z << 17), 0, 0xC8);
+    gptr r = Tmp_Push(0x18), out = r + 8;
+    U16(r) = 0; U16(r + 2) = 0; U16(r + 4) = 0x140; U16(r + 6) = 0x2F;
+    Menu_Tile(r, c3, 3, 0xC8);
+    U16(r + 2) = 0xD1; U16(r + 6) = 0x1F;
+    Menu_Tile(r, c3, 3, 0xC8);
+    Menu_DrawArea(0, 0, 0x140, 0xF0, 0xC8);
+    if (U16(m + 0x92) == 0x46) {
+        int drawn = 0;
+        if (S16(m + 0xA0) > 0x49) {
+            Menu_DrawFrames(0x685068, 0x50, 0xBD, 0xC, 0x7C8F, Color_Pulse(0x80C0, 0x4060, 3), 0xC8);
+            if (U32(0x87DDFC) & 0x4000) Menu_DrawFrames(0x685068, 0x50, 0xC1, 0xC, 0x7C8F, Color_Pulse(0xC0, 0x60, 3), 0xC8);
+        }
+        if (S16(m + 0xA0) < 0xBB) {
+            Menu_DrawFrames(0x685070, 0x50, 0x3F, 0xC, 0x7C8F, Color_Pulse(0x80C0, 0x4060, 3), 0xC8);
+            if (U32(0x87DDFC) & 0x1000) Menu_DrawFrames(0x685070, 0x50, 0x3B, 0xC, 0x7C8F, Color_Pulse(0xC0, 0x60, 3), 0xC8);
+        }
+        if (S16(m + 0x9E) > 0x1F) {
+            Menu_DrawFrames(0x6850C0, 0x92, 0x78, 0xC, 0x7C8F, Color_Pulse(0x80C0, 0x4060, 3), 0xC8);
+            if (U32(0x87DDFC) & 0x2000) Menu_DrawFrames(0x6850C0, 0x97, 0x78, 0xC, 0x7C8F, Color_Pulse(0xC0, 0x60, 3), 0xC8);
+        }
+        if (S16(m + 0x9E) < 0x91) {
+            Menu_DrawFrames(0x685CD8, 0x16, 0x78, 0xC, 0x7C8F, Color_Pulse(0x80C0, 0x4060, 3), 0xC8);
+            if (U32(0x87DDFC) & 0x8000) Menu_DrawFrames(0x685CD8, 0x11, 0x78, 0xC, 0x7C8F, Color_Pulse(0xC0, 0x60, 3), 0xC8);
+        }
+        for (u32 i = 1; i < 0x27; i++) Menu_Line(i * 8, 0, i * 8, 0xF0, 0x303030, 1, 0xC8);
+        for (u32 i = 1; i < 0x1D; i++) Menu_Line(0, i * 8, 0x140, i * 8, 0x303030, 1, 0xC8);
+        draw_mode(0xC, 0xC8);
+        u32 col = Color_Pulse(0xA0A0A0, 0x606060, 5);
+        Map_Locate(m, U16(pl + 0x4A), U16(pl + 0x40), U16(pl + 0x44), U32(rec), U16(rec + 4), out);
+        Menu_DrawFrames(0x65F570, (u32)(s32)S16(out + 0xC), (u32)(s32)S16(out + 0xE), 0x16, 0x7C02, col, 0xC8);
+        Menu_PolyF3(out, Color_Pulse(0x40C0C0, 0x208080, 4), 0xC8);
+        Map_Doors(m);
+        u16 room = U16(G() + 0x1090);
+        U16(r) = (u16)(U16(m + 0x9E) - 0x80); U16(r + 2) = (u16)(U16(m + 0xA0) - 0x80);
+        U16(r + 4) = 0xFF; U16(r + 6) = 0xFF;
+        if (room == 0x503) {
+            static const struct { u8 bit; s8 dy; u8 end; } st[9] = {
+                {0x18, -0x2E, 1}, {0x17, -0x24, 0}, {0x16, -0x1B, 0}, {0x15, -0x12, 0}, {0x14, -9, 0},
+                {0x13, 0, 0}, {0x12, 9, 0}, {0x11, 0x12, 0}, {0x10, 0x1B, 1}};
+            for (u32 i = 0; i < 9; i++)
+                if (!Flag_Check(7, st[i].bit))
+                    Menu_DrawFrames(st[i].end ? 0x65FC90 : 0x65FC98, (u32)(S16(m + 0x9E) - 6), (u32)(S16(m + 0xA0) + st[i].dy),
+                                    6, 0x7D00, 0x808080, 0xC8);
+        } else if (room == 0x808) {
+            if (Flag_Check(6, 0x19)) Menu_Sprite(r, 0, 0, 0x7D00, 0x808080, 0, 0xC8);
+        } else if (!zoom_page_hidden(room)) {
+            Menu_Sprite(r, 0, 0, 0x7D00, 0x808080, 0, 0xC8);
+            drawn = 1;
+        }
+        draw_mode(0x66, 0xC8);
+        U16(r) = (u16)(U16(m + 0x9E) - 0x80); U16(r + 2) = (u16)(U16(m + 0xA0) - 0x80);
+        U16(r + 4) = 0xFF; U16(r + 6) = 0xFF;
+        if (!drawn) Menu_Sprite(r, 0, 0, 0x7D00, 0x808080, 0, 0xC8);
+        draw_mode(7, 0xC8);
+    }
+    U16(r) = 0; U16(r + 2) = 0; U16(r + 4) = 0x140; U16(r + 6) = 0xF0;
+    Menu_Tile(r, 0, 0, 0xC8);
+    Tmp_Pop(0x18);
+    s16 k = S16(m + 0x92);
+    u32 x = 0x12, y = 0x3C;
+    if (k < 0x46) {
+        x = (u32)(U16(rec + 0xC) - ((s32)(U16(rec + 0xC) - 0x12) * k) / 0x46);
+        y = (u32)(U16(rec + 0xE) - ((s32)(U16(rec + 0xE) - 0x3C) * k) / 0x46);
+    }
+    Menu_DrawArea(x, y, (u32)(k * 2), (u32)(k * 2), 0xC8);
+}
+
+/* ---- the areas' map pages (0x73A360 by M+0x62) ---- */
+
+/* ASCII letters 8x8 in OT slot z (colors as given, semi-transparent), then
+ * their draw mode (tpage 0x28) */
+void DC2CALL Text_AsciiZ(gptr s, u32 x, u32 y, u32 color, u32 z)     /* 0x471C90 */
+{
+    float x0 = (float)(s32)x;
+    long double cx = (s32)x;
+    for (u8 c; (c = U8(s)) != 0; s++) {
+        if (c == '\n') { y += 8; cx = x0; continue; }
+        if (c == ' ') { cx += F32(0x703468); continue; }
+        s32 k = (s32)c - 0x21;
+        gptr p = U32(0x87DC98);
+        F32(p + 8) = (float)cx; F32(p + 0xC) = (float)(s32)y;
+        U32(p + 0x10) = 0x3C23D70A;
+        U16(p + 0x18) = 8; U16(p + 0x1A) = 8;
+        U8(p + 0x14) = (u8)(k << 4); U8(p + 0x15) = (u8)(k & 0xF0);
+        U16(p + 0x16) = 0x7DCE;
+        U32(p + 4) = color | 0x80000000;
+        gptr ot = 0x87BC00 + 4 * ((U32(0x87DE0C) << 10) + z);
+        U32(p) = U32(ot) | 0x04000000;
+        U32(ot) = p & 0xFFFFFF;
+        U32(0x87DC98) = p + 0x1C;
+        cx += (long double)F32(0x7373F4 + k * 4) - D64(0x703460);
+    }
+    Gpu_SetDrawMode(U32(0x87DC98), 1, 0, 0x28, 0);
+    Gpu_AddPrim(0x87BC00 + 4 * ((U32(0x87DE0C) << 10) + z), U32(0x87DC98));
+    U32(0x87DC98) += 0xC;
+}
+
+/* a door's mark: blue shut, red open (flag 8, or none), blinking when its
+ * key is had (G+0x108F or flag 9); rect r already set */
+static void door_mark(gptr d, gptr r, u32 z)
+{
+    int st;
+    if (!U16(d + 2) || Flag_Check(8, U16(d + 2))) st = 1;
+    else if (U16(d + 6) == U8(G() + 0x108F) || Flag_Check(9, U16(d + 4))) st = 2;
+    else st = 0;
+    if (st == 0) Menu_Tile(r, 0x1010D0, 0, z);
+    else if (st == 1) Menu_Tile(r, 0xB03030, 0, z);
+    else if (U8(G() + 4) & 4) Menu_Tile(r, Color_Pulse(0x3030A0, 0x80830, 3), 0, z);
+}
+
+/* an area's doors (n records of 16 bytes {room, -, flag 8, flag 9, key, x,
+ * y, w, h}) in the rooms seen (flags 11 by room) */
+void DC2CALL Map_AreaDoors(gptr d, u32 area, u32 n)                 /* 0x49DD50 */
+{
+    if (!(u16)n) return;
+    gptr r = Tmp_Push(8);
+    for (u32 k = (u16)n; k; k--, d += 0x10) {
+        if (!Flag_Check(0xB, (u8)Room_GlobalIndex(area, U8(d)))) continue;
+        U16(r) = U16(d + 8); U16(r + 2) = U16(d + 0xA); U16(r + 4) = U16(d + 0xC); U16(r + 6) = U16(d + 0xE);
+        door_mark(d, r, 0x190);
+    }
+    Tmp_Pop(8);
+}
+
+/* one room on an area page (its record at 0x739DE0 + idx*16): green where
+ * the player is, grey when seen; blinking red the room G+0x1220 (the
+ * monsters' room, while G+0x1222); its outline */
+static void room_mark(u32 idx, u32 k, u32 area, u32 cur, int outline)
+{
+    gptr rec = 0x739DE0 + ((idx & 0xFFFF) << 4), g = G();
+    gptr f = U32(rec + 8);
+    if (!f) return;
+    u32 x = U16(rec + 0xC), y = U16(rec + 0xE);
+    if (Flag_Check(0xB, idx & 0xFFFF)) {
+        if ((u8)cur == (u8)k && U8(G() + 0x1091) == (u8)area) Menu_DrawFrames(f, x, y, 0x16, 0x7C01, 0x73060, 0x1A9);
+        else Menu_DrawFrames(f, x, y, 0x16, 0x7C01, 0x8003103B, 0x1B3);
+    }
+    g = G();
+    if (U8(g + 0x1220) == (u8)k && U8(g + 0x1221) == (u8)area && U8(g + 0x1222) && (U8(g + 4) & 8))
+        Menu_DrawFrames(f, x, y, 0x16, 0x7C01, 0x80802020, 0x1A9);
+    if (outline) Menu_DrawFrames(f, x, y, 0x16, 0x7C01, 0x80000000, 0x1B8);
+}
+
+/* the rooms 0..n-1 of an area */
+void DC2CALL Map_Rooms(u32 area, u32 n)                             /* 0x49E210 */
+{
+    u16 idx = (u8)Room_GlobalIndex(area, 0);
+    for (u8 k = 0; (u16)k < (u16)n; k++, idx++) room_mark(idx, k, area, U8(G() + 0x1090), 1);
+}
+
+/* rooms first..end-1 of an area (inline in the pages) */
+static void rooms(u32 area, u32 first, u32 end)
+{
+    u16 idx = (u8)Room_GlobalIndex(area, first);
+    for (u32 k = first; k < end; k++, idx++) room_mark(idx, k, area, U8(G() + 0x1090), 1);
+}
+
+/* a save room's mark (when seen) */
+static void save_mark(u32 area, u32 room, u32 x, u32 y)
+{
+    if (Flag_Check(0xB, (u16)(u8)Room_GlobalIndex(area, room)))
+        Menu_DrawFrames(0x65F610, x, y, 0x16, 0x7C8F, Color_Pulse(0x707000, 0xC0C000, 4), 0x19A);
+}
+
+/* the page's title: the frame, the area's name (M+0x62), a line under it */
+void DC2CALL Map_Legend(gptr m, u32 x, u32 y)                       /* 0x49D360 */
+{
+    static const u32 names[11] = {0x7276CE, 0x72772C, 0x727A66, 0x727B7C, 0x727CB4, 0x727EDA,
+                                  0x727EDA, 0x727FEE, 0x728202, 0x7283CE, 0x72856E};
+    s32 sx = (s16)x, sy = (s16)y;
+    Menu_DrawFrames(0x65F508, (u32)(sx + 0xE), (u32)(sy + 1), 0x16, 0x7C01, 0x707070, 0x1F4);
+    Menu_DrawFrames(0x65F518, (u32)sx, (u32)(sy + 3), 0x16, 0x7C01, 0x80108030, 0x1F4);
+    Text_Draw(names[U8(m + 0x62)], x + 0x50, y, 0x64, 0x707070, 0x1F4, 0);
+    Menu_Line(x + 0x3C, y + 0xC, x + 0x40, y + 0x10, 0x30C060, 0, 0x1F4);
+    Menu_Line(x + 0x40, y + 0x10, x + 0x100, y + 0x10, 0x30C060, 0, 0x1F4);
+}
+
+/* the key: open door, shut door, save room */
+void DC2CALL Map_Key(gptr m, u32 x, u32 y)                          /* 0x49D480 */
+{
+    u32 xs = x & 0xFFFF, ys = y & 0xFFFF;
+    gptr r = Tmp_Push(8);
+    Text_AsciiZ(0x73AF28, xs + 0xA, ys - 1, 0x707070, 0x1B8);
+    U16(r) = (u16)x; U16(r + 2) = (u16)y; U16(r + 4) = 6; U16(r + 6) = 6;
+    Menu_Tile(r, 0xB03030, 0, 0x190);
+    Text_AsciiZ(0x73AF1C, xs + 0xA, ys + 7, 0x707070, 0x1B8);
+    U16(r) = (u16)x; U16(r + 2) = (u16)(y + 8);
+    Menu_Tile(r, 0x1010D0, 0, 0x1B8);
+    Text_AsciiZ(0x73AF10, xs + 0xA, ys + 0xF, 0x707070, 0x1B8);
+    Menu_DrawFrames(0x65F610, xs - 3, ys + 0xF, 0x16, 0x7C8F, Color_Pulse(0x707000, 0xC0C000, 4), 0x19A);
+    U16(r) = (u16)(x - 4); U16(r + 2) = (u16)(y - 2); U16(r + 4) = 0x60; U16(r + 6) = 0x1C;
+    Menu_Tile(r, 0, 1, 0x1B8);
+    Tmp_Pop(8);
+}
+
+/* the player's arrow on an area page (his area only) at x, y */
+void DC2CALL Map_Arrow(gptr m, u32 x, u32 y)                        /* 0x49DFB0 */
+{
+    static const s16 pts[4][2] = {{0, 0}, {0, -2000}, {500, 1000}, {-500, 1000}};
+    gptr g = G();
+    if ((u8)Area_SoundArea(U8(g + 0x1091), U8(g + 0x1090)) != U8(m + 0x62)) return;
+    gptr f = Tmp_Push(0x50), r = f, sv = f + 8, tri = f + 0x28, mt = f + 0x30;
+    u16 room = U16(g + 0x1090);
+    s16 a = (s16)-S16(U32(g + 0x940) + 0x4A);
+    U16(r) = 0; U16(r + 4) = 0;
+    U16(r + 2) = (u16)(room == 0x40A ? a + 0xF800 : room == 0x204 ? a + 0xF3E8 : a);
+    RotMatrix(r, mt);
+    for (u32 i = 0; i < 4; i++) {
+        gptr v = sv + 8 * i;
+        U16(v) = (u16)pts[i][0]; U16(v + 2) = 0; U16(v + 4) = (u16)pts[i][1];
+        ApplyMatrixSV(mt, v, v);
+        U16(v) = (u16)(S16(v) / 100 + x); U16(v + 2) = 0;
+        U16(v + 4) = (u16)(S16(v + 4) / 100 + y);
+    }
+    for (u32 i = 0; i < 3; i++) { U16(tri + 4 * i) = U16(sv + 8 * (i + 1)); U16(tri + 4 * i + 2) = U16(sv + 8 * (i + 1) + 4); }
+    Menu_PolyF3(tri, Color_Pulse(0x40C0C0, 0x208080, 4), 0x1AE);
+    Tmp_Pop(0x50);
+    draw_mode(0x15, 0x1AE);
+    Menu_DrawFrames(0x65F548, x & 0xFFFF, y & 0xFFFF, 0x16, 0x7C8F, 0x707070, 0x1B8);
+    Menu_DrawFrames(0x65F550, x & 0xFFFF, y & 0xFFFF, 0x16, 0x7C8F, 0x7080, 0x1B8);
+    Menu_DrawFrames(0x65F658, x & 0xFFFF, y & 0xFFFF, 0x16, 0x7C8F, 0x80000000, 0x1B8);
+}
+
+/* the page's frame: backdrop (M+0x92), play time and saves, the cursor
+ * gliding to the player's room (M+0x9A, M+0x9C over M+0x96 frames, in
+ * his area's page), borders, and the paper's texture (fading by M+0x94) */
+void DC2CALL Map_Frame(gptr m)                                      /* 0x49D5D0 */
+{
+    gptr r = Tmp_Push(8), g;
+    s32 z = S16(m + 0x92);
+    U16(r) = 0; U16(r + 2) = 0x30; U16(r + 4) = 0x140; U16(r + 6) = 0x9F;
+    Menu_Tile(r, (u32)(z << 8 | z), 3, 0xD2);
+    Menu_Number8(0x10, 0xD2, 6, 1, 0x80303030, U32(0x87DC04) % 999999, 0x1F4);
+    Menu_Number8(0x104, 0xD2, 6, 1, 0x80303030, U32(0x87DC9C) % 999999, 0x1F4);
+    g = G();
+    u8 area = (u8)Area_SoundArea(U8(g + 0x1091), U8(g + 0x1090));
+    u8 p = U8(m + 0x62), a = p > 4 ? (u8)(p - 1) : p;
+    if (area == p && U8(G() + 0x1090) == U8(m + 0x63)) {
+        gptr rec = 0x739DE0 + ((u8)Room_GlobalIndex(a, U8(m + 0x63)) << 4);
+        Menu_Number8(0xFA, 0x2A, 4, 1, 0x80707000, (u32)(s32)S16(m + 0x9A), 0x1F4);
+        Menu_Number8(0x118, 0x2A, 4, 1, 0x80007070, (u32)(s32)S16(m + 0x9C), 0x1F4);
+        U16(m + 0x96)--;
+        if (S16(m + 0x96) <= 0) {
+            U16(m + 0x96) = 0;
+            U16(m + 0x9A) = U16(rec + 0xC); U16(m + 0x9C) = U16(rec + 0xE);
+        } else {
+            s32 t = S16(m + 0x96);
+            s32 dy = ((s32)U16(rec + 0xE) - S16(m + 0x9C)) / t;
+            s32 dx = ((s32)U16(rec + 0xC) - S16(m + 0x9A)) / t;
+            U16(m + 0x9A) += (u16)dx; U16(m + 0x9C) += (u16)dy;
+            Se_Play(0, 0xC);
+        }
+        u16 cx = U16(m + 0x9A), cy = U16(m + 0x9C);
+        Menu_Line(0, cy, 0x140, cy, 0x707070, 1, 0x1AE);
+        Menu_Line(cx, 0x30, cx, 0xD0, 0x707070, 1, 0x1AE);
+        cx = U16(m + 0x9A); cy = U16(m + 0x9C);
+        Menu_Line((u16)(cx - 5), (u16)(cy - 5), (u16)(cx - 5), (u16)(cy + 5), Color_Pulse(0x8080, 0x6060, 4), 1, 0x1AE);
+        cx = U16(m + 0x9A); cy = U16(m + 0x9C);
+        Menu_Line((u16)(cx - 5), (u16)(cy - 5), (u16)(cx + 5), (u16)(cy - 5), Color_Pulse(0x8080, 0x6060, 4), 1, 0x1AE);
+        cx = U16(m + 0x9A); cy = U16(m + 0x9C);
+        Menu_Line((u16)(cx + 5), (u16)(cy + 5), (u16)(cx - 5), (u16)(cy + 5), Color_Pulse(0x8080, 0x6060, 4), 1, 0x1AE);
+        cx = U16(m + 0x9A); cy = U16(m + 0x9C);
+        Menu_Line((u16)(cx + 5), (u16)(cy + 5), (u16)(cx + 5), (u16)(cy - 5), Color_Pulse(0x8080, 0x6060, 4), 1, 0x1AE);
+        draw_mode(0xC, 0x1AE);
+    }
+    Menu_Line(0x10, 0x34, 0x130, 0x34, 0x808080, 1, 0x1C2);
+    Menu_Line(0x10, 0x35, 0x10, 0x38, 0x808080, 1, 0x1C2);
+    Menu_Line(0x130, 0x35, 0x130, 0x38, 0x808080, 1, 0x1C2);
+    Menu_Line(0x10, 0xCC, 0x130, 0xCC, 0x808080, 1, 0x1C2);
+    Menu_Line(0x10, 0xC8, 0x10, 0xCB, 0x808080, 1, 0x1C2);
+    Menu_Line(0x130, 0xC8, 0x130, 0xCB, 0x808080, 1, 0x1C2);
+    draw_mode(0xC, 0x1C2);
+    Menu_Line(0, 0x30, 0x140, 0x30, 0x808080, 0, 0x1C2);
+    Menu_Line(0, 0xD0, 0x140, 0xD0, 0x808080, 0, 0x1C2);
+    s32 f = 0x80 - S16(m + 0x94);
+    u32 e1 = (u32)((f << 7) / 128) & 0xFFFF, e2 = (u32)((f * 80) / 128) & 0xFFFF;
+    u32 c1 = ((e1 << 8 | e1) << 8) | e1, c2 = ((e2 << 8 | e2) << 8) | e2;
+    U16(r) = 0; U16(r + 2) = 0x30; U16(r + 4) = 0x100; U16(r + 6) = 0xA0;
+    Menu_Sprite(r, 0, 0x30, 0x7C00, c1, 0, 0x1C2);
+    draw_mode(0x15, 0x1C2);
+    U16(r) = 0; U16(r + 2) = 0; U16(r + 4) = 0x100; U16(r + 6) = 0x30;
+    Menu_Sprite(r, 0, 0, 0x7C00, c2, 0, 0x320);
+    U16(r + 2) = 0xD0; U16(r + 6) = 0x20;
+    Menu_Sprite(r, 0, 0xD0, 0x7C00, c2, 0, 0x320);
+    draw_mode(0x15, 0x320);
+    U16(r) = 0x100; U16(r + 2) = 0x30; U16(r + 4) = 0x40; U16(r + 6) = 0xA0;
+    Menu_Sprite(r, 0, 0x30, 0x7C00, c1, 0, 0x1C2);
+    draw_mode(0x16, 0x1C2);
+    U16(r) = 0x100; U16(r + 2) = 0; U16(r + 4) = 0x40; U16(r + 6) = 0x30;
+    Menu_Sprite(r, 0, 0, 0x7C00, c2, 0, 0x320);
+    U16(r + 2) = 0xD0; U16(r + 6) = 0x20;
+    Menu_Sprite(r, 0, 0xD0, 0x7C00, c2, 0, 0x320);
+    draw_mode(0x16, 0x320);
+    Tmp_Pop(8);
+}
+
+static void page_end(gptr m) { Map_Legend(m, 0x18, 0x16); Map_Frame(m); }
+
+void DC2CALL Map_Area0(gptr m)                                      /* 0x49D170 */
+{
+    Map_AreaDoors(0x73A5A0, 0, 7);
+    Map_Key(m, 0xD4, 0xAA);
+    save_mark(0, 3, 0x42, 0x97);
+    u16 here = U16(G() + 0x1090);
+    u8 cur = here == 4 || here == 5 ? 0 : U8(G() + 0x1090);   /* (rooms 4, 5 shown as room 0) */
+    u16 idx = (u8)Room_GlobalIndex(0, 0);
+    for (u32 k = 0; k < 6; k++, idx++) room_mark(idx, k, 0, cur, k != 4 && k != 5);
+    page_end(m);
+}
+
+void DC2CALL Map_Area1(gptr m)                                      /* 0x49DE90 */
+{
+    Map_AreaDoors(0x73A610, 1, 0x28);
+    Map_Arrow(m, 0x30, 0x98);
+    Map_Key(m, 0xD4, 0xB2);
+    Text_AsciiZ(0x73AF68, 0x34, 0xBC, 0x505050, 0x19A);
+    Text_AsciiZ(0x73AF54, 0x7E, 0xBC, 0x505050, 0x19A);
+    Text_AsciiZ(0x73AF44, 0x10F, 0xA0, 0x505050, 0x19A);
+    Text_AsciiZ(0x73AF30, 0x10, 0x52, 0x505050, 0x19A);
+    save_mark(1, 6, 0x87, 0x3D);
+    Map_Rooms(1, 0x11);
+    page_end(m);
+}
+
+void DC2CALL Map_Area2(gptr m)                                      /* 0x49E360 */
+{
+    Map_AreaDoors(0x73A890, 2, 0xC);
+    Map_Arrow(m, 0x38, 0x98);
+    Map_Key(m, 0xD4, 0xAA);
+    Text_AsciiZ(0x73AF78, 0xFE, 0x5D, 0x505050, 0x19A);
+    save_mark(2, 3, 0xA8, 0x96);
+    Map_Rooms(2, 6);
+    page_end(m);
+}
+
+void DC2CALL Map_Area3(gptr m)                                      /* 0x49E430 */
+{
+    Map_AreaDoors(0x73A950, 3, 0xF);
+    Map_Arrow(m, 0x38, 0x98);
+    Map_Key(m, 0xD4, 0x3A);
+    Text_AsciiZ(0x73AF78, 0x82, 0x3D, 0x505050, 0x19A);
+    save_mark(3, 1, 0x6A, 0x4A);
+    save_mark(3, 4, 0x92, 0x9F);
+    Map_Rooms(3, 7);
+    page_end(m);
+}
+
+/* area 4 above ground (its rooms 7..10 on the next page) */
+void DC2CALL Map_Area4(gptr m)                                      /* 0x49E550 */
+{
+    Map_AreaDoors(0x73AA40, 4, 0xB);
+    Map_Arrow(m, 0x30, 0xA0);
+    Map_Key(m, 0xD4, 0x3A);
+    Text_AsciiZ(0x73AF78, 0xA3, 0x36, 0x505050, 0x19A);
+    save_mark(4, 3, 0xCB, 0x7C);
+    save_mark(4, 0xB, 0x85, 0x3A);
+    u16 idx = (u8)Room_GlobalIndex(4, 0);
+    for (u32 k = 0; k < 0xC; k++, idx++)
+        if (k < 7 || k > 10) room_mark(idx, k, 4, U8(G() + 0x1090), 1);
+    page_end(m);
+}
+
+void DC2CALL Map_Area4b(gptr m)                                     /* 0x49E790 */
+{
+    Map_AreaDoors(0x73AAF0, 4, 5);
+    Map_Arrow(m, 0x30, 0xA0);
+    Map_Key(m, 0xD4, 0xAA);
+    rooms(4, 8, 0xB);
+    page_end(m);
+}
+
+void DC2CALL Map_Area5(gptr m)                                      /* 0x49E900 */
+{
+    Map_AreaDoors(0x73AB40, 5, 9);
+    Map_Arrow(m, 0x38, 0xA0);
+    Map_Key(m, 0xD4, 0xAA);
+    save_mark(5, 1, 0x7D, 0x5E);
+    Map_Rooms(5, 5);
+    page_end(m);
+}
+
+/* area 6: rooms 0..5, or 6, 7 (below) when the player is in 0x606/0x607 */
+void DC2CALL Map_Area6(gptr m)                                      /* 0x49E9B0 */
+{
+    u16 here = U16(G() + 0x1090);
+    int below = here == 0x606 || here == 0x607;
+    gptr r = Tmp_Push(8);
+    for (gptr d = 0x73ABD0; d < 0x73ABD0 + 0x11 * 0x10; d += 0x10) {
+        if ((U16(d) >= 6) != below) continue;
+        if (!Flag_Check(0xB, (u8)Room_GlobalIndex(6, U8(d)))) continue;
+        U16(r) = U16(d + 8); U16(r + 2) = U16(d + 0xA); U16(r + 4) = U16(d + 0xC); U16(r + 6) = U16(d + 0xE);
+        door_mark(d, r, 0x190);
+    }
+    Tmp_Pop(8);
+    Text_AsciiZ(0x73AF44, 0x10, 0x58, 0x505050, 0x19A);
+    Map_Arrow(m, 0x78, 0x54);
+    Map_Key(m, 0xD4, 0xAA);
+    here = U16(G() + 0x1090);
+    if (here != 0x606 && here != 0x607) save_mark(6, 5, 0xDA, 0x43);
+    here = U16(G() + 0x1090);
+    if (here != 0x606 && here != 0x607) rooms(6, 0, 6);
+    else rooms(6, 6, 8);
+    page_end(m);
+}
+
+void DC2CALL Map_Area7(gptr m)                                      /* 0x49EF50 */
+{
+    Map_AreaDoors(0x73ACE0, 7, 0x10);
+    Map_Arrow(m, 0x38, 0x58);
+    Map_Key(m, 0x78, 0x3A);
+    save_mark(7, 1, 0x4A, 0xA7);
+    save_mark(7, 5, 0xF2, 0x92);
+    Map_Rooms(7, 8);
+    page_end(m);
+}
+
+void DC2CALL Map_Area8(gptr m)                                      /* 0x49F050 */
+{
+    Map_AreaDoors(0x73ADE0, 8, 0xE);
+    Text_AsciiZ(0x73AF44, 0x10, 0xBD, 0x505050, 0x19A);
+    Map_Arrow(m, 0x38, 0x58);
+    Map_Key(m, 0xD4, 0xAA);
+    save_mark(8, 2, 0x20, 0x92);
+    save_mark(8, 8, 0x101, 0x6E);
+    save_mark(8, 9, 0x117, 0x7B);
+    Map_Rooms(8, 0xC);
+    page_end(m);
+}
+
+void DC2CALL Map_Area9(gptr m)                                      /* 0x49F1C0 */
+{
+    Map_AreaDoors(0x73AEC0, 9, 5);
+    Map_Arrow(m, 0x38, 0xA0);
+    Map_Key(m, 0x70, 0xAA);
+    save_mark(9, 1, 0xDB, 0x82);
+    Map_Rooms(9, 5);
+    page_end(m);
+}

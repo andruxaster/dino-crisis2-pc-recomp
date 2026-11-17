@@ -10501,7 +10501,7 @@ static void test_snd_slots(void)
 static const u32 g_menu_tab[] = {0x739C28};
 static const u8 g_menu_n[] = {12};
 /* the menu's own callees not rewritten yet, recorded only here */
-static const u32 g_menu_stubs[] = {0x403EE0, 0x404100};
+static const u32 g_menu_stubs[] = {0x403EE0, 0x404100, 0x403FD0};
 #define STUB_MENU 138
 static int g_task_n;                    /* frames a task under test runs */
 /* the menu's modes while the task runs: logged, then the mode and the wait
@@ -10660,14 +10660,67 @@ static gptr memos_state(void)
     for (u32 q = 0; q < 8; q++) U8(G() + 0x1204 + q) = (u8)(rnd() % 10);
     return m;
 }
-static u8 g_menu_frames[0x3000];
+/* screen 4's state: the room (its map record 0x739DE0), maps found
+   (flags 11:0x75..0x7F), the area shown, the zoom */
+static gptr map_state(void)
+{
+    gptr m = menu_state(), g = G();
+    U8(g + 0x1091) = (u8)(rnd() % 9); U8(g + 0x1090) = (u8)(rnd() % 8);
+    for (int t = 0; t < 50 && rnd() % 5 && !U32(0x739DE0 + ((u8)Room_GlobalIndex(U8(g + 0x1091), U8(g + 0x1090)) << 4)); t++) {
+        U8(g + 0x1091) = (u8)(rnd() % 9); U8(g + 0x1090) = (u8)(rnd() % 12);   /* (mostly a room with a map) */
+    }
+    if (rnd() % 2) {   /* the rooms with doors on their page or a page of their own */
+        static const u16 rooms[] = {0x100, 0x101, 0x102, 0x106, 0x109, 0x10D, 0x10E, 0x202, 0x205, 0x300, 0x302, 0x303, 0x304, 0x305,
+                                    0x401, 0x408, 0x409, 0x502, 0x603, 0x605, 0x705, 0x706, 0x800, 0x801, 0x402, 0x503, 0x700, 0x703,
+                                    0x704, 0x808, 0x40A, 0x204, 0x503, 0x603, 0x706};
+        U16(g + 0x1090) = rooms[rnd() % (sizeof rooms / sizeof rooms[0])];
+    }
+    S16(U32(g + 0x940) + 0x5A) = (s16)A2_PICK(0, 1, 2, 3, 4, 5, 6, (s32)rnd());
+    S16(U32(g + 0x940) + 0x4A) = (s16)rnd();
+    S16(U32(g + 0x940) + 0x40) = (s16)(rnd() % 2 ? rnd() % 0x4000 - 0x2000 : rnd());
+    S16(U32(g + 0x940) + 0x44) = (s16)(rnd() % 2 ? rnd() % 0x4000 - 0x2000 : rnd());
+    U8(g + 0x108F) = (u8)A2_PICK(0, 1, 0xFF, (s32)rnd());
+    for (u32 q = 0; q < 0x40; q++) { Flag_Set(8, q, rnd() % 2); Flag_Set(9, q, rnd() % 3 == 0); }
+    for (u32 q = 0x10; q < 0x19; q++) Flag_Set(7, q, rnd() % 2);
+    Flag_Set(6, 0x19, rnd() % 2);
+    for (u32 q = 0xB58; q < 0xB5D; q++) U8(g + q) = (u8)rnd();
+    u32 f = rnd() % 4;
+    for (u32 q = 0x74; q < 0x80; q++) Flag_Set(0xB, q, f == 0 ? 0 : f == 1 ? rnd() % 6 == 0 : rnd() % 2);
+    U8(m + 0x62) = (u8)A2_PICK(0, 10, (s32)(rnd() % 11), (s32)(rnd() % 11));
+    U8(m + 0x60) = (u8)(5 + rnd() % 11);
+    U8(m + 0x61) = (u8)A2_PICK(-1, (s32)(rnd() % 0x80), (s32)(u8)Room_GlobalIndex(U8(g + 0x1091), U8(g + 0x1090)));
+    U8(m + 0x64) = (u8)A2_PICK(0, 3, 1);
+    U8(m + 3) = (u8)A2_PICK(0, 1, 2, (s32)rnd());
+    U16(m + 0x92) = (u16)A2_PICK(0, 4, 0x42, 0x44, 0x46, (s32)(rnd() % 0x50));
+    U16(m + 0x9E) = (u16)A2_PICK(0x1F, 0x20, 0x22, 0x91, 0x90, 0x8E, (s32)(rnd() % 0xC0));
+    U16(m + 0xA0) = (u16)A2_PICK(0x49, 0x4A, 0x4C, 0xBB, 0xBA, 0xB8, (s32)(rnd() % 0x100));
+    U16(m + 0x7E) = (u16)A2_PICK(0, 0x8B, 0x8C, 0xEE, 0xED, (s32)rnd());
+    U8(m + 0x63) = (u8)A2_PICK((s32)U8(g + 0x1090), (s32)U8(g + 0x1090), (s32)(rnd() % 8));
+    for (u32 a = 0x65F000; a < 0x660000; a += 8) {       /* the map's frames of sprites (loaded with the map) */
+        U32(a) = rnd(); U32(a + 4) = rnd();
+        U8(a + 6) = (u8)(1 + rnd() % 2);
+    }
+    U16(m + 0x94) = (u16)A2_PICK(0, 0x80, 0x40, (s32)(rnd() % 0x100), (s32)rnd());
+    U16(m + 0x96) = (u16)A2_PICK(0, 1, 2, 0x1E, (s32)rnd());
+    U16(m + 0x9A) = (u16)(rnd() % 0x140); U16(m + 0x9C) = (u16)(rnd() % 0xF0);
+    U8(g + 0x1220) = (u8)A2_PICK((s32)U8(g + 0x1090), (s32)(rnd() % 12)); U8(g + 0x1221) = (u8)A2_PICK((s32)U8(g + 0x1091), (s32)(rnd() % 10));
+    U8(g + 0x1222) = (u8)A2_PICK(0, 1, (s32)rnd());
+    U8(g + 4) = (u8)rnd();
+    U32(0x87DC00) = (u32)A2_PICK(0, 0x20, 0x40, 0x2000, 0x8000, 0x60, 1, 0x4000, (s32)rnd());
+    U32(0x87DDFC) = (u32)A2_PICK(0, 0x1000, 0x2000, 0x4000, 0x8000, 0xF000, 1, (s32)(rnd() & 0xF0F1));
+    U8(0x87DDFC) |= U8(0x87DC00);
+    return m;
+}
+static u8 g_menu_frames[0x3000], g_map_frames[0x1000];
 static void test_menu(void)
 {
     memcpy(g_menu_frames, MEM(0x683000), sizeof g_menu_frames);
+    memcpy(g_map_frames, MEM(0x65F000), sizeof g_map_frames);
     for (unsigned k = 0; k < sizeof g_menu_stubs / sizeof g_menu_stubs[0]; k++) {
         g_stubs[STUB_MENU + k].addr = g_menu_stubs[k];
         g_stubs[STUB_MENU + k].spec = "d";
     }
+    g_stubs[STUB_MENU + 2].spec = "w";   /* (Map_LoadPage: 16 bits read) */
     g_stubs[STUB_MENU + 4].spec = "dd";
     stubs_install(1);
     ao_tables_stub(g_menu_tab, g_menu_n, 1, 1);
@@ -11141,6 +11194,133 @@ static void test_menu(void)
             sprintf(g_what, "x %X y %X page %X count %X z %X arrows %X blink %X", d[1], d[2], d[3], d[4], d[6], d[7], U8(G() + 4));
             check(0x49B270, Memo_Type, "Memo_Type", 8, d, 0xFFFFFFFF);
         }
+        /* screen 4: the map */
+        {
+            static const struct { u32 addr; void *fn; const char *name; } I[] = {
+                {0x49B880, Map_Init, "Map_Init"}, {0x49B940, Map_View, "Map_View"},
+                {0x49BB80, Map_Other, "Map_Other"}, {0x49BBB0, Map_Shown, "Map_Shown"},
+                {0x49BBC0, Map_ZoomLoad, "Map_ZoomLoad"}, {0x49BC20, Map_ZoomWait, "Map_ZoomWait"},
+                {0x49BC50, Map_Zoom, "Map_Zoom"}, {0x49BF90, Map_None, "Map_None"},
+                {0x49C110, Map_Back, "Map_Back"}, {0x49B620, Screen_Map, "Screen_Map"}, {0x49B620, Screen_Map, "Screen_Map"},
+                {0x49B940, Map_View, "Map_View"}, {0x49B940, Map_View, "Map_View"}, {0x49BC50, Map_Zoom, "Map_Zoom"},
+                {0x49BC50, Map_Zoom, "Map_Zoom"}, {0x49BC50, Map_Zoom, "Map_Zoom"}, {0x49BC50, Map_Zoom, "Map_Zoom"}};
+            for (unsigned k = 0; k < sizeof I / sizeof I[0]; k++) {
+                m = map_state();
+                if (I[k].addr == 0x49B620) U8(m + 2) = (u8)A2_PICK(1, 3, 6, 7, 8, (s32)(rnd() % 9));
+                if (k >= 11 && I[k].addr == 0x49B940 && rnd() % 2) {   /* (in its own area, other areas found) */
+                    U8(m + 0x62) = (u8)Area_SoundArea(U8(G() + 0x1091), U8(G() + 0x1090)); Flag_Set(0xB, 0x75 + rnd() % 11, 1); Flag_Set(0xB, 0x75 + rnd() % 11, 1);
+                }
+                if (k == 17) { U8(m + 3) = 0; U16(m + 0x92) = (u16)A2_PICK(0x42, 0x43, 0x41); }   /* (growing to its size) */
+                else if (k >= 13) {   /* zoomed, the pad held at the page's edges */
+                    U8(m + 3) = 1;
+                    U32(0x87DC00) = (u32)A2_PICK(0, 0x40, 0x40, 0x4000);
+                    if (rnd() % 2) U32(0x87DDFC) = (u32)A2_PICK(0x1000, 0x2000, 0x4000, 0x8000, 0x5000, 0xA000, 0xF000, 1, 0x40);
+                }
+                gptr rr = 0x739DE0 + ((u8)Room_GlobalIndex(U8(G() + 0x1091), U8(G() + 0x1090)) << 4);
+                if ((I[k].addr == 0x49BC50 || (I[k].addr == 0x49B620 && U8(m + 2) == 6)) && !U32(rr)) continue;   /* (zoomed only on a map) */
+                sprintf(g_what, "2 %X 3 %X 60 %X 61 %X 62 %X 64 %X 92 %X 9E %X A0 %X 7E %X room %X:%X pad %X held %X", U8(m + 2), U8(m + 3), U8(m + 0x60),
+                        U8(m + 0x61), U8(m + 0x62), U8(m + 0x64), U16(m + 0x92), U16(m + 0x9E), U16(m + 0xA0), U16(m + 0x7E), U8(G() + 0x1091), U8(G() + 0x1090),
+                        U32(0x87DC00), U32(0x87DDFC));
+                g_ign_objpads = 1;
+                check(I[k].addr, I[k].fn, I[k].name, 1, a, 0);
+                g_ign_objpads = 0;
+            }
+            for (int q = 0; q < 2; q++) {
+                m = map_state();
+                gptr rr = 0x739DE0 + ((u8)Room_GlobalIndex(U8(G() + 0x1091), U8(G() + 0x1090)) << 4);
+                if (rnd() % 2) {   /* the rooms whose page is partly hidden */
+                    static const u16 hr[] = {0x402, 0x503, 0x603, 0x700, 0x703, 0x704, 0x705, 0x706, 0x808};
+                    U16(G() + 0x1090) = hr[rnd() % 9];
+                    S16(U32(G() + 0x940) + 0x5A) = (s16)(rnd() % 7);
+                    rr = 0x739DE0 + ((u8)Room_GlobalIndex(U8(G() + 0x1091), U8(G() + 0x1090)) << 4);
+                }
+                if (!U32(rr)) continue;
+                if (rnd() % 3) U16(m + 0x92) = 0x46;
+                sprintf(g_what, "room %X 92 %X 9E %X A0 %X part %d held %X", U16(G() + 0x1090), U16(m + 0x92), U16(m + 0x9E), U16(m + 0xA0),
+                        S16(U32(G() + 0x940) + 0x5A), U32(0x87DDFC));
+                check(0x49C150, Map_ZoomDraw, "Map_ZoomDraw", 1, a, 0);
+                m = map_state();
+                sprintf(g_what, "room %X 108F %X part %d", U16(G() + 0x1090), U8(G() + 0x108F), S16(U32(G() + 0x940) + 0x5A));
+                check(0x49CD20, Map_Doors, "Map_Doors", 1, a, 0);
+            }
+            m = map_state();
+            {
+                gptr o = 0x6CF600;
+                for (u32 q = 0; q < 0x10; q += 4) U32(o + q) = rnd();
+                u32 c[7] = {m, (u32)A2_PICK(0, 0x400, 0x800, (s32)rnd()), rnd() % 2 ? rnd() % 0x4000 - 0x2000 : rnd(), rnd() % 2 ? rnd() % 0x4000 - 0x2000 : rnd(),
+                            (u32)A2_PICK(1000000, 0x55730, 1, 1000, (s32)(1 + rnd() % 0x200000)), (u32)A2_PICK(70, 30, 100, 0, (s32)(rnd() % 0x100)), o};
+                sprintf(g_what, "ry %X x %X z %X scale %X size %X room %X", c[1], c[2], c[3], c[4], c[5], U16(G() + 0x1090));
+                check(0x49CEB0, Map_Locate, "Map_Locate", 7, c, 0);
+            }
+            /* the areas' pages and their parts */
+            {
+                static const struct { u32 addr; void *fn; const char *name; } P[11] = {
+                    {0x49D170, Map_Area0, "Map_Area0"}, {0x49DE90, Map_Area1, "Map_Area1"}, {0x49E360, Map_Area2, "Map_Area2"},
+                    {0x49E430, Map_Area3, "Map_Area3"}, {0x49E550, Map_Area4, "Map_Area4"}, {0x49E790, Map_Area4b, "Map_Area4b"},
+                    {0x49E900, Map_Area5, "Map_Area5"}, {0x49E9B0, Map_Area6, "Map_Area6"}, {0x49EF50, Map_Area7, "Map_Area7"},
+                    {0x49F050, Map_Area8, "Map_Area8"}, {0x49F1C0, Map_Area9, "Map_Area9"}};
+              for (unsigned k = 0; k < 11; k++) {
+                m = map_state();
+                U8(m + 0x62) = (u8)k;
+                if (rnd() % 3 == 0) {   /* (the player in its area) */
+                    static const u8 pa[11] = {0, 1, 2, 3, 4, 4, 5, 6, 7, 8, 9};
+                    U8(G() + 0x1091) = pa[k]; U8(G() + 0x1090) = (u8)(k == 5 ? 8 + rnd() % 3 : rnd() % 12);
+                    U8(m + 0x63) = U8(G() + 0x1090); U8(G() + 0x1221) = pa[k];
+                }
+                if (rnd() % 3 == 0) U16(G() + 0x1090) = (u16)A2_PICK(0x606, 0x607, 4, 5, 0x40A, 0x204);
+                if (rnd() % 2) {   /* a room blinking */
+                    static const u8 pa2[11] = {0, 1, 2, 3, 4, 4, 5, 6, 7, 8, 9};
+                    U8(G() + 0x1221) = pa2[k]; U8(G() + 0x1220) = (u8)(rnd() % 12); U8(G() + 0x1222) = 1; U8(G() + 4) |= 8;
+                }
+                for (u32 q = 0; q < U32(A_FLAG_GROUPS + 11 * 8 + 4); q++) Flag_Set(0xB, q, rnd() % 3 != 0);
+                sprintf(g_what, "62 %X 63 %X room %X 1220 %X:%X:%X 94 %X 96 %X 9A %X 9C %X", U8(m + 0x62), U8(m + 0x63), U16(G() + 0x1090),
+                        U8(G() + 0x1221), U8(G() + 0x1220), U8(G() + 0x1222), U16(m + 0x94), U16(m + 0x96), U16(m + 0x9A), U16(m + 0x9C));
+                check(P[k].addr, P[k].fn, P[k].name, 1, a, 0);
+              }
+                m = map_state();
+                if (rnd() % 2) U8(m + 0x62) = (u8)Area_SoundArea(U8(G() + 0x1091), U8(G() + 0x1090));
+                sprintf(g_what, "62 %X 63 %X room %X 94 %X 96 %X 9A %X 9C %X", U8(m + 0x62), U8(m + 0x63), U16(G() + 0x1090),
+                        U16(m + 0x94), U16(m + 0x96), U16(m + 0x9A), U16(m + 0x9C));
+                check(0x49D5D0, Map_Frame, "Map_Frame", 1, a, 0);
+                m = map_state();
+                u32 c[3] = {m, (u32)A2_PICK(0x30, 0x78, (s32)(rnd() % 0x140)), (u32)A2_PICK(0x98, 0x54, (s32)(rnd() % 0xF0))};
+                if (rnd() % 2) U8(m + 0x62) = (u8)Area_SoundArea(U8(G() + 0x1091), U8(G() + 0x1090));
+                check(0x49DFB0, Map_Arrow, "Map_Arrow", 3, c, 0);
+                m = map_state();
+                check(0x49D480, Map_Key, "Map_Key", 3, c, 0);
+                m = map_state();
+                U8(m + 0x62) = (u8)(rnd() % 11);
+                check(0x49D360, Map_Legend, "Map_Legend", 3, c, 0);
+                m = map_state();
+                for (u32 q = 0; q < U32(A_FLAG_GROUPS + 11 * 8 + 4); q++) Flag_Set(0xB, q, rnd() % 3 != 0);
+                u32 d[2] = {rnd() % 10, (u32)A2_PICK(0, 1, 6, 0x11, (s32)(rnd() % 0x14), (s32)((rnd() << 16) | (rnd() % 8)))};
+                if (rnd() % 2) d[0] = U8(G() + 0x1091), U8(G() + 0x1221) = (u8)d[0];
+                sprintf(g_what, "area %X n %X", d[0], d[1]);
+                check(0x49E210, Map_Rooms, "Map_Rooms", 2, d, 0);
+                m = map_state();
+                for (u32 q = 0; q < U32(A_FLAG_GROUPS + 11 * 8 + 4); q++) Flag_Set(0xB, q, rnd() % 3 != 0);
+                static const u32 tabs[10][2] = {{0x73A5A0, 7}, {0x73A610, 0x28}, {0x73A890, 0xC}, {0x73A950, 0xF}, {0x73AA40, 0xB},
+                                                {0x73AAF0, 5}, {0x73AB40, 9}, {0x73ACE0, 0x10}, {0x73ADE0, 0xE}, {0x73AEC0, 5}};
+                u32 t = rnd() % 10;
+                static const u8 ar[10] = {0, 1, 2, 3, 4, 4, 5, 7, 8, 9};
+                u32 e[3] = {tabs[t][0], ar[t], (u32)A2_PICK((s32)tabs[t][1], (s32)tabs[t][1], 0, 1, (s32)(0x10000 | tabs[t][1]))};
+                check(0x49DD50, Map_AreaDoors, "Map_AreaDoors", 3, e, 0);
+                m = map_state();
+                gptr tx = 0x6CF600;
+                for (u32 q = 0; q < 0x20; q++) U8(tx + q) = (u8)A2_PICK('A', 'z', '0', '/', ' ', '\n', (s32)(0x21 + rnd() % 0x5E));
+                U8(tx + rnd() % 0x20) = 0; U8(tx + 0x1F) = 0;
+                u32 f[5] = {tx, rnd() % 0x140, rnd() % 0xF0, rnd(), 1 + rnd() % 0x3FE};
+                check(0x471C90, Text_AsciiZ, "Text_AsciiZ", 5, f, 0);
+            }
+            m = map_state();
+            check(0x49B770, Map_CountAreas, "Map_CountAreas", 0, a, 0xFFFF);
+            for (int q = 0; q < 3; q++) {
+                m = map_state();
+                if (q) for (u32 b = 0x74; b < 0x80; b++) Flag_Set(0xB, b, rnd() % 5 == 0);   /* (one or two found) */
+                check(0x49B7A0, Map_NextArea, "Map_NextArea", 1, a, 0xFFFF);
+                check(0x49B810, Map_PrevArea, "Map_PrevArea", 1, a, 0xFFFF);
+            }
+        }
         /* flags 9 and items */
         m = menu_state();
         for (u32 q = 0; q < 0x100; q++) Flag_Set(9, q, rnd() % 3 == 0);
@@ -11190,6 +11370,7 @@ static void test_menu(void)
     stubs_install(0);
     for (unsigned k = 0; k < sizeof g_menu_stubs / sizeof g_menu_stubs[0]; k++) g_stubs[STUB_MENU + k].addr = 0;
     memcpy(MEM(0x683000), g_menu_frames, sizeof g_menu_frames);
+    memcpy(MEM(0x65F000), g_map_frames, sizeof g_map_frames);
 }
 
 

@@ -973,6 +973,40 @@ void DC2CALL Memos_Back(gptr m);    /* 0x49A9A0 */
 void DC2CALL Memos_Draw(gptr m);    /* 0x49A9F0 */
 void DC2CALL Memos_Frame(gptr m);   /* 0x49AFA0 */
 u32  DC2CALL Memo_Type(gptr t, u32 x, u32 y, u32 page, u32 count, u32 color, u32 z, u32 arrows); /* 0x49B270 */
+void DC2CALL Screen_Map(gptr m);    /* 0x49B620 */
+u32  DC2CALL Map_CountAreas(void);  /* 0x49B770 */
+u32  DC2CALL Map_NextArea(gptr m);  /* 0x49B7A0 */
+u32  DC2CALL Map_PrevArea(gptr m);  /* 0x49B810 */
+void DC2CALL Map_Init(gptr m);      /* 0x49B880 */
+void DC2CALL Map_View(gptr m);      /* 0x49B940 */
+void DC2CALL Map_Other(gptr m);     /* 0x49BB80 */
+void DC2CALL Map_Shown(gptr m);     /* 0x49BBB0 */
+void DC2CALL Map_ZoomLoad(gptr m);  /* 0x49BBC0 */
+void DC2CALL Map_ZoomWait(gptr m);  /* 0x49BC20 */
+void DC2CALL Map_Zoom(gptr m);      /* 0x49BC50 */
+void DC2CALL Map_None(gptr m);      /* 0x49BF90 */
+void DC2CALL Map_Back(gptr m);      /* 0x49C110 */
+void DC2CALL Map_Locate(gptr m, u32 ry, u32 x, u32 z, u32 scale, u32 size, gptr out); /* 0x49CEB0 */
+void DC2CALL Map_Doors(gptr m);     /* 0x49CD20 */
+void DC2CALL Map_ZoomDraw(gptr m);  /* 0x49C150 */
+void DC2CALL Text_AsciiZ(gptr s, u32 x, u32 y, u32 color, u32 z); /* 0x471C90 */
+void DC2CALL Map_AreaDoors(gptr d, u32 area, u32 n); /* 0x49DD50 */
+void DC2CALL Map_Rooms(u32 area, u32 n); /* 0x49E210 */
+void DC2CALL Map_Legend(gptr m, u32 x, u32 y); /* 0x49D360 */
+void DC2CALL Map_Key(gptr m, u32 x, u32 y); /* 0x49D480 */
+void DC2CALL Map_Arrow(gptr m, u32 x, u32 y); /* 0x49DFB0 */
+void DC2CALL Map_Frame(gptr m);     /* 0x49D5D0 */
+void DC2CALL Map_Area0(gptr m);     /* 0x49D170 */
+void DC2CALL Map_Area1(gptr m);     /* 0x49DE90 */
+void DC2CALL Map_Area2(gptr m);     /* 0x49E360 */
+void DC2CALL Map_Area3(gptr m);     /* 0x49E430 */
+void DC2CALL Map_Area4(gptr m);     /* 0x49E550 */
+void DC2CALL Map_Area4b(gptr m);    /* 0x49E790 */
+void DC2CALL Map_Area5(gptr m);     /* 0x49E900 */
+void DC2CALL Map_Area6(gptr m);     /* 0x49E9B0 */
+void DC2CALL Map_Area7(gptr m);     /* 0x49EF50 */
+void DC2CALL Map_Area8(gptr m);     /* 0x49F050 */
+void DC2CALL Map_Area9(gptr m);     /* 0x49F1C0 */
 void DC2CALL Game_ModeStock(void);                                      /* 0x452450 */
 
 u32  DC2CALL Angle_DiffTo(gptr a, gptr b, u32 ang);                  /* 0x48F3E0 */
