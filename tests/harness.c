@@ -10542,6 +10542,98 @@ static gptr menu_state(void)
     return m;
 }
 
+
+/* screen 1's state: the items carried, the lists of weapons and sub-weapons */
+static gptr equip_state(void)
+{
+    gptr m = menu_state(), g = G(), pl = O_OBJ;
+    U32(g + 0x940) = pl; S16(pl + 0x10A) = (s16)(1 + rnd() % 1000);
+    U8(g + 0x108F) = (u8)(rnd() % 8); U8(g + 0x1094) = (u8)rnd();
+    for (u32 q = 0; q < 21; q++) {
+        gptr it = g + 0x10BC + 12 * q;
+        U8(it) = (u8)(rnd() % 4 ? 1 + rnd() % 255 : 0); U8(it + 1) = (u8)(rnd() % 0x1A);
+        U16(it + 8) = (u16)A2_PICK(0, 1, 99, 1000, (s32)rnd()); U16(it + 0xA) = (u16)A2_PICK(0, 5, 999, (s32)rnd());
+    }
+    U16(g + 0x10B4) = (u16)(rnd() % 16 | (rnd() % 10) << 8);
+    if (rnd() % 4 == 0) U8(g + 0x10B4) = 0;
+    U8(m + 0x5B) = (u8)A2_PICK(1, 2, 2, (s32)(1 + rnd() % 6)); U8(m + 0x5C) = (u8)A2_PICK(1, 2, 2, (s32)(1 + rnd() % 6));
+    for (u32 q = 0; q < 8; q++) { U8(m + 0x18 + q) = (u8)(rnd() % 20); U8(m + 0x20 + q) = (u8)(rnd() % 20); }
+    U8(m + 0x4C) = (u8)(rnd() % 6); U8(m + 0x4E) = (u8)(rnd() % 3 ? rnd() % 2 : rnd());
+    U16(m + 0x48) = (u16)A2_PICK(0, 0x800, (s32)(rnd() & 0xFFF), (s32)rnd());
+    U8(m + 3) = (u8)A2_PICK(0, 0, 0, 1, 2, 0x10, (s32)rnd());
+    U16(m + 0x92) = (u16)A2_PICK(0, 0x62, 0x63, 0x64, 0x100, (s32)(rnd() % 0x80), (s32)rnd());
+    U16(m + 0x94) = (u16)A2_PICK(0, 0x63, 0x64, 0xFF, (s32)(rnd() % 0x80), (s32)rnd());
+    U16(m + 0x88) = (u16)A2_PICK(0, 0x43, 0x44, 0x4D, 0x4E, 0x6B, 0x6C, 0xFF, (s32)(rnd() % 0x80), (s32)rnd());
+    U16(m + 0x44) = (u16)A2_PICK(0, 0, 0x1000, 0x2000, 0x4000, 0x8000, 0xA000, (s32)rnd());
+    U32(0x87DC00) = (u32)A2_PICK(0, 0, 0x20, 0x40, 0x60, 1, (s32)rnd());
+    U32(0x87DDFC) = (u32)A2_PICK(0, 0x8000, (s32)rnd());
+    U16(0x87FFEA) = (u16)(rnd() % 2);
+    U8(m + 0x5F) = (u8)(rnd() % 9);
+    SetGeomScreen(0x100 + rnd() % 0x100); SetGeomOffset(160, 120);
+    for (u32 q = 0; q < 0x40; q++) Flag_Set(9, q, rnd() % 2);
+    U32(LOG_BASE) = 0;
+    return m;
+}
+
+/* the weapons Equip_Choose lists (it divides by their count) */
+static u32 equip_count(gptr m, u32 flag)
+{
+    u8 st = U8(G() + 0x108F), mask = st == 0 ? 1 : st == 1 || st == 5 || st == 6 ? 2 : st == 2 ? 4 : 0;
+    u32 n = 0;
+    (void)m;
+    for (u32 q = 0; q < 20; q++) {
+        gptr it = G() + 0x10BC + 12 * q;
+        if (!U8(it)) continue;
+        u16 fl = U16(0x70426A + U8(it + 1) * 12);
+        if (!(fl & mask)) continue;
+        if (flag == 8 ? (fl & 8) != 0 : !(fl & 8) && (fl & 0x10)) n++;
+    }
+    return n;
+}
+
+/* screen 2's state: items held, files found, zones of kind 9 */
+static gptr items_state(void)
+{
+    gptr m = equip_state(), g = G(), pl = U32(g + 0x940);
+    for (u32 q = 0; q < 6; q++) {
+        gptr it = g + 0x11AC + 12 * q;
+        U8(it) = (u8)A2_PICK(0, 1, 1, 1, 0x81, (s32)rnd()); U8(it + 1) = (u8)A2_PICK(0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x1F, 0x19, (s32)(rnd() % 0x30));
+        S16(it + 8) = (s16)A2_PICK(0, 1, 2, 5, 99, -1); S16(it + 0xA) = (s16)A2_PICK(1, 5, 99);
+    }
+    if (rnd() % 5 == 0) for (u32 q = 0; q < 6; q++) U8(g + 0x11AC + 12 * q) = 0;
+    U8(m + 0x5D) = (u8)Item_CountUsed(g + 0x11AC, 6);
+    if (!U8(m + 0x5D) && rnd() % 2) U8(m + 0x5D) = (u8)(1 + rnd() % 6);
+    for (u32 q = 0x20; q < 0x80; q++) Flag_Set(9, q, rnd() % 3 == 0);
+    for (u32 q = 0; q < 0x60; q++) Flag_Set(0xA, q, rnd() % 2);
+    U8(m + 0x50) = (u8)A2_PICK(0, 1, 5, 6, 7, 12, (s32)Flag_CountRange(0x20, 0x50));
+    for (u32 q = 0; q < 8; q++) U8(m + 0x28 + q) = (u8)(0x20 + rnd() % 0x30);   /* (the list as the menu keeps it: file ids) */
+    U8(m + 0x51) = (u8)A2_PICK(0, 1, 5, 6, (s32)(rnd() % 6));
+    U8(m + 0x52) = (u8)A2_PICK(0, 1, 2, (s32)(rnd() % 8));
+    U8(m + 0x53) = (u8)A2_PICK(0x2D, 0x33, 0x34, 0x37, 0x38, (s32)(0x20 + rnd() % 0x30));
+    U8(m + 0x5A) = (u8)A2_PICK(0, 1, (s32)rnd());
+    U8(m + 0x4F) = (u8)(rnd() % 6);
+    U8(m + 0x64) = (u8)A2_PICK(0, 0, 5, 1);
+    U16(m + 0x96) = (u16)A2_PICK(0, 1, 2, 3, 4, 5, 0x100, (s32)rnd());
+    U16(m + 0x70) = (u16)rnd(); U16(m + 0x72) = (u16)rnd();
+    U8(m + 3) = (u8)A2_PICK(0, 1, 2, 3, 4, 5, 6, (s32)rnd());
+    S16(pl + 0x108) = (s16)A2_PICK(0, 1, S16(pl + 0x10A), (s32)(rnd() % 1000));
+    U16(m + 0x4A) = (u16)A2_PICK(S16(pl + 0x108), (s32)rnd());
+    U16(pl + 0x5A) = (u16)(rnd() % 4 ? rnd() % 8 : rnd());
+    S16(pl + 0x17E) = (s16)(rnd() % 2 ? 0 : rnd());
+    U8(g + 0x1091) = (u8)A2_PICK(7, 1, 3);
+    for (u32 a = 0; a < 0x500; a += 4) U32(O_ZONE + a) = rnd();
+    U32(g + 0xA5C) = O_ZONE;
+    for (u32 z = O_ZONE; z < O_ZONE + 0x500; z += 0x28) {
+        U8(z) = (u8)(rnd() % 4); U8(z + 1) = (u8)A2_PICK(9, 9, 1, (s32)rnd()); U8(z + 2) = (u8)(rnd() % 2 ? U16(pl + 0x5A) : rnd() % 8);
+        U8(z + 0x19) = (u8)A2_PICK((s32)U8(m + 0x53), (s32)(0x20 + rnd() % 0x30));
+        s16 cx = S16(pl + 0x40), cz = S16(pl + 0x44), w = (s16)(rnd() % 2 ? 2000 : 50);
+        S16(z + 4) = (s16)(cx - w); S16(z + 6) = (s16)(cz - w); S16(z + 8) = (s16)(cx - w); S16(z + 0xA) = (s16)(cz + w);
+        S16(z + 0xC) = (s16)(cx + w); S16(z + 0xE) = (s16)(cz + w); S16(z + 0x10) = (s16)(cx + w); S16(z + 0x12) = (s16)(cz - w);
+    }
+    U8(pl + 0x55) = (u8)A2_PICK(0xA, 0, (s32)rnd());
+    U32(LOG_BASE) = 0;
+    return m;
+}
 static u8 g_menu_frames[0x3000];
 static void test_menu(void)
 {
@@ -10831,7 +10923,7 @@ static void test_menu(void)
                 U16(g2 + 0x10B4) = (u16)(rnd() % 6 | (rnd() % 4) << 8);
                 U16(m + 0x46) = (u16)~U16(g2 + 0x10B4);
             } else U16(m + 0x46) = U16(g2 + 0x10B4);
-            U8(g2 + 0xB48) = (u8)A2_PICK(0, 3, 5); U16(g2 + 0x1090) = (u16)A2_PICK(0x905, 0x101, 0x700 | (s32)(rnd() % 0x10), (s32)((rnd() % 10) << 8 | rnd() % 0x10));
+            U8(g2 + 0xB48) = (u8)A2_PICK(0, 3, 5); U16(g2 + 0x1090) = (u16)A2_PICK(0x905, 0x101, 0x700 | (s32)(rnd() % 0x10), (s32)((rnd() % 9) << 8 | rnd() % 0x10));
             U8(g2 + 0xB4A) = (u8)A2_PICK(0xFF, 0, 3); U8(m + 0x64) = (u8)A2_PICK(0, 4, 1); U8(m + 0x53) = (u8)(rnd() % 0x80);
             U8(g2 + 0x14F0) = (u8)A2_PICK(0, 1, (s32)rnd());
             U16(0x87DC08) = (u16)rnd(); U16(0x87DC94) = (u16)rnd(); U16(0x87DDFC) = (u16)rnd(); U16(0x87DC0A) = (u16)rnd();
@@ -10843,6 +10935,123 @@ static void test_menu(void)
             g_ign_weppads = 1;                                  /* (the frame drawn: MulMatrix0's stack bytes) */
             check(0x492330, MenuMode_Leave, "MenuMode_Leave", 1, a, 0);
             g_ign_objpads = 0; g_ign_campad = 0; g_ign_weppads = 0;
+        }
+        /* screen 1: weapon choice */
+        {
+            static const struct { u32 addr; void *fn; const char *name; } E[] = {
+                {0x496970, Equip_Init, "Equip_Init"}, {0x496A30, Equip_Choose, "Equip_Choose"},
+                {0x4985C0, Equip_Options, "Equip_Options"},
+                {0x496D90, Equip_WeaponRing, "Equip_WeaponRing"}, {0x497210, Equip_SubRing, "Equip_SubRing"},
+                {0x496EB0, Equip_WeaponSel, "Equip_WeaponSel"}, {0x497310, Equip_SubSel, "Equip_SubSel"},
+                {0x497120, Equip_WeaponView, "Equip_WeaponView"}, {0x497480, Equip_SubView, "Equip_SubView"},
+                {0x497570, Equip_Back, "Equip_Back"}, {0x497620, Equip_NoWeapon, "Equip_NoWeapon"},
+                {0x496930, Screen_Equip, "Screen_Equip"}};
+            for (unsigned k = 0; k < sizeof E / sizeof E[0]; k++) {
+                m = equip_state();
+                if (E[k].addr == 0x496A30 && (!equip_count(m, 8) || !equip_count(m, 0x10))) U32(0x87DC00) &= ~0x20u;
+                if (E[k].addr == 0x496930) U8(m + 2) = (u8)(rnd() % 10);
+                if (E[k].addr == 0x496930 && U8(m + 2) == 1 && (!equip_count(m, 8) || !equip_count(m, 0x10))) U32(0x87DC00) &= ~0x20u;
+                sprintf(g_what, "2 %X 3 %X 4C %X 4E %X 5B %X 5C %X keys %X pad %X weapon %X stage %X", U8(m + 2), U8(m + 3), U8(m + 0x4C), U8(m + 0x4E),
+                        U8(m + 0x5B), U8(m + 0x5C), U16(m + 0x44), U32(0x87DC00), U16(G() + 0x10B4), U8(G() + 0x108F));
+                check(E[k].addr, E[k].fn, E[k].name, 1, a, 0);
+            }
+            {   /* the choices made: select or turn, the weapons' flags changed */
+                static const struct { u32 addr; void *fn; const char *name; } F[] = {
+                    {0x496A30, Equip_Choose, "Equip_Choose"}, {0x496D90, Equip_WeaponRing, "Equip_WeaponRing"},
+                    {0x497210, Equip_SubRing, "Equip_SubRing"}, {0x496EB0, Equip_WeaponSel, "Equip_WeaponSel"},
+                    {0x497310, Equip_SubSel, "Equip_SubSel"}};
+                static u8 keep[0x1A * 12];
+                memcpy(keep, MEM(0x704268), sizeof keep);
+                for (unsigned k = 0; k < sizeof F / sizeof F[0]; k++) {
+                    m = equip_state();
+                    for (u32 q = 0; q < 0x1A; q++) if (rnd() % 2) { U8(0x704268 + 12 * q + 2) = (u8)rnd(); U8(0x704268 + 12 * q + 3) = (u8)rnd(); }
+                    U16(m + 0x44) = (u16)A2_PICK(0, 0, 0, 0x8000, 0x2000, 1, 0x1000, 0x4000);
+                    U32(0x87DC00) = (u32)A2_PICK(0x20, 0x20, 0x40, 0);
+                    U8(m + 3) = 0; U8(m + 0x4E) = (u8)A2_PICK(0, 0, 1);
+                    if (F[k].addr == 0x496A30 && (!equip_count(m, 8) || !equip_count(m, 0x10))) U32(0x87DC00) &= ~0x20u;
+                    sprintf(g_what, "keys %X pad %X 4E %X 4C %X weapon %X stage %X", U16(m + 0x44), U32(0x87DC00), U8(m + 0x4E), U8(m + 0x4C), U16(G() + 0x10B4), U8(G() + 0x108F));
+                    check(F[k].addr, F[k].fn, F[k].name, 1, a, 0);
+                }
+                memcpy(MEM(0x704268), keep, sizeof keep);
+            }
+            m = equip_state();
+            {
+                u32 c[2] = {m, (u32)A2_PICK(0, 1, 1, 2)};
+                sprintf(g_what, "main %u 48 %X 4C %X n %X/%X", c[1], U16(m + 0x48), U8(m + 0x4C), U8(m + 0x5B), U8(m + 0x5C));
+                check(0x497AE0, Equip_Ring, "Equip_Ring", 2, c, 0);
+                m = equip_state();
+                c[1] = (u32)A2_PICK(0, 1, 1, 2);
+                check(0x4976C0, Equip_Stats, "Equip_Stats", 2, c, 0);
+            }
+            m = equip_state();
+            {
+                u32 c[7] = {m, rnd() % 0x140, rnd() % 0xF0, (u32)A2_PICK(0, 1, 0x10000, (s32)rnd()), (u32)(rnd() % 20 | (rnd() % 2 ? rnd() << 16 : 0)), rnd(), (1 + rnd() % 0x3FE) | (rnd() % 2 ? rnd() << 16 : 0)};   /* (z - 1 in the OT too) */
+                if (rnd() % 4 == 0) U8(G() + 0x10BC + 12 * (c[4] & 0xFFFF) + 1) = 0x19;
+                sprintf(g_what, "sel %X idx %X id %X", c[3], c[4], U8(G() + 0x10BC + 12 * (c[4] & 0xFFFF) + 1));
+                check(0x498030, Equip_RingItem, "Equip_RingItem", 7, c, 0);
+                u32 d[2] = {rnd() % 2 ? rnd() % 0x140 : rnd(), rnd() % 2 ? rnd() % 0xF0 : rnd()};
+                m = equip_state();
+                check(0x497ED0, Equip_ArrowsR, "Equip_ArrowsR", 2, d, 0);
+                m = equip_state();
+                check(0x497F80, Equip_ArrowsL, "Equip_ArrowsL", 2, d, 0);
+            }
+        }
+        /* screen 2: items and files */
+        {
+            static const struct { u32 addr; void *fn; const char *name; } I[] = {
+                {0x498750, Items_Init, "Items_Init"}, {0x498840, Items_Choose, "Items_Choose"},
+                {0x498B40, Items_List, "Items_List"}, {0x498C80, Items_Use, "Items_Use"},
+                {0x498E10, Items_Sort, "Items_Sort"}, {0x499040, Items_None, "Items_None"},
+                {0x499100, Files_List, "Files_List"}, {0x499260, Files_Sel, "Files_Sel"},
+                {0x499430, Files_View, "Files_View"}, {0x499520, Files_None, "Files_None"},
+                {0x4995C0, Files_Cant, "Files_Cant"}, {0x4996C0, Items_Back, "Items_Back"},
+                {0x499770, Items_Draw, "Items_Draw"}, {0x499D00, Items_Panel, "Items_Panel"},
+                {0x499D60, Files_Frame, "Files_Frame"}, {0x499F80, Files_Draw, "Files_Draw"},
+                {0x498710, Screen_Items, "Screen_Items"}};
+            for (unsigned k = 0; k < sizeof I / sizeof I[0]; k++) {
+                m = items_state();
+                if (I[k].addr == 0x498710) U8(m + 2) = (u8)(rnd() % 12);
+                if (I[k].addr == 0x499F80) U8(m + 2) = (u8)A2_PICK(6, 6, 7, (s32)rnd());
+                if (I[k].addr == 0x499100 && rnd() % 2) U8(m + 0x51) = (u8)(((s8)U8(m + 0x50) < 6 ? (s8)U8(m + 0x50) : 6) - 1 - rnd() % 2);
+                sprintf(g_what, "2 %X 3 %X 4F %X 4E %X 5A %X 5D %X 50 %X 51 %X 52 %X 53 %X keys %X pad %X", U8(m + 2), U8(m + 3), U8(m + 0x4F), U8(m + 0x4E),
+                        U8(m + 0x5A), U8(m + 0x5D), U8(m + 0x50), U8(m + 0x51), U8(m + 0x52), U8(m + 0x53), U16(m + 0x44), U32(0x87DC00));
+                g_ign_objpads = 1;
+                check(I[k].addr, I[k].fn, I[k].name, 1, a, 0);
+                g_ign_objpads = 0;
+            }
+            /* the choices made (select, the buttons alone) */
+            static const struct { u32 addr; void *fn; const char *name; } J[] = {
+                {0x498840, Items_Choose, "Items_Choose"}, {0x498B40, Items_List, "Items_List"}, {0x498C80, Items_Use, "Items_Use"},
+                {0x499100, Files_List, "Files_List"}, {0x499260, Files_Sel, "Files_Sel"}, {0x498E10, Items_Sort, "Items_Sort"}};
+            for (unsigned k = 0; k < sizeof J / sizeof J[0]; k++) {
+                m = items_state();
+                U16(m + 0x44) = (u16)A2_PICK(0, 0, 0, 0x1000, 0x4000, 0x2000, 1);
+                U32(0x87DC00) = (u32)A2_PICK(0x20, 0x20, 0x40, 0);
+                U8(m + 0x4E) = (u8)A2_PICK(0, 0, 1);
+                if (J[k].addr == 0x498E10) { U8(m + 3) = (u8)(rnd() % 6); if (rnd() % 2) U8(m + 0x4F) = (u8)(U8(m + 0x5D) - rnd() % 2); }
+                sprintf(g_what, "2 %X 3 %X 4F %X 4E %X 5A %X 5D %X 50 %X 51 %X 52 %X 53 %X keys %X pad %X 96 %X", U8(m + 2), U8(m + 3), U8(m + 0x4F), U8(m + 0x4E),
+                        U8(m + 0x5A), U8(m + 0x5D), U8(m + 0x50), U8(m + 0x51), U8(m + 0x52), U8(m + 0x53), U16(m + 0x44), U32(0x87DC00), U16(m + 0x96));
+                g_ign_objpads = 1;
+                check(J[k].addr, J[k].fn, J[k].name, 1, a, 0);
+                g_ign_objpads = 0;
+            }
+            m = items_state();
+            {
+                u32 c[6] = {(u32)A2_PICK(0, 0x800, (s32)rnd()), rnd() % 0x140, rnd() % 0xF0, rnd() % 0x10, rnd() % 0x10, rnd()};
+                check(0x495410, Menu_Ring, "Menu_Ring", 6, c, 0);
+                m = items_state();
+                gptr t = 0x6CF600;
+                for (u32 q = 0; q < 0x20; q++) U8(t + q) = (u8)A2_PICK('A', 'z', '0', '/', ' ', '\n', (s32)(0x21 + rnd() % 0x5E), (s32)rnd());
+                U8(t + rnd() % 0x20) = 0; U8(t + 0x1F) = 0;
+                Flag_Set(2, 0x17, rnd() % 4 == 0);
+                u32 d[4] = {rnd() % 0x140, rnd() % 0xF0, (u32)A2_PICK(0, 0xFF00, 1, (s32)(rnd() % 8)), t};
+                check(0x471B30, Text_Ascii, "Text_Ascii", 4, d, 0);
+                m = items_state();
+                u32 e[1] = {(u32)A2_PICK(0, (s32)U8(m + 0x53), (s32)U8(m + 0x53), (s32)U8(m + 0x53) | 0x100, (s32)rnd())};
+                g_ign_objpads = 1;
+                check(0x48B280, Zone_FileSpot, "Zone_FileSpot", 1, e, 0xFFFFFFFF);
+                g_ign_objpads = 0;
+            }
         }
         /* flags 9 and items */
         m = menu_state();

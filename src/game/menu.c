@@ -12,6 +12,7 @@
 #include "dc2/gte.h"
 #include "dc2/task.h"
 
+#define D64(a) (*(double *)MEM(a))
 #define M_MODES   0x739C28u     /* modes; screens from entry 4 */
 #define M_SCREENS 0x739C38u
 
@@ -1011,4 +1012,1000 @@ void DC2CALL MenuMode_Leave(gptr m)                                 /* 0x492330 
     Frame_Draw();
     U16(0x87DC08) = 0; U16(0x87DC94) = 0; U16(0x87DDFC) = 0; U16(0x87DC00) = 0;
     Task_Chain(0x4510F0);
+}
+/* ---- screen 1: weapon and sub-weapon choice (sub-steps 0x739D64 by M+2) ---- */
+
+static void screen_bottom(void)
+{
+    Menu_DrawFrames(0x684A40, 0x60, 0xC4, 0xD, 0x7C8E, 0x80808080, 3);
+    Menu_DrawFrames(0x684B60, 0xE8, 0xC4, 0xD, 0x7C8E, 0x80808080, 3);
+}
+
+/* a notice over a dimmed screen (text t) with the gauge boxes */
+static void notice(gptr m, gptr t)
+{
+    gptr r = Tmp_Push(8);
+    U16(r) = 0; U16(r + 2) = 0; U16(r + 4) = 0x140; U16(r + 6) = 0xF0;
+    Menu_Tile(r, 0x404040, 3, 2);
+    Tmp_Pop(8);
+    Text_Draw(t, Text_Left(t), 0x6C, 0x64, 0x808080, 1, 0);
+    Menu_Gauges(m, 0xA0, 0x60);
+}
+
+void DC2CALL Screen_Equip(gptr m)                                   /* 0x496930 */
+{
+    Orig_Call1(U32(0x739D64 + (s8)U8(m + 2) * 4), m);       /* the step (0x739D64) */
+    Menu_Header(m);
+    Menu_Frame(m);
+    if (U8(m + 2) != 7 && U8(m + 2) != 4) Menu_Weapons(m, 0x80, 0x18, 2);
+}
+
+/* step 0: the lists cleared (M+0x18.. weapons, M+0x20.. sub-weapons) */
+void DC2CALL Equip_Init(gptr m)                                     /* 0x496970 */
+{
+    U8(m + 2) = 1; U8(m + 3) = 0; U32(m + 4) = 0;
+    U8(m + 0x4E) = 0; U16(m + 0x48) = 0; U8(m + 0x4C) = 0; U8(m + 0x5B) = 0; U8(m + 0x5C) = 0;
+    U32(m + 0x18) = 0; U32(m + 0x1C) = 0; U32(m + 0x20) = 0; U32(m + 0x24) = 0;
+    Menu_Points(0x80, 0x58, 0x808080);
+    Menu_PauseList(m);
+    Menu_Health(0x10, 0x58);
+    Text_Draw(0x724182, 0x20, 0xC5, 0x64, 0x808080, 1, 0);
+    screen_bottom();
+}
+
+/* step 1: weapon or sub-weapon (M+0x4E); on select the carried ones of the
+ * stage's kind are listed (M+0x5B, M+0x5C of them), the ring turned to the
+ * one in hand (M+0x4C, M+0x48) */
+void DC2CALL Equip_Choose(gptr m)                                   /* 0x496A30 */
+{
+    u8 sel_w = 0, sel_s = 0;
+    if (U8(m + 0x45) & 0xF0) {
+        U8(m + 0x4E) ^= 1;
+        Se_Play(0, 0);
+    } else if (U8(0x87DC00) & 0x40) {
+        U8(m + 2) = 8;
+        Se_Play(0, 1);
+    } else if (U8(0x87DC00) & 0x20) {
+        U8(m + 0x5B) = 0; U8(m + 0x5C) = 0;
+        gptr it = G() + 0x10BC;
+        for (u8 i = 0; i < 0x14; i++, it += 12) {
+            if (!U8(it)) continue;
+            u8 st = U8(G() + 0x108F);
+            u8 mask = st == 0 ? 1 : st == 1 || st == 5 || st == 6 ? 2 : st == 2 ? 4 : 0;
+            u8 id = U8(it + 1);
+            u16 fl = U16(0x70426A + id * 12);
+            if (!(fl & mask)) continue;
+            if (fl & 8) {
+                if (U8(G() + 0x10B4) == id) sel_w = U8(m + 0x5B);
+                U8(m + 0x18 + (s8)U8(m + 0x5B)) = i;
+                U8(m + 0x5B)++;
+            } else if (fl & 0x10) {
+                if ((s32)(U16(G() + 0x10B4) >> 8) == (s32)id - 0x10) sel_s = U8(m + 0x5C);
+                U8(m + 0x20 + (s8)U8(m + 0x5C)) = i;
+                U8(m + 0x5C)++;
+            }
+        }
+        if (!U8(m + 0x4E)) {
+            U8(m + 0x4C) = sel_w; U8(m + 2) = 2;
+            U16(m + 0x48) = (u16)-(((0x1000 / (s8)U8(m + 0x5B)) & 0xFFF) * (s8)sel_w);
+        } else {
+            U8(m + 0x4C) = sel_s; U8(m + 2) = 5;
+            U16(m + 0x48) = (u16)-(((0x1000 / (s8)U8(m + 0x5C)) & 0xFFF) * (s8)sel_s);
+        }
+        U8(m + 3) = 0; U32(m + 4) = 0;
+        Se_Play(0, 2);
+    }
+    u32 c0 = U8(m + 0x4E) ? 0x303030 : 0x808080, c1 = U8(m + 0x4E) ? 0x808080 : 0x303030;
+    Text_Draw(U8(m + 0x4E) ? 0x7241C6 : 0x724182, 0x20, 0xC5, 0x64, 0x808080, 1, 0);
+    Menu_DrawFrames(0x6856A0, 0x71, 0x78, 0xC, 0x7C8F, c0, 3);
+    Menu_DrawFrames(0x685088, 0xA0, 0x74, 0xC, 0x7C8E, c0, 3);
+    Menu_DrawFrames(0x6856B0, 0x74, 0x88, 0xC, 0x7C8F, c1, 3);
+    Menu_DrawFrames(0x685088, 0xA0, 0x84, 0xC, 0x7C8E, c1, 3);
+    U16(m + 0x88)++;
+    if (S16(m + 0x88) > 0x6C) U16(m + 0x88) = 0;
+    gptr r = Tmp_Push(8);
+    for (u32 j = 0; j < 2; j++) {
+        U16(r) = 0x6F; U16(r + 2) = (u16)((s8)U8(m + 0x4E) * 16 + 0x77); U16(r + 4) = 0x62; U16(r + 6) = 0xA;
+        Menu_Border(r, (u16)(U16(m + 0x88) + 0x36 * j), 0x36, 2, 0xFFFF);
+    }
+    Tmp_Pop(8);
+    screen_bottom();
+    Menu_Points(0x80, 0x58, 0x808080);
+    Menu_PauseList(m);
+    Menu_Health(0x10, 0x58);
+}
+
+/* the stock arrows either side of the ring (frames 0x6859F0 right, 0x6859E8 left) */
+void DC2CALL Equip_ArrowsR(u32 x, u32 y)                            /* 0x497ED0 */
+{
+    x &= 0xFFFF; y &= 0xFFFF;
+    Menu_DrawFrames(0x6859F0, x, y, 0x2C, 0x7C8F, Color_Pulse(0x800060A0, 0x80000840, 4), 3);
+    Menu_DrawFrames(0x6859F0, x + 4, y, 0x2C, 0x7C8F, Color_Pulse(0x80004080, 0x80000840, 4), 3);
+    Menu_DrawFrames(0x6859F0, x + 8, y, 0x2C, 0x7C8F, Color_Pulse(0x80002060, 0x80000840, 4), 3);
+}
+void DC2CALL Equip_ArrowsL(u32 x, u32 y)                            /* 0x497F80 */
+{
+    x &= 0xFFFF; y &= 0xFFFF;
+    Menu_DrawFrames(0x6859E8, x - 8, y, 0x2C, 0x7C8F, Color_Pulse(0x800060A0, 0x80000840, 4), 3);
+    Menu_DrawFrames(0x6859E8, x - 0xC, y, 0x2C, 0x7C8F, Color_Pulse(0x80004080, 0x80000840, 4), 3);
+    Menu_DrawFrames(0x6859E8, x - 0x10, y, 0x2C, 0x7C8F, Color_Pulse(0x80002060, 0x80000840, 4), 3);
+}
+
+/* one weapon of the ring at x, y: its picture (lit if sel), its ammunition */
+void DC2CALL Equip_RingItem(gptr m, u32 x, u32 y, u32 sel, u32 idx, u32 color, u32 z) /* 0x498030 */
+{
+    (void)m;
+    gptr rec = G() + ((idx & 0xFFFF) + 0x165) * 12;
+    u8 id = U8(rec + 1);
+    int wide = !(U8(0x70426A + id * 12) & 0x40);
+    u32 zl = z & 0xFFFF;
+    if ((u16)sel)
+        Menu_DrawFrames(wide ? 0x685178 : 0x685108, x, y, 0xC, 0x7C8E,
+                        Color_Pulse(0xC0C0C0, 0x606060, 5) | 0x80000000, zl + 1);
+    gptr r = Tmp_Push(8);
+    U16(r) = (u16)(x - (wide ? 0x40 : 0x1E)); U16(r + 2) = (u16)(y + 0xC);
+    U16(r + 4) = wide ? 0x80 : 0x40; U16(r + 6) = 0x20;
+    u32 tp = 0x8D;
+    if (!wide && id == 0x19) { Menu_Sprite(r, 0x40, 0x40, 0x7F00, color, 0, z); tp = 0x9B; }
+    else Menu_Sprite(r, U8(0x704268 + id * 12), U8(0x704269 + id * 12), 0x7C80, color, 0, z);
+    Gpu_SetDrawMode(U32(0x87DC98), 1, 0, tp, 0);
+    Gpu_AddPrim(0x87BC00 + 4 * ((U32(0x87DE0C) << 10) + zl), U32(0x87DC98));
+    U32(0x87DC98) += 0xC;
+    if (U8(0x70426A + U8(rec + 1) * 12) & 0x80) { Tmp_Pop(8); return; }
+    if (U8(G() + 0x1094) & 1) {
+        Menu_DrawFrames(0x685CC8, x - 0x19, y + 4, 0xC, 0x7C8F, 0x707070, 0x64);
+        Menu_DrawFrames(0x685CC8, x + 0xA, y + 4, 0xC, 0x7C8F, 0x7070, 0x64);
+    } else {
+        Menu_Number8(x - 0x21, y + 4, 4, 0, color, (u32)(s32)S16(rec + 8), z - 1);
+        Menu_Number8(x + 2, y + 4, 4, 0, color & 0xFF00FFFF, (u32)(s32)S16(rec + 0xA), z - 1);
+    }
+    U16(r) = (u16)(x - 5); U16(r + 2) = (u16)(y + 4); U16(r + 4) = 8; U16(r + 6) = 8;
+    Menu_Sprite(r, 0x50, 0x10, 0x7C8E, color, 0, z);
+    Tmp_Pop(8);
+    Gpu_SetDrawMode(U32(0x87DC98), 1, 0, 0xC, 0);
+    Gpu_AddPrim(0x87BC00 + 4 * ((U32(0x87DE0C) << 10) + zl), U32(0x87DC98));
+    U32(0x87DC98) += 0xC;
+}
+
+/* the ring of weapons (main 1) or sub-weapons: M+0x48 turns towards the one
+ * chosen (M+0x4C); each drawn where the GTE puts it, the chosen one named */
+void DC2CALL Equip_Ring(gptr m, u32 main)                           /* 0x497AE0 */
+{
+    Menu_DrawFrames(main == 1 ? 0x6856A0 : 0x6856B0, 0x18, 0x5C, 0xC, 0x7C8F, 0x808080, 2);
+    u8 n = main == 1 ? U8(m + 0x5B) : U8(m + 0x5C);
+    gptr list = m + (main == 1 ? 0x18 : 0x20);
+    s32 step = 0x1000 / (s32)n;
+    s32 target = -(s32)(((u32)step & 0xFFF) * (u32)(u16)(s16)(s8)U8(m + 0x4C));
+    u32 d = Angle_Approach(U16(m + 0x48), (u32)(step >> 4) & 0xFF, (u32)target);
+    if ((((u32)target - U16(m + 0x48)) & 0xFFF) == 0x800 && (U32(0x87DDFC) & 0x8000)) d = (u32)-(s32)d;
+    U16(m + 0x48) += (u16)d;
+    gptr f = Tmp_Push(0x78);                 /* the original's frame: E - 0x78 */
+    gptr vec = f + 0x10, sv = f + 0x18, sxy = f + 0x20, quad = f + 0x28, m1 = f + 0x38, m2 = f + 0x58;
+    U16(vec) = 0x8D0; U16(vec + 2) = U16(m + 0x48); U16(vec + 4) = 0;
+    RotMatrix(vec, m1);
+    S32(m1 + 0x14) = 0; S32(m1 + 0x18) = -40; S32(m1 + 0x1C) = 0x401;
+    U16(vec + 4) = 0; U16(vec + 2) = 0; U16(vec) = 0;
+    if (!(u16)d && n > 1) { Equip_ArrowsR(0xC8, 0xA8); Equip_ArrowsL(0x78, 0xA8); }
+    for (u32 i = 0; i < n; i++, list++) {
+        RotMatrix(vec, m2);
+        U16(sv) = 0; U16(sv + 2) = 0; U16(sv + 4) = 0x1B8;
+        ApplyMatrixSV(m2, sv, sv);
+        SetRotMatrix(m1);
+        SetTransMatrix(m1);
+        s32 z = RotTransPers(sv, sxy, f + 0xC, f + 4);
+        U16(vec + 2) = (u16)((U32(vec + 2) + (u32)step) & 0xFFF);
+        u32 v = 0xA0 - (u32)z / 3;
+        Equip_RingItem(m, (u32)(s32)F32(sxy), (u32)(s32)F32(sxy + 4), (s32)i == (s8)U8(m + 0x4C),
+                       U8(list), v << 8 | v << 16 | v, (u32)z);
+        if ((s32)i == (s8)U8(m + 0x4C)) {
+            gptr rec = G() + (U8(list) + 0x165) * 12;
+            static const u16 q[8] = {0x18, 0xC8, 0x60, 0xC8, 0x18, 0xD8, 0x60, 0xD8};
+            for (int k = 0; k < 8; k++) U16(quad + 2 * k) = q[k];
+            Menu_PolyG4(quad, 0x803000, 0x201000, 0x803000, 0x201000, 1, 0x64);
+            Gpu_SetDrawMode(U32(0x87DC98), 1, 0, 0xC, 0);
+            Gpu_AddPrim(0x87BD90 + (U32(0x87DE0C) << 12), U32(0x87DC98));
+            U32(0x87DC98) += 0xC;
+            Text_Draw(U32(0x704260 + U8(rec + 1) * 12), 0x20, 0xC9, 0x64, 0x808080, 1, 0);
+        }
+    }
+    Tmp_Pop(0x78);
+    Menu_DrawFrames(0x684A40, 0x60, 0xC8, 0xD, 0x7C8E, 0x80808080, 3);
+    Menu_DrawFrames(0x684B60, 0xE8, 0xC8, 0xD, 0x7C8E, 0x80808080, 3);
+    Menu_DrawFrames(0x685278, 0x88, 0x5D, 0xC, 0x7C8E, 0x80808080, 3);
+    Menu_DrawFrames(0x685328, 0x100, 0x65, 0xC, 0x7C8E, 0x80808080, 3);
+    Menu_DrawFrames(0x6853C8, 0x46, 0xBC, 0xC, 0x7C8F, 0x1080F0, 5);
+    Menu_DrawFrames(0x6853D0, 0xD0, 0xBC, 0xC, 0x7C8F, 0x1080F0, 5);
+}
+
+/* "equip" / "check" under the ring (M+0x4E) */
+void DC2CALL Equip_Options(gptr m)                                  /* 0x4985C0 */
+{
+    u32 c0 = U8(m + 0x4E) ? 0x303030 : 0x808080, c1 = U8(m + 0x4E) ? 0x808080 : 0x303030;
+    Text_Draw(0x7242AC, 0x2E, 0xA0, 0x64, c0, 3, 0);
+    Text_Draw(0x7242B8, 0x2E, 0xB2, 0x64, c1, 3, 0);
+    Menu_DrawFrames(0x6850C8, 0x46, 0xA0, 0xC, 0x7C8E, c0, 4);
+    Menu_DrawFrames(0x6850C8, 0x46, 0xB2, 0xC, 0x7C8E, c1, 4);
+    U16(m + 0x88)++;
+    if (S16(m + 0x88) > 0x44) U16(m + 0x88) = 0;
+    gptr r = Tmp_Push(8);
+    for (u32 j = 0; j < 2; j++) {
+        U16(r) = 0x2E; U16(r + 2) = (u16)((s8)U8(m + 0x4E) * 18 + 0xA0); U16(r + 4) = 0x30; U16(r + 6) = 0x10;
+        Menu_Border(r, (u16)(U16(m + 0x88) + 0x22 * j), 0x22, 2, 0xFFFF);
+    }
+    Tmp_Pop(8);
+}
+
+/* a weapon's figures (main 1, or a sub-weapon): power, speed, range as a
+ * triangle growing with M+0x92, its name by M+0x94 letters */
+void DC2CALL Equip_Stats(gptr m, u32 main)                          /* 0x4976C0 */
+{
+    u8 idx = main == 1 ? U8(m + 0x18 + (s8)U8(m + 0x4C)) : U8(m + 0x20 + (s8)U8(m + 0x4C));
+    u32 id = U8(G() + idx * 12 + 0x10BD);
+    Menu_Panels();
+    Menu_DrawFrames(0x685018, 0x18, 0x60, 0xC, 0x7C8F, 0x808080, 2);
+    Menu_DrawFrames(0x6836D8, 0x18, 0x5A, 0xD, 0x7C8E, 0x808080, 1);
+    Menu_DrawFrames(0x6851D8, 0x46, 0x78, 0xC, 0x7C8E, 0x80808080, 0x1F4);
+    static const u8 L[6][4] = {{0x46, 0x82, 0x23, 0xBE}, {0x23, 0xBE, 0x69, 0xBE}, {0x69, 0xBE, 0x46, 0x82},
+                               {0x46, 0xAA, 0x46, 0x82}, {0x46, 0xAA, 0x23, 0xBE}, {0x46, 0xAA, 0x69, 0xBE}};
+    for (int k = 0; k < 6; k++) Menu_Line(L[k][0], L[k][1], L[k][2], L[k][3], k < 3 ? 0x68C040 : 0x206020, 0, 2);
+    U16(m + 0x92) += 2;
+    if (S16(m + 0x92) > 0x64) U16(m + 0x92) = 0x64;
+    s32 t = S16(m + 0x92);
+    s32 a = U8(0x7041F8 + id * 4) * t, b = U8(0x7041F9 + id * 4) * t, c = U8(0x7041FA + id * 4) * t;
+    gptr v = Tmp_Push(0x10);
+    U16(v) = 0x46; U16(v + 2) = (u16)(0xAA - a * 40 / 10000);
+    U16(v + 4) = (u16)(0x46 - b * 35 / 10000); U16(v + 6) = (u16)(0xAA + b * 20 / 10000);
+    U16(v + 8) = (u16)(0x46 + c * 35 / 10000); U16(v + 0xA) = (u16)(0xAA + c * 20 / 10000);
+    U16(v + 0xC) = 0; U16(v + 0xE) = 0;
+    Menu_PolyG3(v, 0x802020C0, 0x20C020, 0xC02020, 0x12C);
+    Tmp_Pop(0x10);
+    Gpu_SetDrawMode(U32(0x87DC98), 1, 0, 0x2C, 0);
+    Gpu_AddPrim(0x87C0B0 + (U32(0x87DE0C) << 12), U32(0x87DC98));
+    U32(0x87DC98) += 0xC;
+    Menu_DrawFrames(0x685418, 0x28, 0x78, 0xC, 0x7C8F, 0x4040C0, 2);
+    Menu_Number8(0x46, 0x82, 3, 0, 0x808080, (u32)(a / 100), 0x64);
+    Menu_DrawFrames(0x685420, 0x10, 0xC0, 0xC, 0x7C8F, 0x40C040, 2);
+    Menu_Number8(0x1C, 0xCA, 3, 0, 0x808080, (u32)(b / 100), 0x64);
+    Menu_DrawFrames(0x685428, 0x44, 0xC0, 0xC, 0x7C8F, 0xC04040, 2);
+    Menu_Number8(0x60, 0xCA, 3, 0, 0x808080, (u32)(c / 100), 0x64);
+    U16(m + 0x94)++;
+    if (S16(m + 0x94) > 0x64) U16(m + 0x94) = 0x64;
+    Text_Draw(U32(0x704264 + id * 12), 0x82, 0x7B, U16(m + 0x94), 0x808080, 1, 1);
+}
+
+/* the ring turned with left/right (M+3 frames of the turn); main: cancel
+ * back (or to step 9 with no weapon), select to step 3; sub: cancel back to
+ * step 1 on sub-weapons, select to step 6 */
+static void ring_step(gptr m, u32 main)
+{
+    u8 n = U8(m + (main ? 0x5B : 0x5C));
+    if (U8(m + 3)) { U8(m + 3)--; Equip_Ring(m, main); return; }
+    u16 k = U16(m + 0x44);
+    if (k & 0x8000) {
+        if ((s8)n > 1) Se_Play(0, 8);
+        U8(m + 3) = 0x10;
+        if ((s8)--U8(m + 0x4C) < 0) U8(m + 0x4C) = (u8)(n - 1);
+    } else if (k & 0x2000) {
+        if ((s8)n > 1) Se_Play(0, 8);
+        U8(m + 3) = 0x10;
+        U8(m + 0x4C)++;
+        if ((s8)U8(m + 0x4C) > (s8)n - 1) U8(m + 0x4C) = 0;
+    } else if (U8(0x87DC00) & 0x40) {
+        if (main) {
+            Se_Play(0, 1);
+            U8(m + 2) = U8(G() + 0x10B4) ? 1 : 9;
+            U8(m + 0x4E) = 0;
+        } else {
+            U16(m + 0x48) = 0; U8(m + 0x4C) = 0;
+            Se_Play(0, 1);
+            U8(m + 2) = 1; U8(m + 0x4E) = 1;
+        }
+    } else if (U8(0x87DC00) & 0x20) {
+        Se_Play(0, 2);
+        U8(m + 2) = main ? 3 : 6; U8(m + 0x4E) = 0;
+    }
+    Equip_Ring(m, main);
+}
+void DC2CALL Equip_WeaponRing(gptr m) { ring_step(m, 1); }          /* 0x496D90 */
+void DC2CALL Equip_SubRing(gptr m) { ring_step(m, 0); }             /* 0x497210 */
+
+/* equip or check the weapon chosen (M+0x4E); a two-handed one clears the
+ * sub-weapon, a one-handed after a two-handed gets the stage's default */
+void DC2CALL Equip_WeaponSel(gptr m)                                /* 0x496EB0 */
+{
+    if (U8(m + 0x45) & 0x50) {
+        Se_Play(0, 0);
+        U8(m + 0x4E) ^= 1;
+    } else if (U8(0x87DC00) & 0x40) {
+        Se_Play(0, 1);
+        U8(m + 2) = 2; U8(m + 3) = 0; U32(m + 4) = 0;
+    } else if (U8(0x87DC00) & 0x20) {
+        Se_Play(0, 2);
+        if (U8(m + 0x4E)) {
+            while (File_IsBusy()) Task_Sleep(1);
+            Orig_Call1(0x403EE0, U8(G() + U8(m + 0x18 + (s8)U8(m + 0x4C)) * 12 + 0x10BD));
+            U8(m + 2) = 4; U16(m + 0x94) = 0;
+        } else {
+            gptr g = G();
+            u8 id = U8(g + U8(m + 0x18 + (s8)U8(m + 0x4C)) * 12 + 0x10BD);
+            u16 w = U16(g + 0x10B4);
+            if (U8(0x70426A + id * 12) & 0x20) U16(g + 0x10B4) = id;
+            else if (U8(0x70426A + (w & 0xFF) * 12) & 0x20) {
+                switch (U8(g + 0x108F)) {
+                case 0: U16(G() + 0x10B4) = (u16)(id | (Flag_Check(9, 0x38) ? 0x800 : 0x200)); break;
+                case 1: U16(G() + 0x10B4) = (u16)(id | (Flag_Check(9, 0x37) ? 0x700 : 0x100)); break;
+                case 5: case 6: U16(g + 0x10B4) = (u16)(id | 0x600); break;
+                case 2: U16(g + 0x10B4) = (u16)(id | 0x500); break;
+                }
+            } else U16(g + 0x10B4) = (u16)((w & 0xFF00) | id);
+            U8(m + 2) = 2;
+        }
+        U16(m + 0x92) = 0; U32(m + 4) = 0;
+    }
+    Equip_Ring(m, 1);
+    Equip_Options(m);
+}
+
+/* the same for the sub-weapon: equipping one sets G+0x10B5 (id - 0x10) */
+void DC2CALL Equip_SubSel(gptr m)                                   /* 0x497310 */
+{
+    if (U8(m + 0x45) & 0x50) {
+        Se_Play(0, 0);
+        U8(m + 0x4E) ^= 1;
+    } else if (U8(0x87DC00) & 0x40) {
+        Se_Play(0, 1);
+        U8(m + 2) = 5; U8(m + 3) = 0; U32(m + 4) = 0;
+    } else if (U8(0x87DC00) & 0x20) {
+        Se_Play(0, 2);
+        if (U8(m + 0x4E)) {
+            while (File_IsBusy()) Task_Sleep(1);
+            Orig_Call1(0x403EE0, U8(G() + U8(m + 0x20 + (s8)U8(m + 0x4C)) * 12 + 0x10BD));
+            U8(m + 2) = 7; U16(m + 0x94) = 0;
+        } else {
+            gptr g = G();
+            u16 w = U16(g + 0x10B4);
+            u8 id = U8(g + U8(m + 0x20 + (s8)U8(m + 0x4C)) * 12 + 0x10BD);
+            if (U8(0x70426A + (w & 0xFF) * 12) & 0x20) U16(g + 0x10B4) = (u16)((id + 0xF0) << 8);
+            else U16(g + 0x10B4) = (u16)(((id + 0xF0) << 8) | (w & 0xFF));
+            U8(m + 2) = U8(G() + 0x10B4) ? 5 : 9;
+        }
+        U16(m + 0x92) = 0; U32(m + 4) = 0;
+    }
+    Equip_Ring(m, 0);
+    Equip_Options(m);
+}
+
+/* checking a weapon: its picture once loaded; cancel back to the ring */
+static void view_step(gptr m, u32 main)
+{
+    switch ((s8)U8(m + 3)) {
+    case 0:
+        U8(m + 0x4E) = 0;
+        if (!File_IsBusy()) U8(m + 3)++;
+        break;
+    case 1: {
+        gptr r = Tmp_Push(8);
+        U16(r) = 0x98; U16(r + 2) = 0x28; U16(r + 4) = 0x80; U16(r + 6) = 0x40;
+        Menu_Sprite(r, 0, 0xC0, 0x7C40, 0x808080, 0, 1);
+        Tmp_Pop(8);
+        Gpu_SetDrawMode(U32(0x87DC98), 1, 0, 0x8C, 0);
+        Gpu_AddPrim(0x87BC04 + (U32(0x87DE0C) << 12), U32(0x87DC98));
+        U32(0x87DC98) += 0xC;
+        if (U8(0x87DC00) & 0x40) {
+            Se_Play(0, 1);
+            U8(m + 2) = main ? 2 : 5; U8(m + 3) = 0;
+        }
+        break; }
+    }
+    Equip_Stats(m, main);
+}
+void DC2CALL Equip_WeaponView(gptr m) { view_step(m, 1); }          /* 0x497120 */
+void DC2CALL Equip_SubView(gptr m) { view_step(m, 0); }             /* 0x497480 */
+
+/* back to the pause menu (no weapon: step 9) */
+void DC2CALL Equip_Back(gptr m)                                     /* 0x497570 */
+{
+    if (U8(G() + 0x10B4)) { U8(m + 2) = 0; U8(m + 1) = 0; }
+    else U8(m + 2) = 9;
+    U8(m + 3) = 0; U32(m + 4) = 0;
+    Menu_Points(0x80, 0x58, 0x808080);
+    Menu_PauseList(m);
+    Menu_Health(0x10, 0x58);
+    screen_bottom();
+    Text_Draw(0x724146, 0x20, 0xC5, 0x64, 0x707070, 0x64, 0);
+}
+
+/* no weapon to equip: a dimmed screen and a notice; either button back to step 2 */
+void DC2CALL Equip_NoWeapon(gptr m)                                 /* 0x497620 */
+{
+    U16(m + 0x48) = 0; U8(m + 0x4C) = 0;
+    if (U8(0x87DC00) & 0x40) { Se_Play(0, 1); U8(m + 2) = 2; }
+    else if (U8(0x87DC00) & 0x20) { Se_Play(0, 2); U8(m + 2) = 2; }
+    notice(m, 0x724314);
+}
+
+/* ---- screen 2: items and files (steps 0x739D8C by M+2) ---- */
+
+/* the pause screen's parts under screen 2 and its line of text */
+static void items_common(gptr m, u32 text)
+{
+    Menu_Header(m);
+    Menu_Weapons(m, 0x80, 0x18, 2);
+    Menu_Health(0x10, 0x58);
+    Menu_Points(0x80, 0x58, 0x808080);
+    Menu_PauseList(m);
+    screen_bottom();
+    Text_Draw(text, 0x20, 0xC5, 0x64, 0x808080, 0x64, 0);
+}
+
+/* M+0x5D items held (G+0x11AC, 6), M+0x50 files found (flags 9:0x20..0x4F) */
+void DC2CALL Screen_Items(gptr m)                                   /* 0x498710 */
+{
+    U8(m + 0x5D) = (u8)Item_CountUsed(G() + 0x11AC, 6);
+    U8(m + 0x50) = (u8)Flag_CountRange(0x20, 0x50);
+    Orig_Call1(U32(0x739D8C + (s8)U8(m + 2) * 4), m);
+    Menu_Frame(m);
+}
+
+/* step 0 (opened by flag 2:0x20: straight to the items) */
+void DC2CALL Items_Init(gptr m)                                     /* 0x498750 */
+{
+    U8(m + 2) = U8(m + 0x64) == 5 ? 2 : 1;
+    U8(m + 3) = 0; U32(m + 4) = 0;
+    U8(m + 0x4E) = 0; U8(m + 0x5A) = 0; U8(m + 0x4F) = 0; U8(m + 0x51) = 0; U8(m + 0x52) = 0; U8(m + 0x53) = 0;
+    U16(m + 0x92) = 0x1E;
+    U32(m + 0x28) = 0; U32(m + 0x2C) = 0;
+    if (U8(m + 0x64) != 5) items_common(m, 0x72423C);
+}
+
+/* step 1: items or files (M+0x5A); the files listed from the page M+0x52 */
+void DC2CALL Items_Choose(gptr m)                                   /* 0x498840 */
+{
+    if (U8(m + 0x45) & 0xF0) {
+        Se_Play(0, 0);
+        U8(m + 0x5A) ^= 1;
+    } else if (U8(0x87DC00) & 0x40) {
+        Se_Play(0, 1);
+        U8(m + 2) = 0xB; U8(m + 3) = 0; U32(m + 4) = 0;
+    } else if (U8(0x87DC00) & 0x20) {
+        Se_Play(0, 2);
+        if (!U8(m + 0x5A)) {
+            if (U8(m + 0x5D)) { U8(m + 2) = 2; U16(m + 0x92) = 0x1E; }
+            else U8(m + 2) = 5;
+        } else if (U8(m + 0x50)) {
+            u8 k = U8(m + 0x52), b = 0x20;
+            for (;;) {
+                if (Flag_Check(9, b) && (s8)--k < 0) break;
+                if (++b >= 0x50) break;
+            }
+            Flag_ListRange(b, 0x50, 6, m + 0x28);
+            U8(m + 2) = 6;
+        } else U8(m + 2) = 9;
+        U8(m + 3) = 0; U32(m + 4) = 0; U8(m + 0x4F) = 0; U8(m + 0x52) = 0; U8(m + 0x4E) = 0; U16(m + 0x94) = 0;
+    }
+    u32 ca = U8(m + 0x5A) ? 0x80303030 : 0x808080, cb = U8(m + 0x5A) ? 0x808080 : 0x80303030;
+    Menu_DrawFrames(0x685408, 0x8B, 0x97, 0xC, 0x7C8F, cb, 2);
+    Menu_DrawFrames(0x6850C8, 0xA8, 0x93, 0xC, 0x7C8E, cb, 3);
+    Menu_DrawFrames(0x684FE0, 0x87, 0x87, 0xC, 0x7C8F, ca, 2);
+    Menu_DrawFrames(0x6850C8, 0xA8, 0x83, 0xC, 0x7C8E, ca, 3);
+    U16(m + 0x88)++;
+    if (S16(m + 0x88) > 0x4E) U16(m + 0x88) = 0;
+    gptr r = Tmp_Push(8);
+    for (u32 j = 0; j < 2; j++) {
+        U16(r) = 0x86; U16(r + 2) = (u16)((s8)U8(m + 0x5A) * 16 + 0x86); U16(r + 4) = 0x44; U16(r + 6) = 0xA;
+        Menu_Border(r, (u16)(U16(m + 0x88) + 0x27 * j), 0x27, 2, 0xFFFF);
+    }
+    Tmp_Pop(8);
+    items_common(m, U8(m + 0x5A) ? 0x724264 : 0x72423C);
+}
+
+/* step 2: the items held (M+0x4F the one chosen); its name by M+0x94 letters */
+void DC2CALL Items_List(gptr m)                                     /* 0x498B40 */
+{
+    s8 old = (s8)U8(m + 0x4F);
+    u16 k = U16(m + 0x44);
+    if (k & 0x1000) {
+        if ((s8)--U8(m + 0x4F) < 0) U8(m + 0x4F) = (u8)(U8(m + 0x5D) - 1);
+    } else if (k & 0x4000) {
+        U8(m + 0x4F)++;
+        if ((s8)U8(m + 0x4F) > (s8)U8(m + 0x5D) - 1) U8(m + 0x4F) = 0;
+    } else if (U8(0x87DC00) & 0x40) {
+        Se_Play(0, 1);
+        if (U8(m + 0x64) == 5) { U32(m) = 0x502; U8(m + 0x64) = 0; }
+        else U8(m + 2) = 1;
+    } else if (U8(0x87DC00) & 0x20) {
+        Se_Play(0, 2);
+        U8(m + 2) = 3; U8(m + 0x4E) = 0;
+        if (U16(m + 0x92)) U16(m + 0x92) = 1;
+    }
+    if ((s32)(s8)U8(m + 0x4F) != (s32)(u16)(s16)old) {
+        Se_Play(0, 8);
+        U16(m + 0x92) = 0x1E; U16(m + 0x94) = 0;
+    }
+    Items_Draw(m);
+    U16(m + 0x94)++;
+    if (S16(m + 0x94) > 0x64) U16(m + 0x94) = 0x64;
+    u8 id = U8(G() + (s8)U8(m + 0x4F) * 12 + 0x11AD);
+    Text_Draw(U32(0x704264 + id * 12), 0x84, 0x9C, U16(m + 0x94), id == 0x1E ? 0x3030B0 : 0x808080, 1, 1);
+}
+
+/* step 3: use the item? (M+0x4E: 0 yes) the medicines heal (0x1B half,
+ * 0x1C full), cure poison (0x1A) or both (0x1D..0x1F); one is used up */
+void DC2CALL Items_Use(gptr m)                                      /* 0x498C80 */
+{
+    if (U8(m + 0x45) & 0xA0) {
+        Se_Play(0, 0);
+        U8(m + 0x4E) ^= 1;
+    } else if (U8(0x87DC00) & 0x40) {
+        Se_Play(0, 1);
+        U8(m + 2) = 2;
+    } else if (U8(0x87DC00) & 0x20) {
+        Se_Play(0, 2);
+        U8(m + 2) = 2; U8(m + 3) = 0;
+        if (!U8(m + 0x4E)) {
+            gptr rec = G() + ((s8)U8(m + 0x4F) + 0x179) * 12, pl = U32(G() + 0x940);
+            U8(m + 2) = 4;
+            switch (U8(rec + 1)) {
+            case 0x1B: U16(pl + 0x108) += (u16)(S16(pl + 0x10A) / 2); break;
+            case 0x1C: U16(pl + 0x108) = U16(pl + 0x10A); break;
+            case 0x1D: case 0x1E: case 0x1F: U16(pl + 0x108) = U16(pl + 0x10A); /* fall through */
+            case 0x1A: U16(pl + 0x17E) = 0; break;
+            }
+            if (S16(pl + 0x108) > S16(pl + 0x10A)) U16(pl + 0x108) = U16(pl + 0x10A);
+            U16(m + 0xBC) = U16(pl + 0x108);
+            if (--S16(rec + 8) <= 0) {
+                U32(rec) = 0; U32(rec + 4) = 0; U32(rec + 8) = 0;
+                Item_Compact(G() + 0x11AC, 6);
+            }
+            if (U8(m + 0x64) == 5) { U32(m) = 0x502; U8(m + 0x64) = 0; }
+        }
+    }
+    Items_Draw(m);
+    Text_Draw(0x7244E6, 0x88, 0xA4, 0x64, 0x808080, 1, 0);
+    Menu_YesNo(0xB4, 0xB4, (u32)(s32)(s8)U8(m + 0x4E), 1);
+}
+
+/* the PC's ASCII letters (8x8, widths 0x7373F4 less 0.5, colors 0x7373D4)
+ * in their own list (0x87DDE4); not while flag 2:0x17 is set */
+void DC2CALL Text_Ascii(u32 x, u32 y, u32 col, gptr s)              /* 0x471B30 */
+{
+    if (Flag_Check(2, 0x17)) return;
+    float x0 = (float)(s32)x;
+    long double cx = (s32)x;
+    for (u8 c; (c = U8(s)) != 0; s++) {
+        if (c == '\n') { y += 8; cx = x0; continue; }
+        if (c == ' ') { cx += F32(0x703458); continue; }
+        s32 k = (s32)c - 0x21;
+        gptr p = U32(0x87DC98);
+        F32(p + 8) = (float)cx; F32(p + 0xC) = (float)(s32)y;
+        U32(p + 0x10) = 0x3C23D70A;
+        U16(p + 0x18) = 8; U16(p + 0x1A) = 8;
+        U8(p + 0x14) = (u8)(k << 4); U8(p + 0x15) = (u8)(k & 0xF0);
+        U16(p + 0x16) = 0x7DCE;
+        U32(p + 4) = U32(0x7373D4 + (col & 0xFF) * 4);
+        gptr l = 0x87DDE4 + U32(0x87DE0C) * 12;
+        U32(p) = U32(l) | 0x04000000;
+        U32(l) = p & 0xFFFFFF;
+        U32(0x87DC98) = p + 0x1C;
+        cx += (long double)F32(0x7373F4 + k * 4) - D64(0x703460);
+    }
+}
+
+/* screen 2's item page: the panels, the picture of the item chosen (loaded
+ * after M+0x92 frames), the cells, the list of items held with their counts */
+void DC2CALL Items_Draw(gptr m)                                     /* 0x499770 */
+{
+    Menu_Header(m);
+    Menu_Health(0x10, 0x58);
+    Menu_DrawFrames(0x684FE0, 0x2A, 0x73, 0xC, 0x7C8F, 0x80808080, 2);
+    Menu_DrawFrames(0x6836D8, 0x18, 0x6F, 0xD, 0x7C8E, 0x808080, 1);
+    Menu_DrawFrames(0x6835C0, 0xD8, 0x18, 0xD, 0x7C8E, 0x80808080, 2);
+    Menu_DrawFrames(0x6846C8, 0xD8, 0x18, 0xD, 0x7C8E, 0x80808080, 2);
+    Menu_DrawFrames(0x684FF0, 0xB0, 0x18, 0xC, 0x7C8F, 0x8068C040, 2);
+    Menu_DrawFrames(0x683628, 0xD8, 0x93, 0xD, 0x7C8E, 0x80808080, 2);
+    Menu_DrawFrames(0x6853D8, 0xD8, 0x93, 0xC, 0x7C8E, 0x80808080, 2);
+    Menu_DrawFrames(0x684528, 0xD8, 0xAC, 0xD, 0x7C8E, 0x808080, 1);
+    if (!(u8)Item_CountUsed(G() + 0x11AC, 6)) U16(m + 0x92) = 0x1E;
+    gptr r = Tmp_Push(0x10);
+    int pic = 0;                             /* the item's picture, or the rings while it loads */
+    if (S16(m + 0x92) > 0) {
+        if (--S16(m + 0x92) <= 0) {
+            while (File_IsBusy()) Task_Sleep(1);
+            s32 k = (s8)U8(m + 0x4F);
+            u8 id = U8(G() + k * 12 + 0x11AD);
+            if (id != 0x1F) Orig_Call1(0x403EE0, ((u32)k & 0xFFFF0000) | id);
+        }
+    } else if (!File_IsBusy()) {
+        pic = 1;
+        U16(r) = 8; U16(r + 2) = 0x8C; U16(r + 4) = 0x80; U16(r + 6) = 0x40;
+        Menu_Sprite(r, 0, 0xC0, 0x7C40, 0x808080, 0, 1);
+        Gpu_SetDrawMode(U32(0x87DC98), 1, 0, 0x8C, 0);
+        Gpu_AddPrim(0x87BC04 + (U32(0x87DE0C) << 12), U32(0x87DC98));
+        U32(0x87DC98) += 0xC;
+        Menu_DrawFrames(0x6851D8, 0x45, 0x80, 0xC, 0x7C8E, 0x808080, 0x64);
+    }
+    if (!pic) Items_Panel(m);
+    u32 a = (U8(G() + 4) >> 2 & 1) ^ 1, c = U8(G() + 4) & 2 ? 0 : 2;
+    U16(r + 4) = 0x2B; U16(r + 6) = 0x16;
+    for (u16 y = 0x9C; y < 0xC8; y += 0x16)
+        for (u16 x = 0x80; x < 0x12C; x += 0x2B) {
+            U16(r) = x; U16(r + 2) = y;
+            Menu_Sprite(r, c + 0xB0, a + 0x80, 0x7C8E, 0x3080, 1, 0x64);
+            Menu_Sprite(r, a + 0xB2, c + 0x82, 0x7C8E, 0x402000, 1, 0x64);
+        }
+    Gpu_SetDrawMode(U32(0x87DC98), 1, 0, 0xC, 0);
+    Gpu_AddPrim(0x87BD90 + (U32(0x87DE0C) << 12), U32(0x87DC98));
+    U32(0x87DC98) += 0xC;
+    Menu_DrawFrames(0x683E38, 0xD8, 0xCD, 0xD, 0x7C8E, 0x808080, 1);
+    for (u32 k = 0; k < 6; k++) Menu_DrawFrames(0x6843E8, 0xD8, 0x20 + 0x13 * k, 0xD, 0x7C8E, 0x80808080, 2);
+    a = (U8(G() + 4) >> 2 & 1) ^ 1; c = U8(G() + 4) & 2 ? 0 : 2;
+    U16(r + 4) = 0x28; U16(r + 6) = 0x13;
+    for (u16 y = 0x20; y < 0x92; y += 0x13)
+        for (u16 x = 0x88; x < 0x128; x += 0x28) {
+            U16(r) = x; U16(r + 2) = y;
+            Menu_Sprite(r, c + 0xB0, a + 0x80, 0x7C8E, 0x3080, 1, 0x64);
+            Menu_Sprite(r, a + 0xB2, c + 0x82, 0x7C8E, 0x402000, 1, 0x64);
+        }
+    Gpu_SetDrawMode(U32(0x87DC98), 1, 0, 0xC, 0);
+    Gpu_AddPrim(0x87BD90 + (U32(0x87DE0C) << 12), U32(0x87DC98));
+    U32(0x87DC98) += 0xC;
+    U16(r) = 0x89; U16(r + 2) = (u16)((s8)U8(m + 0x4F) * 19 + 0x20); U16(r + 4) = 0x9D; U16(r + 6) = 0x13;
+    Menu_Tile(r, 0x358533, 0, 0x320);
+    Tmp_Pop(0x10);
+    gptr buf = Tmp_Push(0x10), rec = G() + 0x11AC;
+    u32 row = 0, ty = 0x22;
+    for (u16 i = 0; (s32)i < (s8)U8(m + 0x5D); i++, rec += 12) {
+        if (!U8(rec)) continue;
+        if (U8(rec) == 1) {
+            Text_Draw(U32(0x704260 + U8(rec + 1) * 12), 0x94, ty, 0x64, 0x808080, 1, 0);
+            Crt_sprintf3(buf, 0x71D738, (u32)(s32)S16(rec + 8), (u32)(s32)S16(rec + 0xA), 0);
+            Text_Ascii(0x104, (row & 0xFFFF) * 19 + 0x28, 0xFF00, buf);
+        }
+        row++; ty += 0x13;
+    }
+    Tmp_Pop(0x10);
+}
+
+/* a ring of 64 flat quads between radii r1 and r2 round x, y, turned by
+ * angle about the vertical (via the GTE); every other 16 left out, the
+ * color rising 0x800 a quad (slot 0x64) */
+void DC2CALL Menu_Ring(u32 angle, u32 x, u32 y, u32 r1, u32 r2, u32 color) /* 0x495410 */
+{
+    gptr f = Tmp_Push(0x460);                /* r {0, angle, 0}, sv, matrix, the points */
+    gptr rv = f + 0x18, sv = f + 0x10, mt = f + 0x28, pin = f + 0x48, pout = f + 0x250;
+    x &= 0xFFFF; y &= 0xFFFF;
+    U16(rv + 2) = (u16)angle; U16(rv) = 0; U16(rv + 4) = 0;
+    s32 d1 = (s32)(r1 * 400), d2 = (s32)((r2 * 5 + 10) * 80);
+    for (u32 i = 0; i < 64; i++) {
+        U16(sv) = 0; U16(sv + 2) = 0; U16(sv + 4) = (u16)d1;
+        RotMatrix(rv, mt);
+        ApplyMatrixSV(mt, sv, sv);
+        F32(pin + 8 * i) = (float)(S16(sv) / 400 + (s32)x);
+        F32(pin + 8 * i + 4) = (float)(S16(sv + 4) / 400 + (s32)y);
+        U16(sv + 2) = 0; U16(sv) = 0; U16(sv + 4) = (u16)d2;
+        RotMatrix(rv, mt);
+        ApplyMatrixSV(mt, sv, sv);
+        U16(rv + 2) += 0x40;
+        F32(pout + 8 * i) = (float)(S16(sv) / 400 + (s32)x);
+        F32(pout + 8 * i + 4) = (float)(S16(sv + 4) / 400 + (s32)y);
+    }
+    U32(pin + 0x200) = U32(pin); U32(pin + 0x204) = U32(pin + 4);
+    for (u32 i = 0; i < 64; i++, color += 0x800) {
+        if (i & 0x10) continue;
+        gptr p = U32(0x87DC98);
+        U32(p + 8) = U32(pin + 8 * i); U32(p + 0x14) = U32(pin + 8 * i + 8);
+        U32(p + 0x20) = U32(pout + 8 * i); U32(p + 0x2C) = U32(pout + 8 * i + 8);
+        U32(p + 0xC) = U32(pin + 8 * i + 4); U32(p + 0x18) = U32(pin + 8 * i + 0xC);
+        U32(p + 0x24) = U32(pout + 8 * i + 4); U32(p + 0x30) = U32(pout + 8 * i + 0xC);
+        U32(p + 0x34) = U32(p + 0x28) = U32(p + 0x1C) = U32(p + 0x10) = 0x3C23D70A;
+        U32(p + 4) = color | 0x28000000;
+        gptr ot = 0x87BD90 + (U32(0x87DE0C) << 12);
+        U32(p) = U32(ot) | 0x05000000;
+        U32(ot) = p & 0xFFFFFF;
+        U32(0x87DC98) = p + 0x38;
+    }
+    Tmp_Pop(0x460);
+}
+
+/* the two turning rings by the item's picture (M+0x70, M+0x72) */
+void DC2CALL Items_Panel(gptr m)                                    /* 0x499D00 */
+{
+    U16(m + 0x70) = (u16)((U16(m + 0x70) + 0x50) & 0xFFF);
+    Menu_Ring(U16(m + 0x70), 0x44, 0xAC, 6, 8, 0x800000);
+    U16(m + 0x72) = (u16)((U16(m + 0x72) + 0x14) & 0xFFF);
+    Menu_Ring(U16(m + 0x72), 0x44, 0xAC, 0xC, 0xE, 0x80);
+}
+
+/* the file page's frame: page number (M+0x51 + M+0x52 + 1), the file's title and text */
+void DC2CALL Files_Frame(gptr m)                                    /* 0x499D60 */
+{
+    Menu_DrawFrames(0x6857B0, 0x1C, 0x18, 0xC, 0x7C8E, 0x80808080, 2);
+    Menu_DrawFrames(0x6857C0, 0x8C, 0x18, 0xC, 0x7C8E, 0x80808080, 3);
+    Menu_DrawFrames(0x6857C8, 0x114, 0x28, 0xC, 0x7C8E, 0x80808080, 2);
+    Menu_DrawFrames(0x6857D0, 0x24, 0x18, 0xC, 0x7C8F, 0x2060C0, 2);
+    Menu_DrawFrames(0x6857D8, 0x58, 0x38, 0xC, 0x7C8E, 0x80808080, 2);
+    Menu_DrawFrames(0x6858D8, 0xE0, 0x38, 0xC, 0x7C8E, 0x80808080, 2);
+    Menu_DrawFrames(0x685858, 0x58, 0x90, 0xC, 0x7C8E, 0x80808080, 2);
+    Menu_DrawFrames(0x685958, 0xE0, 0x90, 0xC, 0x7C8E, 0x80808080, 2);
+    Menu_DrawFrames(0x685408, 0x3C, 0x1D, 0xC, 0x7C8F, 0x808080, 2);
+    Menu_Number11(0x78, 0x1B, 2, 1, 0x104080, (u32)((s8)U8(m + 0x52) + (s8)U8(m + 0x51) + 1), 5);
+    Text_Draw(U32(0x704260 + (s8)U8(m + 0x53) * 12), 0x48, 0x28, 0x64, 0x808080, 3, 0);
+    Text_Draw(U32(0x704264 + (s8)U8(m + 0x53) * 12), 0x20, 0x9F, 0x64, 0x808080, 3, 0);
+    Menu_DrawFrames(0x684C60, 0x58, 0xA0, 0xD, 0x7C8E, 0x80808080, 2);
+    Menu_DrawFrames(0x684D90, 0xE0, 0xA0, 0xD, 0x7C8E, 0x80808080, 2);
+    Menu_DrawFrames(0x684EC0, 0x58, 0xD2, 0xD, 0x7C8E, 0x80808080, 2);
+    Menu_DrawFrames(0x684F40, 0xE0, 0xD2, 0xD, 0x7C8E, 0x80808080, 2);
+}
+
+/* step 4: after an item was used, the list closes up: each item flashes
+ * (+0 | 0x80), Item_Merge, then they settle; back when the health shown caught up */
+void DC2CALL Items_Sort(gptr m)                                     /* 0x498E10 */
+{
+    U8(m + 0x65) = 2;
+    switch ((s8)U8(m + 3)) {
+    case 0:
+        U8(m + 0x4F) = 0; U16(m + 0x96) = 0;
+        if (!(u8)Item_CountUsed(G() + 0x11AC, 6)) U8(m + 3) = 5;
+        else U8(m + 3)++;
+        break;
+    case 1:
+        if (U16(m + 0x96)) { U16(m + 0x96) = 0; U8(m + 0x4F)++; }
+        for (;;) {
+            if ((s8)U8(m + 0x4F) >= 6) { U8(m + 3) = 3; U8(m + 0x4F) = (u8)(U8(m + 0x5D) - 1); break; }
+            if (U8(G() + ((s8)U8(m + 0x4F) + 0x179) * 12)) { U8(m + 3)++; break; }
+            U8(m + 0x4F)++;
+        }
+        break;
+    case 2:
+        if (++S16(m + 0x96) > 2) {
+            U8(G() + ((s8)U8(m + 0x4F) + 0x179) * 12) |= 0x80;
+            U8(m + 3) = 1;
+        }
+        break;
+    case 3:
+        U16(m + 0x96) = 0;
+        Item_Merge();
+        U8(m + 0x4F) = 0;
+        U8(m + 3)++;
+        break;
+    case 4:
+        if (++S16(m + 0x96) > 4) {
+            U8(G() + ((s8)U8(m + 0x4F) + 0x179) * 12) &= 0x7F;
+            U8(m + 0x4F)++;
+            U16(m + 0x96) = 0;
+            if ((s8)U8(m + 0x4F) >= (s8)U8(m + 0x5D)) { U8(m + 0x4F) = (u8)(U8(m + 0x5D) - 1); U8(m + 3)++; }
+        }
+        break;
+    case 5:
+        if ((s32)U16(m + 0x4A) == S16(U32(G() + 0x940) + 0x108)) {
+            U16(m + 0x92) = 0x1E; U16(m + 0x96) = 0; U8(m + 0x4F) = 0;
+            U8(m + 2) = (u8)Item_CountUsed(G() + 0x11AC, 6) ? 2 : 1;
+            U8(m + 3) = 0;
+        }
+        break;
+    }
+    Items_Draw(m);
+}
+
+/* step 5: no items; either button back (or out, when opened for the items) */
+void DC2CALL Items_None(gptr m)                                     /* 0x499040 */
+{
+    u8 pad = U8(0x87DC00);
+    if (pad & 0x60) {
+        Se_Play(0, pad & 0x40 ? 1 : 2);
+        if (U8(m + 0x64) == 5) { U32(m) = 0x502; U8(m + 0x64) = 0; }
+        else U8(m + 2) = 0xB;
+    }
+    notice(m, 0x7242CC);
+}
+
+/* a file id used here: an enabled zone of kind 9 for the player's room
+ * part whose quad holds him (or the point 0x190 ahead), its +0x19 the id */
+u32 DC2CALL Zone_FileSpot(u32 id)                                   /* 0x48B280 */
+{
+    gptr g = G(), pl = U32(g + 0x940), z = U32(g + 0xA5C), end = z + 0x500;
+    u32 sw = U16(g + 0x10B4) >> 8;
+    if (U8(pl + 0x55) == 0xA && (sw == 3 || sw == 6)) return 0;
+    for (; z < end; z += 0x28) {
+        if (!(U8(z) & 1) || U8(z + 1) != 9 || U8(z + 2) != U16(pl + 0x5A)) continue;
+        gptr at = pl + 0x40, sv = 0;
+        if (U8(z) & 2) {
+            sv = Tmp_Push(8);
+            RotMatrix(pl + 0x48, pl + 0x20);
+            U16(sv) = 0; U16(sv + 2) = 0; U16(sv + 4) = 0x190;
+            ApplyMatrixSV(pl + 0x20, sv, sv);
+            U16(sv) += U16(pl + 0x40); U16(sv + 2) += U16(pl + 0x42); U16(sv + 4) += U16(pl + 0x44);
+            at = sv;
+        }
+        u32 in = PointInQuad(at, z + 4);
+        if (sv) Tmp_Pop(8);
+        if (in && U8(z + 0x19) == (u8)id) return 1;
+    }
+    return 0;
+}
+
+/* the files page (M+0x28.. the six shown from page M+0x52, M+0x51 the cursor) */
+void DC2CALL Files_Draw(gptr m)                                     /* 0x499F80 */
+{
+    if (U8(m + 2) == 6) {
+        Menu_DrawFrames(0x6853F0, 0xD6, 0x21, 0xC, 0x7C8F, 0x808080, 2);
+        Menu_Line(0xCC, 0x20, 0x100, 0x20, 0x75E533, 1, 4);
+        Menu_Line(0xCC, 0x30, 0x100, 0x30, 0x75E533, 1, 4);
+        Gpu_SetDrawMode(U32(0x87DC98), 1, 0, 0xC, 0);
+        Gpu_AddPrim(0x87BC10 + (U32(0x87DE0C) << 12), U32(0x87DC98));
+        U32(0x87DC98) += 0xC;
+    }
+    Menu_DrawFrames(0x6857B0, 0x1C, 0x18, 0xC, 0x7C8E, 0x80808080, 2);
+    Menu_DrawFrames(0x6857C0, 0x8C, 0x18, 0xC, 0x7C8E, 0x80808080, 3);
+    Menu_DrawFrames(0x6857C8, 0x34, 0x28, 0xC, 0x7C8E, 0x80808080, 2);
+    Menu_DrawFrames(0x6857D0, 0x24, 0x18, 0xC, 0x7C8F, 0x2060C0, 2);
+    Menu_DrawFrames(0x685408, 0x3C, 0x1D, 0xC, 0x7C8F, 0x808080, 2);
+    Menu_Number11(0x78, 0x1B, 2, 1, 0x104080, (u32)((s8)U8(m + 0x52) + (s8)U8(m + 0x51) + 1), 5);
+    Menu_DrawFrames(0x685080, 0x88, 0x24, 0xC, 0x7C8E, 0x80808080, 2);
+    for (u32 k = 0; k < 6; k++) {
+        u32 v = (u8)(0x80 - (k << 4));
+        u32 c = ((((v | 0xFFFF8000u) << 8) | v) << 8) | v;
+        Menu_DrawFrames(0x685060, 0x68 + 5 * k, 0x2C, 0xC, 0x7C8E, c, 2);
+        Menu_DrawFrames(0x685028, 0xC0 - 5 * k, 0x24, 0xC, 0x7C8E, c, 2);
+    }
+    Menu_DrawFrames(0x6857D8, 0x58, 0x38, 0xC, 0x7C8E, 0x80808080, 2);
+    Menu_DrawFrames(0x6858D8, 0xE0, 0x38, 0xC, 0x7C8E, 0x80808080, 2);
+    Menu_DrawFrames(0x685858, 0x58, 0xAE, 0xC, 0x7C8E, 0x80808080, 2);
+    Menu_DrawFrames(0x685958, 0xE0, 0xAE, 0xC, 0x7C8E, 0x80808080, 2);
+    u8 k = U8(m + 0x52), b = 0x20;
+    for (;;) {
+        if (Flag_Check(9, b) && (s8)--k < 0) break;
+        if (++b >= 0x50) break;
+    }
+    Flag_ListRange(b, 0x50, 6, m + 0x28);
+    u32 n = (s8)U8(m + 0x50) < 6 ? (u32)(s32)(s8)U8(m + 0x50) : 6, i;
+    gptr v = Tmp_Push(0x10);
+    for (i = 0; i < n; i++) {
+        u32 y = 0x48 + 0x11 * i, s = 0x11 * i;
+        int sel = (s8)U8(m + 0x51) == (s32)i;
+        if (sel) Menu_DrawFrames(0x6850C0, 0x3C, y, 0xC, 0x7C8F, 0x1060C0, 2);
+        U16(v) = U16(v + 8) = 0x40; U16(v + 4) = U16(v + 0xC) = 0x124;
+        U16(v + 2) = U16(v + 6) = (u16)(s + 0x47); U16(v + 0xA) = U16(v + 0xE) = (u16)(s + 0x58);
+        if (sel) Menu_PolyG4(v, 0x20, 0x80, 0x20, 0x80, 1, 0xA);
+        else Menu_PolyG4(v, 0x100000, 0x800000, 0x100000, 0x800000, 1, 0xA);
+        Menu_Number12(0x28, y + 2, 2, 1, 0x808080, (u32)((s8)U8(m + 0x52) + (s32)i + 1), 3);
+        Menu_DrawFrames(0x6859D8, 0x18, y, 0xC, 0x7C8E, 0x80808080, 3);
+        Menu_DrawFrames(0x6859E0, 0x11E, y + 1, 0xC, 0x7C8E, 0x80808080, 3);
+        Menu_Line(0x18, s + 0x58, 0x124, s + 0x58, 0x75E533, 1, 4);
+        Gpu_SetDrawMode(U32(0x87DC98), 1, 0, 0xC, 0);
+        Gpu_AddPrim(0x87BC10 + (U32(0x87DE0C) << 12), U32(0x87DC98));
+        U32(0x87DC98) += 0xC;
+        Text_Draw(U32(0x704260 + U8(m + 0x28 + i) * 12), 0x48, s + 0x48, 0x64, 0x808080, 3, 0);
+    }
+    Tmp_Pop(0x10);
+    if (i < 6)
+        for (u32 y = 0x11 * i + 0x48; y < 0xAE; y += 0x11) {
+            Menu_DrawFrames(0x6859D8, 0x18, y, 0xC, 0x7C8E, 0x80808080, 3);
+            Menu_DrawFrames(0x6859E0, 0x1D, y, 0xC, 0x7C8E, 0x80808080, 3);
+        }
+    if ((s8)U8(m + 0x52) > 0)
+        Menu_DrawFrames(0x685070, 0x9C, 0x3E, 0xC, 0x7C8F, Color_Pulse(0x4040, 0xC0C0, 5), 3);
+    if ((s8)U8(m + 0x52) < (s8)U8(m + 0x50) - 6)
+        Menu_DrawFrames(0x685068, 0x9C, 0xB0, 0xC, 0x7C8F, Color_Pulse(0x4040, 0xC0C0, 5), 3);
+}
+
+/* step 6: the files listed; up/down move M+0x51 and scroll M+0x52 */
+void DC2CALL Files_List(gptr m)                                     /* 0x499100 */
+{
+    u8 max = (u8)(((s8)U8(m + 0x50) < 6 ? (s8)U8(m + 0x50) : 6) - 1);
+    u8 o51 = U8(m + 0x51), o52 = U8(m + 0x52);
+    u16 k = U16(m + 0x44);
+    if (k & 0x1000) {
+        U8(m + 0x51) = (u8)(o51 - 1);
+        if ((s8)U8(m + 0x51) < 0) {
+            U8(m + 0x51) = 0;
+            if ((s8)o52 > 0) U8(m + 0x52) = (u8)(o52 - 1);
+        }
+    } else if (k & 0x4000) {
+        U8(m + 0x51) = (u8)(o51 + 1);
+        if ((s8)U8(m + 0x51) > (s32)max) {
+            U8(m + 0x51) = max;
+            if ((s8)o52 < (s8)U8(m + 0x50) - 6) U8(m + 0x52) = (u8)(o52 + 1);
+        }
+    } else if (U8(0x87DC00) & 0x40) {
+        Se_Play(0, 1);
+        U8(m + 2) = 1;
+    } else if (U8(0x87DC00) & 0x20) {
+        Se_Play(0, 2);
+        U8(m + 0x53) = U8(m + 0x28 + (s8)U8(m + 0x51));
+        U8(m + 2) = 7;
+    }
+    if ((u32)o51 != (u32)(s32)(s8)U8(m + 0x51) || (u32)o52 != (u32)(s32)(s8)U8(m + 0x52)) Se_Play(0, 0);
+    Files_Draw(m);
+    Menu_DrawFrames(0x684A40, 0x60, 0xC0, 0xD, 0x7C8E, 0x80808080, 3);
+    Menu_DrawFrames(0x684B60, 0xE8, 0xC0, 0xD, 0x7C8E, 0x80808080, 3);
+    Text_Draw(0x7248E2, 0x20, 0xC1, 0x64, 0x808080, 2, 0);
+}
+
+/* step 7: read or use the file (M+0x53); used where a zone wants it, it is
+ * given to the room (G+0xB4A) and the menu closes */
+void DC2CALL Files_Sel(gptr m)                                      /* 0x499260 */
+{
+    if (U8(m + 0x45) & 0x50) {
+        Se_Play(0, 0);
+        U8(m + 0x4E) ^= 1;
+    } else if (U8(0x87DC00) & 0x40) {
+        Se_Play(0, 1);
+        U8(m + 0x4E) = 0; U8(m + 2) = 6;
+    } else if (U8(0x87DC00) & 0x20) {
+        if (U8(m + 0x4E)) {
+            while (File_IsBusy()) Task_Sleep(1);
+            Orig_Call1(0x403EE0, (u16)(s16)(s8)U8(m + 0x53));
+            U8(m + 2) = 8;
+            Se_Play(0, 2);
+        } else if (Flag_Check(0xA, (u32)(s32)(s8)U8(m + 0x53)) && Zone_FileSpot(U8(m + 0x53))) {
+            U8(G() + 0xB4A) = U8(m + 0x53);
+            U32(m) = 0x502;
+        } else U8(m + 2) = 0xA;
+        U8(m + 3) = 0;
+    }
+    u32 c0 = U8(m + 0x4E) ? 0x303030 : 0x808080, c1 = U8(m + 0x4E) ? 0x808080 : 0x303030;
+    Text_Draw(0x7242C4, 0xC9, 0x16, 0x64, c0, 2, 0);
+    Text_Draw(0x7242B8, 0xC9, 0x26, 0x64, c1, 2, 0);
+    U16(m + 0x88)++;
+    if (S16(m + 0x88) > 0x44) U16(m + 0x88) = 0;
+    gptr r = Tmp_Push(8);
+    for (u32 j = 0; j < 2; j++) {
+        U16(r) = 0xC8; U16(r + 2) = (u16)((s8)U8(m + 0x4E) * 16 + 0x16); U16(r + 4) = 0x30; U16(r + 6) = 0x10;
+        Menu_Border(r, (u16)(U16(m + 0x88) + 0x22 * j), 0x22, 2, 0xFFFF);
+    }
+    Tmp_Pop(8);
+    Files_Draw(m);
+}
+
+/* step 8: reading the file: its picture once loaded; cancel back to the list */
+void DC2CALL Files_View(gptr m)                                     /* 0x499430 */
+{
+    switch ((s8)U8(m + 3)) {
+    case 0:
+        U8(m + 0x4E) = 0;
+        if (!File_IsBusy()) U8(m + 3)++;
+        break;
+    case 1: {
+        gptr r = Tmp_Push(8);
+        U16(r) = 0x60; U16(r + 2) = 0x50; U16(r + 4) = 0x80; U16(r + 6) = 0x40;
+        Menu_Sprite(r, 0, 0xC0, 0x7C40, 0x808080, 0, 1);
+        Tmp_Pop(8);
+        Gpu_SetDrawMode(U32(0x87DC98), 1, 0, 0x8C, 0);
+        Gpu_AddPrim(0x87BC04 + (U32(0x87DE0C) << 12), U32(0x87DC98));
+        U32(0x87DC98) += 0xC;
+        if (U8(0x87DC00) & 0x40) { Se_Play(0, 1); U8(m + 2) = 6; U8(m + 3) = 0; }
+        break; }
+    }
+    Files_Frame(m);
+}
+
+/* step 9: no files */
+void DC2CALL Files_None(gptr m)                                     /* 0x499520 */
+{
+    u8 pad = U8(0x87DC00);
+    if (pad & 0x60) { Se_Play(0, pad & 0x40 ? 1 : 2); U8(m + 2) = 0xB; }
+    notice(m, 0x72438A);
+}
+
+/* step 10: the file cannot be used here (0x2D in area 7, 0x33, 0x34, 0x37, 0x38: another text) */
+void DC2CALL Files_Cant(gptr m)                                     /* 0x4995C0 */
+{
+    u8 id = U8(m + 0x53), pad = U8(0x87DC00);
+    if (pad & 0x60) { Se_Play(0, pad & 0x40 ? 1 : 2); U8(m + 2) = 6; }
+    int other = id == 0x2D ? U8(G() + 0x1091) == 7 : id == 0x37 || id == 0x38 || id == 0x33 || id == 0x34;
+    notice(m, other ? 0x7243F0 : 0x7243C0);
+}
+
+/* step 11: back to the pause menu */
+void DC2CALL Items_Back(gptr m)                                     /* 0x4996C0 */
+{
+    U8(m + 1) = 0; U8(m + 2) = 0; U8(m + 3) = 0;
+    Menu_Header(m);
+    Menu_Weapons(m, 0x80, 0x18, 2);
+    Menu_Health(0x10, 0x58);
+    Menu_Points(0x80, 0x58, 0x808080);
+    Menu_PauseList(m);
+    screen_bottom();
+    Text_Draw(0x724208, 0x20, 0xC5, 0x64, 0x707070, 0x64, 0);
 }

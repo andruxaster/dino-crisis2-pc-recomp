@@ -926,6 +926,43 @@ void DC2CALL Pause_Describe(u32 i, u32 x, u32 y, u32 w); /* 0x4920F0 */
 void DC2CALL Screen_Pause(gptr m);  /* 0x491E50 */
 void DC2CALL Screen_Leave(gptr m);  /* 0x492180 */
 void DC2CALL MenuMode_Leave(gptr m); /* 0x492330 */
+void DC2CALL Screen_Equip(gptr m);  /* 0x496930 */
+void DC2CALL Equip_Init(gptr m);    /* 0x496970 */
+void DC2CALL Equip_Choose(gptr m);  /* 0x496A30 */
+void DC2CALL Equip_ArrowsR(u32 x, u32 y); /* 0x497ED0 */
+void DC2CALL Equip_ArrowsL(u32 x, u32 y); /* 0x497F80 */
+void DC2CALL Equip_RingItem(gptr m, u32 x, u32 y, u32 sel, u32 idx, u32 color, u32 z); /* 0x498030 */
+void DC2CALL Equip_Ring(gptr m, u32 main); /* 0x497AE0 */
+void DC2CALL Equip_Options(gptr m); /* 0x4985C0 */
+void DC2CALL Equip_Stats(gptr m, u32 main); /* 0x4976C0 */
+void DC2CALL Equip_WeaponRing(gptr m); /* 0x496D90 */
+void DC2CALL Equip_SubRing(gptr m); /* 0x497210 */
+void DC2CALL Equip_WeaponSel(gptr m); /* 0x496EB0 */
+void DC2CALL Equip_SubSel(gptr m);  /* 0x497310 */
+void DC2CALL Equip_WeaponView(gptr m); /* 0x497120 */
+void DC2CALL Equip_SubView(gptr m); /* 0x497480 */
+void DC2CALL Equip_Back(gptr m);    /* 0x497570 */
+void DC2CALL Equip_NoWeapon(gptr m); /* 0x497620 */
+void DC2CALL Screen_Items(gptr m);  /* 0x498710 */
+void DC2CALL Items_Init(gptr m);    /* 0x498750 */
+void DC2CALL Items_Choose(gptr m);  /* 0x498840 */
+void DC2CALL Items_List(gptr m);    /* 0x498B40 */
+void DC2CALL Items_Use(gptr m);     /* 0x498C80 */
+void DC2CALL Items_Sort(gptr m);    /* 0x498E10 */
+void DC2CALL Items_None(gptr m);    /* 0x499040 */
+void DC2CALL Files_List(gptr m);    /* 0x499100 */
+void DC2CALL Files_Sel(gptr m);     /* 0x499260 */
+void DC2CALL Files_View(gptr m);    /* 0x499430 */
+void DC2CALL Files_None(gptr m);    /* 0x499520 */
+void DC2CALL Files_Cant(gptr m);    /* 0x4995C0 */
+void DC2CALL Items_Back(gptr m);    /* 0x4996C0 */
+void DC2CALL Items_Draw(gptr m);    /* 0x499770 */
+void DC2CALL Items_Panel(gptr m);   /* 0x499D00 */
+void DC2CALL Files_Frame(gptr m);   /* 0x499D60 */
+void DC2CALL Files_Draw(gptr m);    /* 0x499F80 */
+void DC2CALL Menu_Ring(u32 angle, u32 x, u32 y, u32 r1, u32 r2, u32 color); /* 0x495410 */
+void DC2CALL Text_Ascii(u32 x, u32 y, u32 col, gptr s); /* 0x471B30 */
+u32  DC2CALL Zone_FileSpot(u32 id); /* 0x48B280 */
 void DC2CALL Game_ModeStock(void);                                      /* 0x452450 */
 
 u32  DC2CALL Angle_DiffTo(gptr a, gptr b, u32 ang);                  /* 0x48F3E0 */
