@@ -67,15 +67,18 @@ static int load_image(const char *path)
 /* ------------------------------------------------------- snapshot compare */
 typedef struct { u32 lo, hi; } Range;
 static const Range RW[] = { {0x4E8000, 0x703000},      /* .psxseg */
-                            {0x71B000, 0x882000} };    /* .data + bss */
-static u8 *snap0[2], *snap1[2];
+                            {0x71B000, 0x882000},      /* .data + bss */
+                            {0x882000, 0x8BD000} };    /* past the image (the stub's reserve): see g_nrw */
+static u8 *snap0[3], *snap1[3];
+static int g_nrw = 2;   /* 3 in the drawing tests: an ordering table index from a u16 z reaches 0x8BCC00 */
 
-static void snap(u8 **dst) { for (int i = 0; i < 2; i++) memcpy(dst[i], MEM(RW[i].lo), RW[i].hi - RW[i].lo); }
-static void restore(u8 **src) { for (int i = 0; i < 2; i++) memcpy(MEM(RW[i].lo), src[i], RW[i].hi - RW[i].lo); }
+static void snap(u8 **dst) { for (int i = 0; i < g_nrw; i++) memcpy(dst[i], MEM(RW[i].lo), RW[i].hi - RW[i].lo); }
+static void restore(u8 **src) { for (int i = 0; i < g_nrw; i++) memcpy(MEM(RW[i].lo), src[i], RW[i].hi - RW[i].lo); }
 
 static int g_fail, g_tests;
 static u32 g_ign_addr, g_ign_len;    /* bytes the original fills with stack garbage */
 static u32 g_ign2_addr, g_ign2_len;  /* a second such range */
+static u32 g_ign3_addr, g_ign3_len;  /* a third */
 static int g_ign_objpads;            /* matrix pads (+0x32) of test objects and parts */
 static u32 g_ign_filerecs;           /* the file header's first n records: their last 16 bytes (stack garbage) */
 static int g_ign_door;               /* door scene: matrix pads */
@@ -161,7 +164,11 @@ static int compare(const char *name, u32 r_orig, u32 r_new, u32 rmask)
         for (int i = 0; i < 2; i++)
             if (g_ign2_addr + k >= RW[i].lo && g_ign2_addr + k < RW[i].hi)
                 snap1[i][g_ign2_addr + k - RW[i].lo] = U8(g_ign2_addr + k);
-    for (int i = 0; i < 2; i++) {
+    for (u32 k = 0; k < g_ign3_len; k++)
+        for (int i = 0; i < 2; i++)
+            if (g_ign3_addr + k >= RW[i].lo && g_ign3_addr + k < RW[i].hi)
+                snap1[i][g_ign3_addr + k - RW[i].lo] = U8(g_ign3_addr + k);
+    for (int i = 0; i < g_nrw; i++) {
         u8 *cur = MEM(RW[i].lo);
         u32 n = RW[i].hi - RW[i].lo;
         if (memcmp(cur, snap1[i], n)) {
@@ -683,7 +690,7 @@ static Stub g_stubs[] = {
     {0x4B4F90, "d"}, {0x4BF650, ""}, {0x4BF670, ""}, {0x4BF690, ""}, {0x4BF340, ""},   /* 143..: the movie's clear, play, stop, poll, close */
     {0x4BF180, ""}, {0x46FC60, ""},              /* 148: Input_ReadKey, Display_Apply */
     {0x4C0490, "s"}, {0x4C0510, "ddd"},          /* 150: PCcreat, PCwrite */
-    {0x482940, "d"}, {0x483290, "dddd"}, {0x4836A0, "ddd"},   /* 152: EnvMapDraw, Model_SetTexture (impl), Model_DrawTex */
+    {0, "dd"}, {0, "dddd"}, {0, "ddd"},  /* 152: Task_Start (test_ending sets its address); 153, 154: free */
     {0, "pdd", {8}}, {0, "pdd", {8}},          /* 155: VRAM copy 0x4B4A60, MoveImage 0x4B4B30 (set by test_extra) */
 };
 #define STUB_GAME 71
@@ -759,12 +766,6 @@ static void *const g_recs[] = {rec0, rec1, rec2, rec3, rec4, rec5, rec6, rec7, r
     rec134, rec135, rec136, rec137, rec138, rec139, rec140, rec141, rec142,
     rec143, rec144, rec145, rec146, rec147, rec148, rec149, rec150, rec151, rec152, rec153, rec154, rec155, rec156};
 _Static_assert(sizeof g_recs / sizeof g_recs[0] >= sizeof g_stubs / sizeof g_stubs[0], "a recorder per stub");
-/* Model_SetTexture(model, {u16 tpage, u16 clut, u32 colour, u8 mode}): the colour only counts without mode bit 1 */
-static u32 __cdecl tex_rec(u32 m, u32 p)
-{
-    u32 a[4] = {m, U32(p), U8(p + 8), U8(p + 8) & 2 ? 0 : U32(p + 4)};
-    return rec_common(153, a);
-}
 static int g_task_sleeps;               /* Task_Sleep leaves the task at the n-th call */
 static void *g_task_jb[5];
 /* Task_Sleep: the file loader "runs" while the task sleeps */
@@ -779,7 +780,6 @@ static u32 __cdecl fk_sprintf(u32 buf, u32 fmt, u32 name, u32 b, u32 c);
 static void stubs_install(int on)
 {
     g_stubs[STUB_LOAD].impl = ts_sleep;
-    g_stubs[153].impl = tex_rec;
     if (!g_stubs[STUB_FILE + 7].impl) g_stubs[STUB_FILE + 7].impl = fk_sprintf;   /* sprintf does its work */
     for (int i = 0; i < NSTUBS; i++) {
         Stub *st = &g_stubs[i];
@@ -4326,7 +4326,7 @@ static void test_draw(void)
     };
     static const u32 zf[] = {0x4A82F0, 0x4A8310, 0x4A8360, 0x4A83C0, 0x4A8410};
     stubs_install(1);
-    g_ign_objpads = 1; g_ign_draw = 1;
+    g_ign_objpads = 1; g_ign_draw = 1; g_nrw = 3;
     for (int i = 0; i < iters; i++) {
         for (unsigned k = 0; k < sizeof F / sizeof F[0]; k++) {
             game_state();
@@ -4380,7 +4380,7 @@ static void test_draw(void)
             check(F[k].addr, F[k].fn, F[k].name, F[k].n, a, 0);
         }
     }
-    g_ign_objpads = 0; g_ign_draw = 0;
+    g_ign_objpads = 0; g_ign_draw = 0; g_nrw = 2;
     stubs_install(0);
 }
 
@@ -11646,6 +11646,400 @@ static void title2_state(void)
 static u32 __cdecl t2_task_orig(void) { g_task_sleeps = g_task_n; if (!__builtin_setjmp(g_task_jb)) ((void (__cdecl *)(void))0x4A63F0)(); g_task_sleeps = 0; return 0; }
 static u32 __cdecl t2_task_new(void) { g_task_sleeps = g_task_n; if (!__builtin_setjmp(g_task_jb)) Title2Task(); g_task_sleeps = 0; return 0; }
 
+/* ---- model.c: models lit and projected once (EnvMapDraw), env-mapped or textured polygons ---- */
+#define MD_M    0x5E0000u      /* the model {verts, normals, ...; +0x1C polygon block; u8 +0x23 groups} */
+#define MD_V    0x5E2000u      /* vertices, 3 per group (up to 0x200) */
+#define MD_N    0x5E3000u      /* normals */
+#define MD_TRI  0x5E4000u      /* up to 0x140 triangles */
+#define MD_QUAD 0x5E5000u      /* up to 0x140 quads */
+#define MD_P    0x5E7000u      /* {u16 tpage, u16 clut, u32 colour, u8 mode} */
+static void model_state(void)
+{
+    game_state();
+    draw_scene();
+    for (u32 a = MD_M; a < MD_P + 0x10; a += 4) U32(a) = rnd();
+    u32 ng = rnd() % 8 ? 1 + rnd() % 12 : (u32[]){0, 16, 100, 160}[rnd() % 4], nv = 3 * ng;   /* (over 0x100 vertices: the u16 indices) */
+    u32 big = rnd() % 6 == 0;                          /* (over 0x100 polygons: the u16 counts) */
+    U32(MD_M) = MD_V; U32(MD_M + 4) = MD_N; U8(MD_M + 0x23) = (u8)ng;
+    gptr b = MD_M + 0x1C;
+    U32(b + 8) = MD_TRI; U32(b + 0xC) = MD_QUAD;
+    U16(b + 0x10) = (u16)(big ? 0xF8 + rnd() % 0x48 : rnd() % 6 ? rnd() % 24 : 0);
+    U16(b + 0x12) = (u16)(big ? 0xF8 + rnd() % 0x48 : rnd() % 6 ? rnd() % 24 : 0);
+    s32 r = rnd() % 4 ? 0x300 : 0x4000;
+    ds_svecs(MD_V, nv ? nv : 1, r);
+    ds_svecs(MD_N, nv ? nv : 1, 0x1000);
+    for (u32 k = 0; k < (nv ? nv : 1); k++)            /* mostly unit normals */
+        if (rnd() % 3) { s32 c = rnd() % 3; for (int j = 0; j < 3; j++) U16(MD_N + 8 * k + 2 * j) = (u16)(j == c ? (rnd() % 2 ? 0x1000 : -0x1000) + ds_coord(0x200) : ds_coord(0x400)); }
+    for (u32 k = 0; k < 0x140; k++) {
+        for (int j = 0; j < 4; j++) U16(MD_QUAD + 0x10 * k + 2 * j) = (u16)(nv ? rnd() % nv : 0);
+        for (int j = 0; j < 3; j++) U16(MD_TRI + 0xC * k + 2 * j) = (u16)(nv ? rnd() % nv : 0);
+    }
+    U8(MD_P + 8) = (u8)(rnd() % 4 ? rnd() % 4 : rnd());
+    /* the view: the model ahead of the camera (or anywhere) */
+    gptr a = HB + 0x1F0;
+    for (int k = 0; k < 3; k++) U16(a + 2 * k) = (u16)rnd();
+    RotMatrix(a, HB + 0x200);
+    if (rnd() % 4 == 0) for (int k = 0; k < 9; k++) U16(HB + 0x200 + 2 * k) = (u16)ds_coord(0x1000);
+    for (int k = 0; k < 3; k++) U32(HB + 0x214 + 4 * k) = (u32)(s32)(k == 2 ? (rnd() % 8 ? (s32)(0x600 + rnd() % 0x1800) : ds_coord(0x2000)) : ds_coord(0x300));
+    SetRotMatrix(HB + 0x200); SetTransMatrix(HB + 0x200);
+    for (int k = 0; k < 9; k++) U16(GTE_LLM + 2 * k) = (u16)ds_coord(0x1000);
+    for (int k = 0; k < 9; k++) U16(GTE_LCM + 2 * k) = (u16)(rnd() % 0x1000);
+    for (int k = 0; k < 3; k++) U16(GTE_BK + 2 * k) = (u16)(rnd() % 0x800);
+    U32(0x87DC98) = DS_PRIM; U32(0x87DE0C) = rnd() % 2;
+    /* the screen buffers: as EnvMapDraw leaves them, or random */
+    if (rnd() % 2) EnvMapDraw(MD_M);
+    else {
+        for (u32 k = 0; k < 480; k++) {
+            F32(0x74F5D0 + 8 * k) = (float)ds_coord(400); F32(0x74F5D4 + 8 * k) = (float)ds_coord(300);
+            U32(0x74EE00 + 4 * k) = rnd() % 4 ? rnd() % 0x4000 : rnd() % 0x10000;
+            U32(0x74E630 + 4 * k) = rnd(); U16(0x750570 + 2 * k) = (u16)rnd();
+        }
+    }
+    U32(0x87DC98) = DS_PRIM;
+}
+
+static void test_model(void)
+{
+    static const struct { u32 addr; void *fn; const char *name; int n; } F[] = {
+        {0x482940, EnvMapDraw, "EnvMapDraw", 1}, {0x482BD0, Model_EnvQuads, "Model_EnvQuads", 2},
+        {0x482F80, Model_EnvTris, "Model_EnvTris", 2}, {0x483290, Model_SetTexture, "Model_SetTexture", 2},
+        {0x4832C0, MeshDrawGT4, "MeshDrawGT4", 5}, {0x4834F0, MeshDrawGT3, "MeshDrawGT3", 5},
+        {0x4836A0, Model_DrawTex, "Model_DrawTex", 3},
+    };
+    g_ign_draw = 1;
+    for (int i = 0; i < iters; i++) {
+        for (unsigned k = 0; k < sizeof F / sizeof F[0]; k++) {
+            model_state();
+            u32 a[5];
+            switch (F[k].addr) {
+            case 0x482940: a[0] = MD_M; break;
+            case 0x482BD0: case 0x482F80: a[0] = MD_M + 0x1C; a[1] = MD_P; break;
+            case 0x483290: a[0] = MD_M; a[1] = MD_P; break;
+            case 0x4832C0: case 0x4834F0: a[0] = MD_V; a[1] = MD_N; a[2] = MD_M + 0x1C; a[3] = rnd() % 0x10000; a[4] = rnd() % 0x10000; break;
+            default: a[0] = MD_M; a[1] = rnd() % 0x10000; a[2] = rnd() % 0x10000; break;
+            }
+            sprintf(g_what, "groups %u tris %u quads %u mode %X shift %u", U8(MD_M + 0x23), U16(MD_M + 0x2C), U16(MD_M + 0x2E),
+                    U8(MD_P + 8), U8(G() + 0xB4B));
+            gptr hi = Tmp_Push(0x40);            /* (what lies above the functions' temporaries: the largest depth) */
+            for (u32 q = 0; q < 0x40; q += 4) U32(hi + q) = 0xFFFFFFFF;
+            check(F[k].addr, F[k].fn, F[k].name, F[k].n, a, 0);
+            Tmp_Pop(0x40);
+        }
+    }
+    g_ign_draw = 0;
+}
+
+/* ---- the ending's 3D scenes (model.c) ---- */
+static void end_model(gptr m, gptr d, u32 maxg)       /* a model at m, its data at d (0x1000; 0x4000 when maxg > 40) */
+{
+    for (u32 a = m; a < m + 0x24; a += 4) U32(a) = rnd();
+    int big = maxg > 40;
+    u32 ng = rnd() % 8 ? 1 + rnd() % maxg : 0, nv = 3 * ng, np = big ? 0x110 : 20;
+    gptr vn = d + (big ? 0xA00 : 0x400), tr = d + (big ? 0x1400 : 0x800), qu = d + (big ? 0x2100 : 0xB00);
+    U32(m) = d; U32(m + 4) = vn; U8(m + 0x23) = (u8)ng;
+    U32(m + 0x1C + 8) = tr; U32(m + 0x1C + 0xC) = qu;
+    U16(m + 0x1C + 0x10) = (u16)(rnd() % 6 ? rnd() % np : 0); U16(m + 0x1C + 0x12) = (u16)(rnd() % 6 ? rnd() % np : 0);
+    ds_svecs(d, nv ? nv : 1, rnd() % 4 ? 0x300 : 0x4000);
+    ds_svecs(vn, nv ? nv : 1, 0x1000);
+    for (u32 k = 0; k < np; k++) {
+        for (u32 j = 0; j < 16; j++) U8(qu + 0x10 * k + j) = (u8)rnd();
+        for (u32 j = 0; j < 12; j++) U8(tr + 0xC * k + j) = (u8)rnd();
+        for (u32 j = 0; j < 4; j++) U16(qu + 0x10 * k + 2 * j) = (u16)(nv ? rnd() % nv : 0);
+        for (u32 j = 0; j < 3; j++) U16(tr + 0xC * k + 2 * j) = (u16)(nv ? rnd() % nv : 0);
+    }
+}
+static void end_bufs(gptr xy, gptr slots, gptr rgb, gptr uv)   /* the screen buffers, 320 vertices */
+{
+    for (u32 k = 0; k < 320; k++) {
+        F32(xy + 8 * k) = (float)ds_coord(400); F32(xy + 8 * k + 4) = (float)ds_coord(300);
+        U32(slots + 4 * k) = rnd() % 4 ? rnd() % 0x400 : rnd() % 2 * 0x3FF;
+        U32(rgb + 4 * k) = rnd();
+        if (uv) U16(uv + 2 * k) = (u16)rnd();
+    }
+}
+static void end_view(void)
+{
+    gptr a = HB + 0x1F0;
+    for (int k = 0; k < 3; k++) U16(a + 2 * k) = (u16)rnd();
+    RotMatrix(a, HB + 0x200);
+    for (int k = 0; k < 3; k++) U32(HB + 0x214 + 4 * k) = (u32)(s32)(k == 2 ? (rnd() % 8 ? (s32)(0x600 + rnd() % 0x1800) : ds_coord(0x2000)) : ds_coord(0x300));
+    SetRotMatrix(HB + 0x200); SetTransMatrix(HB + 0x200);
+    for (int k = 0; k < 9; k++) U16(GTE_LLM + 2 * k) = (u16)ds_coord(0x1000);
+    for (int k = 0; k < 9; k++) U16(GTE_LCM + 2 * k) = (u16)(rnd() % 0x1000);
+    for (int k = 0; k < 3; k++) U16(GTE_BK + 2 * k) = (u16)(rnd() % 0x800);
+}
+/* the task block after its set-up, then moved about */
+static void end_task(int sc)
+{
+    static const u32 T[3] = {0x750958, 0x752D60, 0x7551E8}, sz[3] = {0xD0, 0x158, 0xDC};
+    gptr t = T[sc];
+    for (u32 a = 0; a < sz[sc]; a += 4) U32(t + a) = rnd();
+    U8(t) = 0;
+    if (sc == 0) End1_Init(t); else if (sc == 1) End2_Init(t); else {
+        memset(MEM(t), 0, sz[sc]);                      /* (as the task leaves it: its set-up draws the first frame) */
+        U32(0x87DC98) = DS_PRIM; End3_Init(t);
+    }
+    U8(t) = (u8)(rnd() % 8 ? rnd() % 2 : rnd() % 4);
+    gptr c = t + (sc == 0 ? 0x3C : sc == 1 ? 0xC4 : 0x40);
+    for (int k = 0; k < 3; k++) { U16(c + 0x28 + 2 * k) += (u16)ds_coord(0x200); U16(c + 0x38 + 2 * k) += (u16)ds_coord(0x200); }
+    if (rnd() % 2) for (int k = 0; k < 9; k++) U16(c + 2 * k) = (u16)ds_coord(0x1000);
+    for (int k = 0; k < 3; k++) U16(c + 0x30 + 2 * k) = (u16)ds_coord(0x100);
+    U16(c + 0x34) = (u16)(rnd() % 4 ? (u32)(U16(c + 0x34) + ds_coord(0x200)) : rnd());
+    if (sc == 0) {
+        U16(t + 0xC8) = (u16)rnd(); U16(t + 0xCA) = (u16)(0x100 + rnd() % 0x300); U32(0x7519C8) = rnd() % 4 ? rnd() % 0x80 : rnd();
+        if (rnd() % 2) for (int k = 0; k < 9; k++) U16(t + 4 + 2 * k) = (u16)ds_coord(0x1000);
+        for (int k = 0; k < 9; k++) U16(t + 0x1C + 2 * k) = (u16)(rnd() % 4 ? rnd() % 0x1000 : rnd());
+        U16(0x752D58) = (u16)rnd(); U16(0x752D5A) = (u16)rnd(); U16(0x752D5C) = (u16)rnd();
+    } else if (sc == 1) {
+        U32(t + 0x154) = rnd() % 4 ? rnd() % 0x4B0 : 0x4AF - rnd() % 2;
+        for (u32 k = 0; k < 12; k++) U32(t + 4 + 0x10 * k + 0xC) = rnd() % 3 ? rnd() % 2 : rnd();
+        U16(t + 0x150) = (u16)(0x100 + rnd() % 0x300); U16(0x752EBC) = (u16)rnd();
+    } else {
+        U8(t + 4) = (u8)(rnd() % 3 ? rnd() % 15 : 14); U8(t + 5) = (u8)(rnd() % 3 ? rnd() % 20 : 18 + rnd() % 2); U8(t + 6) = (u8)(rnd() % 2 ? rnd() % 2 : rnd());
+        U16(t + 0xD8) = (u16)(0x100 + rnd() % 0x300);
+        for (int k = 0; k < 3; k++) U8(t + 0xD0 + k) = (u8)rnd();
+        U32(t + 0xD4) = rnd();
+        if (rnd() % 2) for (int k = 0; k < 9; k++) U16(t + 8 + 2 * k) = (u16)ds_coord(0x1000);
+        for (int k = 0; k < 9; k++) U16(t + 0x20 + 2 * k) = (u16)(rnd() % 4 ? rnd() % 0x2000 : rnd());
+        U32(t + 0xCC) = rnd() % 4 ? U8(0x600023) * 3 : rnd() % 0x100;
+    }
+}
+static void end_state(int sc)
+{
+    game_state();
+    draw_scene();
+    static const u32 mA[6] = {0x625800, 0x629D94, 0x62963C, 0x62995C, 0x628994, 0x62B570};
+    if (sc == 0) for (int k = 0; k < 6; k++) end_model(mA[k], 0x5E0000 + 0x1000 * k, 12);
+    if (sc == 1) {
+        end_model(0x600000, 0x5E0000, 12); end_model(0x600480, 0x5E1000, 12);
+        for (u32 a = 0x600900; a < 0x615A80; a += 2) U16(a) = (u16)ds_coord(0x1000);
+    }
+    if (sc == 2) {
+        end_model(0x600000, 0x5E0000, rnd() % 3 ? 30 : 100);   /* (over 0x100 vertices / polygons: the u16 indices and counts) */
+        for (u32 a = 0x603610; a < 0x627790; a += 2) U16(a) = (u16)(rnd() % 8 ? (u32)ds_coord(0x1000) : rnd());
+    }
+    end_view();
+    if (sc == 0) end_bufs(0x7519D0, 0x7511F8, 0x750A28, 0x752970);
+    if (sc == 1) end_bufs(0x753E60, 0x753690, 0x752EC0, 0x754E00);
+    if (sc == 2) end_bufs(0x7581A8, 0x756A38, 0x756268, 0);
+    end_task(sc);
+    end_view();
+    U32(0x87DC98) = DS_PRIM; U32(0x87DE0C) = rnd() % 2; U32(0x87F94C) = 0x6CF800;
+    U8(G() + 0xB4B) = rnd() % 4 ? rnd() % 3 : rnd() % 8;
+}
+
+static int g_end_sc;
+static u32 __cdecl end_task_orig(void)
+{
+    static const u32 A[3] = {0x4836E0, 0x484E00, 0x485B70};
+    g_task_sleeps = g_task_n; if (!__builtin_setjmp(g_task_jb)) ((void (__cdecl *)(void))A[g_end_sc])(); g_task_sleeps = 0; return 0;
+}
+static u32 __cdecl end_task_new(void)
+{
+    g_task_sleeps = g_task_n;
+    if (!__builtin_setjmp(g_task_jb)) { if (g_end_sc == 0) End1Task(); else if (g_end_sc == 1) End2Task(); else End3Task(); }
+    g_task_sleeps = 0; return 0;
+}
+
+static void test_ending3d(void)
+{
+    static const struct { u32 addr; void *fn; const char *name; int sc, n; u32 a0, a1; } F[] = {
+        {0x483F40, End1_Verts, "End1_Verts", 0, 1, 0x625800}, {0x484270, End1_TexQuads, "End1_TexQuads", 0, 2, 0x62981C, 0},
+        {0x484600, End1_TexTris, "End1_TexTris", 0, 2, 0x62981C, 0}, {0x484240, End1_Tex, "End1_Tex", 0, 2, 0x629800, 0},
+        {0x484910, End1_ShadeQuads, "End1_ShadeQuads", 0, 1, 0x62B58C}, {0x484BD0, End1_ShadeTris, "End1_ShadeTris", 0, 1, 0x62B58C},
+        {0x4848F0, End1_Shade, "End1_Shade", 0, 1, 0x62B570}, {0x483720, End1_Init, "End1_Init", 0, 1, 0x750958},
+        {0x483820, End1_Sky, "End1_Sky", 0, 1, 0x750958}, {0x483990, End1_Ground, "End1_Ground", 0, 1, 0x750958},
+        {0x483DD0, End1_Backdrop, "End1_Backdrop", 0, 1, 0x750958}, {0x483B00, End1_Run, "End1_Run", 0, 1, 0x750958},
+        {0x4851E0, End2_Verts, "End2_Verts", 1, 1, 0x600480}, {0x4854F0, End2_TexQuads, "End2_TexQuads", 1, 2, 0x60001C, 0},
+        {0x485880, End2_TexTris, "End2_TexTris", 1, 2, 0x60049C, 0}, {0x4854B0, End2_Tex, "End2_Tex", 1, 2, 0x600000, 0},
+        {0x484E40, End2_Init, "End2_Init", 1, 1, 0x752D60}, {0x484FB0, End2_Draw, "End2_Draw", 1, 1, 0x752D60},
+        {0x485160, End2_Run, "End2_Run", 1, 1, 0x752D60},
+        {0x486320, End3_Verts, "End3_Verts", 2, 1, 0x600000}, {0x486400, End3_ShadeQuads, "End3_ShadeQuads", 2, 1, 0x60001C},
+        {0x486680, End3_ShadeTris, "End3_ShadeTris", 2, 1, 0x60001C}, {0x485F00, End3_Shade, "End3_Shade", 2, 1, 0x600000},
+        {0x485F20, End3_Interp, "End3_Interp", 2, 2, 0x7551E8, 2}, {0x485D00, End3_Anim, "End3_Anim", 2, 1, 0x7551E8},
+        {0x486170, End3_Logo, "End3_Logo", 2, 1, 0x7551E8}, {0x485BB0, End3_Init, "End3_Init", 2, 1, 0x7551E8},
+        {0x485D50, End3_Run, "End3_Run", 2, 1, 0x7551E8},
+    };
+    stubs_install(1);
+    g_ign_draw = 1;
+    g_ign_addr = 0x87B40A; g_ign_len = 2;      /* the RT pad: SetRotMatrix copies the stack matrix's pad */
+    g_ign2_addr = 0x87B45A; g_ign2_len = 14;  /* the light matrix's pad and unused translation: stack bytes */
+    for (int i = 0; i < iters; i++) {
+        for (unsigned k = 0; k < sizeof F / sizeof F[0]; k++) {
+            end_state(F[k].sc);
+            u32 a[2] = {F[k].a0, F[k].a1};
+            if (F[k].n == 2 && F[k].a1 == 0) {                   /* the texture parameters */
+                a[1] = HB + 0x300;
+                U16(a[1]) = (u16)rnd(); U16(a[1] + 2) = (u16)rnd(); U32(a[1] + 4) = rnd();
+                U8(a[1] + 8) = (u8)(rnd() % 4 ? rnd() % 4 : rnd());
+            }
+            if (F[k].a1 == 2) a[1] = rnd() % 2;
+            if (F[k].addr == 0x483720 || F[k].addr == 0x484E40 || F[k].addr == 0x485BB0) {   /* the set-ups: from any block */
+                static const u32 sz[3] = {0xD0, 0x158, 0xDC};
+                gptr tt = F[k].a0;
+                for (u32 q = 0; q < sz[F[k].sc]; q += 4) U32(tt + q) = rnd();
+                U8(tt) = (u8)(rnd() % 4);
+                if (F[k].sc == 2) { U8(tt + 4) = (u8)(rnd() % 15); U8(tt + 5) = (u8)(rnd() % 20); }
+                U32(0x752EB8) = rnd();
+                Flag_Set(3, 0, rnd() % 2); Flag_Set(4, 0, rnd() % 2);
+            }
+            gptr t = F[k].sc == 0 ? 0x750958 : F[k].sc == 1 ? 0x752D60 : 0x7551E8;
+            g_ign3_addr = t + (F[k].sc == 0 ? 0x3C : F[k].sc == 1 ? 0xC4 : 0x40) + 0x12; g_ign3_len = 2;   /* the camera's pad (RotMatrixZXY: stack bytes) */
+            sprintf(g_what, "mode %u frame %X %X %X shift %u buf %u", U8(t), U8(t + 4), U8(t + 5), U32(t + 0x154),
+                    U8(G() + 0xB4B), U32(0x87DE0C));
+            gptr hi = Tmp_Push(0x40);
+            for (u32 q = 0; q < 0x40; q += 4) U32(hi + q) = 0xFFFFFFFF;
+            check(F[k].addr, F[k].fn, F[k].name, F[k].n, a, 0);
+            Tmp_Pop(0x40);
+        }
+        for (g_end_sc = 0; g_end_sc < 3; g_end_sc++) {
+            end_state(g_end_sc);
+            g_task_n = 1 + rnd() % 3;
+            sprintf(g_what, "scene %d frames %d", g_end_sc, g_task_n);
+            g_ign3_addr = (g_end_sc == 0 ? 0x750958 + 0x3C : g_end_sc == 1 ? 0x752D60 + 0xC4 : 0x7551E8 + 0x40) + 0x12; g_ign3_len = 2;
+            check((u32)(uintptr_t)end_task_orig, end_task_new, g_end_sc == 0 ? "End1Task" : g_end_sc == 1 ? "End2Task" : "End3Task", 0, NULL, 0);
+        }
+    }
+    g_ign_addr = 0; g_ign_len = 0; g_ign2_addr = 0; g_ign2_len = 0; g_ign3_addr = 0; g_ign3_len = 0;
+    g_ign_draw = 0;
+    stubs_install(0);
+}
+
+/* ---- ENDING (ending.c) ---- */
+static void ending_state(void)
+{
+    gptr g = G(), t = 0x74B030, s = t + 0x9C;
+    game_state();
+    snd_setup();
+    U32(0x87DC98) = DS_PRIM; U32(0x87DE0C) = rnd() % 2; U32(0x87F94C) = 0x6CF800;
+    for (u32 a = 0; a < 0x13C; a += 4) U32(t + a) = rnd();
+    U8(t) = (u8)(rnd() % 8 ? rnd() % 3 : rnd() % 4);
+    U8(t + 1) = (u8)(rnd() % 8 ? rnd() % 6 : rnd() % 7 % 6);
+    U8(t + 2) = (u8)(rnd() % 2 ? rnd() % 11 : rnd() % 3);
+    for (u32 k = 5; k <= 0xD; k++) U8(t + k) = (u8)A2_PICK(0, 0x78, 0x6C, 0x6D, 0x79, 0x7F, (s32)rnd());
+    U32(t + 0x14) = (u32)A2_PICK(0, 0x69780, 0x6977F, 0xD2EFF, 0x13C680, 0x1A5DFF, 0xD2F00, 0x13C67F, 0x1A5E00, 216000 * 99, 216000 * 100 + 5, (s32)(rnd() % 0x400000), (s32)rnd());
+    U16(t + 0x1E) = (u16)A2_PICK(0, 10, 11, 12, 0xFF, 0x10A, (s32)(rnd() % 20));
+    U16(t + 0x22) = (u16)A2_PICK(0, 1, 2, 0x96, (s32)rnd());
+    U8(t + 0x20) = (u8)(rnd() % 5);
+    U8(g + 0x108D) = (u8)A2_PICK(0, 1, 2, 3, 4, 0x62, 0x63, 0xFF, (s32)rnd());
+    U8(g + 0x108E) = (u8)A2_PICK(0, 1, 2, (s32)rnd());
+    U16(g + 0x1092) = (u16)A2_PICK(0, 0x1F, 0x1E, 0x3FF, 0x3DF, 0x7FF, 0xFFF, 0xBFF, 0x3E0, (s32)(rnd() & 0xFFF));   /* (12 costumes) */
+    U8(g + 0x1094) = (u8)rnd();
+    U32(g + 0x120C) = (u32)A2_PICK(0, 9999999, 10000000, 1000, 50000, (s32)(rnd() % 200000), (s32)rnd());
+    U32(g + 0x1098) = rnd();
+    U32(0x87DC00) = (u32)A2_PICK(0, 1, 0x20, 0x40, 0x60, 0x800, 0x920, 0x1000, 0x2000, 0x4000, 0x8000, 0x4040, 0x820, 0x20, 0x20, (s32)(rnd() & rnd()));
+    U8(0x87DC12) = (u8)A2_PICK(0, 0x20, 0x40, (s32)rnd());
+    for (u32 k = 0x74; k <= 0x81; k++) Flag_Set(9, k, rnd() % 2);
+    for (u32 k = 0; k < 10; k++) { Flag_Set(3, k, rnd() % 2); Flag_Set(4, k, rnd() % 2); }
+    for (u32 k = 0x28; k < 0x30; k++) U8(g + 0x778 + k) = (u8)rnd();
+    for (u32 k = 0x76C; k < 0x778; k++) U8(g + k) = (u8)rnd();
+    for (u32 k = 0xC20; k < 0xC30; k++) U8(g + k) = (u8)rnd();
+    for (u32 k = 0x14E8; k < 0x14F0; k++) U8(g + k) = (u8)rnd();
+    for (u32 k = 2; k < 4; k++) U16(A_TASK_SLOTS + 0x20 * k) = (u16)(rnd() % 3);
+    Flag_Set(2, 6, rnd() % 2); Flag_Set(2, 0x17, rnd() % 2);
+    /* the pictures' parts: {u, v, w, h, count (first), x, s8 dx, dy} */
+    for (u32 a = 0x600000; a < 0x600200; a += 4) U32(a) = rnd();
+    for (u32 a = 0x5E0000; a < 0x5E0008; a += 4) U32(a) = rnd();
+    for (u32 a = 0x600004; a < 0x600200; a += 8) U8(a) = (u8)((rnd() % 4 ? 1 + rnd() % 5 : 0) | (rnd() & 0xE0));
+    U8(0x5E0004) = (u8)(1 + rnd() % 4);
+    {                                                     /* the costume shop's records, as Costume_Build leaves them */
+        memset(MEM(0x5E0008), 0, 0x4B0);
+        Costume_Build(s);
+        U32(s + 4) = Spr_Alloc();
+        Spr_Set(U32(s + 4), 0x600000, 0x20, 0x40, 0x808080);
+    }
+    /* more sprites after the shop's 25: some shown (or the list full) */
+    u32 ns = rnd() % 4 ? rnd() % 25 : 100;
+    for (u32 k = 0; k < ns; k++) {
+        gptr e = 0x5E0008 + 0x18 * (25 + rnd() % 25);
+        for (u32 q = 0; q < 0x18; q += 4) U32(e + q) = rnd();
+        U32(e + 4) = 0x600000 + 8 * (rnd() % 0x20);
+        U8(e + 0xD) = (u8)(rnd() % 4);
+        U16(e + 0x14) = (u16)(rnd() % 0x140); U16(e + 0x16) = (u16)(rnd() % 0x1F0);
+    }
+    if (rnd() % 8 == 0) for (u32 k = 0; k < 50; k++) U8(0x5E0008 + 0x18 * k + 0xD) |= 1;
+    U8(s) = (u8)(rnd() % 4); U8(s + 1) = (u8)(rnd() % 4); U8(s + 2) = (u8)(rnd() % 4);
+    U8(s + 8) = (u8)(rnd() % 12); U8(s + 9) = (u8)(rnd() % 4); U8(s + 0xA) = (u8)(rnd() % 2);
+    {
+        u32 price = U32(0x7214A8 + 0x18 * U8(s + 8));
+        if (rnd() % 4 == 0) U32(g + 0x120C) = price + (u32)A2_PICK(0, -1, 1);
+        U32(s + 0x9C) = (u32)A2_PICK(0, (s32)U32(g + 0x120C), (s32)U32(g + 0x120C) + 1000, (s32)(U32(g + 0x120C) + price / 15),
+                                     (s32)(U32(g + 0x120C) + price / 15 - 1), (s32)(rnd() % 0x100000));
+    }
+    for (u32 k = 0; k < 12; k++) if (rnd() % 8 == 0) U8(s + 0xC + 0xC * k) ^= 2;
+}
+
+static u32 __cdecl ending_task_orig(void) { g_task_sleeps = g_task_n; if (!__builtin_setjmp(g_task_jb)) ((void (__cdecl *)(void))0x4462D0)(); g_task_sleeps = 0; return 0; }
+static u32 __cdecl ending_task_new(void) { g_task_sleeps = g_task_n; if (!__builtin_setjmp(g_task_jb)) EndingTask(); g_task_sleeps = 0; return 0; }
+
+static void test_ending(void)
+{
+    static const struct { u32 addr; void *fn; const char *name; int n; u32 ret; } F[] = {
+        {0x447E60, Spr_Alloc, "Spr_Alloc", 0, 0xFFFFFFFF}, {0x447FD0, Spr_Set, "Spr_Set", 5, 0},
+        {0x447E80, Spr_DrawAll, "Spr_DrawAll", 0, 0}, {0x446310, End_Init, "End_Init", 1, 0},
+        {0x446550, End_Setup, "End_Setup", 1, 0}, {0x4463B0, End_Movie1, "End_Movie1", 1, 0},
+        {0x446410, End_Movie2, "End_Movie2", 1, 0}, {0x446D80, End_Digits, "End_Digits", 6, 0},
+        {0x446C60, End_Time, "End_Time", 2, 0}, {0x446F30, End_Points, "End_Points", 2, 0},
+        {0x446F60, End_Files, "End_Files", 2, 0}, {0x446670, End_Results, "End_Results", 1, 0},
+        {0x446FD0, End_Bonus1, "End_Bonus1", 1, 0}, {0x447140, End_Bonus2, "End_Bonus2", 1, 0},
+        {0x447590, Bit_Next, "Bit_Next", 3, 0xFFFFFFFF}, {0x4472A0, Costume_Build, "Costume_Build", 1, 0},
+        {0x447470, Costume_Init, "Costume_Init", 2, 0}, {0x447600, Costume_Pick, "Costume_Pick", 2, 0},
+        {0x4476F0, Costume_Buy, "Costume_Buy", 2, 0}, {0x4479A0, Costume_Check, "Costume_Check", 2, 0},
+        {0x447AD0, Costume_Done, "Costume_Done", 2, 0}, {0x447AE0, Costume_Run, "Costume_Run", 2, 0},
+        {0x447B30, Costume_Exit, "Costume_Exit", 2, 0}, {0x447C20, Costume_End, "Costume_End", 2, 0},
+        {0x447C50, End_Shop, "End_Shop", 1, 0}, {0x446390, End_Run, "End_Run", 1, 0},
+        {0x447D20, End_Restart, "End_Restart", 1, 0},
+    };
+    g_stubs[152].addr = 0x4C2974;              /* Task_Start: logged (the 3D scene's task) */
+    u32 gs[4];                                 /* the GPU calls run (their packets compared, not a capped log) */
+    for (int q = 0; q < 4; q++) { gs[q] = g_stubs[67 + q].addr; g_stubs[67 + q].addr = 0; }
+    stubs_install(1);
+    type_tables_stub(1);
+    for (int i = 0; i < iters; i++) {
+        for (unsigned k = 0; k < sizeof F / sizeof F[0]; k++) {
+            ending_state();
+            gptr t = 0x74B030, s = t + 0x9C;
+            u32 a[6] = {t, s};
+            switch (F[k].addr) {
+            case 0x447FD0: a[0] = 0x5E0008 + 0x18 * (rnd() % 50); a[1] = 0x600000 + 8 * (rnd() % 0x20); a[2] = rnd(); a[3] = rnd(); a[4] = rnd(); break;
+            case 0x446D80:
+                a[0] = rnd() % 0x140; a[1] = rnd() % 0xF0;
+                a[2] = (u32)A2_PICK(0, 9, 10, 99, 100, 9999999, 12345678, (s32)(rnd() % 1000), (s32)rnd());
+                a[3] = (u32)A2_PICK(0, 1, 2, 7, 8, 0x10002, (s32)(rnd() % 10)); a[4] = rnd();
+                a[5] = (u32)A2_PICK(0, 1, 2, 3, 0x10000, 0x10001, (s32)rnd());
+                break;
+            case 0x446C60: case 0x446F30: case 0x446F60: a[1] = rnd(); break;
+            case 0x447590: a[0] = rnd() % 4 ? rnd() & rnd() : rnd() % 2 ? 0x80000000u | (rnd() & 0xF) : 1u << (rnd() % 32);
+                a[1] = (u32)A2_PICK(0, 4, 9, 0x1F, 0x20, -1, (s32)(rnd() % 32)); a[2] = (u32)A2_PICK(1, -1, 0, (s32)rnd()); break;
+            case 0x4472A0: a[0] = s; memset(MEM(0x5E0008), 0, 0x4B0); break;
+            case 0x446670: if (rnd() % 2) { U8(t + 2) = 9; U8(t + 0xD) = (u8)A2_PICK(0x78, 0x79, 0x6C, 0); U8(t + 5) = (u8)A2_PICK(0, 0x78);
+                                             U16(t + 0x1E) = 0xB; U32(G() + 4) = (u32)A2_PICK(0x10, 0x30, 0, 8, (s32)rnd()); } break;
+            case 0x4476F0: if (rnd() % 2) {                       /* yes on a costume: points just enough or not */
+                U8(s + 2) = 2; U8(s + 0xA) = 0; U32(0x87DC00) = 0x20;
+                U32(G() + 0x120C) = U32(0x7214A8 + 0x18 * U8(s + 8)) + (u32)A2_PICK(0, -1, 1); }
+                break;
+            case 0x447B30: if (rnd() % 2) {                       /* back to the shop */
+                U8(s + 1) = 1; U32(0x87DC00) = (u32)A2_PICK(1, 0x1000, 0x820);
+                U8(s + 9) = (u8)((s8)U8(G() + 0x108E) + A2_PICK(-1, 0, 1, 2)); }
+                break;
+            case 0x447470: memset(MEM(0x5E0008), 0, 0x4B0); break;
+            }
+            sprintf(g_what, "mode %u %u %u shop %u %u %u %X %X pad %X have %X ch %u pts %u", U8(t), U8(t + 1), U8(t + 2), U8(s), U8(s + 1),
+                    U8(s + 2), U8(s + 8), U8(s + 9), U32(0x87DC00), U16(G() + 0x1092), U8(G() + 0x108E), U32(G() + 0x120C));
+            check(F[k].addr, F[k].fn, F[k].name, F[k].n, a, F[k].ret);
+        }
+        ending_state();
+        U8(0x74B030) = 0;
+        g_task_n = 1 + rnd() % 3;
+        sprintf(g_what, "frames %d", g_task_n);
+        check((u32)(uintptr_t)ending_task_orig, ending_task_new, "EndingTask", 0, NULL, 0);
+    }
+    type_tables_stub(0);
+    stubs_install(0);
+    g_stubs[152].addr = 0;
+    for (int q = 0; q < 4; q++) g_stubs[67 + q].addr = gs[q];
+}
+
 static void test_title2(void)
 {
     stubs_install(1);
@@ -11724,6 +12118,8 @@ static void res_state(void)
     for (u32 k = 0x58; k < 0x90; k += 2) U16(t + k) = (u16)(rnd() % 0x2000 - 0x1000);
     Flag_Set(2, 6, rnd() % 3 == 0);
     for (u32 k = 0; k < 0xA58; k += 4) U32(0x5EE968 + k) = rnd();     /* (Result_Init clears it) */
+    static const u32 mdl[8] = {0x5E0000, 0x5E3758, 0x5E62F0, 0x5E6DE0, 0x5E9118, 0x5E9988, 0x5EB948, 0x5EBC58};
+    for (u32 k = 0; k < 8; k++) end_model(mdl[k], 0x5D0000 + 0x1000 * k, 12);   /* the grade models */
     for (u32 n = 0; n < 2; n++) {                        /* the stream slots */
         gptr st = 0x87FB80 + n * 0x14;
         for (u32 k = 0; k < 0x14; k += 4) U32(st + k) = rnd();
@@ -14387,6 +14783,7 @@ static void test_vgun(void)
             gptr o = O_OBJ, px = o + 0x1C0;
             do anim_setup_at(o); while (U32(o + 0x68) < 2);  /* (part 1: the barrel) */
             U32(G() + 0x940) = O_OBJ; U32(0x87FD60) = px;
+            U32(0x87DE04) = 0; U32(0x87DC88) = 0; U32(G() + 0xA70) = 0;   /* no effects or props (World_Matrices walks them; earlier groups leave junk) */
             U32(0x87F948) = TYPE_TAB;                       /* effect kind handlers: recorders */
             for (int j = 0; j < 256; j++) U32(TYPE_TAB + 4 * j) = (u32)(uintptr_t)g_recs[STUB_TYPE];
             U8(G() + 0x927) = (u8)A2_PICK(0, 0, 1, (s32)rnd());
@@ -14739,7 +15136,7 @@ __declspec(dllexport) void harness_main(int argc, char **argv)
         else data = argv[i];
     }
     if (!load_image(exe)) { fflush(stdout); TerminateProcess(GetCurrentProcess(), 2); }
-    for (int i = 0; i < 2; i++) {
+    for (int i = 0; i < 3; i++) {
         snap0[i] = malloc(RW[i].hi - RW[i].lo);
         snap1[i] = malloc(RW[i].hi - RW[i].lo);
     }
@@ -14748,7 +15145,7 @@ __declspec(dllexport) void harness_main(int argc, char **argv)
         {"flags", test_flags}, {"geometry", test_geom}, {"script values", test_script_values},
         {"script opcodes", test_script_ops}, {"script objects", test_objects},
         {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"objects 2", test_object}, {"collision", test_collision}, {"player", test_player}, {"player states", test_player2}, {"zones", test_zones}, {"loading", test_room}, {"title", test_title}, {"game task", test_game}, {"doors", test_doors}, {"frame", test_frame}, {"enemy sets", test_enemyset}, {"enemies", test_enemies}, {"raptor", test_raptor}, {"oviraptor", test_ovi}, {"allosaurus", test_allo}, {"pteranodon", test_ptera}, {"area pteranodon", test_ptera2}, {"tyrannosaurus", test_trex}, {"plesiosaurus", test_plesio}, {"water plesiosaurs", test_pw}, {"roamer", test_roam}, {"giganotosaurus", test_gig},
-    {"inostrancevia", test_ino}, {"triceratops", test_tri}, {"mosasaurus", test_mosa}, {"compsognathus", test_compso}, {"duel inostrancevia", test_kof_ino}, {"duel triceratops", test_kof_tri}, {"duel raptor", test_kof_rap}, {"duel oviraptor", test_kof_ovi}, {"duel allosaurus", test_kof_allo}, {"duel tyrannosaurus", test_kof_rex}, {"duel compsognathus", test_kof_comp}, {"duel human", test_kof_human}, {"vehicle gun", test_vgun}, {"area falling piece", test_ao_drop}, {"area flying shell", test_ao_shell}, {"area moving piece", test_ao_mover}, {"area bird", test_ao_bird}, {"area rock", test_ao_rock}, {"area insect", test_ao_bug}, {"area poison plant", test_ao_plant}, {"area burner", test_ao_burner}, {"weapon objects", test_ao_weapons}, {"area 4/8 objects", test_aobj2}, {"area effects", test_k2_area}, {"sound slots", test_snd_slots}, {"menus", test_menu}, {"title 2", test_title2}, {"result", test_result}, {"extra crisis", test_extra}, {"options", test_options}, {"save slots", test_savefile}, {"save room", test_shop}, {"aot kinds", test_aot_kinds}, {"object effects", test_obj_effects}, {"effect slots", test_k2}, {"effect drops", test_k2_drops}, {"effect emitters", test_eff_slots}, {"effect slots 3", test_k2_more}, {"helpers", test_helpers}, {"draw", test_draw}, {"pc gpu", test_pcgpu}, {"pc draw", test_pcdraw}, {"pc masks", test_pcmasks}, {"pc frame", test_pcframe},
+    {"inostrancevia", test_ino}, {"triceratops", test_tri}, {"mosasaurus", test_mosa}, {"compsognathus", test_compso}, {"duel inostrancevia", test_kof_ino}, {"duel triceratops", test_kof_tri}, {"duel raptor", test_kof_rap}, {"duel oviraptor", test_kof_ovi}, {"duel allosaurus", test_kof_allo}, {"duel tyrannosaurus", test_kof_rex}, {"duel compsognathus", test_kof_comp}, {"duel human", test_kof_human}, {"vehicle gun", test_vgun}, {"area falling piece", test_ao_drop}, {"area flying shell", test_ao_shell}, {"area moving piece", test_ao_mover}, {"area bird", test_ao_bird}, {"area rock", test_ao_rock}, {"area insect", test_ao_bug}, {"area poison plant", test_ao_plant}, {"area burner", test_ao_burner}, {"weapon objects", test_ao_weapons}, {"area 4/8 objects", test_aobj2}, {"area effects", test_k2_area}, {"sound slots", test_snd_slots}, {"menus", test_menu}, {"title 2", test_title2}, {"result", test_result}, {"extra crisis", test_extra}, {"models", test_model}, {"ending 3d", test_ending3d}, {"ending", test_ending}, {"options", test_options}, {"save slots", test_savefile}, {"save room", test_shop}, {"aot kinds", test_aot_kinds}, {"object effects", test_obj_effects}, {"effect slots", test_k2}, {"effect drops", test_k2_drops}, {"effect emitters", test_eff_slots}, {"effect slots 3", test_k2_more}, {"helpers", test_helpers}, {"draw", test_draw}, {"pc gpu", test_pcgpu}, {"pc draw", test_pcdraw}, {"pc masks", test_pcmasks}, {"pc frame", test_pcframe},
     };
     for (unsigned i = 0; i < sizeof T / sizeof T[0]; i++) {
         int f0 = g_fail, t0 = g_tests;

@@ -92,7 +92,7 @@ Checked under wine 9 (32-bit prefix): all 26 hooks installed; after one
 minute Lzss_Decode 23 calls, Flag_Check 62 000, Script_Run every frame,
 PointInQuad 5 000.
 
-## Reimplemented (2282)
+## Reimplemented (2348)
 
 The authoritative list is `src/hook/hooks.c`. By area:
 
@@ -128,6 +128,9 @@ The authoritative list is `src/hook/hooks.c`. By area:
 | title after clearing | the second title (0x4A63F0): new game, clear game (the difficulty kept), extra crisis, load, options; idle and difficulty labels, the cursor | src/game/title2.c |
 | results screen | M_RESULT (0x46D990): the grade from the play time, saves and continues, its labels and the five grade models turned in the light | src/game/result.c |
 | extra crisis menu | M_TITLE (0x46E3F0): the Extra Crisis menu and its character select (two players in the duel, the models on turning stands, arrows, names, VRAM copies of the portraits), the start of the chosen mode | src/game/extra.c |
+| models (vertex blocks) | the vertices projected and lit once into screen buffers with env-map uv from the view-space normals (EnvMapDraw), then the env-mapped quads / triangles (semi-transparent, lit or one colour) and the textured lit meshes; the results screen's grade models | src/game/model.c |
+| the ending's 3D scenes | three tasks started under the results, each a camera on its target, light vectors turned into the light matrix: 1) six models and a scrolled ground of 16x16 sprites, a sky and a backdrop; 2) two models along twelve paths of 1200 positions; 3) a model whose vertices and normals are interpolated (Hermite) between 20 key frames, and one of two logos. Vertices carry their order-table slots; gouraud / env-mapped polygons by those | src/game/model.c |
+| ENDING | the task after the last boss: the two ending movies, the grade by play time and one of the 3D scenes (by games cleared), the results faded in line by line (play time, points, files read, the grade), the two bonus pictures (once each), the costume shop (pages of 5 / 10 / 12 costumes per character, prices, yes / no, points counted down), the game restarted with games cleared, costumes, bonus bits and play time kept; the sprite list of pictures | src/game/ending.c |
 | frame drawing | Frame_Draw (0x4A7250): the view matrices of objects, parts, effects and props; models (vertices projected and lit per part, then indexed triangles and quads with depth), effect meshes and their depth rules, shadows on the floor, prop sprites and quads, background mask markers, dim bars, the rope, the text layer (message slots, the sentence and its cursor), the per-frame handlers | src/game/draw.c |
 | velociraptor | handler (damage, movement, collisions), init by level, the choice of the next state, normal sub-states (wait, walk, cry, back off, eat, entrance, feint), jumps and climbs, the attacks (pounce, lunge, side bite, leap, tail) and their hits on the player, the hits it takes (flinch, knock-back, blown back, thrown in the air, burnt, drowned), death | src/game/raptor.c |
 | oviraptor | handler, init by level, the choice of the next state, normal sub-states (walk and turn about, look about, hide, turn in place, entrance), climbs and jumps, the attacks (leap back, peck, pounce and the bites while holding the player down, lunge, kick, jump on the back) and their hits on the player, the hits it takes (staggers, knocked back, blown about, thrown in the air), death | src/game/oviraptor.c |

@@ -2285,6 +2285,75 @@ void DC2CALL Result_Draw(gptr t);                                       /* 0x46E
 void DC2CALL Result_Run(gptr t);                                        /* 0x46DC20 */
 void DC2CALL Result_End(gptr t);                                        /* 0x46DD20 */
 void DC2CALL ResultTask(void);                                          /* 0x46D990 */
+/* model.c: models lit and projected once, env-mapped or textured polygons */
+void DC2CALL EnvMapDraw(gptr m);                                        /* 0x482940 */
+void DC2CALL Model_EnvQuads(gptr b, gptr p);                            /* 0x482BD0 */
+void DC2CALL Model_EnvTris(gptr b, gptr p);                             /* 0x482F80 */
+void DC2CALL Model_SetTexture(gptr m, gptr p);                          /* 0x483290 */
+void DC2CALL MeshDrawGT4(gptr v, gptr nv, gptr b, u32 tpage, u32 clut); /* 0x4832C0 */
+void DC2CALL MeshDrawGT3(gptr v, gptr nv, gptr b, u32 tpage, u32 clut); /* 0x4834F0 */
+void DC2CALL Model_DrawTex(gptr m, u32 tpage, u32 clut);                /* 0x4836A0 */
+/* ending.c: ENDING (movies, results, bonus pictures, costume shop) */
+gptr DC2CALL Spr_Alloc(void);                                     /* 0x447E60 */
+void DC2CALL Spr_Set(gptr e, gptr parts, u32 x, u32 y, u32 col);  /* 0x447FD0 */
+void DC2CALL Spr_DrawAll(void);                                   /* 0x447E80 */
+void DC2CALL End_Init(gptr t);                                    /* 0x446310 */
+void DC2CALL End_Setup(gptr t);                                   /* 0x446550 */
+void DC2CALL End_Movie1(gptr t);                                  /* 0x4463B0 */
+void DC2CALL End_Movie2(gptr t);                                  /* 0x446410 */
+void DC2CALL End_Digits(u32 x, u32 y, u32 v, u32 n, u32 col, u32 mode); /* 0x446D80 */
+void DC2CALL End_Time(gptr t, u32 col);                           /* 0x446C60 */
+void DC2CALL End_Points(gptr t, u32 col);                         /* 0x446F30 */
+void DC2CALL End_Files(gptr t, u32 col);                          /* 0x446F60 */
+void DC2CALL End_Results(gptr t);                                 /* 0x446670 */
+void DC2CALL End_Bonus1(gptr t);                                  /* 0x446FD0 */
+void DC2CALL End_Bonus2(gptr t);                                  /* 0x447140 */
+s32 DC2CALL Bit_Next(u32 m, s32 from, s32 dir);                   /* 0x447590 */
+void DC2CALL Costume_Build(gptr s);                                  /* 0x4472A0 */
+void DC2CALL Costume_Init(gptr t, gptr s);                           /* 0x447470 */
+void DC2CALL Costume_Pick(gptr t, gptr s);                           /* 0x447600 */
+void DC2CALL Costume_Buy(gptr t, gptr s);                            /* 0x4476F0 */
+void DC2CALL Costume_Check(gptr t, gptr s);                          /* 0x4479A0 */
+void DC2CALL Costume_Done(gptr t, gptr s);                           /* 0x447AD0 */
+void DC2CALL Costume_Run(gptr t, gptr s);                            /* 0x447AE0 */
+void DC2CALL Costume_Exit(gptr t, gptr s);                           /* 0x447B30 */
+void DC2CALL Costume_End(gptr t, gptr s);                            /* 0x447C20 */
+void DC2CALL End_Shop(gptr t);                                    /* 0x447C50 */
+void DC2CALL End_Run(gptr t);                                     /* 0x446390 */
+void DC2CALL End_Restart(gptr t);                                 /* 0x447D20 */
+void DC2CALL EndingTask(void);                                       /* 0x4462D0 */
+/* the ending's 3D scenes */
+void DC2CALL End1_Verts(gptr m);                          /* 0x483F40 */
+void DC2CALL End1_TexQuads(gptr b, gptr p);               /* 0x484270 */
+void DC2CALL End1_TexTris(gptr b, gptr p);                /* 0x484600 */
+void DC2CALL End1_Tex(gptr m, gptr p);                    /* 0x484240 */
+void DC2CALL End1_ShadeQuads(gptr b);                     /* 0x484910 */
+void DC2CALL End1_ShadeTris(gptr b);                      /* 0x484BD0 */
+void DC2CALL End1_Shade(gptr m);                          /* 0x4848F0 */
+void DC2CALL End1_Init(gptr t);                           /* 0x483720 */
+void DC2CALL End1_Sky(gptr t);                            /* 0x483820 */
+void DC2CALL End1_Ground(gptr t);                         /* 0x483990 */
+void DC2CALL End1_Backdrop(gptr t);                       /* 0x483DD0 */
+void DC2CALL End1_Run(gptr t);                            /* 0x483B00 */
+void DC2CALL End1Task(void);                              /* 0x4836E0 */
+void DC2CALL End2_Verts(gptr m);                          /* 0x4851E0 */
+void DC2CALL End2_TexQuads(gptr b, gptr p);               /* 0x4854F0 */
+void DC2CALL End2_TexTris(gptr b, gptr p);                /* 0x485880 */
+void DC2CALL End2_Tex(gptr m, gptr p);                    /* 0x4854B0 */
+void DC2CALL End2_Init(gptr t);                           /* 0x484E40 */
+void DC2CALL End2_Draw(gptr t);                           /* 0x484FB0 */
+void DC2CALL End2_Run(gptr t);                            /* 0x485160 */
+void DC2CALL End2Task(void);                              /* 0x484E00 */
+void DC2CALL End3_Verts(gptr m);                          /* 0x486320 */
+void DC2CALL End3_ShadeQuads(gptr b);                     /* 0x486400 */
+void DC2CALL End3_ShadeTris(gptr b);                      /* 0x486680 */
+void DC2CALL End3_Shade(gptr m);                          /* 0x485F00 */
+void DC2CALL End3_Interp(gptr t, u32 which);              /* 0x485F20 */
+void DC2CALL End3_Anim(gptr t);                           /* 0x485D00 */
+void DC2CALL End3_Logo(gptr t);                           /* 0x486170 */
+void DC2CALL End3_Init(gptr t);                           /* 0x485BB0 */
+void DC2CALL End3_Run(gptr t);                            /* 0x485D50 */
+void DC2CALL End3Task(void);                              /* 0x485B70 */
 
 /* extra.c: the extra crisis menu and character choice */
 void DC2CALL Extra_SetLabel(gptr l, gptr a, u32 pal);                   /* 0x46FA30 */

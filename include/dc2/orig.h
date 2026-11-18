@@ -13,9 +13,6 @@
     V(Fn_4BF130,          0x4BF130, (u32 a), (a)) \
     V(Fn_454950,          0x454950, (gptr o, gptr out, u32 mask), (o, out, mask)) \
     F(u32, Fn_4BF330,     0x4BF330, (void), ()) \
-    V(EnvMapDraw,         0x482940, (gptr m), (m)) \
-    V(Model_SetTexture,   0x483290, (gptr m, gptr p), (m, p)) \
-    V(Model_DrawTex,      0x4836A0, (gptr m, u32 tpage, u32 clut), (m, tpage, clut)) \
 
 #define ORIG_DECL_F(ret, name, addr, params, args) ret DC2CALL name params;
 #define ORIG_DECL_V(name, addr, params, args) void DC2CALL name params;
