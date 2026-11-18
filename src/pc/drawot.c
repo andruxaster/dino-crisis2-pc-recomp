@@ -724,6 +724,9 @@ static void vram_move(gptr r, s32 x, s32 y)                          /* 0x4B4B30
     }
 }
 
+/* the same, for game code (the extra crisis character pictures: Gpu_MoveImage) */
+void PcDraw_MoveImage(gptr r, s32 x, s32 y) { vram_move(r, x, y); }   /* 0x4B4B30 */
+
 /* ---- the copy of the frame (code 0x8C draws it) ---------------------------------------------- */
 
 /* a texture size the device takes for w x h (powers of 2, minimum, maximum, square) */

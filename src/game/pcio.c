@@ -13,6 +13,8 @@ u32  DC2CALL Pc_Size(s32 fd)                    { return ORIG(0x4C0540, u32 (DC2
 s32  DC2CALL Pc_Seek(s32 fd, s32 off, u32 w)    { return ORIG(0x4C0580, s32 (DC2CALL *)(s32, s32, u32))(fd, off, w); }
 s32  DC2CALL Pc_SeekSet(s32 fd, s32 off)         { return ORIG(0x4C0560, s32 (DC2CALL *)(s32, s32))(fd, off); }
 void DC2CALL Pc_Close(s32 fd)                   { ORIG(0x4C05A0, void (DC2CALL *)(s32))(fd); }
+s32  DC2CALL Pc_Creat(gptr p)                    { return ORIG(0x4C0490, s32 (DC2CALL *)(gptr))(p); }
+s32  DC2CALL Pc_Write(s32 fd, gptr buf, u32 n)  { return ORIG(0x4C0510, s32 (DC2CALL *)(s32, gptr, u32))(fd, buf, n); }
 gptr DC2CALL Crt_malloc(u32 n)                  { return ORIG(0x4DD711, gptr (DC2CALL *)(u32))(n); }
 void DC2CALL Crt_free(gptr p)                   { ORIG(0x4DD628, void (DC2CALL *)(gptr))(p); }
 void DC2CALL Task_Sleep(u32 n)                  { ORIG(0x4C29A9, void (DC2CALL *)(u32))(n); }
@@ -28,8 +30,12 @@ void DC2CALL Strm_SetVolume(u32 h, s32 v)       { ORIG(0x4BFF20, void (DC2CALL *
 void DC2CALL Strm_Play(u32 h)                   { ORIG(0x4BFEE0, void (DC2CALL *)(u32))(h); }
 void DC2CALL Strm_Stop(u32 h)                   { ORIG(0x4BFFA0, void (DC2CALL *)(u32))(h); }
 void DC2CALL Input_ReadPad(u32 p)               { ORIG(0x4BEF40, void (DC2CALL *)(u32))(p); }
+u32  DC2CALL Input_ReadKey(void)                 { return ORIG(0x4BF180, u32 (DC2CALL *)(void))(); }
+void DC2CALL Display_Apply(void)                 { ORIG(0x46FC60, void (DC2CALL *)(void))(); }
 void DC2CALL Gpu_AddPrim(gptr o, gptr p)        { ORIG(0x4C05D0, void (DC2CALL *)(gptr, gptr))(o, p); }
 void DC2CALL Gpu_DrawOT(gptr o, gptr a, gptr b) { ORIG(0x4C0600, void (DC2CALL *)(gptr, gptr, gptr))(o, a, b); }
+void DC2CALL Gpu_VramCopy(gptr r, s32 x, s32 y)  { ORIG(0x4B4A60, void (DC2CALL *)(gptr, s32, s32))(r, x, y); }
+void DC2CALL Gpu_MoveImage(gptr r, s32 x, s32 y) { ORIG(0x4B4B30, void (DC2CALL *)(gptr, s32, s32))(r, x, y); }
 void DC2CALL Gpu_SetSprt(gptr p)                { ORIG(0x4C0690, void (DC2CALL *)(gptr))(p); }
 void DC2CALL Gpu_SetTile(gptr p)                { ORIG(0x4C06A0, void (DC2CALL *)(gptr))(p); }
 void DC2CALL Gpu_SetSemiTrans(gptr p, u32 on)   { ORIG(0x4C06C0, void (DC2CALL *)(gptr, u32))(p, on); }
@@ -114,7 +120,18 @@ u32 DC2CALL Pc_Size(s32 fd)
 }
 s32 DC2CALL Pc_Seek(s32 fd, s32 off, u32 w) { return fseek(g_files[fd], off, (int)w); }
 s32 DC2CALL Pc_SeekSet(s32 fd, s32 off) { return fseek(g_files[fd], off, SEEK_SET); }
-void DC2CALL Pc_Close(s32 fd) { fclose(g_files[fd]); g_files[fd] = NULL; }
+void DC2CALL Pc_Close(s32 fd) { if (g_files[fd]) fclose(g_files[fd]); g_files[fd] = NULL; }
+s32 DC2CALL Pc_Creat(gptr path)
+{
+    int fd = 0;
+    while (fd < 16 && g_files[fd]) fd++;
+    if (fd == 16) return -1;
+    char host[1024];
+    resolve((const char *)MEM(path), host, sizeof host);
+    g_files[fd] = fopen(host, "wb");
+    return fd;
+}
+s32 DC2CALL Pc_Write(s32 fd, gptr buf, u32 n) { return g_files[fd] ? (s32)fwrite(MEM(buf), 1, n, g_files[fd]) : 0; }
 
 /* first-fit heap in the emulated image: blocks of {u32 size | used bit, data} */
 #define HEAP_BASE (IMAGE_BASE + IMAGE_SIZE + TMP_SIZE)
@@ -152,6 +169,8 @@ void DC2CALL Crt_sprintf1(gptr b, gptr f, u32 a)
 /* the sound buffers and streams: src/pc/audio.c */
 u16 g_pad_raw[2];
 void DC2CALL Input_ReadPad(u32 p) { if (p < 2) U16(0x87DC42 + p * 0x24) = g_pad_raw[p]; }
+u32 DC2CALL Input_ReadKey(void) { return 0; }   /* (no keyboard to bind keys from) */
+void DC2CALL Display_Apply(void) {}              /* (the window keeps its mode) */
 u32 DC2CALL Movie_Open(gptr name, u32 w, u32 h) { (void)name; (void)w; (void)h; return 0; }
 void DC2CALL Movie_Ctl1(void) {}
 void DC2CALL Movie_Ctl0(void) {}
@@ -172,6 +191,8 @@ u32 DC2CALL Masks_FillMarker(u32 i, gptr p)
 void DC2CALL SetMaskMarker(gptr p) { PcGpu_SetMaskMarker(p); }
 void DC2CALL Gpu_AddPrim(gptr o, gptr p) { PcGpu_AddPrim(o, p); }
 void DC2CALL Gpu_DrawOT(gptr o, gptr a, gptr b) { PcGpu_AddPrims(o, a, b); }
+void DC2CALL Gpu_VramCopy(gptr r, s32 x, s32 y) { PcDraw_VramCopy(r, x, y); }
+void DC2CALL Gpu_MoveImage(gptr r, s32 x, s32 y) { PcDraw_MoveImage(r, x, y); }
 void DC2CALL Gpu_SetSprt(gptr p) { PcGpu_SetSprt(p); }
 void DC2CALL Gpu_SetTile(gptr p) { PcGpu_SetTile(p); }
 void DC2CALL Gpu_SetSemiTrans(gptr p, u32 on) { PcGpu_SetSemiTrans(p, on); }

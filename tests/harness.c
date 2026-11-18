@@ -16,6 +16,7 @@
 #include "../src/hook/hooks.h"
 #include "dc2/orig.h"
 #include "dc2/gte.h"
+#include "dc2/pcinput.h"
 #include "dc2/gpu.h"
 #include "dc2/pcdraw.h"
 #include "dc2/task.h"
@@ -680,6 +681,10 @@ static Stub g_stubs[] = {
     {0x4BFB00, "d"}, {0x4BFB40, "d"}, {0x4BFFD0, "d"}, {0x4C0010, "d"},   /* 134: Snd_Pause, Snd_Resume, Strm_Pause, Strm_Resume */
     {0, ""}, {0, ""}, {0, ""}, {0, ""}, {0, ""},  /* 138..: the menu's callees (set by test_menu) */
     {0x4B4F90, "d"}, {0x4BF650, ""}, {0x4BF670, ""}, {0x4BF690, ""}, {0x4BF340, ""},   /* 143..: the movie's clear, play, stop, poll, close */
+    {0x4BF180, ""}, {0x46FC60, ""},              /* 148: Input_ReadKey, Display_Apply */
+    {0x4C0490, "s"}, {0x4C0510, "ddd"},          /* 150: PCcreat, PCwrite */
+    {0x482940, "d"}, {0x483290, "dddd"}, {0x4836A0, "ddd"},   /* 152: EnvMapDraw, Model_SetTexture (impl), Model_DrawTex */
+    {0, "pdd", {8}}, {0, "pdd", {8}},          /* 155: VRAM copy 0x4B4A60, MoveImage 0x4B4B30 (set by test_extra) */
 };
 #define STUB_GAME 71
 #define STUB_LOAD 50
@@ -739,7 +744,8 @@ REC(102) REC(103) REC(104) REC(105) REC(106) REC(107) REC(108) REC(109) REC(110)
 REC(111) REC(112) REC(113) REC(114) REC(115) REC(116) REC(117) REC(118) REC(119) REC(120) REC(121)
 REC(122) REC(123) REC(124) REC(125) REC(126) REC(127) REC(128) REC(129) REC(130) REC(131) REC(132) REC(133)
 REC(134) REC(135) REC(136) REC(137) REC(138) REC(139) REC(140) REC(141) REC(142)
-REC(143) REC(144) REC(145) REC(146) REC(147)
+REC(143) REC(144) REC(145) REC(146) REC(147) REC(148) REC(149) REC(150) REC(151)
+REC(152) REC(153) REC(154) REC(155) REC(156)
 static void *const g_recs[] = {rec0, rec1, rec2, rec3, rec4, rec5, rec6, rec7, rec8, rec9, rec10,
     rec11, rec12, rec13, rec14, rec15, rec16, rec17, rec18, rec19, rec20, rec21, rec22, rec23,
     rec24, rec25, rec26, rec27, rec28, rec29, rec30, rec31, rec32, rec33, rec34, rec35, rec36, rec37,
@@ -751,8 +757,14 @@ static void *const g_recs[] = {rec0, rec1, rec2, rec3, rec4, rec5, rec6, rec7, r
     rec106, rec107, rec108, rec109, rec110, rec111, rec112, rec113, rec114, rec115, rec116, rec117, rec118, rec119, rec120, rec121,
     rec122, rec123, rec124, rec125, rec126, rec127, rec128, rec129, rec130, rec131, rec132, rec133,
     rec134, rec135, rec136, rec137, rec138, rec139, rec140, rec141, rec142,
-    rec143, rec144, rec145, rec146, rec147};
+    rec143, rec144, rec145, rec146, rec147, rec148, rec149, rec150, rec151, rec152, rec153, rec154, rec155, rec156};
 _Static_assert(sizeof g_recs / sizeof g_recs[0] >= sizeof g_stubs / sizeof g_stubs[0], "a recorder per stub");
+/* Model_SetTexture(model, {u16 tpage, u16 clut, u32 colour, u8 mode}): the colour only counts without mode bit 1 */
+static u32 __cdecl tex_rec(u32 m, u32 p)
+{
+    u32 a[4] = {m, U32(p), U8(p + 8), U8(p + 8) & 2 ? 0 : U32(p + 4)};
+    return rec_common(153, a);
+}
 static int g_task_sleeps;               /* Task_Sleep leaves the task at the n-th call */
 static void *g_task_jb[5];
 /* Task_Sleep: the file loader "runs" while the task sleeps */
@@ -767,6 +779,7 @@ static u32 __cdecl fk_sprintf(u32 buf, u32 fmt, u32 name, u32 b, u32 c);
 static void stubs_install(int on)
 {
     g_stubs[STUB_LOAD].impl = ts_sleep;
+    g_stubs[153].impl = tex_rec;
     if (!g_stubs[STUB_FILE + 7].impl) g_stubs[STUB_FILE + 7].impl = fk_sprintf;   /* sprintf does its work */
     for (int i = 0; i < NSTUBS; i++) {
         Stub *st = &g_stubs[i];
@@ -11599,6 +11612,986 @@ static void test_menu(void)
 }
 
 
+/* ---- the title after the game is cleared ------------------------------------------------- */
+static void title2_state(void)
+{
+    gptr g = G(), t = 0x759F30;
+    title_state();
+    snd_setup();
+    for (u32 k = 0; k < 0x40; k += 4) U32(t + k) = rnd();
+    U8(t) = (u8)A2_PICK(0, 1, 2, 3, 4, (s32)(rnd() % 5));
+    U8(t + 1) = 1 + rnd() % 2;
+    for (int i = 0; i < 5; i++) {
+        gptr s = t + 4 + 12 * i;
+        U32(s + 4) = 0x5E0000 + 8 * (rnd() % 0x60);
+        U8(s + 8) = rnd() % 3 ? rnd() % 3 : (u8)rnd();
+        U8(s + 9) = (u8)A2_PICK(0, 1, 2, 3, 0xFF, (s32)rnd());
+    }
+    U16(g + 0x76C) = rnd() % 2; U16(g + 0x76E) = (u16)A2_PICK(0, 1, 2, 3, 0xFFFF, (s32)(rnd() % 3));
+    U16(g + 0x770) = (u16)A2_PICK(0, 1, 2, 0xFFFF, (s32)(rnd() % 2));
+    U32(0x87DC00) = (u32)A2_PICK(0, 1, 0x40, 0x1000, 0x4000, 0x20, 0x10, 0x800, 0x820, 0x830, 0x5040, 0x1040, (s32)(rnd() & rnd()));
+    U32(0x759F74) = 0x5E0000 + 8 * (rnd() % 0x60); U8(0x759F78) = rnd() % 3; U8(0x759F79) = (u8)rnd();   /* (past T: a sixth label) */
+    U32(0x87F940) = rnd();
+    for (u32 k = 0; k < 0x460; k += 4) U32(0x87F4E0 + k) = rnd();
+    U8(0x87F4E8) = (u8)rnd();
+    U16(0x87F4E4) = rnd() % 3 ? 0x101 : (u16)A2_PICK(0x100, 0x201, 0x102, (s32)(rnd() % 0x400));
+    U8(0x87F4E0 + 8) = (u8)rnd();
+    Flag_Set(9, 0x35, rnd() % 2); Flag_Set(2, 0x21, rnd() % 2); Flag_Set(3, 0, rnd() % 2);
+    U8(g + 0x927) = (u8)rnd(); U8(g + 0x662) = (u8)rnd(); U8(g + 0xB48) = (u8)rnd();
+    U32(0x87DE00) = rnd();
+    stub_at(0x494DE0)->ret = rnd() % 0x100;
+    U32(LOG_BASE) = 0;
+}
+
+static u32 __cdecl t2_task_orig(void) { g_task_sleeps = g_task_n; if (!__builtin_setjmp(g_task_jb)) ((void (__cdecl *)(void))0x4A63F0)(); g_task_sleeps = 0; return 0; }
+static u32 __cdecl t2_task_new(void) { g_task_sleeps = g_task_n; if (!__builtin_setjmp(g_task_jb)) Title2Task(); g_task_sleeps = 0; return 0; }
+
+static void test_title2(void)
+{
+    stubs_install(1);
+    type_tables_stub(1);
+    for (u32 a = 0x5E0000; a < 0x5E0800; a += 4) U32(a) = rnd();
+    for (u32 a = 0x5E0000; a < 0x5E0800; a += 8) {
+        U8(a + 4) = (u8)((rnd() % 3 ? rnd() % 4 : rnd()) | (rnd() % 4 == 0 ? 0x20 : 0)) & 0xE7;
+        U8(a + 5) = rnd() % 4;
+    }
+    static const struct { u32 addr; void *fn; const char *name; } F[] = {
+        {0x4A6420, Title2_Init, "Title2_Init"}, {0x4A6460, Title2_Run, "Title2_Run"},
+        {0x4A6730, Title2_NewGame, "Title2_NewGame"}, {0x4A6910, Title2_ClearGame, "Title2_ClearGame"},
+        {0x4A69C0, Title2_Extra, "Title2_Extra"}, {0x4A6A60, Title2_Load, "Title2_Load"},
+        {0x4A6AE0, Title2_Option, "Title2_Option"}, {0x4A6B60, Title2_DrawAll, "Title2_DrawAll"},
+        {0x4A6D20, Title2_AnimAll, "Title2_AnimAll"}, {0x4A6D70, Title2_NewState, "Title2_NewState"},
+    };
+    for (int i = 0; i < iters; i++) {
+        for (unsigned k = 0; k < sizeof F / sizeof F[0]; k++) {
+            title2_state();
+            if (k == 1 && rnd() % 2) U16(G() + 0x76E) = 2;
+            if (k >= 2 && k <= 6 && rnd() % 2) { U16(G() + 0x770) = 1; Flag_Set(2, 6, rnd() % 4 == 0); }
+            u32 a[1] = {0x759F30};
+            sprintf(g_what, "screen %u step %u cursor %d/%d btn %X", U16(G() + 0x76E), U16(G() + 0x770),
+                    S8(0x759F30), S8(0x759F31), U32(0x87DC00));
+            check(F[k].addr, F[k].fn, F[k].name, 1, a, 0);
+        }
+        /* every entry with every button: the menu and the difficulty choice */
+        static const u32 bt[] = {0, 1, 0x40, 0x1000, 0x4000, 0x20, 0x10, 0x800};
+        for (u32 c = 0; c < 5; c++)
+            for (u32 b = 0; b < sizeof bt / sizeof bt[0]; b++) {
+                title2_state();
+                U8(0x759F30) = (u8)c; U32(0x87DC00) = bt[b]; U16(G() + 0x76E) = 1;
+                u32 a[1] = {0x759F30};
+                sprintf(g_what, "menu cursor %u btn %X", c, bt[b]);
+                check(0x4A6460, Title2_Run, "Title2_Run", 1, a, 0);
+                title2_state();
+                U8(0x759F31) = 1 + c % 2; U32(0x87DC00) = bt[b]; U16(G() + 0x770) = 0;
+                sprintf(g_what, "difficulty %u btn %X", 1 + c % 2, bt[b]);
+                check(0x4A6730, Title2_NewGame, "Title2_NewGame", 1, a, 0);
+            }
+        /* the task for a few frames */
+        title2_state();
+        g_task_n = 1 + rnd() % 3;
+        sprintf(g_what, "frames %d mode %u screen %u step %u cursor %d btn %X", g_task_n, U16(G() + 0x76C),
+                U16(G() + 0x76E), U16(G() + 0x770), S8(0x759F30), U32(0x87DC00));
+        check((u32)(uintptr_t)t2_task_orig, t2_task_new, "Title2Task", 0, NULL, 0);
+    }
+    type_tables_stub(0);
+    stubs_install(0);
+}
+
+/* ---- the extra crisis result screen --------------------------------------------------- */
+static void res_state(void)
+{
+    gptr g = G(), t = 0x74D610, c = g + 0x778;
+    title_state();
+    snd_setup();
+    for (u32 k = 0; k < 0x98; k += 4) U32(t + k) = rnd();
+    U8(t) = (u8)A2_PICK(0, 1, 2, (s32)(rnd() % 3)); U8(t + 1) = (u8)A2_PICK(0, 1, 2, 3, (s32)(rnd() % 3));
+    U32(t + 4) = (u32)A2_PICK(0, 1, 2, 0xD2, (s32)rnd());
+    for (u32 l = t + 8; l < t + 0x58; l += 0x10) { U32(l + 4) = 0x625800 + 8 * (rnd() % 0x40); U32(l + 8) = (u32)A2_PICK(0, 1, 2, (s32)rnd()); }
+    for (u32 i = 0; i < 5; i++) U8(t + 0x90 + i) = rnd() % 5;
+    static const u32 thr[5][4] = {
+        {0x50, 0x3C, 0x28, 0x14}, {0x3138, 0x2A30, 0x1C20, 0x708}, {0x46, 0x3C, 0x32, 0x28},
+        {0x64C8, 0x62D4, 0x6144, 0x5FB4}, {0x10, 0xB, 7, 3}};
+    u32 v[4];
+    for (u32 i = 0; i < 4; i++) v[i] = rnd() % 4 ? thr[i][rnd() % 4] + (u32)A2_PICK(-1, 0, 1, (s32)(rnd() % 200) - 100) : rnd() % 3 ? rnd() % 0x10000 : rnd();
+    U16(g + 0x84E) = (u16)v[0]; U32(g + 0x12C8) = v[1]; U32(g + 0x11F4) = v[3];
+    u32 d = rnd() % 4 ? 1 + rnd() % 200 : rnd() % 3 ? 0 : rnd();
+    U32(g + 0x684) = d; U32(g + 0x688) = rnd() % 3 ? d * v[2] / 100 + (u32)A2_PICK(0, 1, -1, 0, 0) : rnd();
+    for (u32 k = 0x20; k < 0x36; k += 2) U16(c + k) = (u16)(rnd() % 0x2000 - 0x1000);
+    U16(0x723B28) = (u16)rnd(); U16(0x723B2A) = (u16)rnd(); U16(0x723B2C) = (u16)rnd();
+    U32(0x87DC10) = (u32)A2_PICK(0, 0x1000, 0x2000, 0x4000, 0x8000, 0xF000, (s32)rnd());
+    U8(0x87DDFC) = (u8)A2_PICK(0, 0x40, (s32)rnd());
+    U32(0x87DC00) = (u32)A2_PICK(0, 0x20, 0x100, 0x800, 0x920, 0x40, (s32)(rnd() & rnd()));
+    for (u32 k = 0x58; k < 0x90; k += 2) U16(t + k) = (u16)(rnd() % 0x2000 - 0x1000);
+    Flag_Set(2, 6, rnd() % 3 == 0);
+    for (u32 k = 0; k < 0xA58; k += 4) U32(0x5EE968 + k) = rnd();     /* (Result_Init clears it) */
+    for (u32 n = 0; n < 2; n++) {                        /* the stream slots */
+        gptr st = 0x87FB80 + n * 0x14;
+        for (u32 k = 0; k < 0x14; k += 4) U32(st + k) = rnd();
+        U32(st + 4) = rnd() % 4 ? 1 : 0; U8(st + 8) = rnd() % 2;
+    }
+    Flag_Set(0, 0xA, rnd() % 4 == 0);
+    U32(LOG_BASE) = 0;
+}
+
+static u32 __cdecl res_task_orig(void) { g_task_sleeps = g_task_n; if (!__builtin_setjmp(g_task_jb)) ((void (__cdecl *)(void))0x46D990)(); g_task_sleeps = 0; return 0; }
+static u32 __cdecl res_task_new(void) { g_task_sleeps = g_task_n; if (!__builtin_setjmp(g_task_jb)) ResultTask(); g_task_sleeps = 0; return 0; }
+
+static void test_result(void)
+{
+    stubs_install(1);
+    g_ign_addr = 0x87B40A; g_ign_len = 2;      /* the RT pad: SetRotMatrix copies the stack matrix's pad */
+    g_ign2_addr = 0x87B45A; g_ign2_len = 14;  /* the light matrix's pad and unused translation: stack bytes */
+    type_tables_stub(1);
+    for (u32 a = 0x625800; a < 0x625C00; a += 4) U32(a) = rnd();
+    for (u32 a = 0x625800; a < 0x625C00; a += 8) U8(a + 4) = (u8)((rnd() % 3 ? rnd() % 4 : rnd()) | (rnd() % 4 == 0 ? 0x20 : 0)) & 0xE7;
+    static const struct { u32 addr; void *fn; const char *name; } F[] = {
+        {0x46D9D0, Result_Init, "Result_Init"}, {0x46DC20, Result_Run, "Result_Run"},
+        {0x46DD20, Result_End, "Result_End"}, {0x46DEB0, Result_Grade, "Result_Grade"},
+        {0x46E1E0, Result_Draw, "Result_Draw"}, {0x46E010, Result_Model0, "Result_Model0"},
+        {0x46E070, Result_Model1, "Result_Model1"}, {0x46E0E0, Result_Model2, "Result_Model2"},
+        {0x46E140, Result_Model3, "Result_Model3"}, {0x46E190, Result_Model4, "Result_Model4"},
+    };
+    for (int i = 0; i < iters; i++) {
+        for (unsigned k = 0; k < sizeof F / sizeof F[0]; k++) {
+            res_state();
+            u32 a[1] = {0x74D610};
+            sprintf(g_what, "mode %u step %u timer %u grade %u btn %X", U8(0x74D610), U8(0x74D611), U32(0x74D614),
+                    U8(0x74D610 + 0x94), U32(0x87DC00));
+            check(F[k].addr, F[k].fn, F[k].name, 1, a, 0);
+        }
+        res_state();
+        u32 b[4] = {0x74D610 + 8 + 0x10 * (rnd() % 5), 0x625800 + 8 * (rnd() % 0x40), (u32)A2_PICK(0, 1, 2, (s32)rnd())};
+        check(0x46DE90, Res_SetLabel, "Res_SetLabel", 3, b, 0);
+        u32 c[4] = {(u32)(rnd() % 400) - 50, (u32)(rnd() % 300) - 50, 0x74D610 + 8 + 0x10 * (rnd() % 5)};
+        check(0x46DD40, Res_DrawLabel, "Res_DrawLabel", 3, c, 0);
+        /* the task for a few frames */
+        res_state();
+        g_task_n = 1 + rnd() % 3;
+        sprintf(g_what, "frames %d", g_task_n);
+        check((u32)(uintptr_t)res_task_orig, res_task_new, "ResultTask", 0, NULL, 0);
+    }
+    g_ign_addr = 0; g_ign_len = 0; g_ign2_addr = 0; g_ign2_len = 0;
+    type_tables_stub(0);
+    stubs_install(0);
+}
+
+/* ---- the extra crisis menu and character choice ----------------------------------------- */
+/* the characters' models (a few parts each; the first one's place holds the fake room block) */
+static void ext_models(int from)
+{
+    static const gptr models[12] = {0x5E0000, 0x5E3088, 0x5E65D8, 0x5E9BA8, 0x5ED150, 0x5F592C, 0x5F0690, 0x5F79A4,
+                                    0x5F2BE0, 0x5F9CF4, 0x5FC978, 0x5FF73C};
+    for (int k = from; k < 12; k++) { model_data(models[k]); if (U32(models[k] + 0x14) > 4) U32(models[k] + 0x14) = 1 + rnd() % 4; }
+}
+
+static void ext_state(int frame)
+{
+    gptr t = 0x74D6A8;
+    if (frame) { title_state(); snd_setup(); game_state(); fake_room_block(); frame_state(); draw_safe(); }
+    else { title_state(); snd_setup(); }
+    gptr g = G();
+    for (u32 k = 0; k < 0x60; k += 4) U32(t + k) = rnd();
+    U8(t) = (u8)A2_PICK(0, 1, 2, (s32)(rnd() % 3)); U8(t + 1) = (u8)A2_PICK(0, 1, 2, 3, (s32)(rnd() % 4));
+    U8(t + 2) = (u8)A2_PICK(0, 1, 2, (s32)(rnd() % 3)); U8(t + 3) = (u8)A2_PICK(0, 0x1F, 0x20, 0x21, (s32)(rnd() % 0x22));
+    U8(t + 4) = (u8)A2_PICK(0, 1, 2, 3, (s32)(rnd() % 3)); U8(t + 5) = (u8)A2_PICK(0, 1, 2, (s32)(rnd() % 2));
+    U8(t + 6) = rnd() % 3; U8(t + 7) = rnd() % 12; U8(t + 8) = (u8)A2_PICK(0, 2, 7, 8, (s32)rnd());
+    U8(t + 9) = rnd() % 2;                              /* (players 0, 1: the duel table has two rows) */
+    u16 m = (u16)A2_PICK(0, 0xFFF, 0xFE0, (s32)(1u << (rnd() % 12)), (s32)(rnd() & 0xFFF));
+    if (frame) { m &= ~1u; if (!m) m = 2; if (!U8(t + 7)) U8(t + 7) = 1; }   /* (no character 0: the room block is there) */
+    U16(t + 0xA) = m;
+    ext_models(frame);
+    for (gptr l = t + 0xC; l < t + 0x5C; l += 0x14) {
+        U32(l + 4) = 0x5FFF00 + 8 * (rnd() % 0x60); U8(l + 0xC) = rnd() % 3; U8(l + 0xD) = (u8)A2_PICK(0, 1, 2, 3, (s32)rnd());
+        U16(l + 0x10) = (u16)(rnd() % 0x140); U16(l + 0x12) = (u16)(rnd() % 0xF0);
+    }
+    U32(t + 0x5C) = rnd() % 2 ? 0x87DC10 : 0x87DC20;
+    for (u32 k = 0; k < 0x14; k += 4) U32(t + 0x60 + k) = rnd();        /* (past T: a fifth label) */
+    U32(t + 0x60 + 4) = 0x5FFF00 + 8 * (rnd() % 0x60);
+    for (gptr l = t + 0xC; l < t + 0x5C; l += 0x14) U16(l + 0x12) = (u16)(rnd() % 0x200);
+    for (u32 n = 0; n < 2; n++) {                        /* the stream slots */
+        gptr st = 0x87FB80 + n * 0x14;
+        for (u32 k = 0; k < 0x14; k += 4) U32(st + k) = rnd();
+        U32(st + 4) = rnd() % 4 ? 1 : 0; U8(st + 8) = rnd() % 2;
+    }
+    Flag_Set(0, 0xA, rnd() % 4 == 0);
+    U8(0x60011C) = (u8)rnd(); U8(0x60011C + 0x98E * 4) = (u8)rnd();
+    U8(G() + 0x108C) = (u8)rnd(); U8(G() + 0x108C + 0x460) = (u8)rnd();
+    for (u32 k = 0x20; k < 0x36; k += 2) U16(G() + 0x778 + k) = (u16)rnd();
+    U16(g + 0x1092) = (u16)A2_PICK(0, 0x1F, 0xFFF, 0x20, 0x800, (s32)(rnd() & 0xFFF));   /* (characters 0..11) */
+    U8(g + 0x1094) = (u8)rnd(); U8(g + 0x927) = (u8)A2_PICK(1, 2, 0, (s32)(1 + rnd() % 2)); U8(g + 4) = (u8)rnd();
+    U32(0x87DC12) = (u32)A2_PICK(0, 0x1000, 0x4000, 0x5000, 1, (s32)(rnd() & rnd()));
+    U32(0x87DC00) = (u32)A2_PICK(0, 0x40, 0x20, 0x800, 0x820, 1, (s32)(rnd() & rnd()));
+    U16(0x87DC92) = (u16)A2_PICK(0, 0x40, 0x20, 0x800, 1, (s32)(rnd() & rnd()));
+    U16(0x87DC10) = (u16)A2_PICK(0, 0x2000, 0x8000, 0xA000, 1, (s32)(rnd() & rnd()));
+    U16(0x87DC20) = (u16)A2_PICK(0, 0x2000, 0x8000, 0xA000, 1, (s32)(rnd() & rnd()));
+    Flag_Set(2, 6, rnd() % 3 == 0); Flag_Set(2, 0x21, rnd() % 2);
+    U32(0x87F4E0 + 0x460 - 4) = rnd();
+    if (!frame) {                                       /* the stand's two objects */
+        U32(g + 0x940) = O_OBJ;
+        for (u32 k = 0; k < 2; k++) {
+            gptr o = O_OBJ + k * 0x260;
+            U8(o + 0x50) = (u8)rnd(); U32(o + 0x60) = MODEL_DATA;
+            U16(o + 0x4A) = (u16)rnd(); U16(o + 0x40) = (u16)rnd(); U16(o + 0x2A0) = (u16)rnd();
+        }
+    }
+    for (u32 k = 0; k < 2; k++) {                       /* their parts: two each */
+        gptr o = U32(g + 0x940) + k * 0x260, p = O_PART + 0xC00 + 0x100 * k;
+        U32(o + 0x64) = p; U32(o + 0x60) = MODEL_DATA;
+        U32(p + 0x58) = o; U32(p + 0x54) = p + 0x80; U32(p + 0x80 + 0x58) = p; U32(p + 0x80 + 0x54) = 0;
+    }
+    stub_at(0x494DE0)->ret = rnd() % 0x100;
+    U32(LOG_BASE) = 0;
+}
+
+static u32 __cdecl ext_task_orig(void) { g_task_sleeps = g_task_n; if (!__builtin_setjmp(g_task_jb)) ((void (__cdecl *)(void))0x46E3F0)(); g_task_sleeps = 0; return 0; }
+static u32 __cdecl ext_task_new(void) { g_task_sleeps = g_task_n; if (!__builtin_setjmp(g_task_jb)) ExtraTask(); g_task_sleeps = 0; return 0; }
+
+static void test_extra(void)
+{
+    g_stubs[155].addr = 0x4B4A60; g_stubs[156].addr = 0x4B4B30;   /* the pictures' VRAM copies: logged */
+    stubs_install(1);
+    type_tables_stub(1);
+    for (u32 a = 0x5FFF00; a < 0x600200; a += 4) U32(a) = rnd();
+    for (u32 a = 0x5FFF00; a < 0x600200; a += 8) {
+        U8(a + 4) = (u8)((rnd() % 3 ? rnd() % 4 : rnd()) | (rnd() % 4 == 0 ? 0x20 : 0)) & 0xE7;
+        U8(a + 5) = rnd() % 4;
+    }
+    static const struct { u32 addr; void *fn; const char *name; int frame; } F[] = {
+        {0x46E440, Extra_Menu, "Extra_Menu", 0}, {0x46EA10, Extra_SelInit, "Extra_SelInit", 0},
+        {0x46EED0, Extra_SelChoose, "Extra_SelChoose", 0}, {0x46F540, Extra_SelTurn, "Extra_SelTurn", 0},
+        {0x46F730, Extra_SelLeave, "Extra_SelLeave", 0}, {0x46F800, Extra_Start, "Extra_Start", 0},
+        {0x46F880, Extra_DrawLabels, "Extra_DrawLabels", 0}, {0x46FA50, Extra_AnimLabels, "Extra_AnimLabels", 0},
+        {0x46E8C0, Extra_Select, "Extra_Select", 1},
+    };
+    for (int i = 0; i < iters; i++) {
+        for (unsigned k = 0; k < sizeof F / sizeof F[0]; k++) {
+            ext_state(F[k].frame);
+            if (F[k].frame) { U8(0x74D6A9) = 1 + rnd() % 3; g_ign_campad = 1; g_ign_objpads = 1; g_ign_draw = 1; g_ign_weppads = 1; }
+            u32 a[1] = {0x74D6A8};
+            sprintf(g_what, "game %u chars %X mode %u step %u/%u/%u cursor %d char %u mask %X player %d pads %X %X %X", U8(G() + 0x927), U16(G() + 0x1092), U8(0x74D6A8), U8(0x74D6A9),
+                    U8(0x74D6AA), U8(0x74D6AC), S8(0x74D6AE), U8(0x74D6AF), U16(0x74D6B2), S8(0x74D6B1),
+                    U32(0x87DC12), U32(0x87DC00), U16(U32(0x74D6A8 + 0x5C)));
+            check(F[k].addr, F[k].fn, F[k].name, 1, a, 0);
+            g_ign_campad = 0; g_ign_objpads = 0; g_ign_draw = 0; g_ign_weppads = 0;
+        }
+        ext_state(0);
+        u32 b[4] = {0x74D6A8 + 0xC + 0x14 * (rnd() % 4), 0x5FFF00 + 8 * (rnd() % 0x60), (u32)A2_PICK(0, 2, 7, (s32)rnd())};
+        check(0x46FA30, Extra_SetLabel, "Extra_SetLabel", 3, b, 0);
+        for (int j = 0; j < 8; j++) {
+            u32 c[4] = {(u32)A2_PICK(0, 1, 0x80000000, 0xFFFFFFFF, 0xFFF, 0xFE0, (s32)rnd(), (s32)(rnd() & 0xFFF)),
+                        (u32)A2_PICK(0, 4, 11, 31, 32, (s32)(rnd() % 40)), (u32)A2_PICK(1, -1, 0, 2, (s32)rnd())};
+            check(0x46E850, Extra_NextChar, "Extra_NextChar", 3, c, 0xFFFFFFFF);
+        }
+        /* targeted: the menu's moves and choices, the choice of a character, the turn's end */
+        for (u32 j = 0; j < 12; j++) {
+            ext_state(0);
+            gptr t = 0x74D6A8, g = G();
+            u32 a[1] = {t};
+            U8(t + 1) = 1; U8(t + 6) = j % 3; U32(0x87DC12) = j & 4 ? 0x1000 : 0x4000;
+            U16(g + 0x1092) = (u16)(j & 8 ? 0x20 : rnd() % 0x20); U8(g + 0x1094) = (u8)(rnd() % 2 ? 0 : 0x80);
+            sprintf(g_what, "menu move cursor %u", j % 3);
+            check(0x46E440, Extra_Menu, "Extra_Menu", 1, a, 0);
+            ext_state(0);
+            U8(t + 1) = 2; U8(t + 6) = j % 2; Flag_Set(2, 6, 0); Flag_Set(2, 0x21, rnd() % 2);
+            sprintf(g_what, "menu chosen %u", j % 2);
+            check(0x46E440, Extra_Menu, "Extra_Menu", 1, a, 0);
+            ext_state(0);
+            U8(t + 7) = (u8[]){0, 5, 11, 4}[j % 4]; U8(t + 9) = j % 2; U8(g + 0x927) = 1 + (j >> 2) % 2;
+            U16(U32(t + 0x5C)) = 0; U16(0x87DC00) = 0x820; U16(0x87DC92) = 0x820;
+            sprintf(g_what, "chosen char %u player %u game %u", U8(t + 7), j % 2, U8(g + 0x927));
+            check(0x46EED0, Extra_SelChoose, "Extra_SelChoose", 1, a, 0);
+            ext_state(0);
+            U8(t + 3) = 0x1F + j % 2; U8(t + 5) = 0; U8(t + 4) = 1 + (j >> 1) % 2; U8(t + 2) = (j >> 2) % 2;
+            U16(0x87FFEA) = 0;
+            sprintf(g_what, "turn time %u load %u dir %u", U8(t + 3), U8(t + 4), U8(t + 2));
+            check(0x46F540, Extra_SelTurn, "Extra_SelTurn", 1, a, 0);
+            ext_state(1);
+            U8(t + 1) = 1; U8(G() + 4) = 0x10; U16(t + 0xA) = (u16[]){0x800, 0x102, 0xFFE, 0x900}[j % 4];
+            U8(t + 7) = (u8[]){8, 11, 1, 9}[j % 4];
+            g_ign_campad = 1; g_ign_objpads = 1; g_ign_draw = 1; g_ign_weppads = 1;
+            sprintf(g_what, "select mask %X char %u", U16(t + 0xA), U8(t + 7));
+            check(0x46E8C0, Extra_Select, "Extra_Select", 1, a, 0);
+            g_ign_campad = 0; g_ign_objpads = 0; g_ign_draw = 0; g_ign_weppads = 0;
+        }
+        /* the task for a few frames (the menu) */
+        ext_state(0);
+        U8(0x74D6A8) = 0; U8(0x74D6A9) = 0;
+        g_task_n = 1 + rnd() % 3;
+        sprintf(g_what, "frames %d", g_task_n);
+        check((u32)(uintptr_t)ext_task_orig, ext_task_new, "ExtraTask", 0, NULL, 0);
+    }
+    type_tables_stub(0);
+    stubs_install(0);
+    g_stubs[155].addr = 0; g_stubs[156].addr = 0;
+}
+
+/* ---- the options screen ---- */
+static const u32 g_opt_keys[] = {0x2, 0x3, 0x4, 0x5, 0x6, 0x7, 0x8, 0x9, 0xa, 0xb, 0xc, 0xd, 0xe, 0xf, 0x10, 0x11, 0x12, 0x13, 0x14, 0x15,
+    0x16, 0x1a, 0x1b, 0x1e, 0x1f, 0x20, 0x21, 0x22, 0x23, 0x24, 0x28, 0x29, 0x2b, 0x2c, 0x2d, 0x2e, 0x2f, 0x30, 0x31, 0x32,
+    0x35, 0x90, 0x7d, 0x91, 0x92, 0x1d, 0x2a, 0x9d, 0x36, 0xd2, 0xd3, 0xc7, 0xcf, 0xc9, 0xd1};
+#define OPT_NKEYS (sizeof g_opt_keys / sizeof g_opt_keys[0])
+static u32 opt_key(void) { return g_opt_keys[rnd() % OPT_NKEYS]; }
+static u8 g_opt_frames[0x2000];
+
+/* the keys bound (each of the screen's 9 bits to a key that has a name) */
+static void opt_binds(void)
+{
+    static const u16 bits[] = {0x20, 0x40, 0x10, 8, 2, 4, 1, 0x100, 0x800};
+    static const u16 other[] = {0x1000, 0x2000, 0x4000, 0x8000, 0x400, 0x200, 0x80, 0, 0x3000, 0xC000};
+    for (u32 i = 0; i < 64; i++) {
+        U16(0x865EFC + 4 * i) = (u16)(rnd() % 3 ? opt_key() : rnd() % 4 ? 0 : rnd());
+        U16(0x865EFE + 4 * i) = other[rnd() % 10];
+    }
+    u8 slot[64];
+    for (u32 i = 0; i < 64; i++) slot[i] = (u8)i;
+    for (u32 i = 0; i < 9; i++) { u32 j = i + rnd() % (64 - i); u8 t = slot[i]; slot[i] = slot[j]; slot[j] = t; }
+    for (u32 k = 0; k < 9; k++) {
+        U16(0x865EFC + 4 * slot[k]) = (u16)opt_key(); U16(0x865EFE + 4 * slot[k]) = bits[k];
+        if (rnd() % 4 == 0 && slot[k] < 63) {           /* (a second binding after the first: never found) */
+            u32 j = slot[k] + 1 + rnd() % (63 - slot[k]);
+            int used = 0;
+            for (u32 q = 0; q < 9; q++) if (slot[q] == j) used = 1;
+            if (!used) { U16(0x865EFC + 4 * j) = (u16)rnd(); U16(0x865EFE + 4 * j) = bits[k]; }
+        }
+    }
+    for (u32 i = 0; i < 64; i++) U16(0x73BDB8 + 4 * i) = U16(0x865EFC + 4 * i), U16(0x73BDBA + 4 * i) = U16(0x865EFE + 4 * i);
+    for (u32 k = 0; k < 9; k++) U8(0x74E2F0 + k) = (u8)opt_key();
+    for (u32 i = 0; i < 10; i++) { U16(0x8660FC + 4 * i) = (u16)rnd(); U16(0x8660FE + 4 * i) = (u16)A2_PICK(0x20, 0x40, 0x10, 2, 1, (s32)rnd()); }
+}
+
+/* the display set-up: 4 devices with names, mode lists for each and window/full screen */
+static void opt_display(void)
+{
+    for (u32 d = 0; d < 4; d++) {
+        gptr e = 0x75DEFC + d * 0x164;
+        U32(e) = rnd() % 2;
+        u32 n = 1 + rnd() % 24;
+        for (u32 q = 0; q < n; q++) U8(e + 0x14 + q) = (u8)A2_PICK(' ', 'A', 'z', '0', (s32)(0x21 + rnd() % 0x5E));
+        U8(e + 0x14 + n) = 0;
+        for (u32 w = 0; w < 2; w++) {
+            gptr l = 0x75BE70 + (d + w * 4) * 0x204;
+            u32 c = (u32)A2_PICK(1, 2, 3, (s32)(1 + rnd() % 63));
+            U32(l) = c;
+            for (u32 q = 0; q < 64; q++) {
+                U16(l + 4 + 8 * q) = (u16)A2_PICK(320, 640, 800, 1024, (s32)(rnd() % 2000));
+                U16(l + 6 + 8 * q) = (u16)A2_PICK(240, 480, 600, 768, (s32)(rnd() % 2000));
+                U16(l + 8 + 8 * q) = (u16)A2_PICK(16, 32, 24, 8, (s32)(rnd() % 64));
+                U16(l + 10 + 8 * q) = (u16)rnd();
+            }
+        }
+    }
+    U32(0x74D738) = (u32)A2_PICK(2, 2, 1, 3, 0, (s32)rnd());
+    for (int s = 0; s < 2; s++) {                    /* the set-up in use, the copy edited */
+        gptr dv = s ? 0x74E2FC : 0x723CA0, wn = s ? 0x74E2C8 : 0x723CA4;
+        U32(dv) = (u32)A2_PICK(0, 1, 2, 1, 2, 3);
+        U32(wn) = rnd() % 2;
+        gptr l = 0x75BE70 + (U32(dv) + U32(wn) * 4) * 0x204, m = l + 4 + 8 * (rnd() % U32(l));
+        u32 w = U16(m), h = U16(m + 2), b = U16(m + 4);
+        if (rnd() % 4 == 0) w = rnd() % 2000;
+        if (s) { U32(0x74E2C4) = w; U32(0x74E2BC) = h; U32(0x74E328) = b; U32(0x74E2C0) = rnd() % 2; U32(0x74E324) = 0x75DEFC + 0x164 * (rnd() % 4) + 0x14; }
+        else { U32(0x723CB0) = w; U32(0x723CB4) = h; U32(0x723CB8) = b; U32(0x87FF9C) = rnd() % 2; U32(0x87FFA0) = 0x75DEFC + 0x164 * (rnd() % 4) + 0x14; }
+    }
+    if (rnd() % 3 == 0) {                            /* (the copy as the set-up) */
+        U32(0x74E2FC) = U32(0x723CA0); U32(0x74E2C8) = U32(0x723CA4); U32(0x74E2C4) = U32(0x723CB0);
+        U32(0x74E2BC) = U32(0x723CB4); U32(0x74E328) = U32(0x723CB8);
+    }
+}
+
+static gptr opt_state(void)
+{
+    gptr m = menu_state(), o = 0x87FDC0, g = G();
+    (void)m;
+    for (u32 a = 0x65F000; a < 0x661000; a += 8) { U32(a) = rnd(); U32(a + 4) = rnd(); U8(a + 6) = (u8)(rnd() % 3); }
+    for (u32 a = 0; a < 0x1B8; a += 4) U32(o + a) = rnd();
+    U8(o) = (u8)A2_PICK(1, 2, 2, 3); U8(o + 1) = (u8)(rnd() % 5);
+    U8(o + 2) = (u8)A2_PICK(0, 1, (s32)rnd()); U8(o + 3) = (u8)A2_PICK(0, 1, 2, 3, (s32)rnd());
+    for (u32 q = 0; q < 50; q++) {
+        if (rnd() % 4) { U16(o + 4 + 2 * q) = (u16)(rnd() % 0xF5); U16(o + 0xCC + 2 * q) = (u16)(rnd() % 0xF5); }
+        if (rnd() % 4) { U16(o + 0x68 + 2 * q) = (u16)(rnd() % 0x91); U16(o + 0x130 + 2 * q) = (u16)(rnd() % 0x91); }
+    }
+    U16(o + 0x194) = (u16)A2_PICK(0, 0x45, 0x46, 0x47, 0xFF, 0x1FF, (s32)(rnd() % 0x48), (s32)rnd());
+    U16(o + 0x196) = (u16)A2_PICK(0, 1, 2, 3, 8, 9, 10, -1, 0x109, 0x100, (s32)(rnd() % 10), (s32)rnd());
+    U16(o + 0x198) = (u16)A2_PICK(0, 1, 2, 3, -1, 0x100, 0x102, 0xFF, (s32)rnd());
+    U16(o + 0x19A) = (u16)A2_PICK(0, 2, 0x10, (s32)(rnd() % 0x20), (s32)rnd());
+    U16(o + 0x19C) = (u16)A2_PICK(0, 0, 1, 0x4F, 0x50, 0x51, (s32)(rnd() % 0x60), (s32)rnd());
+    for (u32 a = 0x19E; a <= 0x1A8; a += 2) U16(o + a) = (u16)A2_PICK(0, 0, 1, 2, 6, 8, 0xB, 0xC, 0xF, 0x10, 0x28, 0x2C, 0x2F, 0x30, 0x32, 0x35, 0x36, 0x3C, 0x4E, 0x50, 0x52, 0x54, 0x60, 0x64, 0xC7, 0xC8, 0xFF, 0x100, 0x12C, (s32)(rnd() % 0xD0), (s32)rnd());
+    U16(o + 0x1B0) = (u16)A2_PICK(0, 0x1F3, 0x1F4, 0x1F5, (s32)(rnd() % 0x200), (s32)rnd());
+    U16(o + 0x1B2) = (u16)A2_PICK(0, 1, 2, 3, -1, 0xFF, 0x102, 0x1FF, (s32)rnd());
+    U16(o + 0x1B4) = (u16)A2_PICK(0, 0, 1, 0x100, (s32)rnd());
+    U8(g + 0x14EF) = (u8)A2_PICK(0, 1, 2, 3, -1, (s32)rnd());
+    U8(g + 0x14F2) = (u8)A2_PICK(0, 1, (s32)rnd()); U8(g + 0x14F1) = (u8)A2_PICK(0, 1, (s32)rnd());
+    U8(g + 0x14F0) = (u8)A2_PICK(0, 1, (s32)rnd()); U8(g + 0x14EC) = (u8)A2_PICK(0, 1, (s32)rnd());
+    U8(g + 0x14ED) = (u8)A2_PICK(0, 1, 14, 15, 16, -1, (s32)rnd()); U8(g + 0x14EE) = (u8)A2_PICK(0, 1, 14, 15, 16, -1, (s32)rnd());
+    U8(g + 4) = (u8)rnd();
+    U32(0x87DC00) = (u32)A2_PICK(0, 0x1000, 0x4000, 0x2000, 0x8000, 0x40, 0x20, 0x800, 0x60, 0xA000, 0x5000, 0x3000, 1, (s32)(rnd() & rnd()));
+    U16(0x87DC16) = (u16)rnd(); U32(o + 0x1B8) = rnd();
+    U32(0x737924) = rnd() % 2 ? 0x727514 : 0x7274FE;
+    if (rnd() % 3 == 0)                                 /* (the keys' labels: glyph strings of any length) */
+        for (u32 k = 0; k < 9; k++) {
+            gptr t = 0x6CF000 + 0x60 * k;
+            u32 n = (u32)A2_PICK(0, 1, 2, 8, 16, 30, 40, (s32)(rnd() % 40));
+            for (u32 q = 0; q < n; q++) U16(t + 2 * q) = (u16)(rnd() % 2 ? 0x20 + rnd() % 0x60 : rnd() % 0x200);
+            U16(t + 2 * n) = 0xF000;
+            U32(0x737920 + 4 * k) = t;
+        }
+    opt_binds(); opt_display();
+    U32(LOG_BASE) = 0;
+    return o;
+}
+
+static u32 __cdecl opt_task_orig(void) { g_task_sleeps = g_task_n; if (!__builtin_setjmp(g_task_jb)) ((void (__cdecl *)(void))0x475720)(); g_task_sleeps = 0; return 0; }
+static u32 __cdecl opt_task_new(void) { g_task_sleeps = g_task_n; if (!__builtin_setjmp(g_task_jb)) Option_Task(); g_task_sleeps = 0; return 0; }
+
+static void test_options(void)
+{
+    memcpy(g_opt_frames, MEM(0x65F000), sizeof g_opt_frames);
+    u32 keep924[9]; memcpy(keep924, MEM(0x737920), sizeof keep924);
+    stubs_install(1);
+    static const struct { u32 addr; void *fn; const char *name; } P[] = {
+        {0x4757B0, Opt_Init, "Opt_Init"}, {0x478150, Opt_Draw, "Opt_Draw"}, {0x475B10, Opt_List, "Opt_List"},
+        {0x475C20, Opt_Page, "Opt_Page"}, {0x475CC0, Opt_Controller, "Opt_Controller"}, {0x476A60, Opt_Keys, "Opt_Keys"},
+        {0x4773E0, Opt_Sound, "Opt_Sound"}, {0x4776D0, Opt_Display, "Opt_Display"}, {0x477CF0, Opt_Quit, "Opt_Quit"}};
+    for (int i = 0; i < iters; i++) {
+        gptr o = opt_state();
+        /* text widths */
+        {
+            gptr t = 0x6CF600;
+            u32 n = (u32)A2_PICK(0, 1, 2, 10, (s32)(rnd() % 40));
+            for (u32 q = 0; q < n; q++) U16(t + 2 * q) = (u16)(rnd() % 2 ? 0x20 + rnd() % 0x60 : rnd() % 0xF000);
+            U16(t + 2 * n) = (u16)(0xF000 | rnd());
+            u32 a[1] = {t};
+            check(0x475AC0, Opt_TextWidth, "Opt_TextWidth", 1, a, 0xFFFFFFFF);
+            for (u32 q = 0; q < 0x40; q++) U8(t + q) = (u8)A2_PICK('a', 'M', ' ', ' ', '\n', (s32)(0x21 + rnd() % 0x5E), (s32)(0x21 + rnd() % 0x5E), (s32)(1 + rnd() % 255));
+            U8(t + (u32)A2_PICK(0, 1, 2, (s32)(rnd() % 0x40))) = 0;
+            U8(t + 0x3F) = 0;
+            check(0x471E10, Text_Width, "Text_Width", 1, a, 0xFFFFFFFF);
+        }
+        /* the PC layer's tables */
+        o = opt_state();
+        {
+            static const u16 bits[] = {0x20, 0x40, 0x10, 8, 2, 4, 1, 0x100, 0x800, 0x1000, 0};
+            u32 a[8] = {(u32)A2_PICK((s32)opt_key(), (s32)opt_key(), 2, 0xD1, 0, 1, (s32)rnd())};
+            sprintf(g_what, "key %X", a[0]);
+            check(0x4BF140, PcIn_KeyName, "PcIn_KeyName", 1, a, 0xFFFFFFFF);
+            a[0] = rnd() % 4 ? bits[rnd() % 11] : rnd();
+            sprintf(g_what, "bit %X", a[0]);
+            check(0x4BF1E0, PcIn_KeyOf, "PcIn_KeyOf", 1, a, 0xFFFFFFFF);
+            a[1] = rnd() % 2 ? opt_key() : rnd();
+            check(0x4BF210, PcIn_BindKey, "PcIn_BindKey", 2, a, 0);
+            check(0x4BF250, PcIn_DefaultKeys, "PcIn_DefaultKeys", 0, a, 0);
+            a[0] = (u32)A2_PICK(0x20, 0x40, 0x10, 2, 1, 0, (s32)rnd()); a[1] = rnd();
+            sprintf(g_what, "bit %X", a[0]);
+            check(0x4BF2A0, PcIn_BindButton, "PcIn_BindButton", 2, a, 0);
+            gptr v = 0x6CF700;
+            u32 d = rnd() % 4, w = rnd() % 2;
+            gptr l = 0x75BE70 + (d + w * 4) * 0x204;
+            if (rnd() % 8 == 0) U32(l) = 0;
+            for (u32 q = 0; q < 0x20; q += 4) U32(v + q) = rnd();
+            if (U32(l) && rnd() % 2) {                      /* (a mode of the list) */
+                gptr m = l + 4 + 8 * (rnd() % U32(l));
+                U32(v + 8) = U16(m); U32(v + 0xC) = U16(m + 2); U32(v + 0x10) = U16(m + 4);
+                if (rnd() % 4 == 0) U32(v + 8) |= 0x10000;
+            }
+            u32 b[8] = {d, w, v, v + 4, v + 8, v + 0xC, v + 0x10, (u32)A2_PICK(0, 1, -1, 2, (s32)rnd())};
+            sprintf(g_what, "device %u window %u (can %u) modes %u size %ux%ux%u dir %d", d, w, U32(0x75DEFC + d * 0x164), U32(l), U32(v + 8), U32(v + 0xC), U32(v + 0x10), (s32)b[7]);
+            check(0x4BB8D0, PcIn_DisplayStep, "PcIn_DisplayStep", 8, b, 0);
+        }
+        o = opt_state();
+        sprintf(g_what, "the keys");
+        check(0x475840, Opt_KeyNames, "Opt_KeyNames", 0, NULL, 0);
+        /* the flickering lines */
+        o = opt_state();
+        {
+            u32 a[3] = {o, o + 4, o + 0x68};
+            if (rnd() % 2) a[1] = o + 0xCC, a[2] = o + 0x130;
+            sprintf(g_what, "mode %u G+4 %X", U8(o), U8(G() + 4));
+            check(0x478510, Opt_Lines, "Opt_Lines", 3, a, 0);
+        }
+        /* each page's rows and buttons */
+        for (int r = 0; r < 4; r++) {
+            static const u32 pads[] = {0x20, 0x40, 0x60, 0x2000, 0x8000, 0xA000, 0x1000, 0x4000, 0x5000, 0x800, 1, 0x21, 0};
+            static const struct { u32 addr; void *fn; const char *name; } Q[] = {
+                {0x475CC0, Opt_Controller, "Opt_Controller"}, {0x4773E0, Opt_Sound, "Opt_Sound"}, {0x4776D0, Opt_Display, "Opt_Display"},
+                {0x477CF0, Opt_Quit, "Opt_Quit"}, {0x475B10, Opt_List, "Opt_List"}};
+            for (unsigned q = 0; q < sizeof Q / sizeof Q[0]; q++) {
+                o = opt_state();
+                U8(G() + 0x14EF) = (u8)(rnd() % 3);
+                U16(o + 0x1B4) = 0;
+                U16(o + 0x196) = (u16)(rnd() % (q == 2 ? 3 : 4));
+                U16(o + 0x198) = (u16)(rnd() % 3 | (rnd() % 4 ? 0 : 0x100));
+                U16(o + 0x19C) = (u16)A2_PICK(0, 0, 0, 0x100, 1);
+                U8(o + 1) = (u8)A2_PICK(0, 1, 2, 3, 4, 4);
+                U8(o + 2) = (u8)A2_PICK(0, 1); U8(o + 3) = (u8)(rnd() % 3);
+                U8(G() + 0x14ED) = (u8)A2_PICK(0, 1, 14, 15); U8(G() + 0x14EE) = (u8)A2_PICK(0, 1, 14, 15);
+                U32(0x74D738) = (u32)A2_PICK(2, 2, 1);
+                U32(0x87DC00) = pads[rnd() % (sizeof pads / sizeof pads[0])];
+                g_stubs[148].ret = 0;
+                u32 a[1] = {o};
+                sprintf(g_what, "row %X sound row %X pad %X slide %X item %u layout %u", U16(o + 0x196), U16(o + 0x198), U32(0x87DC00), U16(o + 0x19C), U8(o + 1), U8(G() + 0x14EF));
+                check(Q[q].addr, Q[q].fn, Q[q].name, 1, a, 0);
+            }
+        }
+        /* the key page's buttons row */
+        for (int r = 0; r < 3; r++) {
+            o = opt_state();
+            U8(G() + 0x14EF) = (u8)(rnd() % 3);
+            U16(o + 0x1B4) = (u16)A2_PICK(1, 1, 0x100);
+            U16(o + 0x196) = (u16)A2_PICK(9, 9, 9, 0x109, 8, 0);
+            U32(0x87DC00) = (u32)A2_PICK(0x20, 0x40, 0x60, 0x2000, 0x8000, 1, 0x21, 0x1000, 0x4000);
+            U16(o + 0x1B2) = (u16)A2_PICK(0, 1, 2, 2, 3, -1, 0xFF, 0x1FF);
+            g_stubs[148].ret = 0;
+            u32 a[1] = {o};
+            sprintf(g_what, "row %X button %X pad %X 1B4 %X", U16(o + 0x196), U16(o + 0x1B2), U32(0x87DC00), U16(o + 0x1B4));
+            check(0x476A60, Opt_Keys, "Opt_Keys", 1, a, 0);
+        }
+        /* the modes, pages, labels */
+        for (unsigned k = 0; k < sizeof P / sizeof P[0]; k++) {
+            o = opt_state();
+            g_stubs[148].ret = (u32)A2_PICK(0, 0, 0, (s32)opt_key(), (s32)PcIn_KeyOf((u16[]){0x20, 0x40, 0x10, 8, 2, 4, 1, 0x100, 0x800}[rnd() % 9]));
+            if (P[k].addr == 0x476A60 && rnd() % 3) U16(o + 0x1B4) = 1;
+            if (g_stubs[148].ret && (P[k].addr == 0x476A60 || P[k].addr == 0x475CC0 || (P[k].addr == 0x475C20 && U8(o + 1) == 0)))
+                U16(o + 0x196) = (u16)(rnd() % 10);   /* (a key for a row of the list) */
+            if (P[k].addr == 0x476A60 || P[k].addr == 0x475CC0 || P[k].addr == 0x475C20) U8(G() + 0x14EF) = (u8)(rnd() % 3);   /* (other layouts: labels at stack garbage) */
+            if (P[k].addr == 0x4776D0 || (P[k].addr == 0x475C20 && U8(o + 1) == 2)) U16(o + 0x196) = (u16)(rnd() % 3);   /* (its text by row: rows 0..2) */
+            u32 a[1] = {o};
+            sprintf(g_what, "o %02X %02X %02X %02X 196 %X 198 %X 19C %X 1B2 %X 1B4 %X pad %X G %X %X %X key %X", U8(o), U8(o + 1), U8(o + 2), U8(o + 3),
+                    U16(o + 0x196), U16(o + 0x198), U16(o + 0x19C), U16(o + 0x1B2), U16(o + 0x1B4), U32(0x87DC00),
+                    U8(G() + 0x14EF), U8(G() + 0x14F2), U8(G() + 0x14EE), g_stubs[148].ret);
+            check(P[k].addr, P[k].fn, P[k].name, 1, a, 0);
+        }
+        {
+            static const struct { u32 addr; void *fn; const char *name; } L[] = {
+                {0x4771F0, Opt_PadFire, "Opt_PadFire"}, {0x477250, Opt_PadAim, "Opt_PadAim"},
+                {0x4772B0, Opt_PadSub, "Opt_PadSub"}, {0x477380, Opt_PadMap, "Opt_PadMap"}};
+            o = opt_state();
+            unsigned k = rnd() % 4;
+            u32 a[4] = {o, (u32)A2_PICK(8, 0xC0, 0x18, (s32)(rnd() % 0x140), (s32)rnd()), (u32)A2_PICK(0x40, 0x88, 0x90, (s32)(rnd() % 0xF0), (s32)rnd()), rnd()};
+            sprintf(g_what, "x %X y %X G %X %X", a[1], a[2], U8(G() + 0x14EF), U8(G() + 0x14F2));
+            check(L[k].addr, L[k].fn, L[k].name, 4, a, 0);
+        }
+        /* leaving */
+        {
+            game_state(); fake_room_block(); draw_safe();
+            gptr g = G();
+            o = 0x87FDC0;
+            U32(o + 0x1AC) = rnd();
+            U32(0x87DC08) = rnd(); U32(0x87DC94) = rnd();
+            Flag_Set(2, 9, rnd() % 2); Flag_Set(3, 9, rnd() % 2);
+            U8(g + 0xB48) = (u8)A2_PICK(0, 1, (s32)rnd()); U8(g + 0x108D) = (u8)A2_PICK(0, 1, (s32)rnd());
+            U8(g + 0x14F1) = (u8)A2_PICK(0, 1, (s32)rnd()); U8(g + 0x14F0) = (u8)A2_PICK(0, 1, (s32)rnd());
+            U32(LOG_BASE) = 0;
+            u32 a[1] = {o};
+            sprintf(g_what, "in game %X title2 %X", U8(g + 0xB48), U8(g + 0x108D));
+            check(0x478090, Opt_Leave, "Opt_Leave", 1, a, 0);
+            game_state(); fake_room_block(); frame_state(); draw_safe();
+            g = G();
+            U8(g + 0x7C4) = (u8)(rnd() % 4);
+            U8(0x74E378) = (u8)A2_PICK(0, 1, 1, (s32)rnd());
+            U32(0x87DC08) = rnd(); U32(0x87DC94) = rnd();
+            U8(g + 0xB48) = (u8)A2_PICK(0, 1, 1, (s32)rnd());
+            U16(g + 0x1090) = (u16)A2_PICK(0x905, 0x101, 0x700, 0x704, (s32)(rnd() % 10 << 8 | rnd() % 5));   /* (rooms 0..4: the fake room data's) */
+            U8(g + 0x7C6) = (u8)(rnd() % 8);
+            U32(LOG_BASE) = 0;
+            sprintf(g_what, "first %X in game %X room %X", U8(0x74E378), U8(g + 0xB48), U16(g + 0x1090));
+            for (gptr q = 0x74D980; q < 0x74DB80; q += 0x10) if (U8(q + 1) != 4) U8(q) &= ~1;   /* (as Frame_Draw's test: no glyphs, no cursor) */
+            for (u32 q = 0; q < 0x8C; q++) U8(0x74D750 + 4 * q + 3) = 0;
+            g_ign_campad = 1; g_ign_objpads = 1; g_ign_draw = 1;
+            check(0x478E20, Opt_ToGame, "Opt_ToGame", 0, NULL, 0);
+            g_ign_campad = 0; g_ign_objpads = 0; g_ign_draw = 0;
+        }
+        /* the task for a few frames */
+        o = opt_state();
+        U8(o) = (u8)A2_PICK(0, 1, 1, 2, 2, 3);
+        U8(G() + 0x14EF) = (u8)(rnd() % 3);
+        g_task_n = 1 + rnd() % 3;
+        sprintf(g_what, "frames %d mode %u item %u pad %X", g_task_n, U8(o), U8(o + 1), U32(0x87DC00));
+        check((u32)(uintptr_t)opt_task_orig, opt_task_new, "Option_Task", 0, NULL, 0);
+    }
+    stubs_install(0);
+    memcpy(MEM(0x737920), keep924, sizeof keep924);
+    memcpy(MEM(0x65F000), g_opt_frames, sizeof g_opt_frames);
+}
+
+
+/* ---- the save slots screen ---- */
+static u8 *g_sv_image;
+static gptr sv_state(void)
+{
+    gptr m = menu_state(), o = 0x74B5E8, g = G();
+    (void)m;
+    fake_room_block();
+    for (u32 a = 0x65F000; a < 0x661000; a += 8) { U32(a) = rnd(); U32(a + 4) = rnd(); U8(a + 6) = (u8)(rnd() % 3); }
+    for (u32 a = 0; a < 0x2020; a += 4) U32(o + a) = rnd();
+    U8(o + 0x2000) = (u8)(rnd() % 6); U8(o + 0x2001) = (u8)A2_PICK(0, 1, 1, 2, 3, (s32)rnd());
+    U8(o + 0x2002) = (u8)rnd(); U8(o + 0x2003) = (u8)rnd();
+    U32(o + 0x2004) = (u32)A2_PICK(0, 1, 9, 10, 98, 99, (s32)(rnd() % 100));
+    U8(o + 0x2008) = (u8)A2_PICK(0, 1, (s32)rnd()); U8(o + 0x2009) = (u8)A2_PICK(0, 1, 0x3B, 0x3C, 0x63, 0x64, 0x65, 0xFF, (s32)rnd());
+    for (u32 k = 0; k < 16; k++) U8(o + 0x200C + k) = (u8)A2_PICK(0, 0x12, 0x13, 0x14, 0xFF, (s32)(rnd() % 0x20), (s32)rnd());
+    for (u32 s = 0; s < 100; s++) {
+        gptr e = 0x87F340 + 4 * s;
+        U8(e) = (u8)A2_PICK(0, 1, 1, (s32)rnd()); U8(e + 1) = (u8)A2_PICK(0, 1, 1, (s32)rnd()); U8(e + 2) = (u8)A2_PICK(0, 0, 1, (s32)rnd());
+        gptr d = g + 0x20 + 16 * s;
+        for (u32 q = 0; q < 16; q += 4) U32(d + q) = rnd();
+        U8(d + 4) = (u8)(rnd() % 4); U8(d + 5) = (u8)(rnd() % 10);
+        U8(d + 2) = (u8)A2_PICK(0, 1, 2, 0, 1, 2, 3, -1, (s32)rnd());
+        U8(d + 3) = (u8)A2_PICK(0, 1, 2, (s32)rnd()); U8(d + 8) = (u8)rnd();
+        U16(d + 6) = (u16)A2_PICK(0, 0x1F, 0x20, 0x100, (s32)rnd());
+        U32(d + 0xC) = (u32)A2_PICK(0, 59, 60, 3599, 3600, 215999, 216000, 99 * 216000 + 3599 * 60, (s32)(rnd() % 50000000), (s32)rnd());
+    }
+    U16(0x87DDFC) = (u16)(rnd() % 3 ? rnd() & rnd() : 0);
+    U32(0x87DC00) = (u32)A2_PICK(0, 0, 0x20, 0x40, 0x10, 0x8000, 0x2000, 0xA000, 0x60, (s32)(rnd() & 0xFFFF));
+    U16(o + 0x200A) = (u16)A2_PICK(0, 0x8000, 0x2000, 0xA000, (s32)rnd());
+    U32(g + 0x1098) = (u32)A2_PICK(0, 216000 * 5 + 3600 * 7 + 60 * 9, 216000 * 100, (s32)(rnd() % 30000000), (s32)rnd());
+    U8(g + 0x108F) = (u8)A2_PICK(0, 1, 2, 3, (s32)rnd());
+    U16(0x87EEB0) = (u16)A2_PICK(0x101, 0x100, (s32)rnd());
+    U32(g + 0x940) = O_OBJ;
+    U8(g + 0x1090) = (u8)(rnd() % 4);                   /* (a room with a name: a save writes it into the slot's summary) */
+    U32(0x87DC08) = rnd(); U32(0x87DC94) = rnd();
+    U32(g + 0x76C) = rnd(); U32(g + 0x770) = rnd();
+    U8(g + 0x108D) = (u8)A2_PICK(0, 1, 0); U8(g + 0xB48) = (u8)A2_PICK(0, 1, 2);
+    U16(0x746D20) = (u16)A2_PICK(0, 0x47, 0x48, 0x49, 0x80FF, (s32)(rnd() % 0x50), (s32)rnd());
+    U16(0x746D22) = (u16)A2_PICK(0, 0x47, 0x48, 0x49, 0x80FF, (s32)(rnd() % 0x50), (s32)rnd());
+    /* the file a load reads: its sums right or not */
+    if (!g_sv_image) g_sv_image = malloc(0x5F4);
+    for (u32 k = 0; k < 0x5F4; k++) g_sv_image[k] = (u8)rnd();
+    memset(g_sv_image + 0x17C, 0, 8);
+    u32 s = 0;
+    for (u32 k = 0; k < 0x5F4; k++) s += g_sv_image[k];
+    if (rnd() % 4) memcpy(g_sv_image + 0x180, &s, 4); else memcpy(g_sv_image + 0x180, (u32[]){s + 1}, 4);
+    if (rnd() % 2) { u32 v = rnd(); memcpy(g_sv_image + 0x17C, &v, 4); }
+    free(g_fake); g_fake = malloc(0x5F4); memcpy(g_fake, g_sv_image, 0x5F4); g_fake_len = 0x5F4;
+    g_fake_fd = rnd() % 4 ? 3 : -1;
+    stub_at(0x4C0490)->ret = rnd() % 4 ? 2 : (u32)-1;
+    U32(LOG_BASE) = 0;
+    return o;
+}
+
+static u32 __cdecl sv_task_orig(void) { g_task_sleeps = g_task_n; if (!__builtin_setjmp(g_task_jb)) ((void (__cdecl *)(void))(g_task_mode[0] ? 0x46D690 : 0x46D5A0))(); g_task_sleeps = 0; return 0; }
+static u32 __cdecl sv_task_new(void) { g_task_sleeps = g_task_n; if (!__builtin_setjmp(g_task_jb)) { if (g_task_mode[0]) Save_Task(); else Load_Task(); } g_task_sleeps = 0; return 0; }
+
+static void test_savefile(void)
+{
+    memcpy(g_opt_frames, MEM(0x65F000), sizeof g_opt_frames);
+    void *impl[8] = {fk_open, fk_read, fk_size, fk_seek, fk_close, fk_malloc, fk_free, fk_sprintf};   /* (the fake files: SAVEnn.DAT) */
+    for (int i = 0; i < 8; i++) g_stubs[STUB_FILE + i].impl = impl[i];
+    stubs_install(1);
+    g_ign_filerecs = 3;
+    static const struct { u32 addr; void *fn; const char *name; } M[] = {
+        {0x46BEE0, Card_Panel, "Card_Panel"}, {0x46C1D0, Card_SlotInfo, "Card_SlotInfo"}, {0x46C480, Card_SlotUnread, "Card_SlotUnread"},
+        {0x46C4F0, Card_SlotEmpty, "Card_SlotEmpty"}, {0x46C560, Card_SlotBad, "Card_SlotBad"},
+        {0x46BD80, Load_List, "Load_List"}, {0x46C880, Save_List, "Save_List"}, {0x46C9E0, Load_Read, "Load_Read"},
+        {0x46CAE0, Save_Write, "Save_Write"}, {0x46D0B0, Load_Done, "Load_Done"}, {0x46D1B0, Save_Done, "Save_Done"},
+        {0x46D230, Load_Back, "Load_Back"}, {0x46D280, Save_Back, "Save_Back"}, {0x46D310, Load_NoData, "Load_NoData"},
+        {0x46D3B0, Save_Fail, "Save_Fail"}, {0x46D430, Load_Bad, "Load_Bad"}, {0x46D4F0, Save_Overwrite, "Save_Overwrite"}};
+    for (int i = 0; i < iters; i++) {
+        gptr o = sv_state();
+        static const struct { u32 addr; void *fn; const char *name; } B[] = {
+            {0x408630, Card_Back, "Card_Back"}, {0x408730, Card_Ring1, "Card_Ring1"}, {0x4089C0, Card_Ring2, "Card_Ring2"}};
+        for (unsigned k = 0; k < 3; k++) {
+            o = sv_state();
+            U32(0x87DE00) = (u32)A2_PICK(0, 0, 1, 2, (s32)rnd()); U8(G() + 4) = (u8)rnd();
+            sprintf(g_what, "counters %X %X mode %X", U16(0x746D20), U16(0x746D22), U32(0x87DE00));
+            check(B[k].addr, B[k].fn, B[k].name, 0, NULL, 0);
+        }
+        {
+            o = sv_state();
+            u32 a[5] = {rnd() % 0x140, rnd() % 0xF0, (u32)A2_PICK(0, 9, 10, 99, 100, 255, 1000, (s32)(rnd() % 100), (s32)rnd()),
+                        (u32)A2_PICK(0x808080, 0x80808080, (s32)rnd()), (u32)A2_PICK(0x64, 0xA, 0x258, (s32)(rnd() % 0x400), (s32)(rnd() % 0x400 | 0xFFFF0000))};
+            if (rnd() % 4 == 0) a[0] = rnd(), a[1] = rnd();
+            sprintf(g_what, "v %u col %X z %X", a[2], a[3], a[4]);
+            check(0x46C780, Card_Number2, "Card_Number2", 5, a, 0);
+            o = sv_state();
+            a[2] = (u32)A2_PICK(0, 59, 60, 3600, 216000, 216000 * 99, 216000 * 100, (s32)(rnd() % 30000000), (s32)rnd());
+            a[4] = rnd() % 0x400;
+            sprintf(g_what, "t %u col %X z %X", a[2], a[3], a[4]);
+            check(0x46C5D0, Card_Time, "Card_Time", 5, a, 0);
+        }
+        o = sv_state();
+        {
+            u32 a[2] = {o, rnd() % 4 ? 0x5F4 : rnd() % 0x2000};
+            check(0x46CAC0, Card_Sum, "Card_Sum", 2, a, 0xFFFFFFFF);
+            a[0] = o;
+            sprintf(g_what, "pad %X held %X", U16(0x87DC00), U16(0x87DDFC));
+            check(0x46D620, Card_Repeat, "Card_Repeat", 1, a, 0xFFFFFFFF);
+            o = sv_state();
+            a[0] = a[1] = o;
+            sprintf(g_what, "slot %u time %u costume %u room %X", U32(o + 0x2004), U32(G() + 0x1098), U8(G() + 0x108F), U16(0x87EEB0));
+            check(0x46CC30, Card_Build, "Card_Build", 2, a, 0);
+        }
+        for (unsigned k = 0; k < sizeof M / sizeof M[0]; k++) {
+            o = sv_state();
+            u32 a[1] = {o};
+            gptr s = 0x87F340 + 4 * U32(o + 0x2004);
+            sprintf(g_what, "step %u slot %u (%X %X %X) 2008 %X 2009 %X pad %X rep %X fd %d", U8(o + 0x2001), U32(o + 0x2004), U8(s), U8(s + 1), U8(s + 2),
+                    U8(o + 0x2008), U8(o + 0x2009), U32(0x87DC00), U16(o + 0x200A), g_fake_fd);
+            check(M[k].addr, M[k].fn, M[k].name, 1, a, 0);
+        }
+        /* choosing a slot: each kind of slot, each button */
+        for (int r = 0; r < 4; r++) {
+            static const struct { u32 addr; void *fn; const char *name; } L[] = {{0x46BD80, Load_List, "Load_List"}, {0x46C880, Save_List, "Save_List"}, {0x46D4F0, Save_Overwrite, "Save_Overwrite"}};
+            for (unsigned q = 0; q < 3; q++) {
+                o = sv_state();
+                gptr sl = 0x87F340 + 4 * U32(o + 0x2004);
+                U8(sl) = (u8)(rnd() % 2); U8(sl + 1) = (u8)(rnd() % 2); U8(sl + 2) = (u8)(rnd() % 2);
+                U8(o + 0x2001) = (u8)A2_PICK(0, 1, 1);
+                U32(0x87DC00) = (u32)A2_PICK(0x20, 0x40, 0x60, 0, 0x2000, 0x8000, 0x10, 1);
+                U16(o + 0x200A) = (u16)A2_PICK(0, 0, 0x8000, 0x2000);
+                U8(o + 0x2008) = (u8)(rnd() % 2);
+                u32 a[1] = {o};
+                sprintf(g_what, "slot %u (%u %u %u) pad %X rep %X yes/no %u", U32(o + 0x2004), U8(sl), U8(sl + 1), U8(sl + 2), U32(0x87DC00), U16(o + 0x200A), U8(o + 0x2008));
+                check(L[q].addr, L[q].fn, L[q].name, 1, a, 0);
+            }
+        }
+        o = sv_state();
+        g_task_mode[0] = (u8)(rnd() % 2);
+        g_task_n = 1 + rnd() % 3;
+        sprintf(g_what, "%s, frames %d", g_task_mode[0] ? "save" : "load", g_task_n);
+        check((u32)(uintptr_t)sv_task_orig, sv_task_new, "Load_Task/Save_Task", 0, NULL, 0);
+    }
+    g_ign_filerecs = 0;
+    stubs_install(0);
+    memcpy(MEM(0x65F000), g_opt_frames, sizeof g_opt_frames);
+}
+
+
+/* ---- the save room terminal (save, the shops) ---- */
+static u8 g_shop_tabs[0xA00];
+static const u8 g_shop_ammo_ids[] = {1, 2, 3, 4, 5, 6, 7, 8, 9, 0xB, 0x13, 0x14, 0x16, 0xA, 0x11, 0x12, 0x15, 0x17};
+#define SHOP_PICK(...) (u32)A2_PICK(__VA_ARGS__)
+static gptr shop_state(void)
+{
+    gptr m = menu_state(), o = 0x746D28, g = G();
+    (void)m;
+    for (u32 a = 0x65F000; a < 0x661000; a += 8) { U32(a) = rnd(); U32(a + 4) = rnd(); U8(a + 6) = (u8)(rnd() % 3); }
+    for (u32 a = 0; a < 0x10C; a += 4) U32(o + a) = rnd();
+    U32(o) = SHOP_PICK(0, 1, 2, 3, 4, 5, 6, 7);
+    U8(o + 1) = (u8)(rnd() % 6);
+    U8(o + 2) = (u8)SHOP_PICK(0, 0, 0, 1, 0x10, (s32)rnd());
+    U8(o + 4) = (u8)SHOP_PICK(0, 1, (s32)rnd()); U8(o + 5) = (u8)(rnd() % 4);
+    U8(o + 0xB) = (u8)(rnd() % 2);   /* (the save text by it) */
+    U8(o + 0xC) = (u8)SHOP_PICK(0, 1, (s32)rnd());
+    U8(o + 0xE) = (u8)SHOP_PICK(0, 1, 2, 2, 3, -1, (s32)rnd());
+    static const s32 cnt[] = {0, 1, 2, 5, 6, 0x1D, 0x1E, 0x3B, 0x3C, 0x3D, 0x59, 0x5A, 0x63, 0x64, 0x65, 0x3E8, 0xFF, 0x100};
+    for (u32 a = 0xE8; a <= 0xEE; a += 2) U16(o + a) = (u16)(rnd() % 4 ? (u32)cnt[rnd() % 18] : rnd());
+    U16(o + 0xD6) = (u16)SHOP_PICK(0, 1, 4, 0x3C, 0x40, 0x41, (s32)(rnd() % 0x50), (s32)rnd());
+    U16(o + 0xE4) = (u16)rnd(); U16(o + 0xE6) = (u16)rnd();
+    if (rnd() % 3 == 0) U16(o + 0xE4) = 0, U16(o + 0xE6) = 0;
+    U16(o + 0x100) = (u16)SHOP_PICK(0, 1, (s32)rnd()); U16(o + 0x102) = (u16)SHOP_PICK(0, 1, (s32)rnd());
+    /* the game: difficulty, costume, points, the items carried */
+    U8(g + 0x108E) = (u8)SHOP_PICK(0, 1, 2, (s32)(rnd() % 4));
+    U8(g + 0x108F) = (u8)SHOP_PICK(0, 1, 2, 3);
+    U8(g + 0x1094) = (u8)rnd();
+    U32(g + 0x11F4) = SHOP_PICK(0, 9, 10, 100, 5000, 20000, 999999, (s32)(rnd() % 200000), (s32)rnd());
+    for (u32 a = 0x1224; a <= 0x1230; a += 4) U32(g + a) = rnd() % 3 ? rnd() & rnd() : 0;
+    U16(g + 0x10B4) = (u16)rnd(); U16(g + 0x10B6) = (u16)rnd(); U16(g + 0x10B8) = (u16)rnd();
+    if (rnd() % 2) U16(g + 0x10B4) = (u16)((rnd() % 3) << 8 | (rnd() & 0xFF));
+    if (rnd() % 2) U16(g + 0x10B6) = (u16)((rnd() % 3) << 8 | (rnd() & 0xFF));
+    if (rnd() % 2) U16(g + 0x10B8) = (u16)((rnd() % 3) << 8 | (rnd() & 0xFF));
+    U8(g + 0x663) = (u8)SHOP_PICK(0, 0, 1);
+    u32 nw = 0;
+    for (u32 i = 0; i < 20; i++) {
+        gptr s = g + 0x10BC + 12 * i;
+        for (u32 q = 0; q < 12; q += 4) U32(s + q) = rnd();
+        int used = nw < 14 && rnd() % 3;
+        U8(s) = used ? 1 : 0;
+        U8(s + 1) = used ? g_shop_ammo_ids[rnd() % sizeof g_shop_ammo_ids] : (u8)(rnd() % 0x1A);
+        if (used) nw++;
+        S16(s + 0xA) = (s16)SHOP_PICK(1, 10, 99, 0x270F, 0x270E, (s32)(1 + rnd() % 500));
+        S16(s + 8) = (s16)(rnd() % 3 ? (s32)(rnd() % (u32)(S16(s + 0xA) + 1)) : (s32)S16(s + 0xA));
+    }
+    if (rnd() % 4 == 0) U8(g + 0x10BC + 12 * (rnd() % 20) + 1) = (u8)SHOP_PICK(0x11, 0x12);
+    for (u32 i = 0; i < 6; i++) {
+        gptr s = g + 0x11AC + 12 * i;
+        for (u32 q = 0; q < 12; q += 4) U32(s + q) = rnd();
+        U8(s) = (u8)(rnd() % 3 ? 1 : 0); U8(s + 1) = (u8)(0x1A + rnd() % 5);
+        S16(s + 0xA) = (s16)SHOP_PICK(1, 2, 5, (s32)(1 + rnd() % 9)); S16(s + 8) = (s16)(rnd() % (u32)(S16(s + 0xA) + 1));
+        if (rnd() % 8 == 0) S16(s + 8) = 0xFF, S16(s + 0xA) = 0x1FF;
+    }
+    for (u32 q = 0; q < 0x100; q++) Flag_Set(6, q, rnd() % 3 != 0);
+    for (u32 q = 0x30; q < 0x40; q++) Flag_Set(9, q, rnd() % 3 == 0);
+    /* the lists the steps work on */
+    U8(o + 9) = (u8)(1 + rnd() % 10);
+    for (u32 k = 0; k < 16; k++) U32(o + 0x10 + 4 * k) = 0x71D790 + 8 * (rnd() % 10);
+    if (rnd() % 2) {
+        U16(o + 0xD4) = (u16)(1 + rnd() % 5);
+        for (u32 k = 0; k < 5; k++) U32(o + 0x50 + 4 * k) = rnd() % 5 == 4 ? 0x71D8E0 : 0x71D8B8 + 8 * (rnd() % 4);
+    } else {
+        U16(o + 0xD4) = (u16)(1 + rnd() % 5);
+        for (u32 k = 0; k < 6; k++) U32(o + 0x50 + 4 * k) = 0x71DC28 + 8 * (rnd() % 6);
+    }
+    U8(o + 0xA) = (u8)(1 + rnd() % 6);
+    {   u32 n = 0;
+        for (u32 i = 0; i < 20 && n < 16; i++) if (U8(g + 0x10BC + 12 * i) && !(U8(0x70426A + 12 * U8(g + 0x10BD + 12 * i)) & 0x80)) U32(o + 0x90 + 4 * n++) = g + 0x10BC + 12 * i;
+        if (!n) { U8(g + 0x10BC) = 1; U8(g + 0x10BD) = 4; U32(o + 0x90) = g + 0x10BC; n = 1; }
+        U8(o + 9) = (u8)(rnd() % 2 ? n : U8(o + 9)); }
+    U8(o + 6) = (u8)(rnd() % U8(o + 9)); U8(o + 7) = (u8)(rnd() % U8(o + 0xA));
+    if (rnd() % 8 == 0) U8(o + 6) = (u8)SHOP_PICK(-1, 0x80);
+    U16(o + 0xD0) = (u16)SHOP_PICK(0, 1, 2, 10, 100, 999, (s32)(rnd() % 50), -1, (s32)rnd());
+    U16(o + 0xD2) = (u16)SHOP_PICK(0, 1, 10, 50, 200, (s32)(rnd() % 600));
+    U32(0x87DC00) = SHOP_PICK(0, 0, 0x20, 0x40, 0x60, 0x2000, 0x8000, 0x1000, 0x4000, 0xA000, 0x5000, 1, (s32)(rnd() & rnd() & 0xFFFF));
+    U32(0x87DDFC) = SHOP_PICK(0, 0, 0x2000, 0x8000, 0xA000, (s32)U32(0x87DC00), (s32)(rnd() & 0xFFFF));
+    U32(LOG_BASE) = 0;
+    return o;
+}
+
+static u32 __cdecl shop_task_orig(void) { g_task_sleeps = g_task_n; if (!__builtin_setjmp(g_task_jb)) ((void (__cdecl *)(void))0x40D710)(); g_task_sleeps = 0; return 0; }
+static u32 __cdecl shop_task_new(void) { g_task_sleeps = g_task_n; if (!__builtin_setjmp(g_task_jb)) Shop_Task(); g_task_sleeps = 0; return 0; }
+
+static void test_shop(void)
+{
+    memcpy(g_opt_frames, MEM(0x65F000), sizeof g_opt_frames);
+    memcpy(g_shop_tabs, MEM(0x71D700), sizeof g_shop_tabs);
+    stubs_install(1);
+    static const struct { u32 addr; void *fn; const char *name; int sel; } M[] = {
+        {0x40D920, Shop_Init, "Shop_Init", 0}, {0x40D930, Shop_SaveAsk, "Shop_SaveAsk", 0}, {0x40DCF0, Shop_Menu, "Shop_Menu", 0},
+        {0x40DAD0, Shop_Check, "Shop_Check", 0}, {0x40E010, Shop_Frame, "Shop_Frame", 0}, {0x40E170, Shop_Title, "Shop_Title", 0},
+        {0x408C50, Shop_Weapons, "Shop_Weapons", 1}, {0x408D80, WS_Init, "WS_Init", 0}, {0x408DA0, WS_Browse, "WS_Browse", 1},
+        {0x408F10, WS_Confirm, "WS_Confirm", 1}, {0x409050, WS_Bought, "WS_Bought", 1}, {0x409160, WS_NoPoints, "WS_NoPoints", 1},
+        {0x4091F0, WS_SoldOut, "WS_SoldOut", 0}, {0x409270, WS_NotYours, "WS_NotYours", 1}, {0x409350, WS_Back, "WS_Back", 0},
+        {0x409360, WS_Carousel, "WS_Carousel", 1},
+        {0x409B20, Shop_Items, "Shop_Items", 2}, {0x409C00, IS_Init, "IS_Init", 0}, {0x409C20, IS_Browse, "IS_Browse", 2},
+        {0x409D90, IS_Confirm, "IS_Confirm", 2}, {0x409E70, IS_Bought, "IS_Bought", 2}, {0x409FF0, IS_Full, "IS_Full", 2},
+        {0x40A070, IS_NoPoints, "IS_NoPoints", 2}, {0x40A0F0, IS_Carousel, "IS_Carousel", 2},
+        {0x40A560, Shop_Ammo, "Shop_Ammo", 3}, {0x40A5A0, AS_Init, "AS_Init", 0}, {0x40A650, AS_Browse, "AS_Browse", 3},
+        {0x40A7A0, AS_Choice, "AS_Choice", 3}, {0x40A960, AS_Count, "AS_Count", 3}, {0x40AB50, AS_Clamp, "AS_Clamp", 3},
+        {0x40ABC0, AS_Confirm, "AS_Confirm", 3}, {0x40AC70, AS_Buying, "AS_Buying", 3}, {0x40ADB0, AS_UpChoose, "AS_UpChoose", 3},
+        {0x40AE70, AS_UpConfirm, "AS_UpConfirm", 3}, {0x40AFE0, AS_Upgrading, "AS_Upgrading", 3}, {0x40B130, AS_UpNoPoints, "AS_UpNoPoints", 3},
+        {0x40B1A0, AS_NoWeapons, "AS_NoWeapons", 0}, {0x40B260, AS_UpMax, "AS_UpMax", 3}, {0x40B870, AS_Panel, "AS_Panel", 3},
+        {0x40C300, AS_UpPanel, "AS_UpPanel", 3},
+        {0x40CB70, Shop_Files, "Shop_Files", 4}, {0x40CC70, FS_Init, "FS_Init", 0}, {0x40CC90, FS_Browse, "FS_Browse", 4},
+        {0x40CD80, FS_Confirm, "FS_Confirm", 4}, {0x40CE80, FS_Bought, "FS_Bought", 4}, {0x40D0C0, FS_NoPoints, "FS_NoPoints", 4},
+        {0x40D150, FS_SoldOut, "FS_SoldOut", 0}, {0x40D1D0, FS_Carousel, "FS_Carousel", 4}};
+    for (int i = 0; i < iters; i++) {
+        gptr o = shop_state();
+        u32 a[8] = {o};
+        check(0x40D820, Shop_Prices, "Shop_Prices", 1, a, 0);
+        for (unsigned k = 0; k < sizeof M / sizeof M[0]; k++) {
+            o = shop_state();
+            if (M[k].sel == 1) { U8(o + 9) = (u8)(1 + rnd() % 10); U8(o + 6) = (u8)(rnd() % U8(o + 9)); }
+            if (M[k].sel == 3) {
+                u32 n = 0;
+                for (u32 q = 0; q < 20 && n < 16; q++) if (U8(G() + 0x10BC + 12 * q) && !(U8(0x70426A + 12 * U8(G() + 0x10BD + 12 * q)) & 0x80)) U32(o + 0x90 + 4 * n++) = G() + 0x10BC + 12 * q;
+                if (!n) { U8(G() + 0x10BC) = 1; U8(G() + 0x10BD) = 4; U32(o + 0x90) = G() + 0x10BC; n = 1; }
+                U8(o + 9) = (u8)n; U8(o + 6) = (u8)(rnd() % n);
+            }
+            switch (M[k].sel) {             /* (the lists as the shop's mode makes them) */
+            case 2: for (u32 q = 0; q < 5; q++) U32(o + 0x50 + 4 * q) = q == 4 ? 0x71D8E0 : 0x71D8B8 + 8 * q;
+                    U16(o + 0xD4) = (u16)(4 + (U8(G() + 0x108E) != 0)); U8(o + 6) = (u8)(rnd() % U16(o + 0xD4)); break;
+            case 4: for (u32 q = 0; q < 6; q++) U32(o + 0x50 + 4 * q) = 0x71DC28 + 8 * (rnd() % 6); break;
+            }
+            if (M[k].addr == 0x40DCF0 && rnd() % 4 == 0) U8(o + 5) = (u8)(rnd() % 4);
+            if (M[k].addr == 0x408C50 || M[k].addr == 0x40A560 || M[k].addr == 0x409B20 || M[k].addr == 0x40CB70) {
+                static const u8 steps[5][2] = {{0, 8}, {0, 8}, {0, 7}, {0, 13}, {0, 7}};
+                U8(o + 1) = (u8)(rnd() % steps[M[k].sel][1]);
+                if (M[k].sel == 3 && rnd() % 2) U8(o + 1) = (u8)(1 + rnd() % 12);
+            }
+            if ((M[k].addr == 0x40AC70 || M[k].addr == 0x40AFE0 || (M[k].addr == 0x40A560 && (U8(o + 1) == 5 || U8(o + 1) == 8)))
+                && !U16(o + 0xEA)) U16(o + 0xEA) = 1;   /* (the counter divides: 60 down to 1) */
+            sprintf(g_what, "mode %u step %u delay %X idx %d/%d/%d n %u/%u/%u pad %X held %X D0 %X E8 %X EA %X EC %X EE %X diff %u costume %u pts %u",
+                    U32(o), U8(o + 1), U8(o + 2), (s8)U8(o + 6), (s8)U8(o + 7), (s8)U8(o + 0xE), U8(o + 9), U16(o + 0xD4), U8(o + 0xA),
+                    U32(0x87DC00), U32(0x87DDFC), U16(o + 0xD0), U16(o + 0xE8), U16(o + 0xEA), U16(o + 0xEC), U16(o + 0xEE),
+                    U8(G() + 0x108E), U8(G() + 0x108F), U32(G() + 0x11F4));
+            check(M[k].addr, M[k].fn, M[k].name, 1, a, 0);
+        }
+        /* the steps that take buttons: each button, the ends of the lists, the points just enough */
+        for (unsigned k = 0; k < sizeof M / sizeof M[0]; k++) {
+            static const u32 pads[] = {0x20, 0x40, 0x60, 0x2000, 0x8000, 0xA000, 0x1000, 0x4000, 0x5000, 1, 0};
+            if (rnd() % 2) continue;
+            o = shop_state();
+            if (M[k].sel == 1) { U8(o + 9) = (u8)(1 + rnd() % 10); U8(o + 6) = (u8)(rnd() % 2 ? 0 : U8(o + 9) - 1); }
+            if (M[k].sel == 3) {
+                u32 n = 0;
+                for (u32 q = 0; q < 20 && n < 16; q++) if (U8(G() + 0x10BC + 12 * q) && !(U8(0x70426A + 12 * U8(G() + 0x10BD + 12 * q)) & 0x80)) U32(o + 0x90 + 4 * n++) = G() + 0x10BC + 12 * q;
+                if (!n) { U8(G() + 0x10BC) = 1; U8(G() + 0x10BD) = 4; U32(o + 0x90) = G() + 0x10BC; n = 1; }
+                U8(o + 9) = (u8)n; U8(o + 6) = (u8)(rnd() % 2 ? 0 : n - 1);
+            }
+            if (M[k].sel == 2) {
+                for (u32 q = 0; q < 5; q++) U32(o + 0x50 + 4 * q) = q == 4 ? 0x71D8E0 : 0x71D8B8 + 8 * q;
+                U16(o + 0xD4) = (u16)(4 + (U8(G() + 0x108E) != 0)); U8(o + 6) = (u8)(rnd() % 2 ? 0 : U16(o + 0xD4) - 1);
+            }
+            if (M[k].sel == 4) { for (u32 q = 0; q < 6; q++) U32(o + 0x50 + 4 * q) = 0x71DC28 + 8 * (rnd() % 6); U8(o + 7) = (u8)(rnd() % 2 ? 0 : U8(o + 0xA) - 1); }
+            if (M[k].addr == 0x408C50 || M[k].addr == 0x40A560 || M[k].addr == 0x409B20 || M[k].addr == 0x40CB70) continue;
+            U8(o + 2) = 0; U8(o + 4) = (u8)(rnd() % 2); U8(o + 0xE) = (u8)(rnd() % 3);
+            U32(0x87DC00) = pads[rnd() % (sizeof pads / sizeof pads[0])];
+            U32(0x87DDFC) = rnd() % 2 ? U32(0x87DC00) : (u32)A2_PICK(0, 0x2000, 0x8000);
+            gptr g = G();
+            switch (M[k].sel) {             /* (points: exactly the price, or one short) */
+            case 1: U32(g + 0x11F4) = U32(0x71D7E8 + 8 * U16(U32(o + 0x10 + 4 * (s8)U8(o + 6)) + 2)) - rnd() % 2; break;
+            case 2: case 4: U32(g + 0x11F4) = U16(U32(o + 0x50 + 4 * (s8)U8(M[k].sel == 2 ? o + 6 : o + 7)) + 6) - rnd() % 2; break;
+            case 3: U32(g + 0x11F4) = U32(0x71D8FC + 4 * ((s8)U8(o + 0xE) + 8 * U8(U32(o + 0x90 + 4 * (s8)U8(o + 6)) + 1))) - rnd() % 2; break;
+            }
+            if (M[k].addr == 0x40AC70 || M[k].addr == 0x40AFE0) U16(o + 0xEA) = (u16)A2_PICK(1, 2, 0x3C);
+            u32 a2[1] = {o};
+            sprintf(g_what, "buttons: pad %X held %X idx %d/%d n %u/%u/%u pts %u yes/no %u", U32(0x87DC00), U32(0x87DDFC), (s8)U8(o + 6), (s8)U8(o + 7), U8(o + 9), U16(o + 0xD4), U8(o + 0xA), U32(g + 0x11F4), U8(o + 4));
+            check(M[k].addr, M[k].fn, M[k].name, 1, a2, 0);
+        }
+        /* the drawing helpers with their own arguments */
+        o = shop_state();
+        {
+            u32 b[8] = {rnd() % 0x140, rnd() % 0xF0};
+            if (rnd() % 4 == 0) b[0] = rnd(), b[1] = rnd();
+            check(0x40E200, Shop_ArrowsL, "Shop_ArrowsL", 2, b, 0);
+            check(0x40E2B0, Shop_ArrowsR, "Shop_ArrowsR", 2, b, 0);
+            u32 c[8] = {rnd() % 0x140, rnd() % 0xF0, SHOP_PICK(0, 1, 3, 4, 7, 0x10003), SHOP_PICK(0, 1, 0x10000), SHOP_PICK(0x808080, (s32)rnd()),
+                        SHOP_PICK(0, 9, 10, 99, 100, 999, 1000, 9999, 123456, (s32)(rnd() % 100000), (s32)rnd()), rnd() % 0x400, SHOP_PICK(0, 1, 0x10000)};
+            sprintf(g_what, "digits %X lead %X v %u pts %X", c[2], c[3], c[5], c[7]);
+            check(0x40C160, AS_Num, "AS_Num", 8, c, 0);
+            u32 d[8] = {o, (u32)(s32)(rnd() % 0x180) - 0x20, (u32)(s32)(rnd() % 0x100) - 0x10, rnd() % 10, SHOP_PICK(1, 2, 0x3F0, (s32)(1 + rnd() % 0x200)) | (rnd() % 3 ? 0 : rnd() << 16), 0x808080, 0x32};   /* (z inside the order table: else its slot lies outside the memory compared) */
+            if (rnd() % 3 == 0) d[1] |= rnd() << 16, d[2] |= rnd() << 16;
+            d[3] = rnd() % 10;
+            sprintf(g_what, "x %X y %X k %u z %X sel %d", d[1], d[2], d[3], d[4], (s8)U8(o + 6));
+            check(0x409520, WS_Item, "WS_Item", 5, d, 0);
+            {   u32 n = 0;
+                for (u32 q = 0; q < 20 && n < 16; q++) if (U8(G() + 0x10BC + 12 * q) && !(U8(0x70426A + 12 * U8(G() + 0x10BD + 12 * q)) & 0x80)) U32(o + 0x90 + 4 * n++) = G() + 0x10BC + 12 * q;
+                if (!n) { U8(G() + 0x10BC) = 1; U8(G() + 0x10BD) = 4; U32(o + 0x90) = G() + 0x10BC; n = 1; }
+                U8(o + 9) = (u8)n; d[3] = rnd() % n; U8(o + 6) = (u8)(rnd() % n); }
+            check(0x40B4B0, AS_Item, "AS_Item", 5, d, 0);
+            d[3] = rnd() % U8(o + 0xA); for (u32 q = 0; q < 6; q++) U32(o + 0x50 + 4 * q) = 0x71DC28 + 8 * (rnd() % 6);
+            check(0x40D390, FS_Item, "FS_Item", 5, d, 0);
+            u32 e[8] = {o, d[1], d[2], g_shop_ammo_ids[rnd() % 13] | (rnd() % 2 ? rnd() << 16 : 0), d[4], SHOP_PICK(0, 1, 2, 3) | (rnd() % 2 ? rnd() << 16 : 0)};
+            check(0x40C7F0, AS_UpItem, "AS_UpItem", 6, e, 0);
+            for (u32 q = 0; q < 5; q++) U32(o + 0x50 + 4 * q) = 0x71D8B8 + 8 * (q % 4);
+            u32 f[8] = {o, d[1], d[2], SHOP_PICK(0, 1, 0x10000), rnd() % 5, SHOP_PICK(0x808080, (s32)rnd()), d[4]};
+            check(0x40A370, IS_Item, "IS_Item", 7, f, 0);
+            u32 h[2] = {o, 0x71DC28 + 8 * (rnd() % 6)};
+            check(0x40D570, FS_Info, "FS_Info", 2, h, 0);
+            u32 w[2] = {o, U16(0x71D790 + 8 * (rnd() % 10) + 2) | (rnd() % 2 ? rnd() << 16 : 0)};
+            check(0x4097C0, WS_Stats, "WS_Stats", 2, w, 0);
+            u32 l[2] = {o, SHOP_PICK(0, 1, 0x10000)};
+            check(0x40B2E0, AS_List, "AS_List", 2, l, 0);
+        }
+        /* leaving (the stage reloaded when the weapons changed) */
+        o = shop_state();
+        {
+            gptr g = G();
+            if (U8(g + 0x663)) {
+                anim_setup(); world_setup();
+                U32(g + 0x940) = AN_OBJ; U32(0x87F940) = 1;
+                U32(0x662514) = U32(AN_OBJ + 0x68);
+                for (u32 q = 0; q < U32(0x662514); q++) { gptr r = 0x66251C + q * 0x14; S8(r + 6) = (s8)(q == 0 || rnd() % 3 == 0 ? -1 : (s32)(rnd() % q)); }
+                U16(g + 0x10B4) = (u16)(rnd() % 6 | (rnd() % 4) << 8);
+            }
+            U32(o + 0x104) = rnd();
+            U32(LOG_BASE) = 0;
+            sprintf(g_what, "reload %u", U8(g + 0x663));
+            g_ign_objpads = 1;
+            check(0x40DF80, Shop_Leave, "Shop_Leave", 1, a, 0);
+            g_ign_objpads = 0;
+        }
+        /* the task a few frames */
+        o = shop_state();
+        U8(G() + 0xB48) = (u8)SHOP_PICK(0, 1);
+        U8(G() + 0x663) = 0;                            /* (no stage reload on leaving: Shop_Leave's own test has it) */
+        g_task_n = 1 + rnd() % 3;
+        sprintf(g_what, "frames %d mode %u in game %u", g_task_n, U32(o), U8(G() + 0xB48));
+        check((u32)(uintptr_t)shop_task_orig, shop_task_new, "Shop_Task", 0, NULL, 0);
+    }
+    stubs_install(0);
+    memcpy(MEM(0x71D700), g_shop_tabs, sizeof g_shop_tabs);
+    memcpy(MEM(0x65F000), g_opt_frames, sizeof g_opt_frames);
+}
+
+
 /* the weapons' object types */
 static void test_ao_weapons(void)
 {
@@ -13755,7 +14748,7 @@ __declspec(dllexport) void harness_main(int argc, char **argv)
         {"flags", test_flags}, {"geometry", test_geom}, {"script values", test_script_values},
         {"script opcodes", test_script_ops}, {"script objects", test_objects},
         {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"objects 2", test_object}, {"collision", test_collision}, {"player", test_player}, {"player states", test_player2}, {"zones", test_zones}, {"loading", test_room}, {"title", test_title}, {"game task", test_game}, {"doors", test_doors}, {"frame", test_frame}, {"enemy sets", test_enemyset}, {"enemies", test_enemies}, {"raptor", test_raptor}, {"oviraptor", test_ovi}, {"allosaurus", test_allo}, {"pteranodon", test_ptera}, {"area pteranodon", test_ptera2}, {"tyrannosaurus", test_trex}, {"plesiosaurus", test_plesio}, {"water plesiosaurs", test_pw}, {"roamer", test_roam}, {"giganotosaurus", test_gig},
-    {"inostrancevia", test_ino}, {"triceratops", test_tri}, {"mosasaurus", test_mosa}, {"compsognathus", test_compso}, {"duel inostrancevia", test_kof_ino}, {"duel triceratops", test_kof_tri}, {"duel raptor", test_kof_rap}, {"duel oviraptor", test_kof_ovi}, {"duel allosaurus", test_kof_allo}, {"duel tyrannosaurus", test_kof_rex}, {"duel compsognathus", test_kof_comp}, {"duel human", test_kof_human}, {"vehicle gun", test_vgun}, {"area falling piece", test_ao_drop}, {"area flying shell", test_ao_shell}, {"area moving piece", test_ao_mover}, {"area bird", test_ao_bird}, {"area rock", test_ao_rock}, {"area insect", test_ao_bug}, {"area poison plant", test_ao_plant}, {"area burner", test_ao_burner}, {"weapon objects", test_ao_weapons}, {"area 4/8 objects", test_aobj2}, {"area effects", test_k2_area}, {"sound slots", test_snd_slots}, {"menus", test_menu}, {"aot kinds", test_aot_kinds}, {"object effects", test_obj_effects}, {"effect slots", test_k2}, {"effect drops", test_k2_drops}, {"effect emitters", test_eff_slots}, {"effect slots 3", test_k2_more}, {"helpers", test_helpers}, {"draw", test_draw}, {"pc gpu", test_pcgpu}, {"pc draw", test_pcdraw}, {"pc masks", test_pcmasks}, {"pc frame", test_pcframe},
+    {"inostrancevia", test_ino}, {"triceratops", test_tri}, {"mosasaurus", test_mosa}, {"compsognathus", test_compso}, {"duel inostrancevia", test_kof_ino}, {"duel triceratops", test_kof_tri}, {"duel raptor", test_kof_rap}, {"duel oviraptor", test_kof_ovi}, {"duel allosaurus", test_kof_allo}, {"duel tyrannosaurus", test_kof_rex}, {"duel compsognathus", test_kof_comp}, {"duel human", test_kof_human}, {"vehicle gun", test_vgun}, {"area falling piece", test_ao_drop}, {"area flying shell", test_ao_shell}, {"area moving piece", test_ao_mover}, {"area bird", test_ao_bird}, {"area rock", test_ao_rock}, {"area insect", test_ao_bug}, {"area poison plant", test_ao_plant}, {"area burner", test_ao_burner}, {"weapon objects", test_ao_weapons}, {"area 4/8 objects", test_aobj2}, {"area effects", test_k2_area}, {"sound slots", test_snd_slots}, {"menus", test_menu}, {"title 2", test_title2}, {"result", test_result}, {"extra crisis", test_extra}, {"options", test_options}, {"save slots", test_savefile}, {"save room", test_shop}, {"aot kinds", test_aot_kinds}, {"object effects", test_obj_effects}, {"effect slots", test_k2}, {"effect drops", test_k2_drops}, {"effect emitters", test_eff_slots}, {"effect slots 3", test_k2_more}, {"helpers", test_helpers}, {"draw", test_draw}, {"pc gpu", test_pcgpu}, {"pc draw", test_pcdraw}, {"pc masks", test_pcmasks}, {"pc frame", test_pcframe},
     };
     for (unsigned i = 0; i < sizeof T / sizeof T[0]; i++) {
         int f0 = g_fail, t0 = g_tests;

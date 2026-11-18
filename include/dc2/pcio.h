@@ -13,6 +13,8 @@ u32  DC2CALL Pc_Size(s32 fd);                           /* 0x4C0540 */
 s32  DC2CALL Pc_Seek(s32 fd, s32 off, u32 whence);      /* 0x4C0580 */
 s32  DC2CALL Pc_SeekSet(s32 fd, s32 off);               /* 0x4C0560: from the start */
 void DC2CALL Pc_Close(s32 fd);                          /* 0x4C05A0 */
+s32  DC2CALL Pc_Creat(gptr path);                       /* 0x4C0490: PCcreat, fopen wb (-1 only when 16 are open) */
+s32  DC2CALL Pc_Write(s32 fd, gptr buf, u32 n);         /* 0x4C0510: PCwrite */
 gptr DC2CALL Crt_malloc(u32 n);                         /* 0x4DD711 */
 void DC2CALL Crt_free(gptr p);                          /* 0x4DD628 */
 void DC2CALL Crt_sprintf1(gptr buf, gptr fmt, u32 a);   /* 0x4DD5D6: sprintf with one argument */
@@ -67,6 +69,8 @@ void DC2CALL SetMaskMarker(gptr p);                     /* 0x4C06B0: code 0x88 *
 void DC2CALL Gpu_AddPrim(gptr ot, gptr p);                  /* 0x4C05D0 */
 void DC2CALL Gpu_DrawOT(gptr ot, gptr a, gptr b);           /* 0x4C0600: AddPrims, the chain a..b into ot */
 void DC2CALL Gpu_SetSprt(gptr p);                           /* 0x4C0690 */
+void DC2CALL Gpu_VramCopy(gptr r, s32 x, s32 y);          /* 0x4B4A60: the rect copied to x, y in VRAM */
+void DC2CALL Gpu_MoveImage(gptr r, s32 x, s32 y);         /* 0x4B4B30: MoveImage */
 void DC2CALL Gpu_SetTile(gptr p);                           /* 0x4C06A0 */
 void DC2CALL Gpu_SetSemiTrans(gptr p, u32 on);              /* 0x4C06C0 */
 void DC2CALL Gpu_SetDrawArea(gptr p, gptr r);               /* 0x4C06E0 */
@@ -81,6 +85,8 @@ void DC2CALL JPEG_Decode(gptr dst, gptr src, u32 size, u32 mode); /* 0x4D2990 */
 
 /* the pads (DirectInput): raw buttons into 0x87DC42 + 0x24 * pad */
 void DC2CALL Input_ReadPad(u32 pad);                    /* 0x4BEF40 */
+u32  DC2CALL Input_ReadKey(void);                       /* 0x4BF180: the first key down that has a name (0: none) */
+void DC2CALL Display_Apply(void);                       /* 0x46FC60: the display re-made for 0x723CA0.. (Win32 glue) */
 #ifndef DC2_IN_PROCESS
 extern u16 g_pad_raw[2];          /* standalone: what the driver presses */
 #endif

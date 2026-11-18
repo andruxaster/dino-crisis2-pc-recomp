@@ -2143,4 +2143,161 @@ void DC2CALL Ples12_Knock(gptr o);                 /* 0x431860 */
 void DC2CALL Ples12_Stun(gptr o);                  /* 0x4318C0 */
 void DC2CALL Ples12_Dead(gptr o);                  /* 0x431970 */
 
+/* The options screen (option.c) */
+s32  DC2CALL Opt_TextWidth(gptr s);               /* 0x475AC0 */
+s32  DC2CALL Text_Width(gptr s);                  /* 0x471E10 */
+void DC2CALL Opt_KeyNames(void);                  /* 0x475840 */
+void DC2CALL Opt_Init(gptr o);                    /* 0x4757B0 */
+void DC2CALL Opt_Lines(gptr o, gptr a, gptr b);   /* 0x478510 */
+void DC2CALL Opt_Draw(gptr o);                    /* 0x478150 */
+void DC2CALL Opt_List(gptr o);                    /* 0x475B10 */
+void DC2CALL Opt_Page(gptr o);                    /* 0x475C20 */
+void DC2CALL Opt_PadFire(gptr o, u32 x, u32 y, u32 col); /* 0x4771F0 */
+void DC2CALL Opt_PadAim(gptr o, u32 x, u32 y, u32 col);  /* 0x477250 */
+void DC2CALL Opt_PadSub(gptr o, u32 x, u32 y, u32 col);  /* 0x4772B0 */
+void DC2CALL Opt_PadMap(gptr o, u32 x, u32 y, u32 col);  /* 0x477380 */
+void DC2CALL Opt_Controller(gptr o);              /* 0x475CC0 */
+void DC2CALL Opt_Keys(gptr o);                    /* 0x476A60 */
+void DC2CALL Opt_Sound(gptr o);                   /* 0x4773E0 */
+void DC2CALL Opt_Display(gptr o);                 /* 0x4776D0 */
+void DC2CALL Opt_Quit(gptr o);                    /* 0x477CF0 */
+void DC2CALL Opt_Leave(gptr o);                   /* 0x478090 */
+void DC2CALL Opt_ToGame(void);                    /* 0x478E20 */
+void DC2CALL Option_Task(void);                   /* 0x475720 */
+
+/* The save slots screen (savefile.c) */
+void DC2CALL Card_Back(void);                     /* 0x408630 */
+void DC2CALL Card_Ring1(void);                    /* 0x408730 */
+void DC2CALL Card_Ring2(void);                    /* 0x4089C0 */
+void DC2CALL Card_Number2(u32 x, u32 y, u32 v, u32 col, u32 z); /* 0x46C780 */
+void DC2CALL Card_Time(u32 x, u32 y, u32 t, u32 col, u32 z);    /* 0x46C5D0 */
+void DC2CALL Card_SlotInfo(gptr o);               /* 0x46C1D0 */
+void DC2CALL Card_SlotUnread(gptr o);             /* 0x46C480 */
+void DC2CALL Card_SlotEmpty(gptr o);              /* 0x46C4F0 */
+void DC2CALL Card_SlotBad(gptr o);                /* 0x46C560 */
+void DC2CALL Card_Panel(gptr o);                  /* 0x46BEE0 */
+u32  DC2CALL Card_Repeat(gptr o);                 /* 0x46D620 */
+u32  DC2CALL Card_Sum(gptr p, u32 n);             /* 0x46CAC0 */
+void DC2CALL Card_Build(gptr p, gptr o);          /* 0x46CC30 */
+void DC2CALL Load_List(gptr o);                   /* 0x46BD80 */
+void DC2CALL Save_List(gptr o);                   /* 0x46C880 */
+void DC2CALL Load_Read(gptr o);                   /* 0x46C9E0 */
+void DC2CALL Save_Write(gptr o);                  /* 0x46CAE0 */
+void DC2CALL Load_Done(gptr o);                   /* 0x46D0B0 */
+void DC2CALL Save_Done(gptr o);                   /* 0x46D1B0 */
+void DC2CALL Load_Back(gptr o);                   /* 0x46D230 */
+void DC2CALL Save_Back(gptr o);                   /* 0x46D280 */
+void DC2CALL Load_NoData(gptr o);                 /* 0x46D310 */
+void DC2CALL Save_Fail(gptr o);                   /* 0x46D3B0 */
+void DC2CALL Load_Bad(gptr o);                    /* 0x46D430 */
+void DC2CALL Save_Overwrite(gptr o);              /* 0x46D4F0 */
+void DC2CALL Load_Task(void);                     /* 0x46D5A0 */
+void DC2CALL Save_Task(void);                     /* 0x46D690 */
+
+/* The save room terminal: save, shops (shop.c) */
+void DC2CALL Shop_Weapons(gptr o);              /* 0x408C50 */
+void DC2CALL WS_Init(gptr o);                   /* 0x408D80 */
+void DC2CALL WS_Browse(gptr o);                 /* 0x408DA0 */
+void DC2CALL WS_Confirm(gptr o);                /* 0x408F10 */
+void DC2CALL WS_Bought(gptr o);                 /* 0x409050 */
+void DC2CALL WS_NoPoints(gptr o);               /* 0x409160 */
+void DC2CALL WS_SoldOut(gptr o);                /* 0x4091F0 */
+void DC2CALL WS_NotYours(gptr o);               /* 0x409270 */
+void DC2CALL WS_Back(gptr o);                   /* 0x409350 */
+void DC2CALL WS_Carousel(gptr o);               /* 0x409360 */
+void DC2CALL WS_Item(gptr o, u32 x, u32 y, u32 k, u32 z); /* 0x409520 */
+void DC2CALL WS_Stats(gptr o, u32 t);           /* 0x4097C0 */
+void DC2CALL Shop_Items(gptr o);                /* 0x409B20 */
+void DC2CALL IS_Init(gptr o);                   /* 0x409C00 */
+void DC2CALL IS_Browse(gptr o);                 /* 0x409C20 */
+void DC2CALL IS_Confirm(gptr o);                /* 0x409D90 */
+void DC2CALL IS_Bought(gptr o);                 /* 0x409E70 */
+void DC2CALL IS_Full(gptr o);                   /* 0x409FF0 */
+void DC2CALL IS_NoPoints(gptr o);               /* 0x40A070 */
+void DC2CALL IS_Carousel(gptr o);               /* 0x40A0F0 */
+void DC2CALL IS_Item(gptr o, u32 x, u32 y, u32 sel, u32 k, u32 col, u32 z); /* 0x40A370 */
+void DC2CALL Shop_Ammo(gptr o);                 /* 0x40A560 */
+void DC2CALL AS_Init(gptr o);                   /* 0x40A5A0 */
+void DC2CALL AS_Browse(gptr o);                 /* 0x40A650 */
+void DC2CALL AS_Choice(gptr o);                 /* 0x40A7A0 */
+void DC2CALL AS_Count(gptr o);                  /* 0x40A960 */
+void DC2CALL AS_Clamp(gptr o);                  /* 0x40AB50 */
+void DC2CALL AS_Confirm(gptr o);                /* 0x40ABC0 */
+void DC2CALL AS_Buying(gptr o);                 /* 0x40AC70 */
+void DC2CALL AS_UpChoose(gptr o);               /* 0x40ADB0 */
+void DC2CALL AS_UpConfirm(gptr o);              /* 0x40AE70 */
+void DC2CALL AS_Upgrading(gptr o);              /* 0x40AFE0 */
+void DC2CALL AS_UpNoPoints(gptr o);             /* 0x40B130 */
+void DC2CALL AS_NoWeapons(gptr o);              /* 0x40B1A0 */
+void DC2CALL AS_UpMax(gptr o);                  /* 0x40B260 */
+void DC2CALL AS_List(gptr o, u32 arrows);       /* 0x40B2E0 */
+void DC2CALL AS_Item(gptr o, u32 x, u32 y, u32 k, u32 z); /* 0x40B4B0 */
+void DC2CALL AS_Panel(gptr o);                  /* 0x40B870 */
+void DC2CALL AS_Num(u32 x, u32 y, u32 digits, u32 lead, u32 col, u32 v, u32 z, u32 pts); /* 0x40C160 */
+void DC2CALL AS_UpPanel(gptr o);                /* 0x40C300 */
+void DC2CALL AS_UpItem(gptr o, u32 x, u32 y, u32 id, u32 z, u32 k); /* 0x40C7F0 */
+void DC2CALL Shop_Files(gptr o);                /* 0x40CB70 */
+void DC2CALL FS_Init(gptr o);                   /* 0x40CC70 */
+void DC2CALL FS_Browse(gptr o);                 /* 0x40CC90 */
+void DC2CALL FS_Confirm(gptr o);                /* 0x40CD80 */
+void DC2CALL FS_Bought(gptr o);                 /* 0x40CE80 */
+void DC2CALL FS_NoPoints(gptr o);               /* 0x40D0C0 */
+void DC2CALL FS_SoldOut(gptr o);                /* 0x40D150 */
+void DC2CALL FS_Carousel(gptr o);               /* 0x40D1D0 */
+void DC2CALL FS_Item(gptr o, u32 x, u32 y, u32 k, u32 z); /* 0x40D390 */
+void DC2CALL FS_Info(gptr o, gptr e);           /* 0x40D570 */
+void DC2CALL Shop_Task(void);                   /* 0x40D710 */
+void DC2CALL Shop_Prices(gptr o);               /* 0x40D820 */
+void DC2CALL Shop_Init(gptr o);                 /* 0x40D920 */
+void DC2CALL Shop_SaveAsk(gptr o);              /* 0x40D930 */
+void DC2CALL Shop_Check(gptr o);                /* 0x40DAD0 */
+void DC2CALL Shop_Menu(gptr o);                 /* 0x40DCF0 */
+void DC2CALL Shop_Leave(gptr o);                /* 0x40DF80 */
+void DC2CALL Shop_Frame(gptr o);                /* 0x40E010 */
+void DC2CALL Shop_Title(gptr o);                /* 0x40E170 */
+void DC2CALL Shop_ArrowsL(u32 x, u32 y);        /* 0x40E200 */
+void DC2CALL Shop_ArrowsR(u32 x, u32 y);        /* 0x40E2B0 */
+
+/* title2.c: the title after the game is cleared */
+void DC2CALL Title2_AnimAll(gptr t);                                     /* 0x4A6D20 */
+void DC2CALL Title2_DrawAll(gptr t);                                     /* 0x4A6B60 */
+void DC2CALL Title2_NewState(void);                                      /* 0x4A6D70 */
+void DC2CALL Title2_NewGame(gptr t);                                     /* 0x4A6730 */
+void DC2CALL Title2_ClearGame(gptr t);                                   /* 0x4A6910 */
+void DC2CALL Title2_Extra(gptr t);                                       /* 0x4A69C0 */
+void DC2CALL Title2_Load(gptr t);                                        /* 0x4A6A60 */
+void DC2CALL Title2_Option(gptr t);                                      /* 0x4A6AE0 */
+void DC2CALL Title2_Run(gptr t);                                         /* 0x4A6460 */
+void DC2CALL Title2_Init(gptr t);                                        /* 0x4A6420 */
+void DC2CALL Title2Task(void);                                           /* 0x4A63F0 */
+
+/* result.c: the extra crisis result screen */
+void DC2CALL Res_SetLabel(gptr l, gptr a, u32 pal);                     /* 0x46DE90 */
+void DC2CALL Res_DrawLabel(s32 x, s32 y, gptr l);                       /* 0x46DD40 */
+void DC2CALL Result_Grade(gptr t);                                      /* 0x46DEB0 */
+void DC2CALL Result_Init(gptr t);                                       /* 0x46D9D0 */
+void DC2CALL Result_Model0(void);                                       /* 0x46E010 */
+void DC2CALL Result_Model1(void);                                       /* 0x46E070 */
+void DC2CALL Result_Model2(void);                                       /* 0x46E0E0 */
+void DC2CALL Result_Model3(void);                                       /* 0x46E140 */
+void DC2CALL Result_Model4(void);                                       /* 0x46E190 */
+void DC2CALL Result_Draw(gptr t);                                       /* 0x46E1E0 */
+void DC2CALL Result_Run(gptr t);                                        /* 0x46DC20 */
+void DC2CALL Result_End(gptr t);                                        /* 0x46DD20 */
+void DC2CALL ResultTask(void);                                          /* 0x46D990 */
+
+/* extra.c: the extra crisis menu and character choice */
+void DC2CALL Extra_SetLabel(gptr l, gptr a, u32 pal);                   /* 0x46FA30 */
+void DC2CALL Extra_AnimLabels(gptr t);                                  /* 0x46FA50 */
+void DC2CALL Extra_DrawLabels(gptr t);                                  /* 0x46F880 */
+u32  DC2CALL Extra_NextChar(u32 mask, u32 cur, s32 dir);                /* 0x46E850 */
+void DC2CALL Extra_Menu(gptr t);                                        /* 0x46E440 */
+void DC2CALL Extra_SelInit(gptr t);                                     /* 0x46EA10 */
+void DC2CALL Extra_SelChoose(gptr t);                                   /* 0x46EED0 */
+void DC2CALL Extra_SelTurn(gptr t);                                     /* 0x46F540 */
+void DC2CALL Extra_SelLeave(gptr t);                                    /* 0x46F730 */
+void DC2CALL Extra_Select(gptr t);                                      /* 0x46E8C0 */
+void DC2CALL Extra_Start(gptr t);                                       /* 0x46F800 */
+void DC2CALL ExtraTask(void);                                           /* 0x46E3F0 */
+
 #endif
