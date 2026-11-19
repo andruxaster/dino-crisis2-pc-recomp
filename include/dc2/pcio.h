@@ -75,6 +75,7 @@ void DC2CALL Gpu_SetTile(gptr p);                           /* 0x4C06A0 */
 void DC2CALL Gpu_SetSemiTrans(gptr p, u32 on);              /* 0x4C06C0 */
 void DC2CALL Gpu_SetDrawArea(gptr p, gptr r);               /* 0x4C06E0 */
 void DC2CALL Gpu_SetDrawMode(gptr p, u32 dfe, u32 dtd, u32 tpage, u32 tw); /* 0x4C06F0 */
+void DC2CALL Gpu_SetDrawVramOp(gptr p, gptr rect, u32 x, u32 y);  /* 0x4C0740: code 0xEC, the rect to x, y in VRAM when drawn */
 u32  DC2CALL Gpu_GetTPage(u32 tp, u32 abr, u32 x, u32 y);   /* 0x4C08A0 */
 void DC2CALL Gpu_LoadImage(gptr rect, gptr p);              /* 0x4B4D20 */
 void DC2CALL Gpu_LoadImageIfChanged(gptr rect, gptr p);     /* 0x4B4DB0 */

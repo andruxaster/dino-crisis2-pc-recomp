@@ -2369,4 +2369,77 @@ void DC2CALL Extra_Select(gptr t);                                      /* 0x46E
 void DC2CALL Extra_Start(gptr t);                                       /* 0x46F800 */
 void DC2CALL ExtraTask(void);                                           /* 0x46E3F0 */
 
+/* stagefx.c: area effects G+0x948 by kind (*0x87DC8C) */
+void DC2CALL CamFx(gptr e);                                             /* 0x40E360 */
+void DC2CALL CamFx_Next(gptr e);                                        /* 0x40E380 */
+u32  DC2CALL CamFx_ObjY(gptr o);                                         /* 0x40E870 */
+void DC2CALL CamFx_Follow(gptr e);                                      /* 0x40E390 */
+void DC2CALL CamFx_Behind(gptr e);                                      /* 0x40E710 */
+void DC2CALL CamFx_Reset(gptr e);                                       /* 0x40E820 */
+void DC2CALL CamFx_Between(gptr e);                                     /* 0x40E880 */
+void DC2CALL CamFx_Over(gptr e);                                        /* 0x40EC60 */
+void DC2CALL Turret(gptr e);                                            /* 0x40F220 */
+void DC2CALL Turret_Init(gptr e);                                       /* 0x40F240 */
+void DC2CALL Turret_Wait(gptr e);                                       /* 0x40F3C0 */
+void DC2CALL Turret_DrawWait(gptr e);                                   /* 0x40F420 */
+void DC2CALL Turret_Run(gptr e);                                        /* 0x40F570 */
+void DC2CALL Screen_ShiftRows(s32 dx, u32 y, u32 h);                    /* 0x411080 */
+void DC2CALL Turret_TargetsRight(gptr e);                               /* 0x412060 */
+void DC2CALL Turret_TargetsLeft(gptr e);                                /* 0x4122A0 */
+void DC2CALL Turret_Targets(gptr e);                                    /* 0x4124E0 */
+void DC2CALL Turret_Fire(gptr e);                                       /* 0x412510 */
+void DC2CALL Turret_DrawFrame(gptr e, u32 shade);                       /* 0x412D50 */
+void DC2CALL Turret_DrawDigit(u32 d, s32 x, s32 y);                     /* 0x412BA0 */
+void DC2CALL Turret_DrawNumber(u32 v, s32 x, s32 y);                    /* 0x412B30 */
+void DC2CALL Turret_DrawCombo(gptr e);                                  /* 0x4129F0 */
+void DC2CALL Turret_DrawBar(s32 hp, u32 b);                             /* 0x412790 */
+void DC2CALL Turret_DrawGauge(gptr e);                                  /* 0x40FF70 */
+void DC2CALL Turret_DrawHit(gptr e);                                    /* 0x410500 */
+void DC2CALL Turret_Draw(gptr e);                                       /* 0x40FCD0 */
+void DC2CALL Turret_DrawSky(gptr e);                                    /* 0x410D10 */
+void DC2CALL Water(gptr e);                                             /* 0x4134C0 */
+void DC2CALL Water_Init(gptr e);                                        /* 0x4134E0 */
+void DC2CALL Water_Step(gptr e);                                        /* 0x413530 */
+void DC2CALL Water_Draw(gptr e);                                        /* 0x4135B0 */
+void DC2CALL FxBurst(gptr e);                                           /* 0x413B60 */
+void DC2CALL Flame(gptr e);                                             /* 0x41BE20 */
+void DC2CALL Flame_Init(gptr e);                                        /* 0x41BEA0 */
+void DC2CALL Flame_Emit(gptr e);                                        /* 0x41BF40 */
+void DC2CALL Flame_Step(gptr e);                                        /* 0x41C110 */
+void DC2CALL Flame_Draw(gptr e);                                        /* 0x41C350 */
+u32  DC2CALL Flame_Ray(gptr o);                                         /* 0x41C770 */
+void DC2CALL Flame_Aim(gptr e);                                         /* 0x41C690 */
+void DC2CALL Fx_Pieces(gptr e);                                         /* 0x413CA0 */
+void DC2CALL Tint(gptr e);                                              /* 0x413DF0 */
+void DC2CALL Tint_Init(gptr e);                                         /* 0x413E10 */
+void DC2CALL Tint_Step(gptr e);                                         /* 0x413E60 */
+void DC2CALL Tint_Draw(gptr e);                                         /* 0x413F70 */
+void DC2CALL Fx_Walk2(gptr e);                                          /* 0x414210 */
+void DC2CALL Fx_PlBurst(gptr e);                                        /* 0x414370 */
+void DC2CALL Fx_PlBurst_Wait(gptr e);                                   /* 0x414390 */
+void DC2CALL K2_Script(gptr e, gptr d);                                 /* 0x4143C0 */
+void DC2CALL Fx_Idle(gptr e);                                           /* 0x4144A0 */
+void DC2CALL Fx_Idle_Init(gptr e);                                      /* 0x4144C0 */
+void DC2CALL Fx_Bob(gptr e);                                            /* 0x414610 */
+void DC2CALL Fx_Bob_Init(gptr e);                                       /* 0x4144E0 */
+void DC2CALL Fx_Bob_Step(gptr e);                                       /* 0x414520 */
+void DC2CALL Fx_Pulse(gptr e);                                          /* 0x4147F0 */
+void DC2CALL Fx_Pulse_Init(gptr e);                                     /* 0x414660 */
+void DC2CALL Fx_Pulse_Draw(gptr e);                                     /* 0x4146A0 */
+void DC2CALL Fx_Pulse_Step(gptr e);                                     /* 0x4147A0 */
+void DC2CALL Gun(gptr e);                                               /* 0x414D00 */
+void DC2CALL Gun_Init(gptr e);                                          /* 0x414810 */
+void DC2CALL Gun_Draw(gptr e);                                          /* 0x414850 */
+void DC2CALL Gun_Step(gptr e);                                          /* 0x414AC0 */
+void DC2CALL Gun_Fire(gptr e);                                          /* 0x414BD0 */
+void DC2CALL Fx_Step1(gptr e);                                          /* 0x415030 */
+void DC2CALL Fx_Hold(gptr e);                                           /* 0x415010 */
+void DC2CALL Fx_Face(gptr e);                                           /* 0x414D70 */
+void DC2CALL Fx_Count(gptr e);                                          /* 0x414DE0 */
+void DC2CALL Fx_Count_Draw(gptr e);                                     /* 0x414E10 */
+void DC2CALL Fx_Shades(gptr e);                                         /* 0x414E30 */
+void DC2CALL Fx_Shade(gptr s, u32 v, u32 k);                            /* 0x414F30 */
+void DC2CALL Fx_Wave(gptr e);                                           /* 0x415040 */
+void DC2CALL Fx_Wave_Draw(gptr e);                                      /* 0x415080 */
+
 #endif

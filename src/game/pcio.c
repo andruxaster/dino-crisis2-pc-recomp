@@ -41,6 +41,7 @@ void DC2CALL Gpu_SetTile(gptr p)                { ORIG(0x4C06A0, void (DC2CALL *
 void DC2CALL Gpu_SetSemiTrans(gptr p, u32 on)   { ORIG(0x4C06C0, void (DC2CALL *)(gptr, u32))(p, on); }
 void DC2CALL Gpu_SetDrawArea(gptr p, gptr r)    { ORIG(0x4C06E0, void (DC2CALL *)(gptr, gptr))(p, r); }
 void DC2CALL Gpu_SetDrawMode(gptr p, u32 a, u32 b, u32 t, u32 w) { ORIG(0x4C06F0, void (DC2CALL *)(gptr, u32, u32, u32, u32))(p, a, b, t, w); }
+void DC2CALL Gpu_SetDrawVramOp(gptr p, gptr r, u32 x, u32 y) { ORIG(0x4C0740, void (DC2CALL *)(gptr, gptr, u32, u32))(p, r, x, y); }
 u32  DC2CALL Gpu_GetTPage(u32 t, u32 a, u32 x, u32 y) { return ORIG(0x4C08A0, u32 (DC2CALL *)(u32, u32, u32, u32))(t, a, x, y); }
 void DC2CALL Gpu_LoadImage(gptr r, gptr p)      { ORIG(0x4B4D20, void (DC2CALL *)(gptr, gptr))(r, p); }
 void DC2CALL Gpu_LoadImageIfChanged(gptr r, gptr p) { ORIG(0x4B4DB0, void (DC2CALL *)(gptr, gptr))(r, p); }
@@ -198,6 +199,7 @@ void DC2CALL Gpu_SetTile(gptr p) { PcGpu_SetTile(p); }
 void DC2CALL Gpu_SetSemiTrans(gptr p, u32 on) { PcGpu_SetSemiTrans(p, on); }
 void DC2CALL Gpu_SetDrawArea(gptr p, gptr r) { PcGpu_SetDrawArea(p, r); }
 void DC2CALL Gpu_SetDrawMode(gptr p, u32 a, u32 b, u32 t, u32 w) { PcGpu_SetDrawMode(p, a, b, t, w); }
+void DC2CALL Gpu_SetDrawVramOp(gptr p, gptr r, u32 x, u32 y) { PcGpu_SetDrawVramOp(p, r, x, y); }
 u32  DC2CALL Gpu_GetTPage(u32 t, u32 a, u32 x, u32 y) { return PcGpu_GetTPage(t, a, x, y); }
 void DC2CALL Gpu_LoadImage(gptr r, gptr p) { PcGpu_LoadImage(r, p); }
 void DC2CALL Gpu_LoadImageIfChanged(gptr r, gptr p) { PcGpu_LoadImageIfChanged(r, p); }

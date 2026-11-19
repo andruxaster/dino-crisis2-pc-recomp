@@ -37,6 +37,14 @@ void DC2CALL PcGpu_SetDefDrawEnv(gptr env, s32 x, s32 y, s32 w, s32 h)   /* 0x4C
     U8(env + 0x16) = 1; U8(env + 0x17) = 1; U32(env + 0x18) = 0;
 }
 
+/* a VRAM copy as a packet (code 0xEC): the rect to x, y when the table is drawn */
+void DC2CALL PcGpu_SetDrawVramOp(gptr p, gptr rect, u32 x, u32 y)  /* 0x4C0740 */
+{
+    U32(p + 4) = 0xEC000000;
+    U32(p + 8) = U32(rect); U32(p + 0xC) = U32(rect + 4);
+    U32(p + 0x10) = x; U32(p + 0x14) = y;
+}
+
 /* the chain p0 .. p1 linked at the head of ot */
 void DC2CALL PcGpu_AddPrims(gptr ot, gptr p0, gptr p1)              /* 0x4C0600 */
 {

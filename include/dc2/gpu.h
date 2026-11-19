@@ -18,6 +18,7 @@ void DC2CALL PcGpu_SetMaskMarker(gptr p);                           /* 0x4C06B0 
 void DC2CALL PcGpu_SetSemiTrans(gptr p, u32 on);                    /* 0x4C06C0 */
 void DC2CALL PcGpu_SetDrawArea(gptr p, gptr r);                     /* 0x4C06E0 */
 void DC2CALL PcGpu_SetDrawMode(gptr p, u32 dfe, u32 dtd, u32 tpage, u32 tw); /* 0x4C06F0 */
+void DC2CALL PcGpu_SetDrawVramOp(gptr p, gptr rect, u32 x, u32 y);  /* 0x4C0740 */
 void DC2CALL PcGpu_SetDefDispEnv(gptr env, s32 x, s32 y, s32 w, s32 h); /* 0x4C07F0 */
 void DC2CALL PcGpu_SetDefDrawEnv(gptr env, s32 x, s32 y, s32 w, s32 h); /* 0x4C0820 */
 void DC2CALL PcGpu_ClearOTagR(gptr ot, s32 n);               /* 0x4C0870 */
