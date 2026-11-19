@@ -161,3 +161,166 @@ void DC2CALL ObjEff_InHandHold(gptr e)                              /* 0x475080 
     U16(e + 0x48) = U16(p + 0x48); U16(e + 0x4A) = U16(p + 0x4A); U16(e + 0x4C) = U16(p + 0x4C);
     U32(e + 0x50) |= 2;
 }
+
+/* ---- the object effects particular to some areas (tab 3, index 16, 17) ---- */
+
+/* on a part (+0x54): into the part's frame, then on */
+void DC2CALL ObjEff_Attach(gptr e)                                  /* 0x4750D0 */
+{
+    gptr p = U32(e + 0x54);
+    if (p) {
+        ApplyMatrixSV(p + 0x20, e + 0x40, e + 0x40);
+        U16(e + 0x40) += U16(p + 0x40); U16(e + 0x42) += U16(p + 0x42); U16(e + 0x44) += U16(p + 0x44);
+        U32(e + 0x54) = 0;
+    }
+    U8(e + 0x46)++;
+}
+
+/* the same, staying on this step without a part */
+void DC2CALL ObjEff_Carry(gptr e)                                   /* 0x475510 */
+{
+    if (U32(e + 0x54)) ObjEff_Attach(e);
+}
+
+void DC2CALL ObjEff_Move(gptr e)                                    /* 0x475130 */
+{
+    Obj_MoveLocal(e, e + 0x60);
+}
+
+/* a light that follows it (0x737808) */
+void DC2CALL ObjEff_AddLight(gptr e)                                /* 0x475150 */
+{
+    gptr l = Light_Alloc();
+    if (l) {
+        U8(l + 1) = 2; U32(l + 0xC) = 0x737808; U32(l + 0x14) = e;
+        U16(l + 0x1E) = 0x39; U16(l + 0x1C) = 0x7EC1; U32(l + 0x18) |= 4;
+    }
+    U8(e + 0x46)++;
+}
+
+/* area 2: on a part, moved, lit, gone */
+void DC2CALL ObjEff_Lit(gptr e)                                     /* 0x4751A0 */
+{
+    Orig_Call1(U32(0x7378A8 + S8(e + 0x46) * 4), e);
+}
+
+void DC2CALL ObjEff_Gone(gptr e)                                    /* 0x4752F0 */
+{
+    Eff_Free(e);
+}
+
+/* area 4: flung from part 3 of the second object, 5 frames */
+void DC2CALL ObjEff_Flung(gptr e)                                   /* 0x475300 */
+{
+    Orig_Call1(U32(0x7378BC + S8(e + 0x46) * 4), e);
+}
+
+void DC2CALL ObjEff_FlungInit(gptr e)                               /* 0x4751C0 */
+{
+    gptr o = U32(G() + 0x940) + 0x260;
+    gptr f = Tmp_Push(0x28), v = f, m = f + 8;
+    U32(e + 0x54) = 0; U16(e + 0x4C) = 0; U8(e + 0x46)++;
+    U32(e + 0x50) = 3; U16(e + 0x48) = 0x400; U16(e + 0x4A) = 0x400;
+    RotMatrixYXZ(e + 0x48, e + 0x20);
+    RotMatrix(o + 0x48, m);
+    U16(v) = 0xFFDE; U16(v + 2) = 0xFFE0; U16(v + 4) = 0xFE89;
+    ApplyMatrixSV(m, v, v);
+    gptr p = Obj_Part(U32(o + 0x64), 3);
+    U16(e + 0x40) = (u16)(U16(p + 0x40) + U16(v));
+    U16(e + 0x42) = (u16)(U16(p + 0x42) + U16(v + 2));
+    U16(e + 0x44) = (u16)(U16(p + 0x44) + U16(v + 4));
+    U16(e + 0x62) = 0x1F4; U16(e + 0x5E) = 5;
+    Tmp_Pop(0x28);
+}
+
+void DC2CALL ObjEff_FlungMove(gptr e)                               /* 0x475290 */
+{
+    gptr v = Tmp_Push(8);
+    ApplyMatrixSV(e + 0x20, e + 0x60, v);
+    U16(e + 0x40) += U16(v); U16(e + 0x42) += U16(v + 2); U16(e + 0x44) += U16(v + 4);
+    Tmp_Pop(8);
+    if (U16(e + 0x5E)) U16(e + 0x5E)--;
+    else U8(e + 0x46)++;
+}
+
+/* area 5: its model's shade from the kind (+0x4F), or dark */
+void DC2CALL ObjEff_Shaded(gptr e)                                  /* 0x475320 */
+{
+    Orig_Call1(U32(0x7378C8 + S8(e + 0x46) * 4), e);
+}
+
+void DC2CALL ObjEff_ShadeSkip(gptr e)                               /* 0x475340 */
+{
+    U8(e + 0x46) = 2;
+}
+
+void DC2CALL ObjEff_ShadeOff(gptr e)                                /* 0x475350 */
+{
+    ObjEff_Shade(e, 0);
+    U8(e + 0x46) = 2;
+}
+
+void DC2CALL ObjEff_ShadeKind(gptr e)                               /* 0x475370 */
+{
+    ObjEff_Shade(e, U8(e + 0x4F));
+}
+
+/* area 7: hurled up and aside (kind 0 back, 1 forward, else straight),
+   tumbling, falling until 5000 down */
+void DC2CALL ObjEff_Hurl(gptr e)                                    /* 0x4754D0 */
+{
+    Orig_Call1(U32(0x7378D4 + S8(e + 0x46) * 4), e);
+}
+
+void DC2CALL ObjEff_HurlInit(gptr e)                                /* 0x475390 */
+{
+    U16(e + 0x62) = 0;
+    U32(e + 0x50) = (U32(e + 0x50) & ~4u) | 2;
+    U16(e + 0x64) = (u16)((Rand8() % 6 + 0x14) * 5);
+    U16(e + 0x5E) = (u16)(Rand8() % 5 + 3);
+    u8 k = U8(e + 0x4F);
+    if (k == 0) U16(e + 0x60) = (u16)((-2 - Rand8() % 5) * 5);
+    else if (k == 1) U16(e + 0x60) = (u16)((Rand8() % 5 + 2) * 5);
+    else U16(e + 0x60) = 0;
+    U8(e + 0x46)++;
+}
+
+void DC2CALL ObjEff_HurlMove(gptr e)                                /* 0x475450 */
+{
+    U16(e + 0x48) = (u16)(((Rand8() & 3) << 4) + U16(e + 0x48)) & 0xFFF;
+    u16 a = (u16)(((Rand8() & 3) << 4) + U16(e + 0x4A)) & 0xFFF;
+    U16(e + 0x40) += U16(e + 0x60);
+    U16(e + 0x44) += U16(e + 0x64);
+    U16(e + 0x4A) = a;
+    U16(e + 0x62) += U16(e + 0x5E);
+    U16(e + 0x42) += U16(e + 0x62);
+    if (S16(e + 0x42) >= -5000) U8(e + 0x46)++;
+}
+
+/* areas 3, 5, 9: on a part, moved, then a burst effect there */
+static void burst_end(gptr e, gptr data)
+{
+    Effect_Spawn(e + 0x40, data, 0, 0, 0x20, 0x387EC0);
+    Eff_Free(e);
+}
+
+void DC2CALL ObjEff_Burst1(gptr e)                                  /* 0x4754F0 */
+{
+    Orig_Call1(U32(0x7378E0 + S8(e + 0x46) * 4), e);
+}
+
+void DC2CALL ObjEff_Burst1End(gptr e) { burst_end(e, 0x646A80); }  /* 0x475560 */
+
+void DC2CALL ObjEff_Burst2(gptr e)                                  /* 0x475590 */
+{
+    Orig_Call1(U32(0x7378F0 + S8(e + 0x46) * 4), e);
+}
+
+void DC2CALL ObjEff_Burst2End(gptr e) { burst_end(e, 0x65F2E0); }  /* 0x4755B0 */
+
+void DC2CALL ObjEff_Burst3(gptr e)                                  /* 0x4755E0 */
+{
+    Orig_Call1(U32(0x737900 + S8(e + 0x46) * 4), e);
+}
+
+void DC2CALL ObjEff_Burst3End(gptr e) { burst_end(e, 0x64CE28); }  /* 0x475600 */

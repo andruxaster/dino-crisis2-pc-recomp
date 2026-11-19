@@ -676,6 +676,28 @@ void DC2CALL ObjEff_DebrisMove(gptr e);                                /* 0x474F
 void DC2CALL ObjEff_InHand(gptr e);                                    /* 0x474FB0 */
 void DC2CALL ObjEff_InHandInit(gptr e);                                /* 0x474FD0 */
 void DC2CALL ObjEff_InHandHold(gptr e);                                /* 0x475080 */
+void DC2CALL ObjEff_Attach(gptr e);                                     /* 0x4750D0 */
+void DC2CALL ObjEff_Carry(gptr e);                                      /* 0x475510 */
+void DC2CALL ObjEff_Move(gptr e);                                       /* 0x475130 */
+void DC2CALL ObjEff_AddLight(gptr e);                                   /* 0x475150 */
+void DC2CALL ObjEff_Lit(gptr e);                                        /* 0x4751A0 */
+void DC2CALL ObjEff_Gone(gptr e);                                       /* 0x4752F0 */
+void DC2CALL ObjEff_Flung(gptr e);                                      /* 0x475300 */
+void DC2CALL ObjEff_FlungInit(gptr e);                                  /* 0x4751C0 */
+void DC2CALL ObjEff_FlungMove(gptr e);                                  /* 0x475290 */
+void DC2CALL ObjEff_Shaded(gptr e);                                     /* 0x475320 */
+void DC2CALL ObjEff_ShadeSkip(gptr e);                                  /* 0x475340 */
+void DC2CALL ObjEff_ShadeOff(gptr e);                                   /* 0x475350 */
+void DC2CALL ObjEff_ShadeKind(gptr e);                                  /* 0x475370 */
+void DC2CALL ObjEff_Hurl(gptr e);                                       /* 0x4754D0 */
+void DC2CALL ObjEff_HurlInit(gptr e);                                   /* 0x475390 */
+void DC2CALL ObjEff_HurlMove(gptr e);                                   /* 0x475450 */
+void DC2CALL ObjEff_Burst1(gptr e);                                     /* 0x4754F0 */
+void DC2CALL ObjEff_Burst1End(gptr e);                                  /* 0x475560 */
+void DC2CALL ObjEff_Burst2(gptr e);                                     /* 0x475590 */
+void DC2CALL ObjEff_Burst2End(gptr e);                                  /* 0x4755B0 */
+void DC2CALL ObjEff_Burst3(gptr e);                                     /* 0x4755E0 */
+void DC2CALL ObjEff_Burst3End(gptr e);                                  /* 0x475600 */
 
 
 /* effect slots (k2.c) */
@@ -1087,6 +1109,7 @@ u32  DC2CALL Angle_Diff(u32 a, u32 b);                               /* 0x48F410
 u32  DC2CALL Value_Approach(gptr p, u32 step, u32 target);           /* 0x48F4B0 */
 void DC2CALL Vec_RotY(gptr out, gptr in, u32 ang);                   /* 0x48F470 */
 u32  DC2CALL Wall_Dist(gptr o, u32 ang, u32 mask);                   /* 0x454B50 */
+void DC2CALL Wall_Farthest(gptr o, gptr out, u32 mask);              /* 0x454950 */
 void DC2CALL Score_Hit(gptr o, u32 n);                               /* 0x404A20 */
 void DC2CALL Boss_Flash(gptr o, u32 alt);                            /* 0x415A40 */
 void DC2CALL Enemy_BiteOn(gptr o);                                   /* 0x42B710 */

@@ -552,6 +552,44 @@ u32 DC2CALL Wall_Dist(gptr o, u32 ang, u32 mask)                    /* 0x454B50 
     return best;
 }
 
+/* of the nearest walls (as Wall_Dist) along +z, +x, -z, -x from o, the
+ * farthest: its crossing point to out (x, y, z words). A way with no wall
+ * counts as farthest, and the original then hands out stack junk; here 0. */
+void DC2CALL Wall_Farthest(gptr o, gptr out, u32 mask)              /* 0x454950 */
+{
+    gptr t = Tmp_Push(0x70), edge = t, hit = t + 8, seg = t + 0x10, pts = t + 0x30;
+    u32 best[4] = {0x7FFFFFFF, 0x7FFFFFFF, 0x7FFFFFFF, 0x7FFFFFFF};
+    u16 x = U16(o + 0x40), z = U16(o + 0x44);
+    static const u16 far[4] = {0x7CFF, 0x7CFF, 0x8301, 0x8301};
+    for (int i = 0; i < 4; i++) {
+        gptr g = seg + 8 * i;
+        U16(g) = x; U16(g + 2) = z;
+        U16(g + 4) = i & 1 ? far[i] : x; U16(g + 6) = i & 1 ? z : far[i];
+    }
+    memset(MEM(pts), 0, 0x20);
+    for (u32 k = U8(U32(G() + 0xA4C)); k--; ) {
+        gptr coll = U32(G() + 0xA4C), poly = coll + U32(coll + 8 + 4 * k);
+        if (!U8(poly) || (U8(poly + 3) & (u8)mask)) continue;
+        if (!(((u32)U16(poly + 4) >> (U8(o + 0x5A) & 31)) & 1)) continue;
+        gptr vtx = poly + 8 + U8(poly + 1) * 4;
+        for (u32 j = U8(poly + 1); j; j--, vtx += 4) {
+            U32(edge) = U32(vtx); U32(edge + 4) = U32(vtx + 4);
+            for (int i = 0; i < 4; i++) {
+                if (!Seg_Cross(seg + 8 * i, edge, hit)) continue;
+                u32 d = Dist2_XZ(o + 0x40, hit);
+                if (best[i] > d) {
+                    best[i] = d;
+                    U16(pts + 8 * i) = U16(hit); U16(pts + 8 * i + 2) = U16(hit + 2); U16(pts + 8 * i + 4) = U16(hit + 4);
+                }
+            }
+        }
+    }
+    int w = 0;
+    for (int i = 1; i < 4; i++) if (best[w] < best[i]) w = i;
+    U16(out) = U16(pts + 8 * w); U16(out + 2) = U16(pts + 8 * w + 2); U16(out + 4) = U16(pts + 8 * w + 4);
+    Tmp_Pop(0x70);
+}
+
 /* wall segment s, circle p (+6 radius): v = how far to push p out (x, 0, z),
  * out = the radius vector toward the wall's outside */
 u32 DC2CALL Wall_Push(gptr s, gptr p, gptr v, gptr out)            /* 0x4541F0 */

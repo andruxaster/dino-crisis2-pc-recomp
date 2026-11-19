@@ -471,7 +471,7 @@ void DC2CALL Mosa_Leap(gptr o)                                      /* 0x440880 
             Mosa_Release(o);
             U32(o + 0x54) = 1;
             Bits_Set(MO_BITS(o), 2, 1);
-            Fn_454950(o, o + 0x1F2, 0xC0);
+            Wall_Farthest(o, o + 0x1F2, 0xC0);
             U16(o + 0x1FC) = 0x3C;
         }
         return;
@@ -584,7 +584,7 @@ void DC2CALL Mosa_Seize(gptr o)                                     /* 0x440D80 
             U16(pl + 0x40) = U16(o + 0x40); U16(pl + 0x42) = U16(o + 0x42); U16(pl + 0x44) = U16(o + 0x44);
             U16(pl + 0x4A) = U16(o + 0x4A);
             pl_place(pl);
-            Fn_454950(o, o + 0x1F2, 0xC0);
+            Wall_Farthest(o, o + 0x1F2, 0xC0);
         }
         speed(o, 0x14, 0xC8);
         Value_Approach(o + 0x42, 0x14, (u16)(U16(pl + 0x42) - 0x3EC));
@@ -620,7 +620,7 @@ void DC2CALL Mosa_Seize(gptr o)                                     /* 0x440D80 
         Mosa_Release(o);
         U32(o + 0x54) = 1;
         Bits_Set(MO_BITS(o), 2, 1);
-        Fn_454950(o, o + 0x1F2, 0xC0);
+        Wall_Farthest(o, o + 0x1F2, 0xC0);
         gptr p = U32(o + 0x64);
         U16(o + 0x1FC) = 0x3C;
         U16(p + 0x4A) = (U16(p + 0x4A) - 0x800) & 0xFFF;

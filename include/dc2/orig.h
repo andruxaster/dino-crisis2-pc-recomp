@@ -11,7 +11,6 @@
 
 #define ORIG_LIST(F, V) \
     V(Fn_4BF130,          0x4BF130, (u32 a), (a)) \
-    V(Fn_454950,          0x454950, (gptr o, gptr out, u32 mask), (o, out, mask)) \
     F(u32, Fn_4BF330,     0x4BF330, (void), ()) \
     V(Fn_410710,          0x410710, (gptr e), (e)) \
 

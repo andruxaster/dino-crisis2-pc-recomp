@@ -3398,6 +3398,45 @@ static void test_obj_effects(void)
             if (j == 5) check(0x474CC0, ObjEff_Shade, "ObjEff_Shade", 2, a, 0);
         }
     }
+    /* the ones particular to some areas (tab 3, #16/#17), with their steps */
+    static const struct { u32 addr; void *fn; const char *name; int steps; } q[] = {
+        {0x4751A0, ObjEff_Lit, "ObjEff_Lit", 5}, {0x4750D0, ObjEff_Attach, "ObjEff_Attach", 0},
+        {0x475130, ObjEff_Move, "ObjEff_Move", 0}, {0x475150, ObjEff_AddLight, "ObjEff_AddLight", 0},
+        {0x4752F0, ObjEff_Gone, "ObjEff_Gone", 0}, {0x475300, ObjEff_Flung, "ObjEff_Flung", 3},
+        {0x4751C0, ObjEff_FlungInit, "ObjEff_FlungInit", 0}, {0x475290, ObjEff_FlungMove, "ObjEff_FlungMove", 0},
+        {0x475320, ObjEff_Shaded, "ObjEff_Shaded", 3}, {0x475340, ObjEff_ShadeSkip, "ObjEff_ShadeSkip", 0},
+        {0x475350, ObjEff_ShadeOff, "ObjEff_ShadeOff", 0}, {0x475370, ObjEff_ShadeKind, "ObjEff_ShadeKind", 0},
+        {0x4754D0, ObjEff_Hurl, "ObjEff_Hurl", 3}, {0x475390, ObjEff_HurlInit, "ObjEff_HurlInit", 0},
+        {0x475450, ObjEff_HurlMove, "ObjEff_HurlMove", 0}, {0x4754F0, ObjEff_Burst1, "ObjEff_Burst1", 4},
+        {0x475510, ObjEff_Carry, "ObjEff_Carry", 0}, {0x475560, ObjEff_Burst1End, "ObjEff_Burst1End", 0},
+        {0x475590, ObjEff_Burst2, "ObjEff_Burst2", 4}, {0x4755B0, ObjEff_Burst2End, "ObjEff_Burst2End", 0},
+        {0x4755E0, ObjEff_Burst3, "ObjEff_Burst3", 4}, {0x475600, ObjEff_Burst3End, "ObjEff_Burst3End", 0}};
+    for (int i = 0; i < iters; i++) {
+        for (unsigned j = 0; j < sizeof q / sizeof q[0]; j++) {
+            game_state(); world_setup();
+            for (int t = 0; t < 256; t++) U32(TYPE_TAB + 4 * t) = (u32)(uintptr_t)g_recs[STUB_TYPE];
+            do anim_setup_at(O_OBJ + 0x260); while (U32(O_OBJ + 0x260 + 0x68) < 4);   /* the second object, with a part 3 */
+            U32(G() + 0x940) = O_OBJ; U32(G() + 0x93C) = O_EFF;
+            for (u32 a = 0; a < 0x34 * 16; a += 4) U32(O_K3 + a) = rnd() % 3 ? rnd() | 1 : rnd() & ~1u;   /* lights: mostly taken */
+            U32(0x87DE14) = 1 + rnd() % 16; U32(G() + 0xA74) = rnd() % U32(0x87DE14);
+            for (u32 a = 0; a < 0xCC * 4; a += 4) U32(PART_POOL + a) = rnd();
+            U32(OE_MODEL) = OE_MODEL + 0x100; U32(OE_MODEL + 4) = OE_MODEL + 0x400;
+            U16(OE_MODEL + 8) = rnd() % 10; U16(OE_MODEL + 0xA) = rnd() % 10;
+            for (u32 a = OE_MODEL + 0x100; a < OE_MODEL + 0xA00; a += 4) U32(a) = rnd();
+            gptr e = O_EFF + 0x70 * (rnd() % 12);
+            for (u32 a = 0; a < 0x70; a += 4) U32(e + a) = rnd();
+            U32(e + 0x68) = OE_MODEL;
+            U32(e + 0x54) = rnd() % 3 ? PART_POOL + 0xCC * (rnd() % 4) : 0;
+            U8(e + 0x4F) = (u8)(rnd() % 2 ? rnd() % 3 : rnd());
+            U8(e + 0x46) = (u8)(q[j].steps ? rnd() % q[j].steps : rnd());
+            U16(e + 0x5E) = (u16)(rnd() % 2 ? rnd() % 3 : rnd());
+            if (rnd() % 2) S16(e + 0x42) = (s16)(-5000 - S16(e + 0x62) - S16(e + 0x5E) + (s32)(rnd() % 3) - 1);   /* lands about at -5000 */
+            U32(LOG_BASE) = 0;
+            u32 a[1] = {e};
+            sprintf(g_what, "effect %X step %u kind %u lights %u/%u", e, U8(e + 0x46), U8(e + 0x4F), U32(0x87DE14), U32(G() + 0xA74));
+            check(q[j].addr, q[j].fn, q[j].name, 1, a, 0);
+        }
+    }
     stubs_install(0);
     g_ign_objpads = 0;
 }
@@ -6899,6 +6938,46 @@ static const AlloEdge g_allo_edge[] = {
     {0x43C890, 1, 2, {9, 0xA}}, {0x43C890, 2, 6, {0x10, 0x11, 0x39, 0x3A, 0x34, 0x1B}}, {0x43C450, 1, 4, {0x1E, 0x28, 0xB, 0xC}},
     {0x43C600, 1, 2, {0x46, 0x47}}, {0x439F70, 1, 2, {0xF, 0x10}}};
 
+/* polygons about o for Wall_Farthest: some across its four rays, one
+   (passing every test) around it, so each ray meets a wall (with none, the
+   original hands out stack junk) */
+static void wf_room(gptr o)
+{
+    gptr w = 0x6CF600u;
+    u32 np = 2 + rnd() % 4, ring = rnd() % np;
+    S16(o + 0x40) = (s16)(rnd() % 0x4000 - 0x2000); S16(o + 0x44) = (s16)(rnd() % 0x4000 - 0x2000);
+    U16(o + 0x5A) = rnd() % 4 ? rnd() % 4 : (u16)(rnd() & 0xFFEF);   /* (a level past 15 meets no wall) */
+    s32 x = S16(o + 0x40), z = S16(o + 0x44);
+    U8(w) = (u8)np;
+    gptr pg = w + 0x40;
+    for (u32 k = 0; k < np; k++) {
+        U32(w + 8 + 4 * k) = pg - w;
+        u32 n = k == ring ? 4 : 1 + rnd() % 3;
+        U8(pg) = k == ring || rnd() % 4 ? 1 : 0; U8(pg + 1) = (u8)n;
+        U8(pg + 3) = k == ring || rnd() % 3 ? 0 : (u8)(rnd() % 2 ? 0x40 : rnd());
+        U16(pg + 4) = k == ring || rnd() % 3 ? 0xFFFF : (u16)rnd();
+        gptr v = pg + 8 + 4 * n;
+        if (k == ring) {
+            s32 r = 2000 + rnd() % 3000;
+            s32 vx[4] = {x - r, x + r + 40 + (s32)(rnd() % 300), x + r, x - r - 40 - (s32)(rnd() % 300)};
+            s32 vz[4] = {z - r - 40 - (s32)(rnd() % 300), z - r, z + r + 40 + (s32)(rnd() % 300), z + r};
+            if (rnd() % 3 == 0) {                       /* a square about o: all four alike far */
+                vx[0] = vx[3] = x - r; vx[1] = vx[2] = x + r; vz[0] = vz[1] = z - r; vz[2] = vz[3] = z + r;
+            }
+            for (u32 e = 0; e < 5; e++) { S16(v + 4 * e) = (s16)vx[e & 3]; S16(v + 4 * e + 2) = (s16)vz[e & 3]; }
+        } else {
+            for (u32 e = 0; e <= n; e++) {                  /* short walls across the rays */
+                s32 d = 100 + (s32)(rnd() % 2500), side = (s32)(rnd() % 4), off = (s32)(rnd() % 400) - 200;
+                s32 px = side == 1 ? x + d : side == 3 ? x - d : x + off;
+                s32 pz = side == 0 ? z + d : side == 2 ? z - d : z + off;
+                S16(v + 4 * e) = (s16)(px + (s32)(rnd() % 600) - 300); S16(v + 4 * e + 2) = (s16)(pz + (s32)(rnd() % 600) - 300);
+            }
+        }
+        pg = v + 4 * (n + 1);
+    }
+    U32(G() + 0xA4C) = w;
+}
+
 static void test_allo(void)
 {
     g_ign_objpads = 1;
@@ -6929,6 +7008,15 @@ static void test_allo(void)
             allo_wall(o);
             u32 w[3] = {o, rnd() % 2 ? 0x400 : (u32)-0x400, rnd() % 2 ? 0x40 : (u8)rnd()};
             check(0x454B50, Wall_Dist, "Wall_Dist", 3, w, 0xFFFFFFFF);
+            {   /* (its room and place only for this check) */
+                static u8 keep[0x200]; u32 kc = U32(G() + 0xA4C), kx = U32(o + 0x40), kz = U16(o + 0x44), kl = U16(o + 0x5A);
+                memcpy(keep, MEM(0x6CF600), 0x200);
+                wf_room(o);
+                u32 wf[3] = {o, o + 0x1E0, rnd() % 2 ? 0xC0 : (u8)rnd()};
+                check(0x454950, Wall_Farthest, "Wall_Farthest", 3, wf, 0);
+                memcpy(MEM(0x6CF600), keep, 0x200);
+                U32(G() + 0xA4C) = kc; U32(o + 0x40) = kx; U16(o + 0x44) = (u16)kz; U16(o + 0x5A) = (u16)kl;
+            }
             U32(LOG_BASE) = 0;
             u32 sc[2] = {o, rnd() % 3 ? rnd() % 0x200 : rnd()};
             U8(o + 0x58) = rnd() % 2 ? 8 : (u8)rnd(); if (rnd() % 2) U16(G() + 0x1090) = 0x808;
