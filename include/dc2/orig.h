@@ -14,7 +14,6 @@
     V(Fn_454950,          0x454950, (gptr o, gptr out, u32 mask), (o, out, mask)) \
     F(u32, Fn_4BF330,     0x4BF330, (void), ()) \
     V(Fn_410710,          0x410710, (gptr e), (e)) \
-    V(Fn_411160,          0x411160, (gptr e), (e)) \
 
 #define ORIG_DECL_F(ret, name, addr, params, args) ret DC2CALL name params;
 #define ORIG_DECL_V(name, addr, params, args) void DC2CALL name params;

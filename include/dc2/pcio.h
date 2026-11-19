@@ -64,6 +64,10 @@ void DC2CALL Masks_ShiftDepth(u32 d);                   /* 0x4BE6A0: all masks d
 u32  DC2CALL Masks_FillMarker(u32 i, gptr p);           /* 0x4BEC40: mask i into the marker p; its z */
 void DC2CALL SetMaskMarker(gptr p);                     /* 0x4C06B0: code 0x88 */
 
+/* the fog (D3D render states; standalone: src/pc/drawot.c): colour 0xRRGGBB, start and end as float bits */
+void DC2CALL Fog_SetColor(u32 rgb, u32 start, u32 end);   /* 0x4B4E60 */
+void DC2CALL Fog_Enable(u32 on);                          /* 0x4B4F50 */
+
 /* the GPU layer (DirectDraw/Direct3D): the original in-process, src/pc/gpu.c
    standalone (include/dc2/gpu.h) */
 void DC2CALL Gpu_AddPrim(gptr ot, gptr p);                  /* 0x4C05D0 */

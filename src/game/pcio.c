@@ -67,6 +67,8 @@ void DC2CALL Masks_Upload(u32 a)                { ORIG(0x4BEAC0, void (DC2CALL *
 void DC2CALL Masks_ShiftDepth(u32 d)            { ORIG(0x4BE6A0, void (DC2CALL *)(u32))(d); }
 u32  DC2CALL Masks_FillMarker(u32 i, gptr p)    { return ORIG(0x4BEC40, u32 (DC2CALL *)(u32, gptr))(i, p); }
 void DC2CALL SetMaskMarker(gptr p)              { ORIG(0x4C06B0, void (DC2CALL *)(gptr))(p); }
+void DC2CALL Fog_SetColor(u32 c, u32 a, u32 b)   { ORIG(0x4B4E60, void (DC2CALL *)(u32, u32, u32))(c, a, b); }
+void DC2CALL Fog_Enable(u32 on)                 { ORIG(0x4B4F50, void (DC2CALL *)(u32))(on); }
 #else
 #include <stdio.h>
 #include <stdlib.h>
@@ -190,6 +192,8 @@ u32 DC2CALL Masks_FillMarker(u32 i, gptr p)
     return PcDraw_MasksMarker(i, p);
 }
 void DC2CALL SetMaskMarker(gptr p) { PcGpu_SetMaskMarker(p); }
+void DC2CALL Fog_SetColor(u32 c, u32 a, u32 b) { PcDraw_SetFarColor(c, a, b); }
+void DC2CALL Fog_Enable(u32 on) { PcDraw_SetFogEnable(on); }
 void DC2CALL Gpu_AddPrim(gptr o, gptr p) { PcGpu_AddPrim(o, p); }
 void DC2CALL Gpu_DrawOT(gptr o, gptr a, gptr b) { PcGpu_AddPrims(o, a, b); }
 void DC2CALL Gpu_VramCopy(gptr r, s32 x, s32 y) { PcDraw_VramCopy(r, x, y); }

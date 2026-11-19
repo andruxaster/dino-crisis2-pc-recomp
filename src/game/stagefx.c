@@ -777,7 +777,7 @@ void DC2CALL Turret_Draw(gptr e)                                     /* 0x40FCD0
     Turret_DrawHit(e);
     Fn_410710(e);
     Turret_DrawSky(e);
-    Fn_411160(e);
+    Turret_Hud(e);
     s16 hp = S16(TU_HP), shown = S16(0x746E38);
     if ((s16)U16(TU_TIME) % 3 == 0 && shown > hp) { shown--; U16(0x746E38) = (u16)shown; }
     Turret_DrawBar(hp, shown >= 0x5A ? 0 : (u32)((0x5A - shown) / 22));
@@ -1662,4 +1662,2138 @@ void DC2CALL Fx_Wave_Draw(gptr e)                                    /* 0x415080
             U32(0x87DC98) = p + 0x1C;
         }
     }
+}
+
+/* ---- a flat water surface (steps table 0x71E8F0) ----
+ * like kind 3 without the swell: e+0xC/+0xE x/z of the corner, e+0x1C height /10,
+ * e+0x14 yaw, e+0x10/+0x11 tiles across/along, e+0x1A tile size /250, e+0x16 fixed
+ * OT depth (0: from z), e+0x18 flags (4 still), e+0x19 tpage, e+0x1E scroll */
+
+void DC2CALL Water2(gptr e)                                          /* 0x4151D0 */
+{
+    Orig_Call1(U32(0x71E8F0 + S8(e + 3) * 4), e);
+}
+
+void DC2CALL Water2_Init(gptr e)                                     /* 0x4151F0 */
+{
+    U8(e + 3)++;
+    U16(e + 0x1E) = 0;
+    if (!U8(e + 0x1A)) U8(e + 0x1A) = 4;
+    U32(e + 4) = 0x415280;
+    Flag_Set(3, 8, 1);
+    Water2_Step(e);
+}
+
+void DC2CALL Water2_Step(gptr e)                                     /* 0x415230 */
+{
+    if (!(U8(e + 0x18) & 4)) {
+        U16(e + 0x1E) += U8(e + 0x13);
+        if (U16(e + 0x1E) > 0x257F) U16(e + 0x1E) = 0;
+    }
+    gptr v = Tmp_Push(8);
+    U32(v) = 0; U32(v + 4) = 0;
+    Water_Level(v);                     /* (the result is dropped) */
+    Tmp_Pop(8);
+}
+
+void DC2CALL Water2_Draw(gptr e)                                     /* 0x415280 */
+{
+    gptr g = G(), c = g + 0x778;
+    gptr t = Tmp_Push(0x70), r = t, m = t + 8, lv = t + 0x28, vt = t + 0x38, z = t + 0x58;
+    u32 sh = (U8(g + 0xB4B) - 2) & 31;
+    U16(r) = 0; U16(r + 2) = U16(e + 0x14); U16(r + 4) = 0;
+    RotMatrix(r, m);
+    MulMatrix0(c, m, m);
+    SetRotMatrix(c);
+    U32(lv) = (u32)((s32)S16(e + 0xC) - S16(c + 0x28));
+    U32(lv + 4) = (u32)((s32)(s16)(U16(e + 0x1C) * 10) - S16(c + 0x2A));
+    U32(lv + 8) = (u32)((s32)S16(e + 0xE) - S16(c + 0x2C));
+    ApplyRotMatrixLV(lv, m + 0x14);
+    U32(m + 0x14) += (u32)(s32)S16(c + 0x30);
+    U32(m + 0x18) += (u32)(s32)S16(c + 0x32);
+    U32(m + 0x1C) += U16(c + 0x34);
+    SetTransMatrix(m);
+    s32 zfix = S16(e + 0x16);
+    u32 otz = (u32)zfix;
+    u16 step = (u16)(U8(e + 0x1A) * 250);
+    s32 nr = S8(e + 0x11), nc = S8(e + 0x10);
+    u32 v0 = (u32)(U16(e + 0x1E) / 50), v1 = v0 + 0x30;
+    for (u32 q = 0; q < 0x20; q += 2) U16(vt + q) = 0;   /* (y and the pads: gte_ldv3c loads them) */
+    for (s32 i = 0; i < nr; i++) {
+        v0 += 0x30; v1 += 0x30;
+        if (v0 > 0xBF) { v0 -= 0xC0; v1 -= 0xC0; }
+        U16(vt + 4) = U16(vt + 0xC) = (u16)(i * step);
+        U16(vt + 0x14) = U16(vt + 0x1C) = (u16)((i + 1) * step);
+        for (s32 j = 0; j < nc; j++) {
+            U16(vt) = U16(vt + 0x10) = (u16)(j * step);
+            U16(vt + 8) = U16(vt + 0x18) = (u16)((j + 1) * step);
+            gptr p = U32(0x87DC98);
+            SetRotMatrix(m);
+            gte_ldv3c(vt); gte_rtpt(); gte_stsxy3_g3(p);
+            gte_ldv0(vt + 0x18); gte_rtps(); gte_stsxy(p + 0x38);
+            PC_stsz4_g4(p);
+            if (!zfix) {
+                gte_stsz4(z);
+                u32 a = U32(z);
+                for (u32 q = 1; q < 4; q++) if (a > U32(z + 4 * q)) a = U32(z + 4 * q);
+                a >>= sh;
+                otz = a >= 0x3FF ? 0x3FF : a;
+            }
+            U8(p + 0x34) = 0; U8(p + 0x14) = 0; U8(p + 0x44) = 0x30; U8(p + 0x24) = 0x30;
+            U8(p + 0x25) = (u8)v0; U8(p + 0x15) = (u8)v0; U8(p + 0x45) = (u8)v1; U8(p + 0x35) = (u8)v1;
+            U32(p + 4) = 0x2E404080;
+            U16(p + 0x26) = (u16)(((u16)(s16)S8(e + 0x19) << 5) | 0x418);
+            U16(p + 0x16) = 0x7F00;
+            gptr ot = 0x87BC00 + ((U32(0x87DE0C) << 10) + otz) * 4;
+            U32(p) = U32(ot) | 0x09000000;
+            U32(ot) = p & 0xFFFFFF;
+            U32(0x87DC98) = p + 0x48;
+        }
+    }
+    Tmp_Pop(0x70);
+}
+
+/* ---- blasts (area kind 8, by e+2: 0 the charge 0x71E940, 1 a blast 0x71E948) ----
+ * e+0x10..+0x14 the place, e+0x16 a countdown; a blast inside one of the quads at
+ * 0x71E900 with its flag 7/0x10+i still clear sets that flag when it goes off */
+
+void DC2CALL Fx_Blasts(gptr e)                                       /* 0x415A20 */
+{
+    Orig_Call1(U32(0x71E950 + U8(e + 2) * 4), e);
+}
+
+void DC2CALL Fx_Charge(gptr e)                                       /* 0x415840 */
+{
+    Orig_Call1(U32(0x71E940 + S8(e + 3) * 4), e);
+}
+
+void DC2CALL Fx_Charge_Arm(gptr e)                                   /* 0x415600 */
+{
+    if (U8(U32(G() + 0x948) + 0x37) != 4) { Eff_Off(e); return; }
+    U16(e + 0x16) = 0x28;
+    U8(e + 3)++;
+}
+
+u8 DC2CALL Fx_Blast_Quad(gptr e)                                     /* 0x4157F0 */
+{
+    for (u32 i = 0; i < 4; i++)
+        if (PointInQuad(e + 0x10, 0x71E900 + i * 0x10) && !Flag_Check(7, 0x10 + i)) return (u8)(0x10 + i);
+    return 0;
+}
+
+void DC2CALL Fx_Charge_Fire(gptr e)                                  /* 0x415630 */
+{
+    gptr g = G(), pl = U32(g + 0x940);
+    if (U16(e + 0x16)) { U16(e + 0x16)--; return; }
+    gptr s1 = U32(g + 0x948) + 0x34;
+    if (!U8(s1 + 8)) { U8(s1 + 3) = 1; U8(s1 + 8) = 1; }
+    Se_PlayFlat(0x66, 0x50, 0x40);
+    u32 found = Fx_Blast_Quad(e);
+    gptr s = Light_Alloc();
+    if (s) {
+        U8(s + 2) = 1; U8(s + 1) = U8(e + 1);
+        U16(s + 0x10) = U16(e + 0x10); U16(s + 0x12) = U16(e + 0x12); U16(s + 0x14) = U16(e + 0x14);
+        U16(s + 0x16) = 0xF; U16(s + 0x1A) = 1;
+        if (found) { U16(s + 0x18) = (u16)found; U8(s + 3) = 1; }
+    }
+    gptr t = Tmp_Push(0x28), r = t, m = t + 8;
+    U16(r) = 0; U16(r + 2) = U16(pl + 0x4A); U16(r + 4) = 0; U16(r + 6) = 0;
+    for (u32 i = 0; i < 3; i++) {
+        s = Light_Alloc();
+        if (!s) continue;
+        U8(s + 1) = U8(e + 1); U8(s + 2) = 1;
+        RotMatrix(r, m);
+        U16(s + 0x10) = 0x9C4; U16(s + 0x14) = 0; U16(s + 0x12) = 0;
+        ApplyMatrixSV(m, s + 0x10, s + 0x10);
+        U16(s + 0x10) += U16(e + 0x10); U16(s + 0x12) += U16(e + 0x12); U16(s + 0x14) += U16(e + 0x14);
+        U16(s + 0x12) = (u16)Floor_Height(s + 0x10, s + 0x10, 0x80, 0);
+        U16(r + 2) = (u16)((U16(r + 2) + 0x555) & 0xFFF);
+        U16(s + 0x16) = (u16)(Rand8() % 15 + 15);
+        U16(s + 0x1A) = (u16)(i & 1);
+        if (!found) {
+            found = Fx_Blast_Quad(s);
+            if (found) { U8(s + 3) = 1; U16(s + 0x18) = (u16)found; }
+        }
+    }
+    Tmp_Pop(0x28);
+    Eff_Off(e);
+}
+
+void DC2CALL Fx_Blast(gptr e)                                        /* 0x415A00 */
+{
+    Orig_Call1(U32(0x71E948 + S8(e + 3) * 4), e);
+}
+
+void DC2CALL Fx_Blast_Wait(gptr e)                                   /* 0x415860 */
+{
+    gptr c = G() + 0x778;
+    gptr t = Tmp_Push(0x28), r = t, m = t + 8;
+    U16(r) = 0x800; U16(r + 2) = 0; U16(r + 4) = 0; U16(r + 6) = 0;
+    RotMatrix(r, m);
+    U16(t) = (u16)(U16(e + 0x10) - U16(c + 0x28));
+    U16(t + 2) = (u16)(U16(e + 0x12) - U16(c + 0x2A));
+    U16(t + 4) = (u16)(U16(e + 0x14) - U16(c + 0x2C));
+    ApplyMatrix(c, t, m + 0x14);
+    U32(m + 0x14) += (u32)(s32)S16(c + 0x30);
+    U32(m + 0x18) += (u32)(s32)S16(c + 0x32);
+    U32(m + 0x1C) += U16(c + 0x34);
+    if (U16(e + 0x16)) U16(e + 0x16)--;
+    else if (Weapon_Hit(m, e + 0x10, 0x1C)) Eff_Off(e);
+    else U8(e + 3)++;
+    Tmp_Pop(0x28);
+}
+
+void DC2CALL Fx_Blast_Go(gptr e)                                     /* 0x415960 */
+{
+    if (U16(e + 0x16)) { U16(e + 0x16)--; return; }
+    if (U16(e + 0x18)) Flag_Set(7, U16(e + 0x18), 1);
+    gptr s = Light_Alloc();
+    if (s) {
+        U8(s + 1) = 1; U32(s + 0xC) = 0x5E2CE4; U32(s + 0x10) = 0x5E2F78; U8(s + 2) = 3;
+        U16(s + 0x1A) = U16(e + 0x10); U16(s + 0x1C) = U16(e + 0x12); U16(s + 0x1E) = U16(e + 0x14);
+    }
+    if (U16(e + 0x1A)) Se_PlayFlat(0x67, 0x64, 0x40);
+    Shake_Set(5, 0, 5);
+    Eff_Off(e);
+}
+
+/* ---- the ride (area kind 2: steps 0x71E9E8): the player fixed on a moving
+ * craft, turning and shooting while the scenery (G+0x93C effect objects) scrolls by
+ * e+0xC phase (0 start, 2 riding, 3 end), e+0xD the light, e+0xE..+0x10 fog rgb,
+ * e+0x12 the gun's reload, e+0x18 turn speed, e+0x1A/+0x1C pitch/yaw, e+0x1E a clock,
+ * e+0x20 the player's life kept; 0x87FFC0 the hit's countdown, 0x87FFC8 the
+ * scenery's slow-down, 0x87FFCC/CE the gauge's blink, 0x87FFD8 the sway,
+ * 0x87FFDA the next shot's object */
+
+void DC2CALL Ride(gptr e)                                            /* 0x415AC0 */
+{
+    Flag_Set(3, 0, 0);
+    Flag_Set(1, 3, 1);
+    Flag_Set(1, 0, 0);
+    Orig_Call1(U32(0x71E9E8 + S8(e + 3) * 4), e);
+}
+
+void DC2CALL Ride_Init(gptr e)                                       /* 0x415B00 */
+{
+    gptr g = G(), c = g + 0x778;
+    u32 col = (u32)U8(e + 0x10) << 3 | (u32)U8(e + 0xF) << 11 | (u32)U8(e + 0xE) << 19;
+    U32(0x7479F0) = col;
+    Fog_SetColor(col, 0x3F800000, 0x40000000);          /* (1.0, 2.0) */
+    Fog_Enable(1);
+    U32(0x747880) = 0;
+    Light_SetFar((u32)U8(e + 0x10) << 19 | (u32)U8(e + 0xF) << 11 | (u32)U8(e + 0xE) << 3);
+    U8(e + 3)++;
+    U32(e + 4) = 0x416450;
+    Flag_Set(1, 9, 1);
+    Flag_Set(3, 10, 1);
+    memset(MEM(0x747888), 0, 0x168);
+    memset(MEM(0x87FFC0), 0, 0x1C);
+    gptr o = U32(g + 0x93C);
+    U16(o + 0x6EE) = 0; U16(o + 0x75E) = 1; U16(o + 0x7CE) = 2; U16(o + 0x83E) = 3;
+    U16(o + 0xB4E) = 0; U16(o + 0xBBE) = 1; U16(o + 0xC2E) = 2; U16(o + 0xC9E) = 3;
+    U16(U32(c + 0x40) + U8(c + 0x4C) * 16 + 6) = 0xD2;
+    SetGeomScreen(0xD2);
+    U16(e + 0x1E) = 0;
+    U16(c + 0x20) = 0xFE0;
+    U16(c + 0x22) = U16(U32(g + 0x940) + 0x4A);
+    U32(U32(g + 0x940) + 0x50) &= ~2u;
+    U16(0x87FFCE) = 0xFFF0;
+    U8(e + 0x12) = 0x16;
+    Ride_Step(e);
+}
+
+void DC2CALL Ride_Step(gptr e)                                       /* 0x415CD0 */
+{
+    gptr g = G(), pl = U32(g + 0x940), c = g + 0x778;
+    s16 t = (s16)(U16(0x87FFC4) + 1);
+    U16(0x87FFC4) = (u16)(t > 30000 ? 30000 : t);
+    if (Flag_Check(0, 0xB)) U16(pl + 0x108) = 0x4B0;
+    if (U8(pl + 0x17B)) U8(pl + 0x17B)--;
+    if (U8(pl + 0x174) & 1) {
+        if (!U16(0x87FFC0)) {                           /* hit */
+            Se_Play(0, 0x5F);
+            U16(0x87FFC0) = 0xF0;
+            Shake_Set(10, 0, 0x14);
+            u8 d = U8(g + 0x108E);
+            u16 a = U16(pl + 0x176);
+            if (d == 0 || d == 1) U16(pl + 0x108) -= a;
+            else U16(pl + 0x108) += (u16)(-2 * a - (a >> 1));
+            if (S16(pl + 0x108) < 0 && !U8(0x87FFCA)) { U8(0x87FFCA) = 1; GameOver_Start(0); }
+        }
+        if (U16(0x87FFC0)) {
+            U16(0x87FFC0) -= 8;
+            u16 a = (u16)(U16(0x87FFC0) - 0x80);
+            if (a == 0x70) U16(c + 0x20) += 0x70;
+            else if (a == 0x60) U16(c + 0x20) += 0xC0;
+            else if ((s16)a > 0) U16(c + 0x20) += (u16)(a * 3);
+            s16 f = S16(0x87FFC0);
+            U16(0x87FFC8) = (u16)(0x338 - f);
+            if (f > 0x30) {
+                u8 w = (u8)(f / 2);
+                if (w > 0x60) w = 0x60;
+                u16 h = w >> 1;
+                U16(c + 0x22) += (u16)(U16(0x87DE10) % w - h);
+                U16(e + 0x1C) += (u16)(U16(0x87DE10) % w - h);
+            }
+        }
+        if (!U16(0x87FFC0)) { U16(0x87FFC8) = 0; U16(pl + 0x174) = 0; U32(pl + 0x54) = 1; }
+    }
+    U16(pl + 0x42) = 0xFED4;
+    if (U8(e + 0x12) < 0x1E && S16(pl + 0x108) >= 0) {   /* turning */
+        u32 pad = U32(0x87DC08);
+        if (pad & 0x8000) U16(e + 0x18) -= 5;
+        if (pad & 0x2000) U16(e + 0x18) += 5;
+        if (S16(e + 0x18) > 0x2D) U16(e + 0x18) = 0x2D;
+        if (S16(e + 0x18) < -0x2D) U16(e + 0x18) = (u16)-0x2D;
+        s16 v = S16(e + 0x18);
+        if ((v < 0 && !(pad & 0x8000)) || (v > 0 && !(pad & 0x2000))) U16(e + 0x18) = (u16)(v / 2);
+        U16(e + 0x1C) += U16(e + 0x18);
+    }
+    s16 y = S16(e + 0x1C);
+    if (y > 0x3AC && y < 0x800) U16(e + 0x1C) = 0x3AC;
+    if (S16(e + 0x1C) < -0x3AC) U16(e + 0x1C) = (u16)-0x3AC;
+    U16(pl + 0x4A) = U16(e + 0x1C);
+    if (U8(e + 0xC) == 2) {
+        if (U8(e + 0x12)) U8(e + 0x12)--;
+        if (S16(0x87FFC0) < 0x10 && !U8(e + 0x12) && (U8(0x87DC08) & 0x20) && S16(pl + 0x108) >= 0) {
+            U8(e + 0x12) = 0x16;
+            Ride_Shoot(e);
+        }
+    }
+    U16(c + 0x3A) = 0xBB8;
+    if (U8(e + 0xC) == 0) {
+        U16(e + 0x20) = U16(pl + 0x108);
+        U16(pl + 0x108) = 0x4B0;
+        U8(e + 0xC) = 2;
+    } else if (U8(e + 0xC) == 3) {
+        U16(pl + 0x108) = U16(e + 0x20);
+        Fog_Enable(0);
+        Light_SetFar(0);
+    }
+    if (U8(e + 0xC) == 2) {                             /* the camera on the craft */
+        U16(pl + 0x40) = 0; U16(pl + 0x42) = 0xFED4; U16(pl + 0x44) = 0xB62C;
+        U16(c + 0x30) = 0; U16(c + 0x32) = 0; U16(c + 0x34) = 0x14;
+        U16(c + 0x2A) = 0xF768; U16(c + 0x28) = U16(pl + 0x40); U16(c + 0x2C) = U16(pl + 0x44);
+        U16(c + 0x22) = U16(pl + 0x4A);
+        Camera_LookAt(c + 0x28, c + 0x30, c + 0x20, c + 0x38);
+        U16(c + 0x20) &= 0xFFF; U16(c + 0x22) &= 0xFFF; U16(c + 0x24) &= 0xFFF;
+        gptr r = Tmp_Push(8);
+        U16(r) = (u16)-U16(c + 0x20); U16(r + 2) = (u16)-U16(c + 0x22); U16(r + 4) = U16(c + 0x24); U16(r + 6) = 0;
+        RotMatrix(r, c);
+        Tmp_Pop(8);
+        static const u16 sway[8] = {0xFE0, 0xFDA, 0xFD8, 0xFD6, 0xFD9, 0xFD3, 0xFDC, 0xFE3};
+        u8 b = (u8)(U8(0x87FFD8) + 1);
+        U8(0x87FFD8) = b;
+        U16(c + 0x20) = sway[b & 7];
+        if (b & 0x20) U8(0x87FFD8) = ++b;
+        if (b & 0x40) U8(0x87FFD8) = b = (u8)(b + 2);
+        if (b & 0x80) U8(0x87FFD8) = (u8)(b + 3);
+        SetBackColor(0xFF, 0xFF, 0xFF);
+    } else {
+        U8(g + 0x7C4) = U8(e + 0xD);
+        SetBackColor(0x5F, 0x5F, 0x5F);
+    }
+    for (u32 d = 0; d < 0x150; d += 0x70) {              /* the first three: life back */
+        gptr q = U32(g + 0x93C) + d;
+        if (U8(q + 0x590) & 2) continue;
+        s16 v = S16(q + 0x584);
+        U16(q + 0x584) = (u16)(v < 30000 ? v + 500 : 30000);
+    }
+    U16(e + 0x1E) -= 7;
+    if (U16(e + 0x1E) > 0x7D00) U16(e + 0x1E) += 0x30;
+    for (u32 o = 0x690, i = 15; o < 0xE70; o += 0x70, i++) {   /* scenery passing by: a new piece when it wraps */
+        gptr q = U32(g + 0x93C) + o;
+        if (!(U8(q + 0x50) & 1)) continue;
+        s16 old = S16(q + 0x44);
+        U16(q + 0x44) = (u16)(old + U16(0x87FFC8) + 0x465);
+        if (old <= S16(q + 0x44)) continue;
+        u32 r1 = Rand8(), r2 = Rand8();
+        u16 v = (u16)(((r1 + r2) / 2) & 3);
+        if (i - 15 < 4) {
+            U16(q + 0x5E) = v;
+            U32(q + 0x68) = U32(0x71E958 + 4 * v);
+        } else {
+            U32(q + 0x68) = U32(0x71E97C + 4 * v);
+            if (U32(q - 0x3F8) == U32(0x71E958 + 4 * v)) {   /* (not the same as the one 10 before) */
+                v = v == 3 ? 0 : v + 1;
+                U32(q + 0x68) = U32(0x71E97C + 4 * v);
+            }
+            U16(q + 0x5E) = v;
+        }
+    }
+    for (u32 o = 0xF50; o < 0x1880; o += 0x70)
+        if (U8(U32(g + 0x93C) + o + 0x50) & 1) U16(U32(g + 0x93C) + o + 0x44) += (u16)(U16(0x87FFC8) + 0x465);
+    for (u32 o = 0xF50; o < 0x1180; o += 0x70) {
+        gptr q = U32(g + 0x93C) + o + 0x44;
+        if (S16(q) >= 0x1F40) U16(q) += 0x63C0;
+    }
+    for (u32 o = 0x1180; o < 0x12D0; o += 0x70) {
+        gptr q = U32(g + 0x93C) + o + 0x44;
+        if (S16(q) >= 0x7D00 || S16(q) < -0x5DC0) U16(q) -= 0x5DC0;
+    }
+    for (u32 o = 0x12D0; o < 0x15E0; o += 0x70) {
+        gptr q = U32(g + 0x93C) + o + 0x44;
+        if (S16(q) >= 0x5DC0) U16(q) += 0x2540;
+    }
+}
+
+void DC2CALL Ride_Draw(gptr e)                                       /* 0x416450 */
+{
+    gptr c = G() + 0x778;
+    Ride_Flash();
+    Ride_Gauge(U8(e + 0x12) * 255u / 22);
+    gptr t = Tmp_Push(0x28), v = t, m = t + 8;
+    U16(v) = (u16)-U16(c + 0x28); U16(v + 2) = (u16)-U16(c + 0x2A); U16(v + 4) = (u16)-U16(c + 0x2C);
+    ApplyMatrixSV(c, v, v);
+    U32(m + 0x14) = (u32)(S16(c + 0x30) + S16(v));
+    U32(m + 0x18) = (u32)(S16(c + 0x32) + S16(v + 2));
+    U32(m + 0x1C) = (u32)(U16(c + 0x34) + S16(v + 4));
+    SetTransMatrix(m);
+    Tmp_Pop(0x28);
+    if (U8(G() + 0xB4B) == 5 && !U32(0x747880)) {
+        Fog_SetColor(U32(0x7479F0), 0x40000000, 0x40400000);   /* (2.0, 3.0) */
+        U32(0x747880) = 1;
+    }
+}
+
+void DC2CALL Ride_Shoot(gptr e)                                      /* 0x416570 */
+{
+    gptr g = G(), c = g + 0x778;
+    gptr s = K2_AllocBack();
+    if (!s) return;
+    Se_Play(U32(g + 0x940), 0x61);
+    gptr m = Tmp_Push(0x14);
+    for (u32 a = 0; a < 0x12; a += 2) U16(m + a) = 0;
+    U16(m) = 0xE8C; U16(m + 8) = 0xE8C; U16(m + 0x10) = 0xE8C;
+    RotMatrixY(-(s32)S16(e + 0x1C), m);
+    RotMatrixX(-(s32)S16(e + 0x1A), m);
+    U8(s + 0x7A) = 3; U8(s + 0x58) = 0x14;
+    gptr pl = U32(g + 0x940);
+    U32(s + 0x40) = U32(pl + 0x40); U32(s + 0x44) = U32(pl + 0x44);
+    U16(s + 0x40) = U16(c + 0x38); U16(s + 0x42) = 0xF830; U16(s + 0x9E) = 0x1C; U16(s + 0x44) = U16(c + 0x3C);
+    U16(s + 0x7C) = (u16)(S16(m + 0xC) / 2); U16(s + 0x7E) = (u16)(S16(m + 0xE) / 2); U16(s + 0x80) = (u16)(S16(m + 0x10) / 2);
+    Tmp_Pop(0x14);
+    U16(s + 0x6E) = 0x10; U16(s + 0x6C) = 0x10;
+    U16(s + 0xA0) = (u16)(U8(0x87FFDA) + 0xC);
+    u8 k = (u8)(U8(0x87FFDA) + 1);
+    U8(0x87FFDA) = k > 2 ? 0 : k;
+    U16(U32(g + 0x93C) + S16(s + 0xA0) * 0x70 + 0x4A) = U16(e + 0x1C);
+    Orig_Call1(U32(U32(0x87F948) + U8(s + 0x58) * 4), s);
+    Orig_Call1(U32(U32(0x87F948) + U8(s + 0x58) * 4), s);
+}
+
+/* a full-screen flash while hit (two semi-transparent F4s, PC float vertices) */
+void DC2CALL Ride_Flash(void)                                        /* 0x416700 */
+{
+    u16 f = U16(0x87FFC0);
+    if (!f) return;
+    gptr ot = 0x87BC04 + (U32(0x87DE0C) << 12);
+    for (u32 k = 0; k < 2; k++) {
+        gptr p = U32(0x87DC98);
+        static const u32 xy[2][4] = {{0, 0x437F0000, 0, 0x437F0000}, {0x437F0000, 0x43A00000, 0x437F0000, 0x43A00000}};
+        U8(p + 4) = 0; U8(p + 5) = (u8)f; U8(p + 6) = (u8)f; U8(p + 7) = 0x2A;
+        for (u32 q = 0; q < 4; q++) {
+            U32(p + 8 + 0xC * q) = xy[k][q];
+            U32(p + 0xC + 0xC * q) = q < 2 ? 0 : 0x43700000;   /* (0, 240) */
+            U32(p + 0x10 + 0xC * q) = 0x3C23D70A;
+        }
+        U32(p) = U32(ot) | 0x05000000;
+        U32(ot) = p & 0xFFFFFF;
+        U32(0x87DC98) = p + 0x38;
+    }
+    Gpu_SetDrawMode(U32(0x87DC98), 1, 0, 0x40, 0);
+    Gpu_AddPrim(ot, U32(0x87DC98));
+    U32(0x87DC98) += 0xC;
+}
+
+/* the gun's gauge: 4 sprites (the frame, two halves of the bar, the lamp) */
+static void ride_sprt(gptr b)
+{
+    gptr p = U32(0x87DC98), ot = U32(0x87F94C) + 0x7C;
+    memcpy(MEM(p), MEM(b), 0x1C);
+    U32(p) = U32(ot) | 0x04000000;
+    U32(ot) = p & 0xFFFFFF;
+    U32(0x87DC98) = p + 0x1C;
+}
+
+void DC2CALL Ride_Gauge(u32 v)                                       /* 0x4168B0 */
+{
+    if (Flag_Check(2, 0xF)) return;
+    gptr b = Tmp_Push(0x1C);
+    u8 bl = (u8)v;
+    U32(b) = 0;
+    U32(b + 4) = 0x64808080; U16(b + 0x16) = 0x7F04;
+    F32(b + 8) = 208.0f; F32(b + 0xC) = 200.0f; U32(b + 0x10) = 0x3C23D70A;
+    U8(b + 0x14) = 0x10; U8(b + 0x15) = 0x80; U16(b + 0x18) = 0x60; U16(b + 0x1A) = 0x18;
+    ride_sprt(b);
+    F32(b + 0xC) = 208.0f; U8(b + 0x15) = 0x80; U16(b + 0x1A) = 8;
+    s32 a;
+    if (bl >= 0x80) {
+        a = (0xFF - bl) * 48 / 32;
+        F32(b + 8) = 208.0f;
+        U8(b + 0x14) = (u8)(a + 0x70);
+        s16 w = (s16)(0x30 - a);
+        U16(b + 0x18) = (u16)(w < 0 ? 0 : w);
+    } else {
+        U8(b + 0x14) = 0x70;
+        a = bl * 96 / 128;
+        F32(b + 8) = (float)(s32)((a & 0xFFFF) + 0xD0);
+        if ((u16)a <= 0x30) U16(b + 0x18) = 0x30;
+        else { s16 w = (s16)(0x60 - a); U16(b + 0x18) = (u16)(w < 0 ? 0 : w); }
+    }
+    U32(b + 0x10) = 0x3C23D70A;
+    ride_sprt(b);
+    if (bl >= 0xC0) a = 0;
+    else if (bl >= 0x80) a = (0xBF - bl) * 48 / 32;
+    else a = bl * 96 / 128;
+    F32(b + 0xC) = 208.0f; U32(b + 0x10) = 0x3C23D70A; U8(b + 0x14) = 0x70;
+    F32(b + 8) = (float)(s32)((a & 0xFFFF) + 0x100);
+    U8(b + 0x15) = 0x88;
+    { s16 w = (s16)(0x30 - a); U16(b + 0x18) = (u16)(w < 0 ? 0 : w); }
+    U16(b + 0x1A) = 8;
+    ride_sprt(b);
+    F32(b + 8) = 208.0f; F32(b + 0xC) = 192.0f; U32(b + 0x10) = 0x3C23D70A; U16(b + 0x1A) = 8;
+    if (!bl) {
+        U8(b + 4) = 0x80; U8(b + 6) = 0; U8(b + 5) = 0;
+        U8(b + 0x14) = 0xA0; U8(b + 0x15) = 0x80; U16(b + 0x18) = 0x20;
+    } else {
+        u16 d = U16(0x87FFCE);
+        if (!Flag_Check(2, 0x10)) U16(0x87FFCC) += d;
+        s16 cc = S16(0x87FFCC);
+        if (cc < 0) { U16(0x87FFCC) = 0; U16(0x87FFCE) = (u16)-d; }
+        else if (cc > 0x80) { U16(0x87FFCC) = 0x80; U16(0x87FFCE) = (u16)-d; }
+        u8 l = U8(0x87FFCC);
+        U8(b + 0x14) = 0xA0; U8(b + 6) = l; U8(b + 5) = l; U8(b + 4) = l;
+        U8(b + 0x15) = 0x88; U16(b + 0x18) = 0x38;
+    }
+    ride_sprt(b);
+    Tmp_Pop(0x1C);
+    Gpu_SetDrawMode(U32(0x87DC98), 1, 0, 0x1A, 0);
+    Gpu_AddPrim(U32(0x87F94C) + 0x7C, U32(0x87DC98));
+    U32(0x87DC98) += 0xC;
+}
+
+/* ---- area kind 3: a strip of VRAM (x 0x1C0..0x1DF, rows 0x100..0x1FF) scrolled
+ * a row a frame through the copy at x 0x1E0 (steps 0x71E9F4); 0x7479F4 the row */
+
+static void vram_copy(u32 x, u32 y, u32 w, u32 h, s32 dx, s32 dy)
+{
+    gptr r = Tmp_Push(8);
+    U16(r) = (u16)x; U16(r + 2) = (u16)y; U16(r + 4) = (u16)w; U16(r + 6) = (u16)h;
+    Gpu_VramCopy(r, dx, dy);
+    Tmp_Pop(8);
+}
+
+void DC2CALL VScroll(gptr e)                                         /* 0x416C50 */
+{
+    Orig_Call1(U32(0x71E9F4 + S8(e + 3) * 4), e);
+}
+
+void DC2CALL VScroll_Init(gptr e)                                    /* 0x416C70 */
+{
+    vram_copy(0x1C0, 0x100, 0x20, 0x100, 0x1E0, 0x100);
+    U8(e + 3)++;
+    VScroll_Step(e);
+}
+
+void DC2CALL VScroll_Step(gptr e)                                    /* 0x416CC0 */
+{
+    (void)e;
+    u16 s = U16(0x7479F4);
+    vram_copy(0x1E0, 0x100, 0x20, (u16)(0x100 - s), 0x1C0, (s32)(s16)s + 0x100);
+    vram_copy(0x1E0, (u16)(0x200 - s), 0x20, s, 0x1C0, 0x100);
+    s16 n = (s16)(s + 1);
+    U16(0x7479F4) = (u16)(n > 0xFF ? 0 : n);
+}
+
+/* ---- area kind 7: a meter on the screen (steps 0x71EA00): filling, flashing,
+ * emptying; e+0xC clut, e+0xE/+0x10 u/v (in: VRAM x/y), e+0x12/+0x13 x/y,
+ * e+0x1A fill, e+0x1C its shade, e+0x18/+0x1D the lamp's blink, e+0x1E tpage;
+ * e+2 == 1: a row of marks, *0x87FD60 +0x7C of them */
+
+void DC2CALL Meter(gptr e)                                           /* 0x416D60 */
+{
+    Orig_Call1(U32(0x71EA00 + S8(e + 3) * 4), e);
+}
+
+void DC2CALL Meter_Init(gptr e)                                      /* 0x416D80 */
+{
+    U8(e + 3) = 4;
+    U32(e + 4) = 0x416F40;
+    s16 x = S16(e + 0xE), y = S16(e + 0x10);
+    U16(e + 0x1E) = (u16)((((s32)y / 256) << 4) + (s32)x / 64) | 0x20;
+    U16(e + 0xE) = (u16)((s32)x % 64);
+    U16(e + 0x10) = (u16)(y - 0x100);
+    U16(e + 0x1A) = 0x60; U8(e + 0x1C) = 0x60;
+    U16(e + 0x18) = 0x80; U8(e + 0x1D) = 0xF0;
+}
+
+void DC2CALL Meter_Fill(gptr e)                                      /* 0x416E00 */
+{
+    gptr g = G();
+    if (U16(g + 0x67C) == 9) U16(e + 0x1A) += U8(g + 0x927) ? 0x14 : 0xB;
+    else U16(e + 0x1A) += 0xA;
+    if (S16(e + 0x1A) > 0xA0) { U16(e + 0x18) = 0x80; U8(e + 0x1D) = 0xF0; U8(e + 3) = 2; }
+}
+
+void DC2CALL Meter_Fade(gptr e)                                      /* 0x416E50 */
+{
+    gptr g = G();
+    s8 c;
+    if (U16(g + 0x67C) == 9) c = (s8)(U8(e + 0x1C) + (U8(g + 0x927) ? -10 : -6));
+    else c = (s8)(U8(e + 0x1C) - 5);
+    U8(e + 0x1C) = (u8)c;
+    if (c < -0x20) { U16(e + 0x1A) = 0; U8(e + 0x1C) = 0; U8(e + 3)++; }
+}
+
+void DC2CALL Meter_Rise(gptr e)                                      /* 0x416EA0 */
+{
+    gptr g = G();
+    U16(e + 0x1A) += U16(g + 0x67C) == 9 && U8(g + 0x927) ? 4 : 3;
+    if (S16(e + 0x1A) >= 0x60) {
+        U16(e + 0x1A) = 0x60; U8(e + 3) = 4; U8(e + 8) = 0;
+        if (U16(G() + 0x67C) == 9) U8(U32(0x87FD60) + 0x2F) = 1;
+    }
+    U8(e + 0x1C) = U8(e + 0x1A);
+}
+
+void DC2CALL Meter_Hold(gptr e)                                      /* 0x416F10 */
+{
+    if (U16(G() + 0x67C) == 9 && !U8(U32(0x87FD60) + 0x2F)) U8(e + 3) = 1;
+}
+
+void DC2CALL Meter_Draw(gptr e)                                      /* 0x416F40 */
+{
+    gptr g = G();
+    if (U16(g + 0x67C) == 8 && (Flag_Check(2, 0xF) || (U16(G() + 0x10B4) & 0xFF00) != 0x900)) return;
+    gptr b = Tmp_Push(0x1C);
+    u8 st = U8(e + 3);
+    U32(b) = 0;
+    F32(b + 8) = (float)(s32)U8(e + 0x12); F32(b + 0xC) = (float)(s32)U8(e + 0x13); U32(b + 0x10) = 0x3C23D70A;
+    U32(b + 4) = 0x64808080;
+    U8(b + 0x14) = (u8)(U8(e + 0xE) + 0x10); U8(b + 0x15) = U8(e + 0x10); U16(b + 0x16) = U16(e + 0xC);
+    U16(b + 0x18) = 0x60; U16(b + 0x1A) = 0x18;
+    ride_sprt(b);                                       /* the frame */
+    U16(b + 0x1A) = 8;
+    F32(b + 0xC) = (float)(s32)(U8(e + 0x13) + 8);
+    U8(b + 0x15) = U8(e + 0x10);
+    s16 w;
+    if (st != 1 && st != 2) {                           /* the fill */
+        s16 f = S16(e + 0x1A);
+        F32(b + 8) = (float)(s32)(U8(e + 0x12) - f + 0x60);
+        U8(b + 0x14) = (u8)(U8(e + 0xE) + 0x70);
+        w = f > 0x30 ? 0x30 : f;
+        U16(b + 0x18) = (u16)w;
+        if (w) ride_sprt(b);
+    } else {
+        F32(b + 8) = (float)(s32)U8(e + 0x12);
+        U8(b + 0x14) = (u8)(U8(e + 0xE) + U8(e + 0x1A) + 0x10);
+        w = (s16)(0x90 - U16(e + 0x1A));
+        U16(b + 0x18) = (u16)w;
+        if (w > 0) ride_sprt(b);
+    }
+    s8 sh = S8(e + 0x1C);                               /* the shade */
+    F32(b + 8) = (float)(s32)(U8(e + 0x12) - sh + 0x90);
+    F32(b + 0xC) = (float)(s32)(U8(e + 0x13) + 8);
+    U8(b + 0x14) = (u8)(U8(e + 0xE) + 0x70);
+    U8(b + 0x15) = (u8)(U8(e + 0x10) + 8);
+    U16(b + 0x18) = (u16)(sh > 0x30 ? sh - 0x30 : 0);
+    U16(b + 0x1A) = 8;
+    ride_sprt(b);
+    F32(b + 8) = (float)(s32)U8(e + 0x12);              /* the lamp */
+    F32(b + 0xC) = (float)(s32)(U8(e + 0x13) - 8);
+    if (st == 4 || st == 1) {
+        U8(b + 4) = 0x80; U8(b + 6) = 0; U8(b + 5) = 0;
+        U8(b + 0x14) = (u8)(U8(e + 0xE) - 0x60); U8(b + 0x15) = U8(e + 0x10); U16(b + 0x18) = 0x20;
+    } else {
+        if (!Flag_Check(2, 0x22)) U16(e + 0x18) += (u16)(s16)S8(e + 0x1D);
+        s16 v = S16(e + 0x18);
+        if (v < 0) { U16(e + 0x18) = 0; U8(e + 0x1D) = (u8)-U8(e + 0x1D); }
+        else if (v > 0x80) { U16(e + 0x18) = 0x80; U8(e + 0x1D) = (u8)-U8(e + 0x1D); }
+        u8 l = U8(e + 0x18);
+        U8(b + 6) = l; U8(b + 5) = l; U8(b + 4) = l;
+        U8(b + 0x14) = (u8)(U8(e + 0xE) - 0x60); U8(b + 0x15) = (u8)(U8(e + 0x10) + 8); U16(b + 0x18) = 0x38;
+    }
+    ride_sprt(b);
+    if (U8(e + 2) == 1) {                               /* the marks */
+        U8(b + 0x14) = (u8)(U8(e + 0xE) - 0x10);
+        U16(b + 0x1A) = 0x10; U16(b + 0x18) = 0x10; U16(b + 0x16) = (u16)(U16(e + 0xC) + 1);
+        U8(b + 0x15) = (u8)(U8(e + 0x10) + 0x10);
+        F32(b + 8) = (float)(s32)(U8(e + 0x12) + 0x60);
+        F32(b + 0xC) = (float)(s32)(U8(e + 0x13) + 0x18);
+        U32(b + 4) = 0x64008080;
+        for (u32 k = 0; k < U8(U32(0x87FD60) + 0x7C); k++) {
+            F32(b + 8) -= F32(0x7031B0);
+            ride_sprt(b);
+        }
+    }
+    Tmp_Pop(0x1C);
+    Gpu_SetDrawMode(U32(0x87DC98), 1, 0, (u32)(s32)S16(e + 0x1E), 0);
+    Gpu_AddPrim(U32(0x87F94C) + 0x7C, U32(0x87DC98));
+    U32(0x87DC98) += 0xC;
+}
+
+/* ---- area kind 19 (areas with several dinosaurs at once): the camera, by mode
+ * G+0x84C (steps 0x71EA30); e+0xC..+0x10 the group's middle, e+0x12 the distance,
+ * e+0x14/+0x16 its limits, e+0x18 a blend's clock, e+0x1A the mode last frame;
+ * 0x7479F8 the group's middle kept for mode 4 */
+
+static int mc_alive(gptr o) { return (U8(o + 0x50) & 1) && S16(o + 0x108) >= 0; }
+static gptr mc_end(void) { return U32(G() + 0x940) + U32(0x87F940) * 0x260; }
+
+/* the eye at the distance the screen asks for, kept within e+0x14..+0x16 */
+static s32 mc_dist(gptr a, gptr b, gptr e)
+{
+    s32 h = ReadGeomScreen();
+    s32 d = (s32)(Camera_Distance(a, b) * (u32)h) / 120;
+    if ((s32)U16(e + 0x14) > d) d = U16(e + 0x14);
+    if ((s32)U16(e + 0x16) < d) d = U16(e + 0x16);
+    return d;
+}
+
+/* the camera's matrix 15/16 of the way to m */
+static void mc_blend(gptr c, gptr m)
+{
+    for (u32 k = 0; k < 0x12; k += 2) S16(c + k) = (s16)(((s32)S16(c + k) * 15 + S16(m + k)) * 256 / 4096);
+}
+
+/* the matrix from the angles c+0x20 (negated; no roll) */
+static void mc_rot(gptr c)
+{
+    gptr r = Tmp_Push(8);
+    U16(r) = (u16)-U16(c + 0x20); U16(r + 2) = (u16)-U16(c + 0x22); U16(c + 0x24) = 0; U16(r + 4) = 0; U16(r + 6) = 0;
+    RotMatrixZXY(r, c);
+    Tmp_Pop(8);
+}
+
+void DC2CALL MultiCam(gptr e)                                        /* 0x4173D0 */
+{
+    if (Flag_Check(7, 0x1F)) return;
+    Flag_Set(3, 0, 0);
+    if (U8(e + 0x1A) != U8(G() + 0x84C)) U8(e + 3) = 0;
+    U8(e + 0x1A) = U8(G() + 0x84C);
+    Orig_Call1(U32(0x71EA30 + U8(G() + 0x84C) * 4), e);
+}
+
+u16 DC2CALL MultiCam_Y(gptr o)                                       /* 0x417BF0 */
+{
+    return U8(G() + 0x108F) == 3 ? 0xF448 : U16(U32(o + 0x60) + 0x1E);
+}
+
+/* mode 0: behind the player, looking over the ones within 2500 of him */
+void DC2CALL MultiCam_Avg(gptr e)                                    /* 0x417430 */
+{
+    gptr g = G(), pl = U32(g + 0x940), pp = U32(pl + 0x64), c = g + 0x778;
+    gptr t = Tmp_Push(0x20), A = t, B = t + 8, C = t + 0x10, sv = t + 0x18;
+    if (!U8(e + 3)) {
+        U8(e + 3) = 1;
+        U16(c + 0x20) = 0xFF00; U16(c + 0x22) = 0; U16(c + 0x32) = 0; U16(c + 0x30) = 0; U16(c + 0x34) = 0xFA0;
+        U16(sv) = 0x100; U16(sv + 2) = (u16)-U16(c + 0x22); U16(c + 0x24) = 0; U16(sv + 4) = 0; U16(sv + 6) = 0;
+        RotMatrixZXY(sv, c);
+        U16(c + 0x28) = U16(pp + 0x40); U16(c + 0x2A) = (u16)(U16(pl + 0x42) - 1000); U16(c + 0x2C) = U16(pp + 0x44);
+        U16(e + 0x16) = 30000;
+        U16(e + 0x14) = U16(0x71EA14 + U8(G() + 0x108F) * 2);
+    }
+    for (u32 a = 0; a < 0x18; a += 2) U16(t + a) = 0;
+    U16(A) = U16(B) = U16(pp + 0x40);
+    U16(A + 2) = U16(B + 2) = (u16)(U16(pl + 0x42) - 1000);
+    U16(A + 4) = U16(B + 4) = U16(pp + 0x44);
+    s32 sx = S16(A), sy = S16(A + 2), sz = S16(A + 4), n = 1;
+    u32 dmax = Camera_Distance(A, c + 0x28);
+    for (gptr o = U32(G() + 0x940) + 0x260; o < mc_end(); o += 0x260) {
+        if (!mc_alive(o)) continue;
+        gptr p = U32(o + 0x64);
+        U16(C) = U16(p + 0x40);
+        U16(C + 2) = MultiCam_Y(o);
+        U16(C + 4) = U16(p + 0x44);
+        u32 d = Camera_Distance(C, B);
+        if (d > U32(0x71EA48)) continue;
+        sx += S16(C); sy += S16(C + 2); sz += S16(C + 4); n++;
+        if (dmax < d) { dmax = d; U32(A + 4) = U32(C + 4); U32(A) = U32(C); }
+    }
+    U16(e + 0xC) = (u16)(sx / n); U16(e + 0xE) = (u16)(sy / n); U16(e + 0x10) = (u16)(sz / n);
+    U16(sv) = (u16)mc_dist(A, c + 0x28, e); U16(sv + 2) = 0; U16(sv + 4) = 0;
+    ApplyMatrixSV(c, sv, sv);
+    U16(c + 0x28) = (u16)(S16(c + 0x28) + (S16(e + 0xC) - S16(c + 0x28)) / 16);
+    U16(c + 0x2A) = (u16)(S16(c + 0x2A) + (S16(e + 0xE) - S16(c + 0x2A)) / 16);
+    U16(c + 0x2C) = (u16)(S16(c + 0x2C) + (S16(e + 0x10) - S16(c + 0x2C)) / 16);
+    U16(c + 0x38) = (u16)(U16(c + 0x28) + U16(sv)); U16(c + 0x3A) = (u16)(U16(c + 0x2A) + U16(sv + 2));
+    U16(c + 0x3C) = (u16)(U16(c + 0x2C) + U16(sv + 4));
+    Tmp_Pop(0x20);
+    mc_rot(c);
+    u32 d = Camera_Distance(c + 0x38, c + 0x28);
+    U16(e + 0x12) = (u16)d;
+    U16(c + 0x34) = (u16)(U16(c + 0x34) + ((s32)(d & 0xFFFF) - U16(c + 0x34)) / 16);
+}
+
+/* modes 1, 2: on the player (blended in over 64 frames in 1), back as far as the
+ * farthest within 4000 of him */
+void DC2CALL MultiCam_Follow(gptr e)                                 /* 0x4177C0 */
+{
+    gptr g = G(), pl = U32(g + 0x940), c = g + 0x778;
+    gptr t = Tmp_Push(0x20), out = t, V1 = t + 8, V2 = t + 0x10, V3 = t + 0x18;
+    for (u32 a = 0; a < 0x20; a += 2) U16(t + a) = 0;
+    U16(V1) = U16(V2) = U16(pl + 0x40);
+    U16(V1 + 2) = U16(V2 + 2) = (u16)(U16(pl + 0x42) - 1000);
+    U16(V1 + 4) = U16(V2 + 4) = U16(pl + 0x44);
+    switch (S8(e + 3)) {
+    case 0:
+        U8(e + 3)++;
+        U16(e + 0x18) = 0;
+        /* fall through */
+    case 1: {
+        u16 k = U16(e + 0x18);
+        s32 p0 = (s16)((0x40 - k) << 6);
+        U16(e + 0x18) = (u16)(k + 1);
+        if (k >= 0x40) U8(e + 3)++;
+        LoadAverageShort0(c + 0x28, V1, p0, 0x1000 - p0, out);
+        U16(c + 0x28) = U16(out); U16(c + 0x2A) = U16(out + 2); U16(c + 0x2C) = U16(out + 4);
+        break;
+    }
+    case 2:
+        U16(c + 0x28) = U16(V1); U16(c + 0x2A) = U16(V1 + 2); U16(c + 0x2C) = U16(V1 + 4);
+        break;
+    }
+    u32 dmax = Camera_Distance(V2, c + 0x28);
+    for (gptr o = U32(G() + 0x940) + 0x260; o < mc_end(); o += 0x260) {
+        if (!mc_alive(o)) continue;
+        gptr p = U32(o + 0x64);
+        U16(V3) = U16(p + 0x40);
+        U16(V3 + 2) = MultiCam_Y(o);
+        U16(V3 + 4) = U16(p + 0x44);
+        u32 d = Camera_Distance(V3, V1);
+        if (d <= U32(0x71EA4C) && dmax < d) { dmax = d; U32(V2) = U32(V3); U32(V2 + 4) = U32(V3 + 4); }
+    }
+    U16(out) = (u16)mc_dist(V2, c + 0x28, e); U16(out + 2) = 0; U16(out + 4) = 0;
+    ApplyMatrixSV(c, out, out);
+    U16(c + 0x38) = (u16)(U16(c + 0x28) + U16(out)); U16(c + 0x3A) = (u16)(U16(c + 0x2A) + U16(out + 2));
+    U16(c + 0x3C) = (u16)(U16(c + 0x2C) + U16(out + 4));
+    Tmp_Pop(0x20);
+    mc_rot(c);
+    u32 d = Camera_Distance(c + 0x38, c + 0x28);
+    U16(e + 0x12) = (u16)d;
+    U16(c + 0x34) = (u16)(U16(c + 0x34) + ((s32)(d & 0xFFFF) - U16(c + 0x34)) / 16);
+}
+
+static u32 mc_count(void)
+{
+    u32 n = 0;
+    for (gptr o = U32(G() + 0x940) + 0x260; o < mc_end(); o += 0x260) if (mc_alive(o)) n++;
+    return n;
+}
+
+/* mode 3: the group from beside the player; when one is left, over to him (16 frames) */
+void DC2CALL MultiCam_Group3(gptr e)                                 /* 0x417A70 */
+{
+    u32 n = mc_count();
+    switch (S8(e + 3)) {
+    case 0:
+        if (!n) return;
+        U8(e + 3)++;
+        U16(e + 0x18) = 0;
+        /* fall through */
+    case 1:
+        if (n == 1) { MultiCam_Group(e, 0); return; }
+        U8(e + 3)++;
+        /* fall through */
+    case 2: {
+        u16 k = U16(e + 0x18);
+        s32 p = 0x1000 - (k << 8);
+        U16(e + 0x18) = (u16)(k + 1);
+        if (k >= 0x10) U8(e + 3)++;
+        MultiCam_Group(e, (u32)p);
+        return;
+    }
+    case 3:
+        if (n <= 1) U8(e + 3)++;
+        MultiCam_Group(e, 0);
+        return;
+    case 4:
+        MultiCam_Focus(e);
+        return;
+    }
+}
+
+/* mode 4: between the player and the group */
+void DC2CALL MultiCam_Focus4(gptr e)                                 /* 0x417B70 */
+{
+    u32 n = mc_count();
+    switch (S8(e + 3)) {
+    case 0:
+        if (!n) return;
+        U8(e + 3)++;
+        U16(e + 0x18) = 0;
+        /* fall through */
+    case 1:
+        MultiCam_Focus(e);
+        return;
+    }
+}
+
+void DC2CALL MultiCam_Focus(gptr e)                                  /* 0x417C20 */
+{
+    gptr g = G(), pl = U32(g + 0x940), pp = U32(pl + 0x64);
+    gptr t = Tmp_Push(0x38), r = t, P = t + 8, lk = t + 0x10, m = t + 0x18;
+    for (u32 a = 0; a < 0x18; a += 2) U16(t + a) = 0;
+    U16(P) = U16(pp + 0x40);
+    U16(P + 2) = MultiCam_Y(pl);
+    U16(P + 4) = U16(pp + 0x44);
+    s32 sx = 0, sy = 0, sz = 0, n = 0;
+    for (gptr o = U32(G() + 0x940) + 0x260; o < mc_end(); o += 0x260) {
+        if (!mc_alive(o)) continue;
+        gptr p = U32(o + 0x64);
+        sx += S16(p + 0x40);
+        sy += (s16)MultiCam_Y(o);
+        sz += S16(p + 0x44);
+        n++;
+    }
+    if (n) { U16(0x7479F8) = (u16)(sx / n); U16(0x7479FA) = (u16)(sy / n); U16(0x7479FC) = (u16)(sz / n); }
+    gptr c = G() + 0x778;
+    U16(c + 0x28) = (u16)((S16(0x7479F8) + S16(P)) / 2);
+    U16(c + 0x2A) = (u16)((S16(0x7479FA) + S16(P + 2)) / 2);
+    U16(c + 0x2C) = (u16)((S16(0x7479FC) + S16(P + 4)) / 2);
+    U16(r) = 0; U16(r + 2) = (u16)Angle_XZ(P, 0x7479F8); U16(r + 4) = 0xFF00;
+    RotMatrixYXZ(r, m);
+    U16(r) = (u16)mc_dist(P, c + 0x28, e); U16(r + 2) = 0; U16(r + 4) = 0;
+    ApplyMatrixSV(m, r, r);
+    U16(c + 0x38) = (u16)(U16(c + 0x28) + U16(r)); U16(c + 0x3A) = (u16)(U16(c + 0x2A) + U16(r + 2));
+    U16(c + 0x3C) = (u16)(U16(c + 0x2C) + U16(r + 4));
+    Angles_LookAt(c + 0x28, c + 0x38, lk);
+    Angles_LookAt(c + 0x28, c + 0x38, lk);
+    U16(r) = (u16)-U16(lk); U16(r + 2) = (u16)-U16(lk + 2); U16(r + 4) = 0;
+    RotMatrixZXY(r, m);
+    mc_blend(c, m);
+    VectorNormalS(c, c);
+    U16(c + 0x32) = 0; U16(c + 0x30) = 0;
+    U16(c + 0x34) = (u16)Camera_Distance(c + 0x38, c + 0x28);
+    Tmp_Pop(0x38);
+}
+
+/* the camera over the player from the group's side; p: how far it still is
+ * from where it was (0x1000: there) */
+void DC2CALL MultiCam_Group(gptr e, u32 p)                           /* 0x417FF0 */
+{
+    gptr g = G();
+    gptr t = Tmp_Push(0x40), out = t, sv = t + 8, P = t + 0x10, Gm = t + 0x18, m = t + 0x20;
+    for (u32 a = 0; a < 0x20; a += 2) U16(t + a) = 0;
+    s32 sx = 0, sy = 0, sz = 0, n = 0;
+    for (gptr o = U32(G() + 0x940) + 0x260; o < mc_end(); o += 0x260) {
+        if (!mc_alive(o)) continue;
+        gptr q = U32(o + 0x64);
+        sx += S16(q + 0x40);
+        sy += (s16)MultiCam_Y(o);
+        sz += S16(q + 0x44);
+        n++;
+    }
+    if (n) { U16(Gm) = (u16)(sx / n); U16(Gm + 2) = (u16)(sy / n); U16(Gm + 4) = (u16)(sz / n); }
+    gptr pl = U32(g + 0x940), pp = U32(pl + 0x64), c = G() + 0x778;
+    U16(P) = U16(pp + 0x40);
+    U16(P + 2) = MultiCam_Y(pl);
+    U16(P + 4) = U16(pp + 0x44);
+    s32 q = 0x1000 - (s32)p;
+    LoadAverageShort0(c + 0x28, P, (s32)p, q, out);
+    U16(c + 0x28) = U16(out); U16(c + 0x2A) = U16(out + 2); U16(c + 0x2C) = U16(out + 4);
+    U16(out) = (u16)(U16(P) - U16(c + 0x28)); U16(out + 2) = (u16)(U16(P + 2) - U16(c + 0x2A));
+    U16(out + 4) = (u16)(U16(P + 4) - U16(c + 0x2C));
+    U16(sv) = 0; U16(sv + 2) = (u16)Angle_XZ(Gm, P); U16(sv + 4) = 0;
+    RotMatrixYXZ(sv, m);
+    U16(sv) = 0; U16(sv + 2) = 0; U16(sv + 4) = U16(e + 0x14);
+    ApplyMatrixSV(m, sv, sv);
+    for (u32 k = 0; k < 6; k += 2) U16(out + k) = (u16)(U16(out + k) + U16(sv + k) + U16(c + 0x28 + k));
+    LoadAverageShort0(c + 0x38, out, (s32)p, q, out);
+    u16 y = U16(c + 0x2A);
+    U16(c + 0x38) = U16(out); U16(c + 0x3A) = U16(out + 2); U16(c + 0x3C) = U16(out + 4);
+    U16(c + 0x2A) = U16(c + 0x3A);                      /* (the heights swapped: looking down from the player's) */
+    U16(c + 0x3A) = y;
+    Tmp_Pop(0x40);
+    Angles_LookAt(c + 0x28, c + 0x38, c + 0x20);
+    mc_rot(c);
+    U16(c + 0x32) = 0; U16(c + 0x30) = 0;
+    U16(c + 0x34) = (u16)Camera_Distance(c + 0x38, c + 0x28);
+}
+
+/* mode 5: the two first ones from the side */
+void DC2CALL MultiCam_Pair(gptr e)                                   /* 0x4182C0 */
+{
+    if (!U8(e + 3)) {
+        U8(e + 3) = 1;
+        u8 k = U8(G() + 0x850);
+        static const u16 far1[11] = {0x1770, 0x1770, 0x1B58, 0x1770, 0x1F40, 0x1770, 0x2EE0, 0x1770, 0x2328, 0x1770, 0xFA0};
+        s32 a = (u32)(k - 0x1D) <= 10 ? far1[k - 0x1D] : 0x1770;
+        s32 b = (u32)(k - 0x1E) <= 10 ? far1[k - 0x1E] : 0x1770;
+        U16(e + 0x14) = (u16)(a < b ? b : a);
+        U16(e + 0x16) = 30000;
+    }
+    gptr pl = U32(G() + 0x940);
+    gptr t = Tmp_Push(0x38), r = t, A = t + 8, B = t + 0x10, lk = t + 0x18, m = t + 0x20;
+    for (u32 a = 0; a < 0x20; a += 2) U16(t + a) = 0;
+    gptr o1 = pl + 0x260, o2 = pl + 0x4C0;
+    U16(A) = U16(U32(o1 + 0x64) + 0x40); U16(A + 2) = MultiCam_Y(o1); U16(A + 4) = U16(U32(o1 + 0x64) + 0x44);
+    U16(B) = U16(U32(o2 + 0x64) + 0x40); U16(B + 2) = MultiCam_Y(o2); U16(B + 4) = U16(U32(o2 + 0x64) + 0x44);
+    gptr c = G() + 0x778;
+    U16(c + 0x28) = (u16)((S16(B) + S16(A)) / 2);
+    U16(c + 0x2A) = (u16)((S16(B + 2) + S16(A + 2)) / 2);
+    U16(c + 0x2C) = (u16)((S16(B + 4) + S16(A + 4)) / 2);
+    U16(r) = 0; U16(r + 2) = (u16)Angle_XZ(A, B); U16(r + 4) = 0xFF00;
+    RotMatrixYXZ(r, m);
+    U16(r) = (u16)mc_dist(A, c + 0x28, e); U16(r + 2) = 0; U16(r + 4) = 0;
+    ApplyMatrixSV(m, r, r);
+    U16(c + 0x38) = (u16)(U16(c + 0x28) + U16(r)); U16(c + 0x3A) = (u16)(U16(r + 2) + U16(c + 0x2A));
+    U16(c + 0x3C) = (u16)(U16(c + 0x2C) + U16(r + 4));
+    Angles_LookAt(c + 0x28, c + 0x38, lk);
+    Angles_LookAt(c + 0x28, c + 0x38, lk);
+    U16(r) = (u16)-U16(lk); U16(r + 2) = (u16)-U16(lk + 2); U16(r + 4) = 0;
+    RotMatrixZXY(r, m);
+    mc_blend(c, m);
+    VectorNormalS(c, c);
+    U16(c + 0x32) = 0; U16(c + 0x30) = 0;
+    U16(c + 0x34) = (u16)Camera_Distance(c + 0x38, c + 0x28);
+    Tmp_Pop(0x38);
+}
+
+/* ---- the duel arena (area kind 21: steps 0x71ECA8): the players' pads, the
+ * round's end, the opponent's picture, and spinning shards drawn while
+ * 0x747A10 counts down (14 triangles 0x71EA5C, 3 rings of 17 quads 0x747A28);
+ * 0x747A02 the shards' size, 0x747A04 their spin, 0x747A08..0C the place,
+ * 0x747A18 the frames since, 0x747A14 the OT shift */
+
+static void poly_g3(gptr p)                         /* SetPolyG3 (0x4C0630, PC layer) */
+{
+    U8(p + 7) = 0x30; U32(p + 0x10) = 0x3C23D70A; U32(p + 0x20) = 0x3C23D70A; U32(p + 0x30) = 0x3C23D70A;
+}
+
+static void poly_g4(gptr p)                         /* SetPolyG4 (0x4C0650) */
+{
+    poly_g3(p);
+    U8(p + 7) = 0x38; U32(p + 0x40) = 0x3C23D70A;
+}
+
+void DC2CALL Duel(gptr e)                                            /* 0x4186F0 */
+{
+    Orig_Call1(U32(0x71ECA8 + S8(e + 3) * 4), e);
+}
+
+void DC2CALL Duel_Init(gptr e)                                       /* 0x418710 */
+{
+    U8(e + 3)++;
+    U16(0x747A20) = 0; U16(0x747A1E) = 0; U16(0x747A00) = 0; U16(0x747A04) = 0; U16(0x747A1C) = 0;
+    U32(e + 4) = 0x418800;
+}
+
+void DC2CALL Duel_Step(gptr e)                                       /* 0x418750 */
+{
+    (void)e;
+    Duel_Pad(0, U16(0x87DC94));
+    Duel_End();
+    Duel_Picture();
+    if (U8(0x87E747) != 2) return;
+    u32 pad = U32(0x87DC08);                            /* (a debug chord: flag 0/0xB) */
+    if (!(pad & 4) || (pad & 9) || !(pad & 2) || !(pad & 0x8000) || !(U8(0x87DC94) & 0x10)) return;
+    s16 c = S16(0x747A00);
+    if (c < 3) U16(0x747A00) = (u16)++c;
+    if (c != 3) return;
+    U16(0x747A00) = 0;
+    u32 on = !Flag_Check(0, 0xB);
+    Flag_Set(0, 0xB, on);
+    Flag_Set(0, 0x14, on);
+    Se_Play(0, 2);
+}
+
+/* pad presses for player i: a new button while 0x87E984+i counts lets it act again */
+void DC2CALL Duel_Pad(u32 i, u32 pad)                                /* 0x419250 */
+{
+    i &= 0xFF;
+    if (U8(0x87E984 + i)) {
+        U8(0x87E984 + i)--;
+        gptr o = U32(0x87E760) + i * 0x260;
+        if (U8(o + 0x54) != 1 || !(pad & 0x7F) || (U16(0x87E98C + 2 * i) & pad & 0xFFFF)) return;
+        U32(o + 0x54) = 1;
+        U16(U32(0x87E760) + i * 0x260 + 0x42) = 0;
+        U8(0x87E984 + i) = 0;
+        U16(0x87E98C + 2 * i) |= (u16)pad;
+        return;
+    }
+    if (!U16(0x87E98C + 2 * i)) return;
+    if (U8(0x87E990 + i)) U8(0x87E990 + i)--;
+    if (!U8(0x87E990 + i)) U8(0x87E990 + i) = 0x1E;
+    if (U8(0x87E990 + i) == 1) { U8(0x87E990 + i) = 0; U16(0x87E98C + 2 * i) = 0; }
+}
+
+/* the round over (0x747A20): fade out, back in */
+void DC2CALL Duel_End(void)                                          /* 0x4190B0 */
+{
+    if (!U16(0x747A20)) return;
+    switch (S16(0x747A1E)) {
+    case 0:
+        Fade_Set(1, 2, 2);
+        Flag_Set(2, 0xF, 1);
+        U16(0x747A1E)++;
+        break;
+    case 1:
+        if (Flag_Check(2, 6)) return;
+        Fade_Set(0, 0x1E, 2);
+        U16(0x747A1E)++;
+        break;
+    case 2:
+        if (Flag_Check(2, 6)) return;
+        U16(0x747A20) = 0; U16(0x747A1E) = 0;
+        Flag_Set(2, 0xF, 0);
+        break;
+    }
+}
+
+/* the opponent's picture's palette, once, by the stage (0x87EEAF) and its kind */
+void DC2CALL Duel_Picture(void)                                      /* 0x419140 */
+{
+    if (U8(0x87E747) != 1 || U16(0x747A1C)) return;
+    u32 n = U32(0x87F940);
+    gptr pl = U32(G() + 0x940), o = pl + 0x260;
+    for (u16 k = (u16)(n - 1); k && !(U8(o + 0x50) & 1); k--) o += 0x260;
+    if (o == pl + n * 0x260) return;
+    u8 st = U8(0x87EEAF), ty = U8(o + 0x58);
+    u32 i;
+    if (st == 9) { if (ty != 3) return; i = 0; }
+    else if (st == 0xC) { if (ty != 0xE) return; i = 1; }
+    else if (st == 8) { if (ty != 8) return; i = 2; }
+    else if (st == 7) { if (ty != 7) return; i = 3; }
+    else return;
+    static const u32 pics[4] = {0x5F31F4, 0x5F33FC, 0x5F3604, 0x5F380C};
+    gptr r = Tmp_Push(8);
+    U16(r) = 0; U16(r + 2) = 0x1FF; U16(r + 4) = 0x100; U16(r + 6) = 1;
+    Gpu_LoadImageIfChanged(r, pics[i] + 8);
+    Tmp_Pop(8);
+    DrawSync(0);
+    U16(0x747A1C) = 1;
+}
+
+void DC2CALL Duel_Draw(gptr e)                                       /* 0x418810 */
+{
+    (void)e;
+    if (!U32(0x747A10)) return;
+    U16(0x747A04) += 0x20;
+    U32(0x747A10)--;
+    U32(0x747A18)++;
+    U32(0x747A14) = U8(G() + 0xB4B) - 2;
+    Duel_Shape();
+    gptr c = G() + 0x778, v = Tmp_Push(8);
+    U16(v) = (u16)-U16(c + 0x28); U16(v + 2) = (u16)-U16(c + 0x2A); U16(v + 4) = (u16)-U16(c + 0x2C);
+    ApplyMatrixSV(c, v, v);
+    U32(c + 0x14) = (u32)(S16(c + 0x30) + S16(v));
+    U32(c + 0x18) = (u32)(S16(c + 0x32) + S16(v + 2));
+    U32(c + 0x1C) = (u32)(U16(c + 0x34) + S16(v + 4));
+    Tmp_Pop(8);
+    for (u32 k = 0; k < 14; k++) Duel_Tri(0x71EA5C + k * 0x24);
+    for (u32 k = 0; k < 51; k++) Duel_Quad(0x747A28 + k * 0x20);
+}
+
+/* the shards this frame: the triangles turned by their own angles and the
+ * spin, the rings' quads grown along their slopes and spread around */
+void DC2CALL Duel_Shape(void)                                        /* 0x418910 */
+{
+    gptr t = Tmp_Push(0x28), r = t, m = t + 8;
+    s16 s = S16(0x747A02);
+    U16(r + 6) = 0;
+    for (u32 k = 0; k < 14; k++) {
+        gptr R = 0x71EA50 + k * 0x24, v = R + 0xC;
+        s16 a = S16(R), b = S16(R + 2);
+        U16(v) = 0; U16(v + 2) = 0; U16(v + 4) = 0;
+        U16(v + 8) = (u16)-(s16)(s * a); U16(v + 0xA) = (u16)-(s16)(b * s); U16(v + 0xC) = 0;
+        U16(v + 0x10) = (u16)(s * a); U16(v + 0x12) = (u16)-(s16)(b * s); U16(v + 0x14) = 0;
+        RotMatrix(R + 4, m);
+        for (u32 q = 0; q < 3; q++) ApplyMatrixSV(m, v + 8 * q, v + 8 * q);
+        U16(r) = 0; U16(r + 2) = U16(0x747A04); U16(r + 4) = 0;
+        RotMatrix(r, m);
+        for (u32 q = 0; q < 3; q++) ApplyMatrixSV(m, v + 8 * q, v + 8 * q);
+    }
+    gptr Q = 0x747A28;
+    for (u32 ring = 0; ring < 3; ring++) {
+        gptr A = 0x71EC48 + ring * 0x10, dA = 0x71EC78 + ring * 0x10;
+        u16 ang = 0;
+        for (u32 k = 0; k < 17; k++, Q += 0x20) {
+            u16 tt = U16(0x747A18);
+            s = S16(0x747A02);
+            for (u32 q = 0; q < 3; q++) {
+                u16 x = (u16)((u16)(S16(dA + 2 * q) * tt + S16(A + 2 * q)) * s);
+                U16(Q + 8 + 2 * q) = x; U16(Q + 2 * q) = x;
+                u16 y = (u16)((u16)(S16(dA + 8 + 2 * q) * tt + S16(A + 8 + 2 * q)) * s);
+                U16(Q + 0x18 + 2 * q) = y; U16(Q + 0x10 + 2 * q) = y;
+            }
+            U16(r) = 0; U16(r + 2) = ang; U16(r + 4) = 0;
+            RotMatrix(r, m);
+            ApplyMatrixSV(m, Q, Q);
+            ApplyMatrixSV(m, Q + 0x10, Q + 0x10);
+            ang = (u16)(ang + 0x100);
+            U16(r) = 0; U16(r + 2) = ang; U16(r + 4) = 0;
+            RotMatrix(r, m);
+            ApplyMatrixSV(m, Q + 8, Q + 8);
+            ApplyMatrixSV(m, Q + 0x18, Q + 0x18);
+        }
+    }
+    Tmp_Pop(0x28);
+}
+
+/* a shard: n vertices at p (stride 8) moved to 0x747A08.., shaded G3/G4 */
+static void duel_shard(gptr p, u32 n)
+{
+    gptr t = Tmp_Push(0x28), v = t, pq = t + 0x20, fl = t + 0x24;
+    for (u32 k = 0; k < n; k++) {
+        U16(v + 8 * k) = (u16)(U16(p + 8 * k) + U16(0x747A08));
+        U16(v + 8 * k + 2) = (u16)(U16(p + 8 * k + 2) + U16(0x747A0A));
+        U16(v + 8 * k + 4) = (u16)(U16(0x747A0C) + U16(p + 8 * k + 4));
+    }
+    u8 l = (u8)((s32)(U32(0x747A10) * 240) / 25);
+    gptr c = G() + 0x778;
+    SetRotMatrix(c);
+    SetTransMatrix(c);
+    gptr pr = U32(0x87DC98);
+    u32 z = n == 3 ? (u32)RotTransPers3(v, v + 8, v + 0x10, pr + 8, pr + 0x18, pr + 0x28, pq, fl)
+                   : (u32)RotTransPers4(v, v + 8, v + 0x10, v + 0x18, pr + 8, pr + 0x18, pr + 0x28, pr + 0x38, pq, fl);
+    Tmp_Pop(0x28);
+    z >>= U32(0x747A14) & 31;
+    u32 otz = z >= 0x3FF ? 0x3FF : z;
+    if (n == 3) { poly_g3(pr); PC_stsz3_g3(pr); }
+    else { poly_g4(pr); PC_stsz4_g4(pr); }
+    Gpu_SetSemiTrans(pr, 1);
+    for (u32 k = 0; k < n; k++) {
+        u8 b = k < n - 2 ? l : 0;
+        U8(pr + 0x10 * k + 4) = b; U8(pr + 0x10 * k + 5) = b; U8(pr + 0x10 * k + 6) = b;
+    }
+    gptr ot = 0x87BC00 + ((U32(0x87DE0C) << 10) + otz) * 4;
+    Gpu_AddPrim(ot, pr);
+    U32(0x87DC98) = pr + (n == 3 ? 0x34 : 0x44);
+    Gpu_SetDrawMode(U32(0x87DC98), 0, 0, 0x20, 0);
+    Gpu_AddPrim(ot, U32(0x87DC98));
+    U32(0x87DC98) += 0xC;
+}
+
+void DC2CALL Duel_Tri(gptr p) { duel_shard(p, 3); }                  /* 0x418BA0 */
+void DC2CALL Duel_Quad(gptr p) { duel_shard(p, 4); }                 /* 0x418D60 */
+
+/* ---- the waves (area kind 20: steps 0x71ECDC): kill G+0x84C's number
+ * (0x71ECC8) in this room (G+0x12D0+room), then the next wave (0x71ECB4) is
+ * loaded; after the last, the results; e+8/+9 a sub-step and its clock */
+
+static u32 waves_room(void) { return Room_GlobalIndex(U8(G() + 0x1091), U8(G() + 0x1090)) & 0xFF; }
+
+void DC2CALL Waves(gptr e)                                           /* 0x419310 */
+{
+    Orig_Call1(U32(0x71ECDC + S8(e + 3) * 4), e);
+}
+
+void DC2CALL Waves_Init(gptr e)                                      /* 0x419330 */
+{
+    U32(e + 4) = 0x419710;
+    U8(e + 3)++;
+}
+
+void DC2CALL Waves_Count(gptr e)                                     /* 0x419350 */
+{
+    u32 r = waves_room();
+    gptr g = G();
+    if (U8(g + 0x12D0 + r) < U32(0x71ECC8 + U8(g + 0x84C) * 4)) return;
+    U32(g + 0xA68) = 0;
+    U8(e + 3)++;
+}
+
+void DC2CALL Waves_Clear(gptr e)                                     /* 0x4193B0 */
+{
+    u8 s = U8(e + 8);
+    switch (s) {
+    case 0:
+        Snd_FadeOutAll();
+        U8(e + 9) = 0x1E;
+        U8(e + 8)++;
+        break;
+    case 1: {
+        u8 t = U8(e + 9);
+        U8(e + 9) = (u8)(t - 1);
+        if (!t) U8(e + 8) = (u8)(s + 1);
+        break;
+    }
+    case 2: {
+        gptr pl = U32(G() + 0x940);
+        for (gptr o = pl + 0x260; o < pl + U32(0x87F940) * 0x260; o += 0x260) if (U32(o + 0x50)) return;
+        U8(e + 3)++;
+        U8(G() + 0x84C)++;
+        if (U8(G() + 0x84C) > 4) {
+            Flag_Set(1, 0xE, 1);
+            U8(e + 3) = 4;
+            U8(G() + 0x84C) = 4;
+        }
+        U8(e + 9) = 0; U8(e + 8) = 0;
+        break;
+    }
+    }
+}
+
+void DC2CALL Waves_Load(gptr e)                                      /* 0x4194A0 */
+{
+    gptr w = U32(0x71ECB4 + U8(G() + 0x84C) * 4);
+    u32 lv = U8(w + 4) & 0xF, kind = U8(w + 1);
+    switch (U8(e + 8)) {
+    case 0:
+        if (File_IsBusy()) return;
+        U8(e + 8)++;
+        File_RequestLoad(U16(0x703520 + kind * 8));
+        Flag_Set(2, 0xF, 1);
+        /* fall through */
+    case 1: {
+        if (File_IsBusy()) return;
+        u8 s = (u8)(U8(e + 8) + 1);
+        U8(e + 8) = s;
+        if (kind != 2 && kind != 7) { U8(e + 8) = (u8)(s + 1); return; }
+        u32 i = (u32)((s32)S16(G() + 0x1388) * 3 + (s32)lv);
+        if (kind == 2) File_RequestLoad(U32(0x703E48 + (i > 9 ? 9 : i) * 4));
+        else File_RequestLoad(U32(0x703E70 + (i > 8 ? 8 : i) * 4));
+    }
+        /* fall through */
+    case 2:
+        if (File_IsBusy()) return;
+        U8(e + 8) = 5;
+        break;
+    default:
+        break;
+    }
+    Flag_Set(2, 0xF, 0);
+    U8(e + 3) = 0; U8(e + 8) = 0;
+    U32(G() + 0xA68) = w;
+    U8(G() + 0x12D0 + waves_room()) = 0;
+    gptr g = G();
+    U8(g + 0xA84) = 0;
+    memset(MEM(g + 0xA98), 0, 0x20);
+    memset(MEM(g + 0xA80), 0, 0x48);
+    U8(g + 0xA89) = 0xFF;
+    U8(g + 0xAD1) = 0xFF;
+}
+
+void DC2CALL Waves_End(gptr e)                                       /* 0x419640 */
+{
+    switch (U8(e + 8)) {
+    case 0: {
+        U8(e + 8)++;
+        Fade_Set(1, 0x5A, 1);
+        Strm_SetFade(0, 3, 0, 0x80);
+        gptr g = G(), pl = U32(g + 0x940);
+        s16 m = S16(pl + 0x10A);
+        U16(g + 0x84E) = (u16)(m ? (s32)S16(pl + 0x108) * 100 / m : 0);
+        u8 d = U8(G() + 0x108F);
+        if (!d || d == 6) U32(G() + 0x684) /= 3;
+        break;
+    }
+    case 1:
+        if (Flag_Check(2, 6)) return;
+        Room_Reset();
+        Game_Start(0x18);
+        break;
+    }
+}
+
+/* the kills still to go, beside a picture */
+void DC2CALL Waves_Draw(gptr e)                                      /* 0x419710 */
+{
+    if (U8(e + 3) != 1 && U8(e + 3) != 2) return;
+    gptr p = U32(0x87DC98);
+    Gpu_SetSprt(p);
+    U32(p + 4) = 0x64808080; U32(p + 8) = 0x42FA0000; U32(p + 0xC) = 0x43340000; U32(p + 0x10) = 0x3C23D70A;
+    U8(p + 0x14) = 0; U8(p + 0x15) = 0; U16(p + 0x18) = 0x30; U16(p + 0x1A) = 0x20; U16(p + 0x16) = 0x7E80;
+    Gpu_AddPrim(U32(0x87F94C) + 0x88, p);
+    U32(0x87DC98) = p + 0x1C;
+    Gpu_SetDrawMode(U32(0x87DC98), 1, 0, 0x1D, 0);
+    Gpu_AddPrim(U32(0x87F94C) + 0x88, U32(0x87DC98));
+    U32(0x87DC98) += 0xC;
+    u32 r = waves_room();
+    gptr g = G();
+    Menu_Number11(0xA6, 0xC2, 2, 0, 0x808080, U32(0x71ECC8 + U8(g + 0x84C) * 4) - U8(g + 0x12D0 + r), 1);
+}
+
+/* ---- the versus duel (area kind 22: steps 0x71ECF0) between objects 1 and 2
+ * (*0x87E760; the scenery: *0x87E75C, 0x70 each): an intro flown over the
+ * arena, the fight with a timer (e+0x10), then the winner, a time-out or a
+ * draw; e+0xD a sub-step, e+0xE a random intro or pose, e+0x12 a clock,
+ * e+0x14..+0x1C a camera (height, z, angles, distance), e+0x1E/+0x20/+0x22 the
+ * players' combo counts, their shown counts and its clock, e+0x24 the winner */
+
+void DC2CALL Versus(gptr e)                                          /* 0x419850 */
+{
+    Orig_Call1(U32(0x71ECF0 + S8(e + 3) * 4), e);
+    if (Flag_Check(7, 0x1F)) Vs_Camera(e);
+    Flag_Set(3, 0, 0);
+    for (u32 k = 0; k < 2; k++) {
+        u8 c = U8(e + 0x22 + k);
+        if (!c) continue;
+        U8(e + 0x22 + k) = --c;
+        if (!c) U8(e + 0x20 + k) = 0;
+    }
+}
+
+/* the camera from e+0x14.. */
+void DC2CALL Vs_Camera(gptr e)                                       /* 0x41BA60 */
+{
+    gptr c = G() + 0x778;
+    U16(c + 0x28) = 0; U16(c + 0x2A) = U16(e + 0x14); U16(c + 0x2C) = U16(e + 0x16);
+    U16(c + 0x20) = U16(e + 0x18); U16(c + 0x22) = U16(e + 0x1A); U16(c + 0x24) = 0;
+    U16(c + 0x34) = U16(e + 0x1C);
+    Camera_LookAt(c + 0x28, c + 0x30, c + 0x20, c + 0x38);
+    U16(c + 0x20) &= 0xFFF; U16(c + 0x22) &= 0xFFF; U16(c + 0x24) &= 0xFFF;
+    gptr r = Tmp_Push(8);
+    U16(r) = (u16)-U16(c + 0x20); U16(r + 2) = (u16)-U16(c + 0x22); U16(r + 4) = U16(c + 0x24); U16(r + 6) = 0;
+    RotMatrix(r, c);
+    Tmp_Pop(8);
+}
+
+/* 0, 1: who has more of their life left; 0xFF: even */
+u8 DC2CALL Vs_Winner(void)                                           /* 0x41BB00 */
+{
+    gptr o = U32(0x87E760);
+    s32 a = S16(o + 0x368) * 6000 / S16(o + 0x36A), b = S16(o + 0x5C8) * 6000 / S16(o + 0x5CA);
+    return a == b ? 0xFF : (u8)(a <= b);
+}
+
+/* a piece of scenery hopping (for the winner): up, wait, fall with a shake, wobble */
+void DC2CALL Vs_Hop(gptr e, gptr o)                                  /* 0x41B940 */
+{
+    static const s16 wob[8] = {-10, 8, -6, 4, -3, 2, -1, 0};
+    s8 st = S8(o + 0x46);
+    switch (st) {
+    case 0:
+        U8(o + 0x46) = (u8)(st + 1);
+        U32(o + 0x50) = 3;
+        U8(o + 0x47) = (u8)(Rand8() % 5 + 1);
+        U16(o + 0x42) = (u16)(Rand8() - 10000);
+        break;
+    case 1: {
+        s8 c = (s8)(U8(o + 0x47) - 1);
+        U8(o + 0x47) = (u8)c;
+        if (c <= 0) U8(o + 0x46) = (u8)(st + 1);
+        break;
+    }
+    case 2:
+        U16(o + 0x62) += 0xB4;
+        U16(o + 0x42) += U16(o + 0x62);
+        if (S16(o + 0x42) < -2000) break;
+        U16(o + 0x42) = (u16)-2000;
+        U8(o + 0x46) = (u8)(st + 1); U8(o + 0x47) = 0;
+        Shake_Set(3, 0, 0x14);
+        break;
+    case 3: {
+        s8 c = S8(o + 0x47);
+        U16(o + 0x4C) = (u16)wob[c];
+        U8(o + 0x47) = (u8)++c;
+        if (c < 8) break;
+        U8(o + 0x46) = (u8)(st + 1);
+        U8(e + 0x12)++;
+        break;
+    }
+    }
+}
+
+/* player i's moves against j: a combo knock-back on j (0x87E986.. a clock,
+ * 0x87E988 the push), pad presses for the next move (as Duel_Pad) */
+void DC2CALL Vs_Pad(gptr e, u32 i, u32 j, u32 pad)                   /* 0x41B630 */
+{
+    j &= 0xFF;
+    gptr o = U32(0x87E760);
+    if (U8(o + j * 0x260 + 0x2B4) == 1) U8(e + 0x1E + (i & 0xFF)) = 0;
+    if (Flag_Check(7, 0x1B)) { U8(0x87E986 + (i & 0xFF)) = 0; U16(0x87E988 + 2 * (i & 0xFF)) = 0; }
+    i &= 0xFF;
+    u32 f = i == 0 ? 0x1C : i == 1 ? 0x1D : 0;           /* (others: the stack's zeros) */
+    if (Flag_Check(7, f)) {                             /* a hit: j's combo grows */
+        Flag_Set(7, f, 0);
+        U8(0x87E986 + i) = 0xA;
+        U16(0x87E988 + 2 * i) = U16(U32(0x87E760) + i * 0x260 + 0x3D6);
+        U8(0x87E984 + j) = 0xA;
+        s8 c = (s8)(U8(e + 0x1E + j) + 1);
+        U8(e + 0x1E + j) = (u8)c;
+        if (c > 0x63) U8(e + 0x1E + j) = 0x63;
+        U8(e + 0x20 + j) = U8(e + 0x1E + j);
+        U8(e + 0x22 + j) = 0x5A;
+    }
+    if (U8(0x87E986 + i) && !Flag_Check(7, 0x1B)) {
+        gptr v = U32(0x87E760) + (i + 1) * 0x260, sv = Tmp_Push(8);
+        s16 q = (s16)(S16(0x87E988 + 2 * i) * 2 / 3);
+        U16(sv) = 0; U16(sv + 2) = 0; U16(sv + 4) = (u16)(q * (s16)S8(0x87E986 + i));
+        Vec_RotY(sv, sv, U16(v + 0x178));
+        U16(v + 0x40) += U16(sv); U16(v + 0x42) += U16(sv + 2); U16(v + 0x44) += U16(sv + 4);
+        Tmp_Pop(8);
+        Obj_UpdateMatrix(v);
+        if (!(U8(v + 0x50) & 0x20)) Obj_CollideObjs(v);
+        if (!(U8(v + 0x50) & 0x10)) Obj_CollideWalls(v);
+        if (U16(v + 0xE8) || U16(v + 0xEA) || U16(v + 0xEC)) {   /* pushed into the other: it moves too */
+            gptr a = U32(0x87E760) + (j + 1) * 0x260;
+            U16(a + 0x40) += U16(v + 0xE8); U16(a + 0x42) += U16(v + 0xEA); U16(a + 0x44) += U16(v + 0xEC);
+            if (!(U8(a + 0x50) & 0x20)) Obj_CollideObjs(a);
+            if (!(U8(a + 0x50) & 0x10)) Obj_CollideWalls(a);
+        }
+        U8(0x87E986 + i)--;
+    }
+    if (U8(0x87E984 + i)) {
+        U8(0x87E984 + i)--;
+        gptr p = U32(0x87E760) + i * 0x260;
+        if (U8(p + 0x2B4) != 1 || !(pad & 0x7F) || (U16(0x87E98C + 2 * i) & pad & 0xFFFF)) return;
+        U32(p + 0x2B4) = 1;
+        U16(U32(0x87E760) + i * 0x260 + 0x2A2) = 0;
+        U8(0x87E984 + i) = 0;
+        U8(0x87E986 + j) = 0;
+        U16(0x87E98C + 2 * i) |= (u16)pad;
+        return;
+    }
+    if (U8(U32(0x87E760) + j * 0x260 + 0x2B4) != 1 || !U16(0x87E98C + 2 * i)) return;
+    if (U8(0x87E990 + i)) U8(0x87E990 + i)--;
+    if (!U8(0x87E990 + i)) U8(0x87E990 + i) = 0x14;
+    if (U8(0x87E990 + i) == 1) { U8(0x87E990 + i) = 0; U16(0x87E98C + 2 * i) = 0; }
+}
+
+void DC2CALL Vs_Init(gptr e)                                         /* 0x4198B0 */
+{
+    gptr o = U32(0x87E760);
+    U32(e + 0xC) = 1; U8(e + 3) = 1;
+    U32(o + 0x50) = 0; U16(o + 0x108) = 0x4B0;
+    Flag_Set(1, 0, 1);
+    Flag_Set(2, 0xF, 1);
+    Flag_Set(7, 0x1F, 1);
+    Flag_Set(3, 7, 0);
+    U8(0x87EEAF) = 4;
+    U16(e + 0x10) = 0xBB7;
+    U16(0x748090) = 0x1000; U16(0x748098) = 0x1000; U16(0x7480A0) = 0x1000;
+    U32(0x7480E0) = 3;
+    U16(0x748092) = 0; U16(0x748094) = 0; U16(0x748096) = 0; U16(0x74809A) = 0; U16(0x74809C) = 0; U16(0x74809E) = 0;
+    U32(0x7480A4) = 0; U32(0x7480A8) = 0; U32(0x7480AC) = 0;
+    for (u32 k = 0; k < 28; k++) U32(U32(0x87E75C) + 0x600 + k * 0x70) = 1;
+}
+
+/* the scenery's pieces k (0x70 each from *0x87E75C) */
+#define VS_OBJ(k) (U32(0x87E75C) + (k) * 0x70)
+
+void DC2CALL Vs_Intro(gptr e)                                        /* 0x419990 */
+{
+    static const s16 x0[4] = {0, 0, 0, -0x578}, y0[4] = {0, 0, 0, 0x1F40}, a0[4] = {0xC00, 0xC00, 0x400, 0},
+                     b0[4] = {0, 0x800, 0x400, 0}, d0[4] = {-0x15A0, -0x15A0, 0x7530, 0x8FC};
+    static const s16 dx[4] = {0, 0, 0, 0x1F}, dy[4] = {0, 0, 0, -0xB1}, da[4] = {0x10, 0x10, -0x1D, -6},
+                     db[4] = {0, 0x2D, -0x16, 0}, dd[4] = {-1000, -1000, -0x14D, 0x11A};
+    static const s16 v1[5] = {0xC8, 0xFA, 0x12C, 0x163, 0x19A}, x1[5] = {-2000, -1000, 0, 0x44C, 0x898},
+                     v2x[5] = {0x1B8, 0x1A4, 0, -0x1B8, -0x1B8}, v2y[5] = {0x140, -0x2D0, 0x280, -0x2D0, 0x140},
+                     x2[5] = {-0x76C, -0x44C, -0x96, 0x320, 0x708};
+    switch (U8(e + 0xD)) {
+    case 0: {                                           /* one of four flights, a voice */
+        u32 k = (Rand8() & 0xFF) % 4;
+        U8(e + 0xE) = (u8)k;
+        U16(e + 0x14) = (u16)x0[k]; U16(e + 0x16) = (u16)y0[k]; U16(e + 0x18) = (u16)a0[k];
+        U16(e + 0x1C) = (u16)d0[k]; U16(e + 0x1A) = (u16)b0[k];
+        U8(e + 0x12) = 0x2D;
+        U8(e + 0xD)++;
+        Voice_Play(1, 0x3EF);
+        gptr g = G();
+        U8(g + 0xB58) = 0x80; U8(g + 0xB59) = 0x80; U8(g + 0xB5A) = 0x80; U8(g + 0xB5B) = 0; U8(g + 0xB5C) = 0;
+        return;
+    }
+    case 1: {
+        u32 k = U8(e + 0xE);
+        U16(e + 0x14) += (u16)dx[k]; U16(e + 0x16) += (u16)dy[k]; U16(e + 0x18) += (u16)da[k];
+        U16(e + 0x1A) += (u16)db[k]; U16(e + 0x1C) += (u16)dd[k];
+        U8(e + 0x12)--;
+        if (S8(e + 0x12) <= 0) { Fade_Set(1, 2, 2); U8(e + 0xD)++; }
+        DrawSync(0);
+        return;
+    }
+    case 2:
+        if (!Flag_Check(2, 6)) {
+            Flag_Set(7, 0x1F, 0);
+            Fade_Set(0, 0x1E, 2);
+            U8(e + 0xD)++;
+        }
+        DrawSync(0);
+        return;
+    case 3:                                             /* the letters fly in */
+        if (Flag_Check(2, 6)) return;
+        U8(e + 0x12) = 0x14;
+        U8(e + 0xD)++;
+        for (u32 k = 0; k < 5; k++) {
+            gptr q = VS_OBJ(36 + k);
+            U32(q + 0x50) = 3; U32(q + 0x54) = 0x748090; U16(q + 0x40) = 0xE890;
+        }
+        return;
+    case 4:
+        for (u32 k = 0; k < 5; k++) U16(VS_OBJ(36 + k) + 0x40) += (u16)v1[k];
+        U8(e + 0x12)--;
+        if (S8(e + 0x12) > 0) return;
+        U8(e + 0x12) = 0x14;
+        U8(e + 0xD)++;
+        for (u32 k = 0; k < 5; k++) U16(VS_OBJ(36 + k) + 0x40) = (u16)x1[k];
+        return;
+    case 5:
+        U8(e + 0x12)--;
+        if (S8(e + 0x12) > 0) return;
+        U8(e + 0x12) = 5;
+        U8(e + 0xD)++;
+        for (u32 k = 0; k < 5; k++) U32(VS_OBJ(36 + k) + 0x50) = 0;
+        for (u32 k = 0; k < 5; k++) {
+            gptr q = VS_OBJ(31 + k);
+            U32(q + 0x50) = 3; U32(q + 0x54) = 0x748090;
+        }
+        return;
+    case 6:
+        for (u32 k = 0; k < 5; k++) {
+            gptr q = VS_OBJ(31 + k);
+            U16(q + 0x40) += (u16)v2x[k]; U16(q + 0x42) += (u16)v2y[k];
+        }
+        U8(e + 0x12)--;
+        if (S8(e + 0x12) <= 0) {
+            U8(e + 0xD)++;
+            Fade_Set(1, 2, 2);
+            for (u32 k = 0; k < 5; k++) {
+                gptr q = VS_OBJ(31 + k);
+                U16(q + 0x40) = (u16)x2[k]; U16(q + 0x42) = 0x1F4;
+            }
+        }
+        DrawSync(0);
+        return;
+    case 7:
+        if (!Flag_Check(2, 6)) { Fade_Set(0, 0x1E, 2); U8(e + 0xD)++; }
+        DrawSync(0);
+        return;
+    case 8:
+        if (Flag_Check(2, 6) || Flag_Check(2, 0)) return;
+        for (u32 k = 0; k < 5; k++) U32(VS_OBJ(31 + k) + 0x50) = 0;
+        Flag_Set(1, 0, 0);
+        U32(e + 0xC) = 2; U8(e + 3) = 2;
+        Flag_Set(2, 0xF, 0);
+        U32(e + 4) = 0x41A940;
+        return;
+    }
+}
+
+static void vs_over(gptr e, u32 st)
+{
+    if (st) { U32(e + 0xC) = st; U8(e + 3) = (u8)st; }
+    Flag_Set(1, 0, 1);
+    Flag_Set(2, 0xF, 1);
+    Strm_SetFade(0, 3, 0, 0x80);
+    U32(U32(0x87E760) + 0x2B0) &= ~8u;
+    U32(U32(0x87E760) + 0x510) &= ~8u;
+}
+
+void DC2CALL Vs_Fight(gptr e)                                        /* 0x419F60 */
+{
+    if (U16(e + 0x10)) U16(e + 0x10)--;
+    if (Flag_Check(0, 0x14)) U16(e + 0x10) = 0xBB7;
+    if (S16(e + 0x10) < 0x1E) { vs_over(e, 4); return; }  /* time out */
+    gptr o = U32(0x87E760);
+    s16 a = S16(o + 0x368), b = S16(o + 0x5C8);
+    if (a < 0 && b < 0) { vs_over(e, 5); return; }      /* both down */
+    if (a < 0 || b < 0) { vs_over(e, 3); return; }
+    Vs_Pad(e, 0, 1, U16(0x87DC94));
+    Vs_Pad(e, 1, 0, U16(0x87DC92));
+}
+
+static void vs_lights(u8 b5c)
+{
+    gptr g = G();
+    U8(g + 0xB58) = 0x80; U8(g + 0xB59) = 0x80; U8(g + 0xB5A) = 0x80; U8(g + 0xB5B) = 0; U8(g + 0xB5C) = b5c;
+}
+
+static void vs_unhold(void)
+{
+    U32(U32(0x87E760) + 0x2B0) &= ~8u;
+    U32(U32(0x87E760) + 0x510) &= ~8u;
+}
+
+/* one down: the winner's pieces hop, a pose, a voice by its kind */
+void DC2CALL Vs_Win(gptr e)                                          /* 0x41A060 */
+{
+    static const s16 ty[4] = {-0x78, -0x78, -0x78, -0x78}, ta[4] = {-0x11, -0x16, -2, 0x16},
+                     tb[4] = {0, 0x16, -0x2D, -0x16}, td[4] = {0x4BB, 0x4BB, 0x1E8, 0x4BB};
+    vs_unhold();
+    switch (U8(e + 0xD)) {
+    case 0:
+        vs_lights(0);
+        U32(0x87DE00) = 3;
+        U8(e + 0x12) = 0x3C;
+        U8(e + 0xD)++;
+        return;
+    case 1:
+        DrawSync(0);
+        U8(e + 0x12)--;
+        if (S8(e + 0x12) > 0) return;
+        U32(0x87DE00) = 2;
+        U8(e + 0xD)++;
+        return;
+    case 2: {
+        if (!Flag_Check(7, 0x1E) || Flag_Check(2, 0)) return;
+        U8(e + 0x24) = Vs_Winner();
+        U16(e + 0x14) = 0xF18C; U16(e + 0x16) = 0x1518; U16(e + 0x18) = 0; U16(e + 0x1A) = 0; U16(e + 0x1C) = 0x1F4;
+        U8(e + 0xD)++;
+        U8(e + 0x12) = 0;
+        Flag_Set(7, 0x1F, 1);
+        Voice_Play(1, U8(e + 0x24) ? 0x3EC : 0x3EB);
+        Flag_Set(3, 1, 0);
+        return;
+    }
+    case 3:
+        Vs_Hop(e, U32(0x87E75C) + (U8(e + 0x24) ? 0x620 : 0x5B0));
+        for (u32 k = 0; k < 4; k++) Vs_Hop(e, U32(0x87E75C) + 0x690 + k * 0x70);
+        if (S8(e + 0x12) < 5) return;
+        U8(e + 0x12) = 0xF;
+        U8(e + 0xD)++;
+        return;
+    case 4: {
+        if (U8(e + 0x12)) U8(e + 0x12)--;
+        if (S8(e + 0x12) > 0 || Flag_Check(2, 0)) return;
+        U8(e + 0xD)++;
+        U8(e + 0xE) = (u8)((Rand8() & 0xFF) % 4);
+        U8(e + 0x12) = 0x2D;
+        static const u16 voices[7] = {0x3FA, 0x3FB, 0x3F7, 0x3F6, 0x3F8, 0x3FC, 0x3F9};
+        u32 k = U8(U32(0x87E760) + U8(e + 0x24) * 0x260 + 0x2B8) - 0x1D;
+        if (k <= 0xD) Voice_Play(1, voices[k / 2]);
+        vs_lights(1);
+        Flag_Set(3, 1, 1);
+        return;
+    }
+    case 5: {
+        u32 k = U8(e + 0xE);
+        U16(e + 0x18) += (u16)ta[k]; U16(e + 0x16) += (u16)ty[k];
+        U16(e + 0x1C) += (u16)td[k]; U16(e + 0x1A) += (u16)tb[k];
+        s8 c = (s8)(U8(e + 0x12) - 1);
+        U8(e + 0x12) = (u8)c;
+        if (c <= 0) { U32(e + 0xC) = 6; U8(e + 3) = 6; }
+        if (c == 0x14) Fade_Set(1, 0x14, 1);
+        DrawSync(0);
+        return;
+    }
+    }
+}
+
+/* the time over: the TIME letters run across, then a winner or a draw */
+void DC2CALL Vs_Timeout(gptr e)                                      /* 0x41A470 */
+{
+    static const u8 ids[8] = {0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1A};
+    static const s16 xs[8] = {-0x1388, -0xE74, -0x834, -0x1F4, 0x44C, 0x9C4, 0xF3C, 0x13EC};
+    vs_unhold();
+    switch (U8(e + 0xD)) {
+    case 0:
+        if (Flag_Check(2, 0)) return;
+        for (u32 k = 0; k < 8; k++) {
+            gptr q = VS_OBJ(ids[k]);
+            U16(q + 0x40) = (u16)(xs[k] + 0x2710); U16(q + 0x42) = 0x1F4; U16(q + 0x44) = 0x1388;
+            U32(q + 0x50) = 3; U32(q + 0x54) = 0x748090;
+        }
+        U8(e + 0xD)++;
+        Voice_Play(1, 0x3F1);
+        return;
+    case 1:
+        if (S16(U32(0x87E75C) + 0xBA0) < (s16)0xE890) U8(e + 0xD)++;
+        for (u32 k = 0; k < 8; k++) U16(VS_OBJ(ids[k]) + 0x40) -= 400;
+        return;
+    case 2:
+        for (u32 k = 0; k < 8; k++) U32(VS_OBJ(ids[k]) + 0x50) = 0;
+        Flag_Set(7, 0x1E, 1);
+        if (Vs_Winner() == 0xFF) { U32(e + 0xC) = 0x205; U8(e + 3) = 5; }
+        else { U32(e + 0xC) = 0x203; U8(e + 3) = 3; }
+        return;
+    }
+}
+
+/* a draw: the DRAW letters drop in and hop */
+void DC2CALL Vs_Draw(gptr e)                                         /* 0x41A650 */
+{
+    static const u8 ids[4] = {0x1B, 0x1C, 0x1D, 0x1E};
+    static const s16 xs[4] = {-0xC1C, -0x4B0, 0x2BC, 0xC1C};
+    vs_unhold();
+    u8 s = U8(e + 0xD);
+    switch (s) {
+    case 0:
+        vs_lights(0);
+        U8(e + 0xD) = (u8)(s + 1);
+        U8(e + 0x12) = 0x3C;
+        return;
+    case 1:
+        DrawSync(0);
+        U8(e + 0x12)--;
+        if (S8(e + 0x12) > 0) return;
+        U32(0x87DE00) = 2;
+        U8(e + 0xD)++;
+        return;
+    case 2:
+        if (!Flag_Check(7, 0x1E) || Flag_Check(2, 0)) return;
+        U16(e + 0x14) = 0xF18C; U16(e + 0x16) = 0x1518; U16(e + 0x18) = 0; U16(e + 0x1A) = 0; U16(e + 0x1C) = 0x1F4;
+        U8(e + 0xD)++;
+        U8(e + 0x12) = 0;
+        Flag_Set(7, 0x1F, 1);
+        for (u32 k = 0; k < 4; k++) { gptr q = VS_OBJ(ids[k]); U16(q + 0x40) = (u16)xs[k]; U16(q + 0x44) = 0x32C8; }
+        Voice_Play(1, 0x3F0);
+        Flag_Set(3, 1, 0);
+        return;
+    case 3:
+        for (u32 k = 0; k < 4; k++) Vs_Hop(e, U32(0x87E75C) + 0xBD0 + k * 0x70);
+        if (S8(e + 0x12) < 4) return;
+        U8(e + 0x12) = 0xF;
+        U8(e + 0xD)++;
+        return;
+    case 4:
+        U8(e + 0x12)--;
+        if (S8(e + 0x12) > 0) return;
+        U8(e + 0xD) = (u8)(s + 1);
+        U8(e + 0x12) = 0x2D;
+        return;
+    case 5: {
+        s8 c = (s8)(U8(e + 0x12) - 1);
+        U8(e + 0x12) = (u8)c;
+        if (c <= 0) { U32(e + 0xC) = 6; U8(e + 3) = 6; }
+        if (c == 0x28) Fade_Set(1, 0x28, 3);
+        return;
+    }
+    }
+}
+
+void DC2CALL Vs_Exit(gptr e)                                         /* 0x41A8E0 */
+{
+    switch (U8(e + 0xD)) {
+    case 0:
+        U8(e + 0xD)++;
+        return;
+    case 1:
+        if (Flag_Check(2, 6) || Flag_Check(2, 0)) return;
+        Flag_Set(0, 0xB, 0);
+        Flag_Set(0, 0x14, 0);
+        Room_Reset();
+        Game_Start(0x19);
+        return;
+    }
+}
+
+/* a HUD sprite from a record {x, y, u, v, w, h, rgb, clut}, moved and cut */
+static void vs_sprt(gptr r, s32 dx, u8 du, u8 dv, u16 dw)
+{
+    gptr p = U32(0x87DC98);
+    Gpu_SetSprt(p);
+    F32(p + 8) = (float)(S16(r) + dx);
+    F32(p + 0xC) = (float)(s32)S16(r + 2);
+    U8(p + 0x14) = (u8)(U8(r + 4) + du); U8(p + 0x15) = (u8)(U8(r + 5) + dv);
+    U16(p + 0x18) = (u16)(U16(r + 6) - dw); U16(p + 0x1A) = U16(r + 8);
+    U8(p + 4) = U8(r + 0xA); U8(p + 5) = U8(r + 0xB); U8(p + 6) = U8(r + 0xC);
+    U16(p + 0x16) = (u16)(((U16(r + 0xE) >> 4) & 0x3F) | 0x7EC0);
+    Gpu_AddPrim(U32(0x87F94C) + 0x74, p);
+    U32(0x87DC98) = p + 0x1C;
+}
+
+/* the two life bars (by thirds of colour), the faces, the combo counts and the timer */
+void DC2CALL Vs_Hud(gptr e)                                          /* 0x41A940 */
+{
+    for (u32 k = 0; k < 2; k++) vs_sprt(0x71ED10 + k * 0x10, 0, 0, 0, 0);
+    if (!Flag_Check(0, 0xB)) {
+        gptr o = U32(0x87E760);
+        s16 h1 = S16(o + 0x368), h2 = S16(o + 0x5C8), m1 = S16(o + 0x36A), m2 = S16(o + 0x5CA);
+        s16 c1 = h1 < 0 ? 0 : h1, c2 = h2 < 0 ? 0 : h2;
+        u32 l1 = 0, l2 = 0;
+        if ((s16)(m1 >> 1) >= h1) l1 = 1;
+        if ((s16)(m1 >> 2) >= h1) l1 = 2;
+        if ((s16)(m2 >> 1) >= h2) l2 = 1;
+        if ((s16)(m2 >> 2) >= h2) l2 = 2;
+        s32 b1 = m1 ? 0x7E - c1 * 126 / m1 : 0, b2 = m2 ? 0x7E - c2 * 126 / m2 : 0;
+        if (b1 < 0) b1 = 0;
+        if (b2 < 0) b2 = 0;
+        vs_sprt(0x71ED30 + l1 * 0x10, b1, (u8)b1, 0, (u16)b1);
+        vs_sprt(0x71ED60 + l2 * 0x10, 0, 0, 0, (u16)b2);
+    } else {
+        vs_sprt(0x71EDB0, 0, 0, 0, 0);
+        vs_sprt(0x71EDC0, 0, 0, 0, 0);
+    }
+    for (u32 k = 0; k < 2; k++) {                       /* the faces by kind */
+        s32 f = ((s32)U8(U32(0x87E760) + k * 0x260 + 0x2B8) - 0x1D) / 2;
+        vs_sprt(0x71EDE0 + k * 0x10, 0, 0, (u8)(f << 4), 0);
+    }
+    for (u32 k = 0; k < 2; k++) {                       /* "n hits" */
+        s8 n = S8(e + 0x20 + k);
+        if (n <= 1 || !U8(e + 0x22 + k)) continue;
+        s32 t = n / 10, d = n % 10;
+        if (t) vs_sprt(0x71EE00 + k * 0x10, 0, (u8)(t << 4), 0, 0);
+        vs_sprt(0x71EE20 + k * 0x10, 0, (u8)(d << 4), 0, 0);
+        vs_sprt(0x71EE40 + k * 0x10, 0, 0, 0, 0);
+        vs_sprt(0x71EE60 + k * 0x10, 0, 0, 0, 0);
+    }
+    if (!Flag_Check(0, 0x14)) {                         /* the seconds left */
+        s32 s = S16(e + 0x10) / 30;
+        vs_sprt(0x71ED90, 0, (u8)((s / 10) << 4), 0, 0);
+        vs_sprt(0x71EDA0, 0, (u8)((s % 10) << 4), 0, 0);
+    } else vs_sprt(0x71EDD0, 0, 0, 0, 0);
+    Gpu_SetDrawMode(U32(0x87DC98), 0, 0, 0x19, 0);
+    Gpu_AddPrim(U32(0x87F94C) + 0x74, U32(0x87DC98));
+    U32(0x87DC98) += 0xC;
+}
+
+/* ---- the vehicle (area kind 18, area 2?: steps 0x71EE80): the player's
+ * matrix from its angles, moved by +0xF0; its wheel (part 1) turns by e+0xC and
+ * two strips of the road in VRAM scroll with the speed +0xF4 (0x74815E, 0x74815C) */
+
+void DC2CALL Vehicle(gptr e)                                         /* 0x41BB60 */
+{
+    gptr pl = U32(G() + 0x940);
+    Orig_Call1(U32(0x71EE80 + S8(e + 3) * 4), e);
+    RotMatrixYXZ(pl + 0x48, pl + 0x20);
+    Obj_MoveLocal(pl, pl + 0xF0);
+    Obj_UpdateMatrix(pl);
+}
+
+void DC2CALL Vehicle_Init(gptr e)                                    /* 0x41BBB0 */
+{
+    gptr w = Obj_Part(U32(U32(G() + 0x940) + 0x64), 1);
+    U16(w + 0x48) = 0x400; U16(w + 0x4C) = 0;
+    U16(0x74815C) = 0; U16(0x74815E) = 0;
+    U8(e + 3)++;
+}
+
+/* a strip of 0xB8 at x 0x280 (row y) scrolled by s through the copy at 0x380 */
+static void road_strip(u16 s, u32 y, u32 dy)
+{
+    s16 v = (s16)s;
+    gptr r = Tmp_Push(8);
+    U16(r) = (u16)(0x280 + v / 2); U16(r + 2) = (u16)y; U16(r + 4) = (u16)((0xB8 - v) / 2); U16(r + 6) = 0x24;
+    Gpu_VramCopy(r, 0x380, (s32)dy);
+    U16(r) = 0x280; U16(r + 4) = (u16)(v / 2);
+    Gpu_VramCopy(r, 0x380 - (v - 0xB8) / 2, (s32)dy);
+    Tmp_Pop(8);
+}
+
+static u16 road_scroll(gptr a, gptr pl)
+{
+    s16 v = (s16)(U16(a) + (s16)(S16(pl + 0xF4) / -20));
+    U16(a) = (u16)v;
+    if (v > 0xB8) U16(a) = 0;
+    else if (v < 0) U16(a) = 0xB8;
+    return U16(a);
+}
+
+void DC2CALL Vehicle_Step(gptr e)                                    /* 0x41BBF0 */
+{
+    gptr pl = U32(G() + 0x940);
+    gptr w = Obj_Part(U32(pl + 0x64), 1);
+    U16(w + 0x48) = 0x400;
+    U16(w + 0x4C) += U16(e + 0xC);
+    road_strip(road_scroll(0x74815E, pl), 0x1B8, 0xB8);
+    road_strip(road_scroll(0x74815C, pl), 0x1DC, 0xDC);
+}
+
+void DC2CALL Vehicle_Fx1(gptr e)                                     /* 0x41BDC0 */
+{
+    Effect_Attach(U32(G() + 0x940), 0x666D34);
+    U8(e + 3) = 1;
+}
+
+void DC2CALL Vehicle_Fx2(gptr e)                                     /* 0x41BDF0 */
+{
+    Effect_Attach(U32(G() + 0x940), 0x6672BC);
+    U8(e + 3) = 1;
+}
+
+/* ---- the turret's HUD (kind 16 of area 0, after Turret_Draw) ---- */
+
+/* a sprite at xywh with its uv, clut, colour (semi-transparent: semi) */
+void DC2CALL Sprite_Put(gptr xywh, u32 u, u32 v, u32 clut, u32 col, u32 semi)   /* 0x413190 */
+{
+    gptr p = U32(0x87DC98);
+    F32(p + 8) = (float)(s32)S16(xywh); F32(p + 0xC) = (float)(s32)S16(xywh + 2); U32(p + 0x10) = 0x3C23D70A;
+    U16(p + 0x18) = U16(xywh + 4); U16(p + 0x1A) = U16(xywh + 6);
+    U8(p + 0x14) = (u8)u; U8(p + 0x15) = (u8)v; U16(p + 0x16) = (u16)clut;
+    U32(p + 4) = col | ((u16)semi ? 0x66000000u : 0x64000000u);
+    gptr ot = 0x87BC04 + (U32(0x87DE0C) << 12);
+    U32(p) = U32(ot) | 0x04000000;
+    U32(ot) = p & 0xFFFFFF;
+    U32(0x87DC98) = p + 0x1C;
+}
+
+/* sprites from a list {u, v, w, h, dx, dy, (count in the first)} at x, y; then the tpage */
+void DC2CALL Sprites_Draw(gptr l, u32 x, u32 y, u32 tp, u32 clut, u32 col)   /* 0x4130B0 */
+{
+    u32 n = U8(l + 6);
+    if (n) {
+        u32 semi = col >> 31 & 1;
+        gptr r = Tmp_Push(8);
+        for (; n; n--, l += 8) {
+            U16(r) = (u16)(S8(l + 4) + x); U16(r + 2) = (u16)(S8(l + 5) + y);
+            U16(r + 4) = U8(l + 2); U16(r + 6) = U8(l + 3);
+            Sprite_Put(r, U8(l), U8(l + 1), clut, col & 0xFFFFFF, semi);
+        }
+        Tmp_Pop(8);
+    }
+    gptr p = U32(0x87DC98), ot = 0x87BC04 + (U32(0x87DE0C) << 12);
+    U32(p + 4) = tp | 0xE1000400;
+    U32(p + 8) = 0;
+    U32(p) = U32(ot) | 0x02000000;
+    U32(ot) = p & 0xFFFFFF;
+    U32(0x87DC98) = p + 0xC;
+}
+
+/* an FT4 from a 0x48 buffer into the HUD's OT entry */
+static void ft4_put(gptr b)
+{
+    gptr p = U32(0x87DC98), ot = 0x87BC04 + (U32(0x87DE0C) << 12);
+    memcpy(MEM(p), MEM(b), 0x48);
+    U32(p) = U32(ot) | 0x09000000;
+    U32(ot) = p & 0xFFFFFF;
+    U32(0x87DC98) = p + 0x48;
+}
+
+static void ft4_z(gptr b)
+{
+    U32(b + 0x10) = 0x3C23D70A; U32(b + 0x20) = 0x3C23D70A; U32(b + 0x30) = 0x3C23D70A; U32(b + 0x40) = 0x3C23D70A;
+}
+
+static void ft4_xy(gptr b, float x0, float y0, float x1, float y1)
+{
+    F32(b + 8) = x0; F32(b + 0xC) = y0; F32(b + 0x18) = x1; F32(b + 0x1C) = y0;
+    F32(b + 0x28) = x0; F32(b + 0x2C) = y1; F32(b + 0x38) = x1; F32(b + 0x3C) = y1;
+}
+
+static void ft4_uv(gptr b, u8 u0, u8 v0, u8 u1, u8 v1)
+{
+    U8(b + 0x14) = u0; U8(b + 0x15) = v0; U8(b + 0x24) = u1; U8(b + 0x25) = v0;
+    U8(b + 0x34) = u0; U8(b + 0x35) = v1; U8(b + 0x44) = u1; U8(b + 0x45) = v1;
+}
+
+/* an angle into -0x800..0x800 the way the HUD folds it */
+static s16 hud_fold(u16 a)
+{
+    if ((s16)a > 0x800) a = (u16)(a - (((u32)(s32)(s16)a + 0x7FF) >> 12 << 12));
+    return (s16)a;
+}
+
+/* a target's mark on the screen (blinking cluts) */
+void DC2CALL Turret_Mark(gptr o, u32 t)                              /* 0x411E30 */
+{
+    gptr b = Tmp_Push(0x50), v = b + 0x48;
+    memset(MEM(b), 0, 0x50);
+    U8(b + 7) = 0x2E; U8(b + 6) = 0x80; U8(b + 5) = 0x80; U8(b + 4) = 0x80;
+    U8(b + 0x34) = 0x20; U8(b + 0x14) = 0x20; U16(b + 0x26) = 0x438; U8(b + 0x25) = 0xA8; U8(b + 0x15) = 0xA8;
+    U8(b + 0x44) = 0x58; U8(b + 0x24) = 0x58; U8(b + 0x45) = 0xE0; U8(b + 0x35) = 0xE0;
+    (void)t;                                            /* (the clut blinks by the global clock) */
+    U16(b + 0x16) = (u16)(0x7F4C + (((s32)S16(0x746E40) / 2) & 3));
+    s32 dx = 0x18, dy = 0x16;
+    gptr pp;
+    if (U8(o + 0x58) == 0xC) { pp = Obj_Part(U32(o + 0x64), 0x10); dx = 0x2C; dy = 0x28; }
+    else pp = Obj_Part(U32(o + 0x64), 2);
+    U16(v) = U16(pp + 0x40); U16(v + 2) = U16(pp + 0x42); U16(v + 4) = U16(pp + 0x44); U16(v + 6) = 0;
+    gte_ldv0(v); gte_rtps(); gte_stsxy(v);
+    s32 sx = S16(v), sy = S16(v + 2);
+    ft4_xy(b, (float)(sx - dx), (float)(sy - dy), (float)(sx + dx), (float)(sy + dy));
+    ft4_z(b);
+    ft4_put(b);
+    Tmp_Pop(0x50);
+}
+
+void DC2CALL Turret_Hud(gptr e)                                      /* 0x411160 */
+{
+    gptr c = G() + 0x778;
+    U8(0x746E7C)++;
+    gptr cr = U32(c + 0x40) + U8(c + 0x4C) * 16;
+    Sprites_Draw(0x5E02A8, 0x80, 0x80, 0x15, 0x7E42, 0x80008080);
+    Sprites_Draw(0x5E02D8, 0x120, 0x80, 0x15, 0x7E42, 0x80008080);
+    gptr b = Tmp_Push(0x48);
+    memset(MEM(b), 0, 0x48);
+    ft4_uv(b, 0x80, 0x80, 0xA8, 0xA8);
+    U8(b + 6) = 0x80; U8(b + 5) = 0x80; U8(b + 4) = 0x80; U8(b + 7) = 0x2C;
+    U16(b + 0x26) = 0x418; U16(b + 0x16) = 0x7E41;
+    /* the sight where the aim points against the camera */
+    s16 cy = S16(c + 0x22);
+    s32 ca = cy > 0x800 ? cy - 0x1000 : cy;
+    s16 ay = hud_fold((u16)((U16(e + 0x14) & 0x1FFF) - ca));
+    s16 ex = (s16)(ay * 140 / S16(e + 0xE));
+    s32 h = ratan2(120.0f, (float)(s32)U16(cr + 6));
+    s16 cx = S16(c + 0x20);
+    ca = cx > 0x800 ? cx - 0x1000 : cx;
+    s16 ax = hud_fold((u16)((U16(e + 0x12) & 0x1FFF) - ca));
+    U16(0x746E5C) = (u16)ex;
+    s16 ey = (s16)(-104 * ax / (s16)h);
+    U16(0x746E5E) = (u16)ey;
+    ft4_z(b);
+    ft4_xy(b, (float)(ex + 0x8C), (float)(ey + 0x64), (float)(ex + 0xB4), (float)(ey + 0x8C));
+    if (!U16(e + 0xC)) ft4_put(b);
+    /* the middle dot */
+    ft4_uv(b, 0x28, 0x78, 0x2F, 0x7F);
+    U8(b + 7) = 0x2E; U16(b + 0x26) = 0x418; U16(b + 0x16) = 0x7F40;
+    ft4_xy(b, 154.0f, 186.0f, 162.0f, 194.0f);
+    ft4_put(b);
+    /* the compass strip, in two pieces around the yaw */
+    s16 q = (s16)(hud_fold(U16(c + 0x22)) / -12);
+    if (q < 0) { U8(b + 0x44) = 0x78; U8(b + 0x24) = 0x78; U8(b + 0x34) = (u8)(0x18 - q); U8(b + 0x14) = (u8)(0x18 - q);
+                 F32(b + 0x28) = 96.0f; F32(b + 8) = 96.0f; }
+    else { U8(b + 0x34) = 0x18; U8(b + 0x14) = 0x18; F32(b + 0x28) = (float)(q + 0x60); F32(b + 8) = (float)(q + 0x60);
+           U8(b + 0x44) = 0x78; U8(b + 0x24) = 0x78; }
+    U8(b + 0x45) = 0x58; U8(b + 0x35) = 0x58; U8(b + 0x25) = 0x48; U8(b + 0x15) = 0x48;
+    U16(b + 0x26) = 0x418; U16(b + 0x16) = 0x7F40;
+    float mid = (float)(q + 0xA0);
+    F32(b + 0x1C) = 170.0f; F32(b + 0x38) = mid; F32(b + 0x18) = mid; F32(b + 0xC) = 170.0f;
+    F32(b + 0x3C) = 186.0f; F32(b + 0x2C) = 186.0f;
+    ft4_put(b);
+    U8(b + 0x34) = 0x18; U8(b + 0x14) = 0x18;
+    if (q < 0) { U8(b + 0x44) = 0x78; U8(b + 0x24) = 0x78; F32(b + 0x38) = (float)(q + 0xE0); F32(b + 0x18) = (float)(q + 0xE0); }
+    else { F32(b + 0x38) = 224.0f; F32(b + 0x18) = 224.0f; U8(b + 0x44) = (u8)(0x78 - q); U8(b + 0x24) = (u8)(0x78 - q); }
+    F32(b + 0x28) = mid; F32(b + 8) = mid;
+    F32(b + 0x1C) = 170.0f; F32(b + 0xC) = 170.0f; F32(b + 0x3C) = 186.0f; F32(b + 0x2C) = 186.0f;
+    ft4_put(b);
+    /* the pitch scale's marker */
+    U8(b + 0x25) = 0x78; U8(b + 0x15) = 0x78; U8(b + 0x44) = 0x37; U8(b + 0x24) = 0x37;
+    U8(b + 0x34) = 0x30; U8(b + 0x14) = 0x30; U8(b + 0x45) = 0x7F; U8(b + 0x35) = 0x7F;
+    U16(b + 0x26) = 0x418; U16(b + 0x16) = 0x7F40;
+    ft4_xy(b, 15.0f, 120.0f, 23.0f, 128.0f);
+    ft4_put(b);
+    /* the pitch scale, in one or two pieces */
+    s16 q2 = (s16)(hud_fold(U16(c + 0x20)) * 4 / 9);
+    U8(b + 0x34) = 0; U8(b + 0x14) = 0;
+    u8 v3;
+    if (q2 < 0) { U8(b + 0x25) = (u8)(0x40 - q2); U8(b + 0x15) = (u8)(0x40 - q2); v3 = 0xB0; }
+    else { U8(b + 0x25) = 0x40; U8(b + 0x15) = 0x40; v3 = (u8)(0xB0 - q2); }
+    U8(b + 0x45) = v3; U8(b + 0x35) = v3; U8(b + 0x44) = 0x10; U8(b + 0x24) = 0x10;
+    F32(b + 0x28) = 24.0f; F32(b + 8) = 24.0f; F32(b + 0x38) = 40.0f; F32(b + 0x18) = 40.0f;
+    if (q2 < 0) { F32(b + 0x1C) = 68.0f; F32(b + 0xC) = 68.0f; F32(b + 0x3C) = (float)(q2 + 0xB4); F32(b + 0x2C) = (float)(q2 + 0xB4); }
+    else { F32(b + 0x3C) = 180.0f; F32(b + 0x2C) = 180.0f; F32(b + 0x1C) = (float)(q2 + 0x44); F32(b + 0xC) = (float)(q2 + 0x44); }
+    ft4_put(b);
+    if (q2 > 0) {
+        F32(b + 0x3C) = (float)(q2 + 0x44); F32(b + 0x2C) = (float)(q2 + 0x44);
+        U8(b + 0x45) = 0xC0; U8(b + 0x35) = 0xC0; U8(b + 0x34) = 0; U8(b + 0x14) = 0;
+        U8(b + 0x25) = (u8)(0xC0 - q2); U8(b + 0x15) = (u8)(0xC0 - q2); U8(b + 0x44) = 0x10; U8(b + 0x24) = 0x10;
+        F32(b + 0x28) = 24.0f; F32(b + 8) = 24.0f; F32(b + 0x38) = 40.0f; F32(b + 0x18) = 40.0f;
+        F32(b + 0x1C) = 68.0f; F32(b + 0xC) = 68.0f;
+        ft4_put(b);
+    }
+    /* the nearest enemies left and right (0x746E58, 0x746E54), blinking */
+    if ((s16)U16(0x746E40) % 10 < 5) {
+        for (u32 k = 0; k < 2; k++) {
+            gptr r = U32(k ? 0x746E54 : 0x746E58);
+            if (!r || S16(r + 0x1C8) >= 0x37) continue;
+            s16 a = S16(r + 0x1C8);
+            ft4_uv(b, k ? 0x40 : 0, 0, k ? 0x80 : 0x40, 0x40);
+            U16(b + 0x26) = 0x418;
+            U16(b + 0x16) = a < 0x24 ? (u16)((a / 6 % 6 + 1) | 0x7F40) : 0x7F46;
+            if (k) ft4_xy(b, 202.0f, 48.0f, 266.0f, 112.0f);
+            else ft4_xy(b, 54.0f, 48.0f, 118.0f, 112.0f);
+            ft4_put(b);
+        }
+    }
+    Tmp_Pop(0x48);
+    /* the targets' marks, odd or even ones by turns */
+    for (u32 k = 1; k < 10; k++) {
+        gptr o = U32(G() + 0x940) + k * 0x260;
+        if (!(U8(o + 0x50) & 1) || !(U8(o + 0x184) & 1) || S16(o + 0x1C8) >= 0x3C || U8(0x746E6D + k - 1)) continue;
+        if (U32(0x746E40) & 8 ? (k & 1) : !(k & 1)) Turret_Mark(o, U16(0x746E40));
+    }
+    /* a grid over the screen */
+    U16(0x746E60) = 0; U16(0x746E62) = 0;
+    for (u32 k = 0; k < 13; k++) {
+        gptr p = U32(0x87DC98), ot = 0x87BC04 + (U32(0x87DE0C) << 12);
+        U32(p + 8) = 0; F32(p + 0xC) = (float)(s32)(k * 16); U32(p + 0x14) = 0x439F8000; F32(p + 0x18) = (float)(s32)(k * 16);
+        U32(p + 0x1C) = 0x3C23D70A; U32(p + 0x10) = 0x3C23D70A; U32(p + 4) = 0x42004800;
+        U32(p) = U32(ot) | 0x03000000; U32(ot) = p & 0xFFFFFF;
+        U32(0x87DC98) = p + 0x20;
+    }
+    u32 x0 = U32(0x746E60) & 0xF;
+    for (u32 k = 0; k < 18; k++) {
+        gptr p = U32(0x87DC98), ot = 0x87BC04 + (U32(0x87DE0C) << 12);
+        float x = (float)(s32)(x0 + k * 16);
+        F32(p + 8) = x; U32(p + 0xC) = 0; F32(p + 0x14) = x; U32(p + 0x18) = 0x436F0000;
+        U32(p + 0x1C) = 0x3C23D70A; U32(p + 0x10) = 0x3C23D70A; U32(p + 4) = 0x42004800;
+        U32(p) = U32(ot) | 0x03000000; U32(ot) = p & 0xFFFFFF;
+        U32(0x87DC98) = p + 0x20;
+    }
+    Gpu_SetDrawMode(U32(0x87DC98), 1, 0, 0x60, 0);
+    Gpu_AddPrim(0x87BC04 + (U32(0x87DE0C) << 12), U32(0x87DC98));
+    U32(0x87DC98) += 0xC;
 }

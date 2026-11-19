@@ -2441,5 +2441,82 @@ void DC2CALL Fx_Shades(gptr e);                                         /* 0x414
 void DC2CALL Fx_Shade(gptr s, u32 v, u32 k);                            /* 0x414F30 */
 void DC2CALL Fx_Wave(gptr e);                                           /* 0x415040 */
 void DC2CALL Fx_Wave_Draw(gptr e);                                      /* 0x415080 */
+void DC2CALL Water2(gptr e);                                            /* 0x4151D0 */
+void DC2CALL Water2_Init(gptr e);                                       /* 0x4151F0 */
+void DC2CALL Water2_Step(gptr e);                                       /* 0x415230 */
+void DC2CALL Water2_Draw(gptr e);                                       /* 0x415280 */
+void DC2CALL Fx_Blasts(gptr e);                                         /* 0x415A20 */
+void DC2CALL Fx_Charge(gptr e);                                         /* 0x415840 */
+void DC2CALL Fx_Charge_Arm(gptr e);                                     /* 0x415600 */
+u8   DC2CALL Fx_Blast_Quad(gptr e);                                     /* 0x4157F0 */
+void DC2CALL Fx_Charge_Fire(gptr e);                                    /* 0x415630 */
+void DC2CALL Fx_Blast(gptr e);                                          /* 0x415A00 */
+void DC2CALL Fx_Blast_Wait(gptr e);                                     /* 0x415860 */
+void DC2CALL Fx_Blast_Go(gptr e);                                       /* 0x415960 */
+void DC2CALL Ride(gptr e);                                              /* 0x415AC0 */
+void DC2CALL Ride_Init(gptr e);                                         /* 0x415B00 */
+void DC2CALL Ride_Step(gptr e);                                         /* 0x415CD0 */
+void DC2CALL Ride_Draw(gptr e);                                         /* 0x416450 */
+void DC2CALL Ride_Shoot(gptr e);                                        /* 0x416570 */
+void DC2CALL Ride_Flash(void);                                          /* 0x416700 */
+void DC2CALL Ride_Gauge(u32 v);                                         /* 0x4168B0 */
+void DC2CALL VScroll(gptr e);                                           /* 0x416C50 */
+void DC2CALL VScroll_Init(gptr e);                                      /* 0x416C70 */
+void DC2CALL VScroll_Step(gptr e);                                      /* 0x416CC0 */
+void DC2CALL Meter(gptr e);                                             /* 0x416D60 */
+void DC2CALL Meter_Init(gptr e);                                        /* 0x416D80 */
+void DC2CALL Meter_Fill(gptr e);                                        /* 0x416E00 */
+void DC2CALL Meter_Fade(gptr e);                                        /* 0x416E50 */
+void DC2CALL Meter_Rise(gptr e);                                        /* 0x416EA0 */
+void DC2CALL Meter_Hold(gptr e);                                        /* 0x416F10 */
+void DC2CALL Meter_Draw(gptr e);                                        /* 0x416F40 */
+void DC2CALL MultiCam(gptr e);                                          /* 0x4173D0 */
+u16  DC2CALL MultiCam_Y(gptr o);                                        /* 0x417BF0 */
+void DC2CALL MultiCam_Avg(gptr e);                                      /* 0x417430 */
+void DC2CALL MultiCam_Follow(gptr e);                                   /* 0x4177C0 */
+void DC2CALL MultiCam_Group3(gptr e);                                   /* 0x417A70 */
+void DC2CALL MultiCam_Focus4(gptr e);                                   /* 0x417B70 */
+void DC2CALL MultiCam_Focus(gptr e);                                    /* 0x417C20 */
+void DC2CALL MultiCam_Group(gptr e, u32 p);                             /* 0x417FF0 */
+void DC2CALL MultiCam_Pair(gptr e);                                     /* 0x4182C0 */
+void DC2CALL Duel(gptr e);                                              /* 0x4186F0 */
+void DC2CALL Duel_Init(gptr e);                                         /* 0x418710 */
+void DC2CALL Duel_Step(gptr e);                                         /* 0x418750 */
+void DC2CALL Duel_Pad(u32 i, u32 pad);                                  /* 0x419250 */
+void DC2CALL Duel_End(void);                                            /* 0x4190B0 */
+void DC2CALL Duel_Picture(void);                                        /* 0x419140 */
+void DC2CALL Duel_Draw(gptr e);                                         /* 0x418810 */
+void DC2CALL Duel_Shape(void);                                          /* 0x418910 */
+void DC2CALL Duel_Tri(gptr p);                                          /* 0x418BA0 */
+void DC2CALL Duel_Quad(gptr p);                                         /* 0x418D60 */
+void DC2CALL Waves(gptr e);                                             /* 0x419310 */
+void DC2CALL Waves_Init(gptr e);                                        /* 0x419330 */
+void DC2CALL Waves_Count(gptr e);                                       /* 0x419350 */
+void DC2CALL Waves_Clear(gptr e);                                       /* 0x4193B0 */
+void DC2CALL Waves_Load(gptr e);                                        /* 0x4194A0 */
+void DC2CALL Waves_End(gptr e);                                         /* 0x419640 */
+void DC2CALL Waves_Draw(gptr e);                                        /* 0x419710 */
+void DC2CALL Versus(gptr e);                                            /* 0x419850 */
+void DC2CALL Vs_Camera(gptr e);                                         /* 0x41BA60 */
+u8   DC2CALL Vs_Winner(void);                                           /* 0x41BB00 */
+void DC2CALL Vs_Hop(gptr e, gptr o);                                    /* 0x41B940 */
+void DC2CALL Vs_Pad(gptr e, u32 i, u32 j, u32 pad);                     /* 0x41B630 */
+void DC2CALL Vs_Init(gptr e);                                           /* 0x4198B0 */
+void DC2CALL Vs_Intro(gptr e);                                          /* 0x419990 */
+void DC2CALL Vs_Fight(gptr e);                                          /* 0x419F60 */
+void DC2CALL Vs_Win(gptr e);                                            /* 0x41A060 */
+void DC2CALL Vs_Timeout(gptr e);                                        /* 0x41A470 */
+void DC2CALL Vs_Draw(gptr e);                                           /* 0x41A650 */
+void DC2CALL Vs_Exit(gptr e);                                           /* 0x41A8E0 */
+void DC2CALL Vs_Hud(gptr e);                                            /* 0x41A940 */
+void DC2CALL Vehicle(gptr e);                                           /* 0x41BB60 */
+void DC2CALL Vehicle_Init(gptr e);                                      /* 0x41BBB0 */
+void DC2CALL Vehicle_Step(gptr e);                                      /* 0x41BBF0 */
+void DC2CALL Vehicle_Fx1(gptr e);                                       /* 0x41BDC0 */
+void DC2CALL Vehicle_Fx2(gptr e);                                       /* 0x41BDF0 */
+void DC2CALL Sprite_Put(gptr xywh, u32 u, u32 v, u32 clut, u32 col, u32 semi);/* 0x413190 */
+void DC2CALL Sprites_Draw(gptr l, u32 x, u32 y, u32 tp, u32 clut, u32 col);/* 0x4130B0 */
+void DC2CALL Turret_Mark(gptr o, u32 t);                                /* 0x411E30 */
+void DC2CALL Turret_Hud(gptr e);                                        /* 0x411160 */
 
 #endif
