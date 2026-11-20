@@ -20,6 +20,7 @@
 #include "dc2/gpu.h"
 #include "dc2/pcdraw.h"
 #include "dc2/task.h"
+#include "dc2/data.h"
 
 u8 *g_membase = (u8 *)IMAGE_BASE;
 
@@ -15927,6 +15928,64 @@ static gptr hum_setup(void)
     if (rnd() % 3 == 0) U32(0x759EA4) = 0x12C - U16(o + 0x176) + rnd() % 3 - 1;
     return o;
 }
+/* area 9's own objects (aobj9.c): type 17 (it answers the others' hits),
+   type 19 (blows up) */
+static void test_aobj9(void)
+{
+    static const u32 tab[] = {0x721390};
+    static const u8 n[] = {4};
+    g_ign_objpads = 1;
+    stubs_install(1);
+    ao_tables_stub(tab, n, 1, 1);
+    for (int i = 0; i < iters; i++) {
+        u32 a[1];
+        gptr o = ao_setup(); a[0] = o;
+        U8(o + 0x54) = (u8)(rnd() % 4);
+        sprintf(g_what, "type 19 %X state %u flags %X", o, U8(o + 0x54), U32(o + 0x50));
+        check(0x4454E0, Ao19_Handler, "Ao19_Handler", 1, a, 0);
+        o = ao_setup(); a[0] = o;
+        U16(o + 0x10C) = rnd() % 2 ? 10 : (u16)(rnd() % 2 ? rnd() % 12 : rnd());
+        U8(o + 0x54) = (u8)rnd();
+        sprintf(g_what, "type 19 init %X look %u parts %u", o, U16(o + 0x10C), U32(o + 0x68));
+        check(0x445520, Ao19_Init, "Ao19_Init", 1, a, 0);
+        o = ao_setup(); a[0] = o;
+        U16(o + 0x10C) = rnd() % 3 ? 0 : (u16)rnd();
+        U32(o + 0x70) = (u32)A2_PICK(0x1000, 0x800, 1, 0x1000 - rnd() % 0x800, 1 + rnd() % 0x1000, (s32)(1 + rnd() % 0x1000));
+        U16(o + 0x1C0) = (u16)(rnd() % 16);
+        U32(0x87DE14) = 2 + rnd() % 12; U32(G() + 0xA74) = rnd() % 2;   /* lights, taken or free */
+        for (u32 k = 0; k < 16; k++) U8(U32(G() + 0x948) + k * 0x34) = rnd() % 3 ? 1 : 0;
+        U16(o + 0x11C) = (u16)rnd();
+        sprintf(g_what, "type 19 blow %X health %X scale %X target %u", o, U16(o + 0x10C), U32(o + 0x70), U16(o + 0x1C0));
+        {   /* the burst keeps a pointer to the position on the stack: not compared */
+            u32 j = U32(G() + 0xA70), m = U32(0x87DC88) - j;
+            gptr k = U32(G() + 0x944) + j * 0xAC;
+            while (m && (U8(k + 0x50) & 1)) { m--; k += 0xAC; }
+            g_ign_addr = m ? k + 0xA0 : 0; g_ign_len = 4;
+        }
+        check(0x4455A0, Ao19_Blow, "Ao19_Blow", 1, a, 0);
+        g_ign_addr = 0;
+        o = ao_setup(); a[0] = o;
+        check(0x445660, Ao19_Gone, "Ao19_Gone", 1, a, 0);
+        /* type 17 among the others */
+        o = ao_setup(); a[0] = o;
+        U32(0x87F940) = (u32)A2_PICK(0, 1, 2, 16, (s32)(rnd() % 17));
+        U32(0x87E760) = rnd() % 4 ? O_OBJ : O_OBJ + 0x260 * (rnd() % 3);
+        U32(G() + 0x940) = O_OBJ;
+        Flag_Set(7, 0x1C, rnd() % 4 == 0); Flag_Set(7, 0x1D, rnd() % 4 == 0);
+        for (u32 k = 0; k < 16; k++) {
+            gptr p = O_OBJ + k * 0x260;
+            U32(p + 0x50) = rnd() % 3 ? (U32(p + 0x50) | 1) : (U32(p + 0x50) & ~1u);
+            U16(p + 0x1C0) = rnd() % 2 ? 0 : (u16)rnd();
+            U16(p + 0x1C2) = (u16)(rnd() % 2 ? rnd() % 16 : rnd());
+        }
+        sprintf(g_what, "type 17 %X objects %u", o, U32(0x87F940));
+        check(0x47FFA0, Ao17_Handler, "Ao17_Handler", 1, a, 0);
+    }
+    ao_tables_stub(tab, n, 1, 0);
+    stubs_install(0);
+    g_ign_objpads = 0;
+}
+
 static void test_kof_human(void)
 {
     static const struct { u32 addr; void *fn; const char *name; } F[] = {
@@ -16006,6 +16065,370 @@ static void test_kof_human(void)
     hum_tables_stub(0);
     stubs_install(0);
     g_ign_objpads = 0;
+}
+
+/* ---- the extra game's humans (src/game/xhum*.c) ---- */
+static u32 g_xh_saved[128];
+static void xh_tables_stub(const u32 (*tabs)[2], int nt, int on)
+{
+    int n = 0;
+    for (int k = 1; k <= 30; k++) g_stubs[k].spec = on ? "d" : "";
+    for (int t = 0; t < nt; t++)
+        for (u32 e = 0; e < tabs[t][1]; e++, n++) {
+            gptr a = tabs[t][0] + 4 * e;
+            if (on) { g_xh_saved[n] = U32(a); U32(a) = (u32)(uintptr_t)g_recs[1 + n % 30]; }
+            else U32(a) = g_xh_saved[n];
+        }
+}
+/* the human (hum_setup's), its pad copies at v (new presses, held), the
+   weapon records of its blows */
+static gptr xh_setup(gptr v, gptr held, const u8 *kinds, int nk)
+{
+    gptr o = hum_setup();
+    static const u16 pb[] = {1, 2, 4, 8, 0x10, 0x20, 0x40, 0x1000, 0x2000, 0x8000};
+    static const u16 hb[] = {8, 0x10, 0x20, 0x40, 0x1000, 0x2000, 0x4000, 0x8000, 0xA000};
+    U16(v) = rnd() % 4 ? kr_bits(pb, 10) : (u16)rnd();
+    U16(held) = rnd() % 4 ? kr_bits(hb, 9) : (u16)rnd();
+    if (rnd() % 4 == 0) U16(held) = (u16[]){0, 0x20, 0x10, 0x1040, 0x1060, 0x1068, 0x4020, 0x8010, 0x2010, 0x1000, 0x4000, 0x2000, 8, 0xA, 0x1008, 0x4008}[rnd() % 16];
+    if (rnd() % 4 == 0) U16(v) = (u16[]){0, 1, 2, 4, 8}[rnd() % 5];
+    if (held == v + 2) U32(v + 4) = rnd();               /* (read as a dword with the held buttons) */
+    U8(o + 0x56) = rnd() % 4 ? rnd() % 3 : (u8)rnd();
+    U8(o + 0x57) = (u8)(rnd() % 4 ? rnd() % 10 : rnd());
+    U16(o + 0x92) = (u16)A2_PICK(0xC, 0xD, 0x11, 0x12, 0x14, 0x18, 0x19, 0x1A, 0x1B, 0x1C, 0x1D, 0x1E, 0x20, 0x21, 0x24, 0x27, 0x28,
+                                 0x13, 0x17, 0x1F, (s32)(rnd() % 0x40));
+    Flag_Set(2, 0xE, rnd() % 4 == 0);
+    for (int k = 0; k < nk; k++) {
+        gptr e = 0x737A90 + kinds[k] * 0x24;
+        U32(e + 0xC) = (0x800 + (u32[]){0, 1, 2, 0x100}[rnd() % 4]) | (rnd() % 4 ? 0 : rnd() & 0xFFFF0000u);
+        U16(e + 0x10) = 0; U16(e + 0x12) = 0;
+        U16(e) = 0; U16(e + 2) = (u16)(1 + rnd() % 2000);
+        u16 r = (u16)(rnd() % 800); for (u32 j = 4; j < 0xC; j += 2) U16(e + j) = r;
+        if (rnd() % 4) { U16(e + 0x1C) = 0; U16(e + 0x1E) = 0; U16(e + 0x20) = 0; }
+    }
+    for (u32 k = 0; k < 4; k++) U32(0x703500 + 4 * k) = U32(0x703500 + 4 * k);   /* (its hit effects: the game's) */
+    return o;
+}
+typedef struct { u32 addr; void *fn; const char *name; u8 field, max; } XhFn;   /* (a dispatcher: o+field below max) */
+static void xh_run(const XhFn *F, int nf, const u32 (*tabs)[2], int nt, gptr v, gptr held, gptr cyl, gptr spheres, const u8 *kinds, int nk,
+                   void (*more)(gptr o))
+{
+    g_ign_objpads = 1;
+    stubs_install(1);
+    xh_tables_stub(tabs, nt, 1);
+    for (int i = 0; i < iters; i++)
+        for (int k = 0; k < nf; k++) {
+            game_state(); world_setup(); mo_zones();
+            gptr o = xh_setup(v, held, kinds, nk);
+            if (more) more(o);
+            {                                             /* parts up to the last its cylinders name (0x11 for some) */
+                u32 need = 0;
+                for (gptr d = cyl;; d += 0xC) { if (U8(d + 0xA) >= need) need = U8(d + 0xA) + 1u; if (!(U8(d + 0xB) & 1)) break; }
+                u32 n = 1; gptr last = U32(o + 0x64);
+                for (; last && U32(last + 0x54); last = U32(last + 0x54)) n++;
+                for (; last && n < need; n++) {
+                    gptr q = AN_PART + n * 0x80;
+                    if (q == last) break;
+                    memcpy(MEM(q), MEM(last), 0x80);
+                    U32(q + 0x54) = 0; U32(q + 0x58) = last; U32(last + 0x54) = q; last = q;
+                }
+            }
+            if (nk > 1 && U32(o + 0x64) && rnd() % 2) U16(U32(o + 0x64) + 0x4A) = (u16)rnd();
+            if (nk > 1 && rnd() % 2) {                    /* the fighters (20, 21): the others at its fist or foot, blows land */
+                gptr at = Obj_Part(U32(o + 0x64), rnd() % 2 ? 4 : 0);
+                for (u32 j = 1; at && j < U32(0x87F940) && j < 16; j++) {
+                    gptr ob = O_OBJ + j * 0x260, d = U32(ob + 0x134);
+                    if (ob == o || !d) continue;
+                    U32(ob + 0x50) |= 8; U8(ob + 0x17B) = (u8)A2_PICK(0, 0, 0, 1, 2);
+                    for (int q = 0; q < 4; q++, d += 0xC) {
+                        gptr pp = Obj_Part(U32(ob + 0x64), U8(d + 0xA));
+                        U16(d) = 0; U16(d + 2) = 0; U16(d + 4) = 0;
+                        for (u32 b = 0; b < 6; b += 2) S16(pp + 0x40 + b) = (s16)(S16(at + 0x40 + b) + (s32)(rnd() % 200) - 100);
+                        if (!(U8(d + 0xB) & 1)) break;
+                    }
+                }
+            }
+            u32 a[1] = {o};
+            if (k == 1) {                                 /* the init: the stage's files, the player's start */
+                U8(G() + 0x108F) = rnd() % 4; U16(G() + 0x10B4) = (u16)(rnd() % 16 | (rnd() % 8) << 8);
+                for (u32 j = 0x840; j < 0x848; j += 2) U16(G() + j) = (u16)(rnd() % 2 ? rnd() % 8000 - 4000 : rnd());
+                if (o != O_OBJ) memcpy(MEM(O_OBJ), MEM(o), 0x260);
+            }
+            if (k == 0) {                                 /* the handler: its head's turn, its feet */
+                U8(o + 0x11B) = rnd() % 2 ? 0 : (u8)(rnd() % 2 << 4 | 1);
+                for (u32 j = 0; j < 2; j++) U32(o + 0x120 + 4 * j) = AN_PART + 0x80 * (rnd() % 16);
+                U32(o + 0x158) = rnd() % 2;                  /* (nothing or the head back: no target) */
+            }
+            if (rnd() % 2) { U32(o + 0x12C) = cyl; U32(o + 0x134) = spheres; }
+            if (F[k].max) U8(o + F[k].field) = (u8)(rnd() % F[k].max);
+            if (F[k].addr == F[0].addr) U8(o + 0x54) = (u8)(rnd() % 4);
+            U32(LOG_BASE) = 0;
+            sprintf(g_what, "%X state %08X new %X held %X frame %u health %d/%d", o, U32(o + 0x54), U16(v), U16(held),
+                    U16(o + 0x92), S16(o + 0x108), S16(o + 0x10A));
+            check(F[k].addr, F[k].fn, F[k].name, 1, a, 0);
+        }
+    xh_tables_stub(tabs, nt, 0);
+    stubs_install(0);
+    g_ign_objpads = 0;
+}
+
+static void test_xh20(void)
+{
+    static const XhFn F[] = {
+        {0x480040, Xh20_Handler, "Xh20_Handler"}, {0x480170, Xh20_Init, "Xh20_Init"}, {0x480310, Xh20_Normal, "Xh20_Normal", 0x55, 10},
+        {0x480820, Xh20_Hit, "Xh20_Hit", 0x55, 8}, {0x480840, Xh20_Die, "Xh20_Die"}, {0x480390, Xh20_HurtLight, "Xh20_HurtLight"},
+        {0x480500, Xh20_HurtDown, "Xh20_HurtDown"}, {0x480690, Xh20_HurtFall, "Xh20_HurtFall"}, {0x480950, Xh20_Stand, "Xh20_Stand"},
+        {0x480A70, Xh20_Walk, "Xh20_Walk"}, {0x480BC0, Xh20_Run, "Xh20_Run"}, {0x480CF0, Xh20_Back, "Xh20_Back"},
+        {0x480E10, Xh20_Attack, "Xh20_Attack", 0x56, 5}, {0x480E30, Xh20_TurnSpot, "Xh20_TurnSpot"}, {0x480F70, Xh20_TurnAbout, "Xh20_TurnAbout"},
+        {0x481000, Xh20_Dodge, "Xh20_Dodge"}, {0x4810C0, Xh20_TurnFirst, "Xh20_TurnFirst"}, {0x4811A0, Xh20_TurnNext, "Xh20_TurnNext"},
+        {0x481280, Xh20_Punch, "Xh20_Punch"}, {0x481480, Xh20_Kick, "Xh20_Kick"}, {0x4815F0, Xh20_Spin, "Xh20_Spin"},
+        {0x481790, Xh20_Low, "Xh20_Low"}, {0x4818E0, Xh20_Super, "Xh20_Super"}};
+    static const u32 tabs[][2] = {{0x7381E4, 4}, {0x7381F4, 10}, {0x73821C, 8}, {0x73823C, 5}};
+    static const u8 kinds[] = {0xD, 0xE, 0xF};
+    xh_run(F, sizeof F / sizeof F[0], tabs, 4, 0x74E62C, 0x74E62E, 0x738198, 0x7381B0, kinds, 3, 0);
+}
+
+static void test_xh21(void)
+{
+    static const XhFn F[] = {
+        {0x473310, Xh21_Handler, "Xh21_Handler"}, {0x473440, Xh21_Init, "Xh21_Init"}, {0x4735E0, Xh21_Normal, "Xh21_Normal", 0x55, 10},
+        {0x473B30, Xh21_Hit, "Xh21_Hit", 0x55, 8}, {0x473660, Xh21_HurtLight, "Xh21_HurtLight"},
+        {0x4737D0, Xh21_HurtDown, "Xh21_HurtDown"}, {0x473980, Xh21_HurtFall, "Xh21_HurtFall"}, {0x473B50, Xh21_Stand, "Xh21_Stand"},
+        {0x473C60, Xh21_Walk, "Xh21_Walk"}, {0x473DB0, Xh21_Run, "Xh21_Run"}, {0x473EE0, Xh21_Back, "Xh21_Back"},
+        {0x474090, Xh21_Attack, "Xh21_Attack", 0x56, 5}, {0x4740B0, Xh21_TurnSpot, "Xh21_TurnSpot"}, {0x4741E0, Xh21_TurnAbout, "Xh21_TurnAbout"},
+        {0x474270, Xh21_Dodge, "Xh21_Dodge"}, {0x4742F0, Xh21_TurnFirst, "Xh21_TurnFirst"}, {0x4743D0, Xh21_TurnNext, "Xh21_TurnNext"},
+        {0x4744B0, Xh21_Punch, "Xh21_Punch"}, {0x474650, Xh21_Kick, "Xh21_Kick"}, {0x4748C0, Xh21_Spin, "Xh21_Spin"},
+        {0x474790, Xh21_Low, "Xh21_Low"}, {0x474A00, Xh21_Super, "Xh21_Super"}};
+    static const u32 tabs[][2] = {{0x737700, 3}, {0x737710, 10}, {0x737738, 8}, {0x737758, 5}};
+    static const u8 kinds[] = {0xD, 0xF, 0x22};
+    xh_run(F, sizeof F / sizeof F[0], tabs, 4, 0x74DB8C, 0x74DB8E, 0x7376C8, 0x7376D8, kinds, 3, 0);
+}
+
+/* the duel gunmen's variables: the angle to the foe, the foe, bits, the
+   hit's kind, the turn about, the super move's armour, glow and time */
+static void xh_gun_vars(gptr o, gptr angle, gptr foe, gptr bits, gptr hitk, gptr turn, gptr armor, gptr glow, gptr time)
+{
+    S16(angle) = (s16)A2_PICK(0, 1, -1, 0x4FF, 0x500, -0x500, (s32)rnd());
+    U32(foe) = rnd() % 4 ? U32(0x759EE0) : o;
+    U32(bits) = rnd() % 3 ? rnd() & 0xF : rnd();
+    U16(hitk) = (u16)(rnd() % 2 ? rnd() % 4 : rnd());
+    U16(turn) = (u16)(rnd() % 2 ? 0 : rnd() % 0x100 - 0x80);
+    S16(armor) = (s16)A2_PICK(0, 1, 0x1F4, (s32)(rnd() % 0x200), (s32)rnd());
+    U16(glow) = (u16)A2_PICK(0, 1, 0x1D, 0x1E, 0x1F, (s32)(rnd() % 0x20));
+    U16(time) = (u16)A2_PICK(0, 1, 2, 0x384, (s32)(rnd() % 0x400));
+    U8(o + 0x184) = (u8)rnd(); U8(o + 0x17C) = (u8)A2_PICK(0, 1, 2, -1, (s32)rnd());
+    U16(o + 0x178) = (u16)rnd(); U16(o + 0x172) = (u16)A2_PICK(0, 1, 2, 3, 4, (s32)rnd());
+    U16(o + 0xD4) = (u16)(rnd() % 2 ? rnd() % 0x200 - 0x100 : rnd());
+    U8(G() + 0x927) = (u8)(rnd() % 3);
+}
+static void xh22_vars(gptr o)
+{
+    xh_gun_vars(o, 0x746C9A, 0x746C94, 0x746C50, 0x746C58, 0x746C76, 0x746C80, 0x746C82, 0x746C84);
+    U8(o + 0x57) = (u8)(rnd() % 4 ? rnd() % 2 : rnd());
+}
+static void test_xh22(void)
+{
+    static const XhFn F[] = {
+        {0x401000, Xh22_Handler, "Xh22_Handler"},
+        {0x4012A0, Xh22_Init, "Xh22_Init"},
+        {0x401490, Xh22_Normal, "Xh22_Normal", 0x55, 16},
+        {0x401520, Xh22_Hit, "Xh22_Hit", 0x55, 12},
+        {0x401540, Xh22_Die, "Xh22_Die", 0x55, 12},
+        {0x401560, Xh22_Attack, "Xh22_Attack", 0x55, 16},
+        {0x4015B0, Xh22_StandCtl, "Xh22_StandCtl"},
+        {0x401750, Xh22_TurnCtl, "Xh22_TurnCtl"},
+        {0x4019D0, Xh22_WalkCtl, "Xh22_WalkCtl"},
+        {0x401B70, Xh22_RunCtl, "Xh22_RunCtl"},
+        {0x401CF0, Xh22_BackCtl, "Xh22_BackCtl"},
+        {0x401FC0, Xh22_GuardCtl, "Xh22_GuardCtl"},
+        {0x402250, Xh22_StepCtl, "Xh22_StepCtl"},
+        {0x4025D0, Xh22_ShotCtl, "Xh22_ShotCtl"},
+        {0x402750, Xh22_TurnPad, "Xh22_TurnPad"},
+        {0x402870, Xh22_TurnPad, "Xh22_TurnPad"},
+        {0x4016E0, Xh22_Stand, "Xh22_Stand"},
+        {0x401870, Xh22_Turn, "Xh22_Turn"},
+        {0x4018E0, Xh22_TurnToFoe, "Xh22_TurnToFoe"},
+        {0x401AD0, Xh22_Walk, "Xh22_Walk"},
+        {0x401C50, Xh22_Run, "Xh22_Run"},
+        {0x401DC0, Xh22_Back, "Xh22_Back"},
+        {0x401E60, Xh22_TurnAbout, "Xh22_TurnAbout", 0x57, 4},
+        {0x402100, Xh22_Guard, "Xh22_Guard"},
+        {0x402300, Xh22_SideStep, "Xh22_SideStep", 0x57, 2},
+        {0x402400, Xh22_Pose, "Xh22_Pose"},
+        {0x402490, Xh22_Super, "Xh22_Super"},
+        {0x402530, Xh22_Roll, "Xh22_Roll"},
+        {0x402620, Xh22_Lunge, "Xh22_Lunge"},
+        {0x402780, Xh22_Dash, "Xh22_Dash"},
+        {0x4028A0, Xh22_Shot, "Xh22_Shot"},
+        {0x402940, Xh22_Kick, "Xh22_Kick", 0x57, 2},
+        {0x402A00, Xh22_SparkShot, "Xh22_SparkShot"},
+        {0x402A30, Xh22_SparkShot2, "Xh22_SparkShot2"},
+        {0x402A50, Xh22_SparkKick, "Xh22_SparkKick"},
+        {0x402A80, Xh22_HitReact, "Xh22_HitReact"},
+        {0x402D10, Xh22_Flinch, "Xh22_Flinch"},
+        {0x402D90, Xh22_Flinch2, "Xh22_Flinch2"},
+        {0x402E10, Xh22_Thrown, "Xh22_Thrown", 0x57, 2},
+        {0x402F30, Xh22_Blocked, "Xh22_Blocked"},
+        {0x402FA0, Xh22_Fall, "Xh22_Fall"},
+        {0x403100, Xh22_FallThrown, "Xh22_FallThrown", 0x57, 2},
+        {0x403320, Xh22_Glow, "Xh22_Glow"}};
+    static const u32 tabs[][2] = {{0x71B0B0, 4}, {0x71B0C0, 16}, {0x71B100, 16}, {0x71B140, 12}, {0x71B170, 12}, {0x71B1A0, 16}};
+    static const u8 kinds[] = {0x1F};
+    xh_run(F, sizeof F / sizeof F[0], tabs, 6, 0x746C48, 0x746C98, 0x71B030, 0x71B070, kinds, 1, xh22_vars);
+}
+
+static void xh24_vars(gptr o)
+{
+    xh_gun_vars(o, 0x75BDA6, 0x75BDA0, 0x75BD60, 0x75BD68, 0x75BD6E, 0x75BD70, 0x75BD72, 0x75BD74);
+    U32(0x75BD70) = (u32)A2_PICK(0, 1, 2, 3, 0xA0, 0x9F, (s32)(rnd() % 0x100), (s32)rnd());
+    U8(o + 0x57) = (u8)(rnd() % 4 ? rnd() % 2 : rnd());
+}
+static void test_xh24(void)
+{
+    static const XhFn F[] = {
+        {0x4A9370, Xh24_Handler, "Xh24_Handler"},
+        {0x4A9630, Xh24_Init, "Xh24_Init"},
+        {0x4A9820, Xh24_Normal, "Xh24_Normal", 0x55, 10},
+        {0x4A98A0, Xh24_Hit, "Xh24_Hit", 0x55, 11},
+        {0x4A98C0, Xh24_Die, "Xh24_Die", 0x55, 11},
+        {0x4A98E0, Xh24_Attack, "Xh24_Attack", 0x55, 10},
+        {0x4A9930, Xh24_StandCtl, "Xh24_StandCtl"},
+        {0x4A9A70, Xh24_TurnCtl, "Xh24_TurnCtl"},
+        {0x4A9C70, Xh24_WalkCtl, "Xh24_WalkCtl"},
+        {0x4A9D80, Xh24_RunCtl, "Xh24_RunCtl"},
+        {0x4A9EA0, Xh24_BackCtl, "Xh24_BackCtl"},
+        {0x4A9FA0, Xh24_TurnPad, "Xh24_TurnPad"},
+        {0x4AA060, Xh24_TurnPad, "Xh24_TurnPad"},
+        {0x4AA120, Xh24_TurnPad, "Xh24_TurnPad"},
+        {0x4AA200, Xh24_SuperCtl, "Xh24_SuperCtl"},
+        {0x4A9A10, Xh24_Stand, "Xh24_Stand"},
+        {0x4A9B30, Xh24_Turn, "Xh24_Turn"},
+        {0x4A9B90, Xh24_TurnToFoe, "Xh24_TurnToFoe"},
+        {0x4A9D20, Xh24_Walk, "Xh24_Walk"},
+        {0x4A9E30, Xh24_Run, "Xh24_Run"},
+        {0x4A9F40, Xh24_Back, "Xh24_Back"},
+        {0x4A9FD0, Xh24_Shot, "Xh24_Shot"},
+        {0x4AA090, Xh24_Burst, "Xh24_Burst"},
+        {0x4AA150, Xh24_SideShot, "Xh24_SideShot", 0x57, 2},
+        {0x4AA230, Xh24_Super, "Xh24_Super"},
+        {0x4AA330, Xh24_SparkShot, "Xh24_SparkShot"},
+        {0x4AA360, Xh24_SparkBurst, "Xh24_SparkBurst"},
+        {0x4AA390, Xh24_SparkSide, "Xh24_SparkSide", 0x57, 2},
+        {0x4AA3E0, Xh24_HitReact, "Xh24_HitReact"},
+        {0x4AA580, Xh24_Flinch, "Xh24_Flinch"},
+        {0x4AA5F0, Xh24_Flinch2, "Xh24_Flinch2"},
+        {0x4AA660, Xh24_Down, "Xh24_Down"},
+        {0x4AA6E0, Xh24_Fall, "Xh24_Fall"}};
+    static const u32 tabs[][2] = {{0x73B344, 4}, {0x73B354, 10}, {0x73B37C, 10}, {0x73B3A4, 11}, {0x73B3D0, 11}, {0x73B3FC, 10}};
+    static const u8 kinds[] = {0x1F};
+    xh_run(F, sizeof F / sizeof F[0], tabs, 6, 0x75BD58, 0x75BDA4, 0x73B2D8, 0x73B310, kinds, 1, xh24_vars);
+}
+
+static void xh25_vars(gptr o)
+{
+    xh_gun_vars(o, 0x746D0A, 0x746CFC, 0x746CB0, 0x746CB8, 0x746CE4, 0x746CE6, 0x746CE8, 0x746CF8);
+    S16(0x746CE8) = (s16)A2_PICK(0, 2, 3, 4, 5, 6, (s32)rnd());
+    U16(0x746CE6) = (u16)A2_PICK(0, 1, 2, 3, 0x96, (s32)(rnd() % 0x100));
+    U16(0x746CF8) = (u16)A2_PICK(0, 1, 2, (s32)rnd());
+    U16(o + 0x10C) = rnd() % 4 ? 0 : 1;
+    U16(o + 0x10E) = (u16)rnd();
+    for (u32 k = 0; k < 9; k++) U16(0x746D0C + 2 * k) = (u16)(rnd() % 4);
+    U32(0x746D00) = MODEL_DATA; U32(0x746D04) = U32(o + 0x88);
+    {                                                   /* the pack's frames by the model's stride: lengths not 0 */
+        u32 nm = U32(MODEL_DATA + 0x14), st = (u8)((u8)(((nm * 36 + 0x1F) >> 5) + 3) << 2);
+        for (u32 f = 0; f < 10; f++) { S16(AN_DATA + 0x16 + f * st) = (s16)(1 + rnd() % 8); S16(AN_DATA + 0x1016 + f * st) = (s16)(1 + rnd() % 8); }
+    }
+    U32(0x746CD4) = U32(o + 0x40) + (rnd() % 2000 - 1000); U16(0x746CD8) = (u16)(U16(o + 0x44) + rnd() % 2000 - 1000);
+    U32(0x87DCA0) = TYPE_TAB;                           /* (the pack's handler: a recorder) */
+    for (int j = 0; j < 64; j++) U32(TYPE_TAB + 4 * j) = (u32)(uintptr_t)g_recs[STUB_TYPE];
+    U8(o + 0x57) = (u8)(rnd() % 4 ? rnd() % 2 : rnd());
+}
+static void test_xh25(void)
+{
+    static const XhFn F[] = {
+        {0x4071E0, Xh25_Handler, "Xh25_Handler"},
+        {0x4074C0, Xh25_Init, "Xh25_Init"},
+        {0x4076C0, Xh25_Normal, "Xh25_Normal", 0x55, 9},
+        {0x407780, Xh25_Hit, "Xh25_Hit", 0x55, 9},
+        {0x4077A0, Xh25_Die, "Xh25_Die", 0x55, 9},
+        {0x4077C0, Xh25_Attack, "Xh25_Attack", 0x55, 9},
+        {0x407810, Xh25_StandCtl, "Xh25_StandCtl"},
+        {0x407970, Xh25_TurnCtl, "Xh25_TurnCtl"},
+        {0x407B90, Xh25_WalkCtl, "Xh25_WalkCtl"},
+        {0x407CA0, Xh25_RunCtl, "Xh25_RunCtl"},
+        {0x407DB0, Xh25_BackCtl, "Xh25_BackCtl"},
+        {0x407FE0, Xh25_TurnPad, "Xh25_TurnPad"},
+        {0x4078F0, Xh25_Stand, "Xh25_Stand"},
+        {0x407A30, Xh25_Turn, "Xh25_Turn"},
+        {0x407AA0, Xh25_TurnToFoe, "Xh25_TurnToFoe"},
+        {0x407C40, Xh25_Walk, "Xh25_Walk"},
+        {0x407D50, Xh25_Run, "Xh25_Run"},
+        {0x407E50, Xh25_Back, "Xh25_Back"},
+        {0x407EB0, Xh25_Spin, "Xh25_Spin", 0x57, 2},
+        {0x407F60, Xh25_Call, "Xh25_Call"},
+        {0x408010, Xh25_Leap, "Xh25_Leap"},
+        {0x4080A0, Xh25_SparkLeap, "Xh25_SparkLeap"},
+        {0x4080D0, Xh25_HitReact, "Xh25_HitReact"},
+        {0x408220, Xh25_Flinch, "Xh25_Flinch"},
+        {0x4082C0, Xh25_Fall, "Xh25_Fall"},
+        {0x408370, Xh25_Pack, "Xh25_Pack", 0x54, 4},
+        {0x4083D0, Xh25_PackInit, "Xh25_PackInit"},
+        {0x4084B0, Xh25_PackRun, "Xh25_PackRun"},
+        {0x408580, Xh25_Summon, "Xh25_Summon"}};
+    static const u32 tabs[][2] = {{0x71D614, 4}, {0x71D624, 9}, {0x71D648, 9}, {0x71D66C, 9}, {0x71D690, 9}, {0x71D6B4, 9}, {0x71D6EC, 4}};
+    static const u8 kinds[] = {0x1F};
+    xh_run(F, sizeof F / sizeof F[0], tabs, 7, 0x746CA8, 0x746D08, 0x71D5D8, 0x71D5F8, kinds, 1, xh25_vars);
+}
+
+static void xh26_vars(gptr o)
+{
+    xh_gun_vars(o, 0x74B1FE, 0x74B1F8, 0x74B1B0, 0x74B1B8, 0x74B1E8, 0x74B1C0, 0x74B1C2, 0x74B1C4);
+    U32(0x74B1B0) = rnd() % 3 ? rnd() & 0x7F : rnd();
+    U16(o + 0x10A) = (u16)A2_PICK(0x4B0, 0x4AF, 0, 1, (s32)rnd());
+    U16(o + 0x108) = (u16)A2_PICK(U16(o + 0x10A), U16(o + 0x10A) - 1, U16(o + 0x10A) + 1, U16(o + 0x10A) / 2, 0, -1, (s32)rnd());
+    U8(o + 0x57) = (u8)(rnd() % 4 ? rnd() % 2 : rnd());
+    U16(o + 0xF4) = (u16)A2_PICK(0, -0x1E, -0x1D, -0x1F, 0x3C, 0x3B, 0x3D, 0x78, 0x77, (s32)rnd());
+    if (rnd() % 4)
+        U16(o + 0x92) = (u16)A2_PICK(9, 0xA, 0xD, 0xE, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1C, 0x1D, 0x24, 0x25, 0x26, 0x2A, 0x2B,
+                                     0x2C, 0x2D, 0x2E, 0x31, 0x32, 0x35, 0x36, 0x40, 0x41);
+    if (rnd() % 4 == 0) U16(o + 0x92) = (u16)(0x2B + rnd() % 3);   /* (the dead one's prop at 0x2D) */
+    if (rnd() % 4 == 0) U8(o + 0x57) = (u8)(0x12 + rnd() % 3);     /* (the turn to the foe gives up at 0x14) */
+}
+static void test_xh26(void)
+{
+    static const XhFn F[] = {
+        {0x454CE0, Xh26_Handler, "Xh26_Handler"},
+        {0x454F70, Xh26_Init, "Xh26_Init"},
+        {0x455160, Xh26_Normal, "Xh26_Normal", 0x55, 10},
+        {0x455250, Xh26_Hit, "Xh26_Hit", 0x55, 10},
+        {0x455270, Xh26_Die, "Xh26_Die", 0x55, 10},
+        {0x455290, Xh26_Attack, "Xh26_Attack", 0x55, 10},
+        {0x4552E0, Xh26_StandCtl, "Xh26_StandCtl"},
+        {0x455440, Xh26_TurnCtl, "Xh26_TurnCtl"},
+        {0x455670, Xh26_WalkCtl, "Xh26_WalkCtl"},
+        {0x4557A0, Xh26_BackCtl, "Xh26_BackCtl"},
+        {0x455AA0, Xh26_TurnPad, "Xh26_TurnPad"},
+        {0x455C80, Xh26_TurnPad, "Xh26_TurnPad"},
+        {0x455B80, Xh26_KickCtl, "Xh26_KickCtl"},
+        {0x4553D0, Xh26_Stand, "Xh26_Stand"},
+        {0x455510, Xh26_Turn, "Xh26_Turn"},
+        {0x455580, Xh26_TurnToFoe, "Xh26_TurnToFoe"},
+        {0x455730, Xh26_Walk, "Xh26_Walk"},
+        {0x455860, Xh26_Back, "Xh26_Back"},
+        {0x4558D0, Xh26_Dodge, "Xh26_Dodge"},
+        {0x455970, Xh26_TurnAbout, "Xh26_TurnAbout", 0x57, 2},
+        {0x455AD0, Xh26_Punch, "Xh26_Punch"},
+        {0x455BD0, Xh26_Kick, "Xh26_Kick"},
+        {0x455CB0, Xh26_Spin, "Xh26_Spin"},
+        {0x455D80, Xh26_SparkPunch, "Xh26_SparkPunch"},
+        {0x455DB0, Xh26_SparkKick, "Xh26_SparkKick"},
+        {0x455DE0, Xh26_SparkSpin, "Xh26_SparkSpin"},
+        {0x455E00, Xh26_HitReact, "Xh26_HitReact"},
+        {0x455FE0, Xh26_Flinch, "Xh26_Flinch"},
+        {0x456050, Xh26_Flinch2, "Xh26_Flinch2"},
+        {0x4560C0, Xh26_Fall, "Xh26_Fall"}};
+    static const u32 tabs[][2] = {{0x722528, 4}, {0x722538, 10}, {0x722560, 10}, {0x722588, 10}, {0x7225B0, 10}, {0x7225D8, 10}};
+    static const u8 kinds[] = {0x1F};
+    xh_run(F, sizeof F / sizeof F[0], tabs, 6, 0x74B1A8, 0x74B1FC, 0x7224C8, 0x722500, kinds, 1, xh26_vars);
 }
 
 /* ---- the vehicle's gun (src/game/vgun.c) ---- */
@@ -16381,6 +16804,20 @@ static int in_list(const char *list, const char *name)
     }
 }
 
+/* the tables of src/data against the exe's sections as loaded (run first:
+   the other tests change .data) */
+static void test_data(void)
+{
+    for (int l = 0; g_data_lists[l]; l++)
+        for (const DataBlock *b = g_data_lists[l]; b->size; b++) {
+            g_tests++;
+            if (!memcmp(MEM(b->addr), b->p, b->size)) continue;
+            u32 i = 0; while (MEM(b->addr)[i] == ((const u8 *)b->p)[i]) i++;
+            if (g_fail++ < 20) printf("FAIL data table 0x%06X (%u bytes): byte 0x%06X is %02X, exe %02X\n", b->addr, b->size,
+                                      b->addr + i, ((const u8 *)b->p)[i], MEM(b->addr)[i]);
+        }
+}
+
 __declspec(dllexport) void harness_main(int argc, char **argv)
 {
     SetUnhandledExceptionFilter(on_crash);
@@ -16398,10 +16835,10 @@ __declspec(dllexport) void harness_main(int argc, char **argv)
     }
     U32(A_G_PTR) = A_G_STATIC;
     struct { const char *name; void (*fn)(void); } T[] = {
-        {"flags", test_flags}, {"geometry", test_geom}, {"script values", test_script_values},
+        {"data tables", test_data}, {"flags", test_flags}, {"geometry", test_geom}, {"script values", test_script_values},
         {"script opcodes", test_script_ops}, {"script objects", test_objects},
         {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"objects 2", test_object}, {"collision", test_collision}, {"player", test_player}, {"player states", test_player2}, {"zones", test_zones}, {"loading", test_room}, {"title", test_title}, {"game task", test_game}, {"doors", test_doors}, {"frame", test_frame}, {"enemy sets", test_enemyset}, {"enemies", test_enemies}, {"raptor", test_raptor}, {"oviraptor", test_ovi}, {"allosaurus", test_allo}, {"pteranodon", test_ptera}, {"area pteranodon", test_ptera2}, {"tyrannosaurus", test_trex}, {"plesiosaurus", test_plesio}, {"water plesiosaurs", test_pw}, {"roamer", test_roam}, {"giganotosaurus", test_gig},
-    {"inostrancevia", test_ino}, {"triceratops", test_tri}, {"mosasaurus", test_mosa}, {"compsognathus", test_compso}, {"duel inostrancevia", test_kof_ino}, {"duel triceratops", test_kof_tri}, {"duel raptor", test_kof_rap}, {"duel oviraptor", test_kof_ovi}, {"duel allosaurus", test_kof_allo}, {"duel tyrannosaurus", test_kof_rex}, {"duel compsognathus", test_kof_comp}, {"duel human", test_kof_human}, {"vehicle gun", test_vgun}, {"area falling piece", test_ao_drop}, {"area flying shell", test_ao_shell}, {"area moving piece", test_ao_mover}, {"area bird", test_ao_bird}, {"area rock", test_ao_rock}, {"area insect", test_ao_bug}, {"area poison plant", test_ao_plant}, {"area burner", test_ao_burner}, {"weapon objects", test_ao_weapons}, {"area 4/8 objects", test_aobj2}, {"area effects", test_k2_area}, {"sound slots", test_snd_slots}, {"menus", test_menu}, {"title 2", test_title2}, {"result", test_result}, {"extra crisis", test_extra}, {"models", test_model}, {"ending 3d", test_ending3d}, {"ending", test_ending}, {"options", test_options}, {"save slots", test_savefile}, {"save room", test_shop}, {"aot kinds", test_aot_kinds}, {"object effects", test_obj_effects}, {"effect slots", test_k2}, {"effect drops", test_k2_drops}, {"effect emitters", test_eff_slots}, {"effect slots 3", test_k2_more}, {"camera effect", test_camfx}, {"turret", test_turret}, {"water", test_water}, {"blasts", test_blast}, {"ride", test_ride}, {"meter", test_meter}, {"multi camera", test_multicam}, {"duel arena", test_duel}, {"waves", test_waves}, {"versus", test_versus}, {"vehicle", test_vehicle}, {"effect burst", test_fxburst}, {"flamethrower", test_flame}, {"effect pieces", test_fxpieces}, {"screen tint", test_tint}, {"area effects 2", test_fxmisc}, {"area effects 3", test_fxmisc2}, {"helpers", test_helpers}, {"draw", test_draw}, {"pc gpu", test_pcgpu}, {"pc draw", test_pcdraw}, {"pc masks", test_pcmasks}, {"pc frame", test_pcframe},
+    {"inostrancevia", test_ino}, {"triceratops", test_tri}, {"mosasaurus", test_mosa}, {"compsognathus", test_compso}, {"duel inostrancevia", test_kof_ino}, {"duel triceratops", test_kof_tri}, {"duel raptor", test_kof_rap}, {"duel oviraptor", test_kof_ovi}, {"duel allosaurus", test_kof_allo}, {"duel tyrannosaurus", test_kof_rex}, {"duel compsognathus", test_kof_comp}, {"duel human", test_kof_human}, {"extra human 20", test_xh20}, {"extra human 21", test_xh21}, {"extra human 22", test_xh22}, {"extra human 24", test_xh24}, {"extra human 25", test_xh25}, {"extra human 26", test_xh26}, {"vehicle gun", test_vgun}, {"area falling piece", test_ao_drop}, {"area flying shell", test_ao_shell}, {"area moving piece", test_ao_mover}, {"area bird", test_ao_bird}, {"area rock", test_ao_rock}, {"area insect", test_ao_bug}, {"area poison plant", test_ao_plant}, {"area burner", test_ao_burner}, {"area 9 objects", test_aobj9}, {"weapon objects", test_ao_weapons}, {"area 4/8 objects", test_aobj2}, {"area effects", test_k2_area}, {"sound slots", test_snd_slots}, {"menus", test_menu}, {"title 2", test_title2}, {"result", test_result}, {"extra crisis", test_extra}, {"models", test_model}, {"ending 3d", test_ending3d}, {"ending", test_ending}, {"options", test_options}, {"save slots", test_savefile}, {"save room", test_shop}, {"aot kinds", test_aot_kinds}, {"object effects", test_obj_effects}, {"effect slots", test_k2}, {"effect drops", test_k2_drops}, {"effect emitters", test_eff_slots}, {"effect slots 3", test_k2_more}, {"camera effect", test_camfx}, {"turret", test_turret}, {"water", test_water}, {"blasts", test_blast}, {"ride", test_ride}, {"meter", test_meter}, {"multi camera", test_multicam}, {"duel arena", test_duel}, {"waves", test_waves}, {"versus", test_versus}, {"vehicle", test_vehicle}, {"effect burst", test_fxburst}, {"flamethrower", test_flame}, {"effect pieces", test_fxpieces}, {"screen tint", test_tint}, {"area effects 2", test_fxmisc}, {"area effects 3", test_fxmisc2}, {"helpers", test_helpers}, {"draw", test_draw}, {"pc gpu", test_pcgpu}, {"pc draw", test_pcdraw}, {"pc masks", test_pcmasks}, {"pc frame", test_pcframe},
     };
     for (unsigned i = 0; i < sizeof T / sizeof T[0]; i++) {
         int f0 = g_fail, t0 = g_tests;

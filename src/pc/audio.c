@@ -9,7 +9,8 @@
  * v / 127 * 3000 - 3000 hundredths of a dB (streams: * 10000 - 10000), pan
  * p / 64 * 10000 - 10000; a frequency other than 0 replays at that rate.
  * Streams (Strm_*): MPEG-1 layer III data (the room's music) decoded whole
- * at Strm_Open (minimp3), looping when opened so. */
+ * at Strm_Open (minimp3), looping when opened so. A source (the movie's
+ * sound, src/pc/movie.c) is added in at full volume. */
 #ifndef DC2_IN_PROCESS
 #include <stdlib.h>
 #include <string.h>
@@ -17,7 +18,6 @@
 #include "dc2/types.h"
 #include "dc2/pcio.h"
 #define MINIMP3_IMPLEMENTATION
-#define MINIMP3_ONLY_MP3
 #include "../../third_party/minimp3/minimp3.h"
 #include <stdio.h>
 
@@ -41,6 +41,7 @@ static Voice g_buf[NBUF], g_strm[NSTRM];
 static u32 g_rate = 44100;
 static void (*g_sink)(const s16 *lr, u32 frames);
 static double g_carry;
+static u32 (*g_source)(float *lr, u32 frames);
 
 static float db_gain(s32 cb) { return cb <= -10000 ? 0.0f : (float)pow(10.0, cb / 2000.0); }
 static void gains(Voice *v)
@@ -179,6 +180,7 @@ void PcAudio_Mix(s16 *lr, u32 frames)
         memset(acc, 0, 2 * n * sizeof(float));
         for (u32 h = 0; h < NBUF; h++) if (g_buf[h].used) mix_voice(&g_buf[h], acc, n);
         for (u32 h = 0; h < NSTRM; h++) if (g_strm[h].used) mix_voice(&g_strm[h], acc, n);
+        if (g_source) g_source(acc, n);
         for (u32 i = 0; i < 2 * n; i++) {
             float s = acc[i];
             lr[i] = (s16)(s > 32767.0f ? 32767 : s < -32768.0f ? -32768 : (s32)s);
@@ -187,6 +189,8 @@ void PcAudio_Mix(s16 *lr, u32 frames)
     }
 }
 
+void PcAudio_SetSource(u32 (*add)(float *lr, u32 frames)) { g_source = add; }
+u32 PcAudio_Rate(void) { return g_rate; }
 void PcAudio_Init(u32 rate, void (*sink)(const s16 *lr, u32 frames)) { g_rate = rate ? rate : 44100; g_sink = sink; }
 
 void PcAudio_Frame(u32 sixtieths)

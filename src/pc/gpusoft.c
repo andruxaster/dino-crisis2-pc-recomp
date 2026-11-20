@@ -134,6 +134,25 @@ static u32 release(u32 h)
 static void pix_put(Obj *o, u32 x, u32 y, u32 c) { if (o->bpp == 2) ((u16 *)o->pix)[y * o->w + x] = (u16)c; else ((u32 *)o->pix)[y * o->w + x] = c; }
 static u32 pix_get(const Obj *o, u32 x, u32 y) { return o->bpp == 2 ? ((u16 *)o->pix)[y * o->w + x] : ((u32 *)o->pix)[y * o->w + x]; }
 
+/* pixels drawn into the back buffer over [x0,x1) x [y0,y1), stretched (a
+   blit to the screen: the movies' frames) */
+void PcSoft_DrawImage(u32 id, u32 version, const void *pix, u32 w, u32 h, u32 bpp, s32 x0, s32 y0, s32 x1, s32 y1)
+{
+    if (!g_r || !g_r->draw || !w || !h) return;
+    RTexture t = {id, version, w, h, bpp, w * bpp, pix};
+    RState s;
+    memset(&s, 0, sizeof s);
+    s.filter = 1;
+    RVertex v[4];
+    memset(v, 0, sizeof v);
+    for (int i = 0; i < 4; i++) {
+        v[i].x = (float)(i & 1 ? x1 : x0); v[i].y = (float)(i & 2 ? y1 : y0);
+        v[i].rhw = 1.0f; v[i].diffuse = 0xFFFFFFFF;
+        v[i].u = i & 1 ? 1.0f : 0.0f; v[i].v = i & 2 ? 1.0f : 0.0f;
+    }
+    g_r->draw(5, v, 4, &s, &t);
+}
+
 static u32 blt(u32 dst, const void *dr, u32 src, const void *sr, u32 flags, const void *fx)
 {
     Obj *d = obj(dst), *s = obj(src);
@@ -150,7 +169,11 @@ static u32 blt(u32 dst, const void *dr, u32 src, const void *sr, u32 flags, cons
     }
     if (!s || s->kind != K_SURF) return 1;
     if (s->back && g_r && g_r->read_back) g_r->read_back((u16 *)s->pix, s->w, s->h, s->w * 2);
-    if (d->back) return 0;                      /* (to the screen: drawn by the renderer) */
+    if (d->back) {                              /* to the screen: drawn by the renderer */
+        if (!s->back && s->pix && !sr && s->w && s->h)
+            PcSoft_DrawImage(src, s->version, s->pix, s->w, s->h, s->bpp, (s32)r[0], (s32)r[1], (s32)r[2], (s32)r[3]);
+        return 0;
+    }
     u32 dw = r[2] - r[0], dh = r[3] - r[1], sw = q[2] - q[0], sh = q[3] - q[1];
     if (!dw || !dh) return 0;
     for (u32 y = 0; y < dh; y++) {

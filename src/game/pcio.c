@@ -79,8 +79,10 @@ void DC2CALL Fog_Enable(u32 on)                 { ORIG(0x4B4F50, void (DC2CALL *
 const char *g_pc_root = ".";
 
 static FILE *g_files[16];
+static int resolve(const char *game_path, char *out, size_t n);
 
 /* "data\NAME" -> root/data/NAME, each component matched without case */
+int Pc_HostPath(const char *game_path, char *out, unsigned long n) { return resolve(game_path, out, n); }
 static int resolve(const char *game_path, char *out, size_t n)
 {
     char comp[256];
@@ -174,12 +176,7 @@ u16 g_pad_raw[2];
 void DC2CALL Input_ReadPad(u32 p) { if (p < 2) U16(0x87DC42 + p * 0x24) = g_pad_raw[p]; }
 u32 DC2CALL Input_ReadKey(void) { return 0; }   /* (no keyboard to bind keys from) */
 void DC2CALL Display_Apply(void) {}              /* (the window keeps its mode) */
-u32 DC2CALL Movie_Open(gptr name, u32 w, u32 h) { (void)name; (void)w; (void)h; return 0; }
-void DC2CALL Movie_Ctl1(void) {}
-void DC2CALL Movie_Ctl0(void) {}
-u32 DC2CALL Movie_Poll(void) { return 1; }
 void DC2CALL Movie_Clear(u32 m) { extern void PcDraw_Clear(u32); PcDraw_Clear(m); }
-void DC2CALL Movie_Close(void) {}
 /* the masks: src/pc/drawot.c (the marker: none while no masks are built) */
 void DC2CALL Masks_CreateVB(u32 n, gptr p) { PcDraw_MasksCreate(n, p); }
 void DC2CALL Masks_SetQuad(u32 i, u32 x, u32 y, u32 z) { PcDraw_MasksSetQuad(i, x, y, z); }

@@ -1,12 +1,11 @@
 /* smoke -- the reimplemented game code running natively (no Dino2.exe code).
- * Builds the game's memory image from the data sections of Dino2.exe
- * (temporary: the tables will move into C), loads a room with the game's
+ * Builds the game's memory image from the tables of src/data, loads a room with the game's
  * file loader (File_Process: room block LZSS to 0x5E0000, tables, sound,
  * textures to the PC layer, which is not rewritten yet), starts the room script like
  * Script_Init and runs Script_Run frame by frame until an opcode that is
  * not reimplemented yet stops the threads.
  * Functions that are not rewritten yet are reported once and skipped.
- *   usage: smoke Dino2.exe DATA_DIR [ROOM|all] [FRAMES] */
+ *   usage: smoke DATA_DIR [ROOM|all] [FRAMES] */
 #include <stdio.h>
 #include <stdlib.h>
 #include <dirent.h>
@@ -17,37 +16,17 @@
 #include "dc2/game.h"
 #include "dc2/orig.h"
 #include "dc2/pcio.h"
+#include "dc2/data.h"
 
 u8 *g_membase;
 
-static u8 *read_all(const char *path, long *n)
+static int load_image(void)
 {
-    FILE *f = fopen(path, "rb");
-    if (!f) return NULL;
-    fseek(f, 0, SEEK_END); *n = ftell(f); fseek(f, 0, SEEK_SET);
-    u8 *d = malloc(*n);
-    if (fread(d, 1, *n, f) != (size_t)*n) { fclose(f); free(d); return NULL; }
-    fclose(f);
-    return d;
-}
-
-static int load_data_sections(const char *exe)
-{
-    long n; u8 *d = read_all(exe, &n);
-    if (!d) return 0;
-    u32 pe = *(u32 *)(d + 0x3C); u16 nsec = *(u16 *)(d + pe + 6), opt = *(u16 *)(d + pe + 20);
     g_membase = calloc(1, IMAGE_SIZE + TMP_SIZE + HEAP_SIZE);
-    for (int i = 0; i < nsec; i++) {
-        u8 *s = d + pe + 24 + opt + 40 * i;
-        u32 va = *(u32 *)(s + 12), rs = *(u32 *)(s + 16), ro = *(u32 *)(s + 20), ch = *(u32 *)(s + 36);
-        if (ch & 0x20000000) continue;                  /* executable: not needed */
-        memcpy(g_membase + va, d + ro, rs);
-    }
-    free(d);
+    if (!g_membase) return 0;
+    Data_Init();
     return 1;
 }
-
-static const char *g_exe;
 
 /* Game code reads data that loaders not rewritten yet would have put in
    memory (models, animations of cutscene files, ...). A fault there ends
@@ -84,7 +63,7 @@ static void type_handler(gptr fn, u32 obj)
 static int run_room(const char *data, const char *room, int frames)
 {
     free(g_membase);
-    if (!load_data_sections(g_exe)) { fprintf(stderr, "cannot read %s\n", g_exe); return 1; }
+    if (!load_image()) { fprintf(stderr, "out of memory\n"); return 1; }
     U32(A_G_PTR) = A_G_STATIC;
 
     /* the room file through the game's own loader (File_Process) */
@@ -139,16 +118,15 @@ static int cmp(const void *a, const void *b) { return strcmp(*(char **)a, *(char
 
 int main(int argc, char **argv)
 {
-    if (argc < 3) { fprintf(stderr, "usage: %s Dino2.exe DATA_DIR [ROOM|all] [FRAMES]\n", argv[0]); return 1; }
+    if (argc < 2) { fprintf(stderr, "usage: %s DATA_DIR [ROOM|all] [FRAMES]\n", argv[0]); return 1; }
     setvbuf(stdout, NULL, _IOLBF, 0);
-    g_exe = argv[1];
-    static char root[1024]; snprintf(root, sizeof root, "%s", argv[2]);
+    static char root[1024]; snprintf(root, sizeof root, "%s", argv[1]);
     g_pc_root = dirname(root);                 /* "data\NAME" is looked up from here */
-    const char *room = argc > 3 ? argv[3] : "ST100";
-    int frames = argc > 4 ? atoi(argv[4]) : 120;
-    if (strcmp(room, "all")) return run_room(argv[2], room, frames);
-    DIR *dir = opendir(argv[2]);
-    if (!dir) { fprintf(stderr, "cannot open %s\n", argv[2]); return 1; }
+    const char *room = argc > 2 ? argv[2] : "ST100";
+    int frames = argc > 3 ? atoi(argv[3]) : 120;
+    if (strcmp(room, "all")) return run_room(argv[1], room, frames);
+    DIR *dir = opendir(argv[1]);
+    if (!dir) { fprintf(stderr, "cannot open %s\n", argv[1]); return 1; }
     char *names[256]; int n = 0; struct dirent *e;
     while ((e = readdir(dir)) && n < 256) {
         size_t l = strlen(e->d_name);
@@ -158,7 +136,7 @@ int main(int argc, char **argv)
     qsort(names, n, sizeof *names, cmp);
     int bad = 0, stopped = 0;
     for (int i = 0; i < n; i++) {
-        int r = run_room(argv[2], names[i], frames);
+        int r = run_room(argv[1], names[i], frames);
         if (r == 2) stopped++; else bad |= r;
     }
     printf("%d rooms, %d stopped on missing data\n", n, stopped);

@@ -45,9 +45,16 @@ u32  DC2CALL Strm_Open(gptr mp3, u32 size, u32 loop);  /* 0x4BFC10: handle or -1
 void PcAudio_Init(u32 rate, void (*sink)(const s16 *lr, u32 frames));
 void PcAudio_Frame(u32 sixtieths);
 void PcAudio_Mix(s16 *lr, u32 frames);
+/* a source mixed in at full volume (the movie's sound): adds up to n frames
+   of stereo s16 at the mixer's rate to lr (as float), returns how many */
+void PcAudio_SetSource(u32 (*add)(float *lr, u32 frames));
+u32  PcAudio_Rate(void);
+/* "data\\NAME" -> the host's path under g_pc_root, each component matched
+   without case */
+int  Pc_HostPath(const char *game_path, char *out, unsigned long n);
 #endif
 
-/* movies (standalone: none; each "plays" for no time, as if it ended at once) */
+/* movies (standalone: src/pc/movie.c, the MPEG-1 files of MOVIE decoded) */
 u32  DC2CALL Movie_Open(gptr name, u32 w, u32 h);       /* 0x4BF3A0: 0 when it plays */
 void DC2CALL Movie_Ctl1(void);                          /* 0x4BF650: plays */
 void DC2CALL Movie_Ctl0(void);                          /* 0x4BF670: stops */

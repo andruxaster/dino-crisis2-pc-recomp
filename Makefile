@@ -6,8 +6,9 @@ CC32   ?= i686-w64-mingw32-gcc
 CC     ?= cc
 CFLAGS  = -std=gnu11 -O2 -Wall -Wextra -Wno-unused-parameter -Iinclude -fexcess-precision=standard -fno-strict-aliasing
 GAME    = src/game/lzss.c src/game/flag.c src/game/geom.c src/game/script_vm.c \
-          src/game/script_obj.c src/game/script_ops.c src/game/script_aot.c src/game/anim.c src/game/object.c src/game/player.c src/game/weapon.c src/game/zone.c src/game/gun.c src/game/door.c src/game/sound.c src/game/camera.c src/game/enemyset.c src/game/enemy.c src/game/raptor.c src/game/oviraptor.c src/game/allosaurus.c src/game/pteranodon.c src/game/trex.c src/game/plesio.c src/game/plesio2.c src/game/roamer.c src/game/gigano.c src/game/inostr.c src/game/tricera.c src/game/mosa.c src/game/compso.c src/game/kof.c src/game/kof_ino.c src/game/kof_tri.c src/game/kof_rap.c src/game/kof_ovi.c src/game/kof_allo.c src/game/kof_rex.c src/game/kof_comp.c src/game/kof_human.c src/game/vgun.c src/game/option.c src/game/savefile.c src/game/shop.c src/game/aobj.c src/game/ptera2.c src/game/aobj2.c src/game/k2area.c src/game/menu.c src/game/effect.c src/game/k2.c src/game/misc.c src/game/draw.c src/pc/gpu.c src/pc/jpeg.c src/pc/gpudev.c src/pc/drawot.c src/pc/input.c src/pc/gpusoft.c src/pc/audio.c src/game/crt.c src/game/file.c src/game/pcio.c src/game/room.c src/game/root.c src/game/title.c src/game/title2.c src/game/result.c src/game/extra.c src/game/model.c src/game/ending.c src/game/stagefx.c src/game/game.c src/game/task.c src/game/gte.c src/game/orig.c \
+          src/game/script_obj.c src/game/script_ops.c src/game/script_aot.c src/game/anim.c src/game/object.c src/game/player.c src/game/weapon.c src/game/zone.c src/game/gun.c src/game/door.c src/game/sound.c src/game/camera.c src/game/enemyset.c src/game/enemy.c src/game/raptor.c src/game/oviraptor.c src/game/allosaurus.c src/game/pteranodon.c src/game/trex.c src/game/plesio.c src/game/plesio2.c src/game/roamer.c src/game/gigano.c src/game/inostr.c src/game/tricera.c src/game/mosa.c src/game/compso.c src/game/kof.c src/game/kof_ino.c src/game/kof_tri.c src/game/kof_rap.c src/game/kof_ovi.c src/game/kof_allo.c src/game/kof_rex.c src/game/kof_comp.c src/game/kof_human.c src/game/vgun.c src/game/option.c src/game/savefile.c src/game/shop.c src/game/aobj.c src/game/ptera2.c src/game/aobj2.c src/game/aobj9.c src/game/xhum_a.c src/game/xhum_b.c src/game/k2area.c src/game/menu.c src/game/effect.c src/game/k2.c src/game/misc.c src/game/draw.c src/pc/gpu.c src/pc/jpeg.c src/pc/gpudev.c src/pc/drawot.c src/pc/input.c src/pc/gpusoft.c src/pc/audio.c src/pc/movie.c src/game/crt.c src/game/file.c src/game/pcio.c src/game/room.c src/game/root.c src/game/title.c src/game/title2.c src/game/result.c src/game/extra.c src/game/model.c src/game/ending.c src/game/stagefx.c src/game/game.c src/game/task.c src/game/gte.c src/game/orig.c \
           src/hook/hooks.c
+DATASRC = src/data/data.c src/data/rodata.c src/data/data_game.c src/data/data_pc.c
 DINO2  ?= game/Dino2.exe
 DATA   ?= game/Data
 OUT     = build
@@ -22,7 +23,7 @@ HDRS    = $(wildcard include/dc2/*.h) src/hook/hooks.h
 $(OUT)/dinput.dll: $(GAME) src/hook/dllmain.c $(HDRS) | $(OUT)
 	$(CC32) $(CFLAGS) -DDC2_IN_PROCESS -shared -o $@ $(filter %.c,$^) -Wl,--kill-at -static-libgcc
 
-$(OUT)/harness.dll: $(GAME) tests/harness.c $(HDRS) | $(OUT)
+$(OUT)/harness.dll: $(GAME) $(DATASRC) tests/harness.c $(HDRS) | $(OUT)
 	$(CC32) $(CFLAGS) -DDC2_IN_PROCESS -shared -o $@ $(filter %.c,$^) -Wl,--image-base,0x10000000 -Wl,--out-implib,$(OUT)/libharness.a -static-libgcc
 
 $(OUT)/harness_stub.exe: tests/stub.c $(OUT)/harness.dll
@@ -35,12 +36,15 @@ check: $(OUT)/harness_stub.exe
 	WINEDEBUG=-all wine $(OUT)/harness_stub.exe "$$(winepath -w $(DINO2))" "$$(winepath -w $(DATA))"
 
 linux: $(OUT)/libdc2game.a $(OUT)/smoke $(OUT)/dc2
-$(OUT)/libdc2game.a: $(GAME) $(HDRS) | $(OUT)
+$(OUT)/libdc2game.a: $(GAME) $(DATASRC) $(HDRS) | $(OUT)
 	for f in $(filter %.c,$^); do $(CC) $(CFLAGS) -c $$f -o $(OUT)/$$(basename $$f .c).o || exit 1; done
-	ar rcs $@ $(addprefix $(OUT)/,$(notdir $(GAME:.c=.o)))
+	ar rcs $@ $(addprefix $(OUT)/,$(notdir $(GAME:.c=.o) $(DATASRC:.c=.o)))
 $(OUT)/smoke: src/port/smoke.c $(OUT)/libdc2game.a
 	$(CC) $(CFLAGS) -o $@ $^ -lm
 $(OUT)/dc2: src/port/dc2.c $(OUT)/libdc2game.a
+	$(CC) $(CFLAGS) -o $@ $^ -lm
+# the movies checked in numbers (tests/movie_test.c)
+$(OUT)/movie_test: tests/movie_test.c $(OUT)/libdc2game.a
 	$(CC) $(CFLAGS) -o $@ $^ -lm
 # the game in a window (SDL2, OpenGL)
 dc2gl: $(OUT)/dc2gl

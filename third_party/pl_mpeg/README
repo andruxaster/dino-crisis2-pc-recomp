@@ -1,0 +1,5 @@
+pl_mpeg.h -- MPEG-1 video decoder and MPEG-PS demuxer, single header.
+https://github.com/phoboslab/pl_mpeg (commit c871f2be022ece7ef4f64230b4fb8e1fb9eb6023)
+Copyright (c) Dominic Szablewski, MIT license (SPDX header in the file).
+Used by src/pc/movie.c for the movies of MOVIE\*.DAT; their sound (MPEG
+audio layer I/II) is decoded with minimp3.
