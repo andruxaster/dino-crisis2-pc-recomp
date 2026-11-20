@@ -9,13 +9,25 @@
  * FROM-TO:MASK (0x1000 forward, 0x4000 back, 0x2000/0x8000 turn, 0x20 action).
  * DC2_TRACE=1 prints the player every 50 frames, the room's trigger areas, the
  * screen's fades and the background masks.
- *   usage: dc2 DATA_DIR [FRAMES] [FRAME:MASK | FROM-TO:MASK ...] */
+ * Without DATA_DIR the game's Data folder is looked for under [Assets] Path of
+ * config.ini (next to the executable; relative to its folder), else in the
+ * executable's own folder; FRAMES 0 runs until the window is closed (the
+ * default with a window).
+ *   usage: dc2 [DATA_DIR [FRAMES] [FRAME:MASK | FROM-TO:MASK ...]] */
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <libgen.h>
 #include <setjmp.h>
 #include <signal.h>
+#include <ctype.h>
+#ifdef _WIN32
+#include <windows.h>
+#define sigjmp_buf jmp_buf
+#define sigsetjmp(b, m) setjmp(b)
+#define siglongjmp longjmp
+#elif defined(__linux__)
+#include <unistd.h>
+#endif
 #include "dc2/game.h"
 #include "dc2/pcinput.h"
 #include "dc2/orig.h"
@@ -32,6 +44,86 @@
 #endif
 
 u8 *g_membase;
+
+/* ---- where things are: the executable's folder, config.ini ----------------------------------- */
+
+static char g_exe_dir[1024] = ".";
+
+static void find_exe_dir(const char *argv0)
+{
+    char p[1024] = "";
+#ifdef _WIN32
+    GetModuleFileNameA(NULL, p, sizeof p);
+#elif defined(__linux__)
+    ssize_t n = readlink("/proc/self/exe", p, sizeof p - 1);
+    if (n > 0) p[n] = 0; else p[0] = 0;
+#endif
+    if (!p[0]) snprintf(p, sizeof p, "%s", argv0);
+    char *e = p + strlen(p);
+    while (e > p && e[-1] != '/' && e[-1] != '\\') e--;
+    if (e > p) { e[-1] = 0; snprintf(g_exe_dir, sizeof g_exe_dir, "%s", p); }
+}
+
+static int strcasecmp_(const char *a, const char *b)
+{
+    for (; *a && tolower((unsigned char)*a) == tolower((unsigned char)*b); a++, b++) {}
+    return tolower((unsigned char)*a) - tolower((unsigned char)*b);
+}
+
+/* config.ini: [Display] Scale, FullScreen; [Assets] Path (keys without case) */
+static struct { int scale, fullscreen; char path[1024]; } g_cfg = {2, 0, ""};
+
+static void load_config(void)
+{
+    char fn[1100], line[1100], sec[64] = "";
+    snprintf(fn, sizeof fn, "%s/config.ini", g_exe_dir);
+    FILE *f = fopen(fn, "r");
+    if (!f) return;
+    while (fgets(line, sizeof line, f)) {
+        char *l = line;
+        while (isspace((unsigned char)*l)) l++;
+        char *c = strpbrk(l, ";#\r\n"); if (c) *c = 0;
+        if (*l == '[') { char *r = strchr(l, ']'); if (r) { *r = 0; snprintf(sec, sizeof sec, "%s", l + 1); } continue; }
+        char *eq = strchr(l, '='); if (!eq) continue;
+        *eq = 0;
+        char *k = l, *v = eq + 1, *t = eq;
+        while (t > k && isspace((unsigned char)t[-1])) *--t = 0;
+        while (isspace((unsigned char)*v)) v++;
+        for (t = v + strlen(v); t > v && isspace((unsigned char)t[-1]);) *--t = 0;
+        #define IS(a, b) (!strcasecmp_(a, b))
+        if (IS(sec, "Display") && IS(k, "Scale")) g_cfg.scale = atoi(v);
+        else if (IS(sec, "Display") && IS(k, "FullScreen")) g_cfg.fullscreen = atoi(v);
+        else if (IS(sec, "Assets") && IS(k, "Path")) snprintf(g_cfg.path, sizeof g_cfg.path, "%s", v);
+        #undef IS
+    }
+    fclose(f);
+}
+
+static int is_abs(const char *p) { return p[0] == '/' || p[0] == '\\' || (p[0] && p[1] == ':'); }
+
+/* the folder holding Data: [Assets] Path (from the executable's folder when
+   relative), else the executable's folder */
+static void default_root(char *out, size_t n)
+{
+    const char *parts[3] = {g_exe_dir, "/", g_cfg.path};
+    if (is_abs(g_cfg.path)) parts[0] = parts[1] = "";
+    else if (!g_cfg.path[0]) parts[1] = "";
+    size_t l = 0;
+    for (int i = 0; i < 3; i++) for (const char *c = parts[i]; *c && l + 1 < n; c++) out[l++] = *c;
+    out[l] = 0;
+}
+
+/* DATA_DIR's parent: the root the game's "data\..." paths start from */
+static void parent_of(char *p)
+{
+    size_t l = strlen(p);
+    while (l > 1 && (p[l - 1] == '/' || p[l - 1] == '\\')) p[--l] = 0;
+    char *e = p + l;
+    while (e > p && e[-1] != '/' && e[-1] != '\\') e--;
+    if (e == p) snprintf(p, 2, ".");
+    else if (e - 1 == p) p[1] = 0;
+    else e[-1] = 0;
+}
 
 /* the memory image: zero, the tables of src/data at their addresses */
 static int load_image(void)
@@ -160,12 +252,34 @@ static void draw_frame(void)
 
 int main(int argc, char **argv)
 {
-    if (argc < 2) { fprintf(stderr, "usage: %s DATA_DIR [FRAMES] [FRAME:MASK | FROM-TO:MASK ...]\n", argv[0]); return 1; }
     setvbuf(stdout, NULL, _IOLBF, 0);
+    find_exe_dir(argv[0]);
+    load_config();
     if (!load_image()) { fprintf(stderr, "out of memory\n"); return 1; }
-    static char root[1024]; snprintf(root, sizeof root, "%s", argv[1]);
-    g_pc_root = dirname(root);
+    static char root[1024];
+    if (argc > 1) { snprintf(root, sizeof root, "%s", argv[1]); parent_of(root); }
+    else default_root(root, sizeof root);
+    g_pc_root = root;
+#ifdef DC2_GL
+    int frames = argc > 2 ? atoi(argv[2]) : 0;
+#else
     int frames = argc > 2 ? atoi(argv[2]) : 600;
+#endif
+    {   /* the data must be there: CORE.DAT */
+        char probe[1100];
+        Pc_HostPath("data\\CORE.DAT", probe, sizeof probe);
+        FILE *t = fopen(probe, "rb");
+        if (!t) {
+            fprintf(stderr, "Dino Crisis 2: the game's Data folder was not found (%s).\n"
+                            "Put Data next to the executable, set [Assets] Path in config.ini, or give DATA_DIR.\n", probe);
+#if defined(DC2_GL) && defined(_WIN32)
+            char m[1300]; snprintf(m, sizeof m, "The game's Data folder was not found:\n%s\n\nPut Data next to the executable or set [Assets] Path in config.ini.", probe);
+            MessageBoxA(NULL, m, "Dino Crisis 2", MB_ICONERROR);
+#endif
+            return 1;
+        }
+        fclose(t);
+    }
     int npress = 0, press_at[32]; u32 press_mask[32];
     int nhold = 0, hold_from[32], hold_to[32]; u32 hold_mask[32];
     for (int i = 3; i < argc; i++) {
@@ -175,7 +289,7 @@ int main(int argc, char **argv)
     int trace = getenv("DC2_TRACE") != NULL;
     const Renderer *rend = NULL;
 #ifdef DC2_GL
-    rend = RenderGl_Open(640, 480, getenv("DC2_SCALE") ? atoi(getenv("DC2_SCALE")) : 1);
+    rend = RenderGl_Open(640, 480, getenv("DC2_SCALE") ? atoi(getenv("DC2_SCALE")) : g_cfg.scale, g_cfg.fullscreen);
     if (!rend) return 1;
     g_rend = rend;
     int quit = 0;
@@ -201,7 +315,7 @@ int main(int argc, char **argv)
         return 2;
     }
     signal(SIGSEGV, on_fault); signal(SIGFPE, on_fault);
-    for (f = 0; f < frames; f++) {
+    for (f = 0; !frames || f < frames; f++) {
         if (U16(0x87FFEA) && U16(0x87FFE8) != last_file) {
             last_file = U16(0x87FFE8);
             gptr nm = U32(0x71B230 + last_file * 4);

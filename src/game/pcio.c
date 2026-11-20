@@ -73,15 +73,18 @@ void DC2CALL Fog_Enable(u32 on)                 { ORIG(0x4B4F50, void (DC2CALL *
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#ifndef _WIN32
 #include <strings.h>
 #include <dirent.h>
+#endif
 
 const char *g_pc_root = ".";
 
 static FILE *g_files[16];
 static int resolve(const char *game_path, char *out, size_t n);
 
-/* "data\NAME" -> root/data/NAME, each component matched without case */
+/* "data\NAME" -> root/data/NAME, each component matched without case (Windows'
+   file names are already) */
 int Pc_HostPath(const char *game_path, char *out, unsigned long n) { return resolve(game_path, out, n); }
 static int resolve(const char *game_path, char *out, size_t n)
 {
@@ -92,15 +95,19 @@ static int resolve(const char *game_path, char *out, size_t n)
         while (*s && *s != '\\' && *s != '/' && k < sizeof comp - 1) comp[k++] = *s++;
         comp[k] = 0;
         while (*s == '\\' || *s == '/') s++;
-        DIR *d = opendir(out);
         const char *found = comp;
+#ifndef _WIN32
+        DIR *d = opendir(out);
         struct dirent *e;
         if (d) {
             while ((e = readdir(d))) if (!strcasecmp(e->d_name, comp)) { found = e->d_name; break; }
         }
+#endif
         size_t l = strlen(out);
         snprintf(out + l, n - l, "/%s", found);
+#ifndef _WIN32
         if (d) closedir(d);
+#endif
     }
     return 1;
 }

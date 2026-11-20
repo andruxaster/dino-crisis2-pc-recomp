@@ -575,7 +575,7 @@ void Raster_Glyph(void *dst, const void *glyph, gptr prm)            /* 0x4C42F3
 static int has_mmx(void)                                             /* 0x4C2A60 */
 {
     if (g_soft_mmx >= 0) return g_soft_mmx;
-#if defined(__i386__) || defined(__x86_64__)
+#if (defined(__i386__) || defined(__x86_64__)) && defined(__GNUC__)
     return __builtin_cpu_supports("mmx");
 #else
     return 1;

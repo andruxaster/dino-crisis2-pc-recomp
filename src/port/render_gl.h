@@ -11,7 +11,7 @@ struct RenderGlStats {
 };
 
 /* a window of w x h times scale; NULL if it cannot be opened */
-const Renderer *RenderGl_Open(int w, int h, int scale);
+const Renderer *RenderGl_Open(int w, int h, int scale, int fullscreen);
 RenderGlStats *RenderGl_Stats(void);
 /* events handled, the pad's buttons from the keyboard (quit set on close or Escape) */
 u16 RenderGl_Pad(int *quit);

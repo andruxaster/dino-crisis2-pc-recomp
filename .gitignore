@@ -17,3 +17,4 @@ Dino2.exe
 *.ppm
 dc2re.ini
 __pycache__/
+dist/

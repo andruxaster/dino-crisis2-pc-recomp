@@ -4,13 +4,17 @@
  *   flat shading: the first vertex's colour (D3D), via glProvokingVertex;
  *   vertex fog: the specular's alpha as the fog coordinate (1 - factor);
  *   textures: by surface id, uploaded again when their version changes. */
-#define GL_GLEXT_PROTOTYPES
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_opengl.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 #include "dc2/render.h"
 #include "render_gl.h"
+
+/* past OpenGL 1.1 (Windows' opengl32 exports no more): looked up at start */
+static PFNGLFOGCOORDFPROC p_glFogCoordf;
+static PFNGLPROVOKINGVERTEXPROC p_glProvokingVertex;
 
 static SDL_Window *g_win;
 static SDL_GLContext g_ctx;
@@ -91,7 +95,7 @@ static void vertex(const RVertex *v)
 {
     float w = v->rhw > 0 ? 1.0f / v->rhw : 1.0f;
     glColor4ub((GLubyte)(v->diffuse >> 16), (GLubyte)(v->diffuse >> 8), (GLubyte)v->diffuse, (GLubyte)(v->diffuse >> 24));
-    glFogCoordf(1.0f - (v->specular >> 24) / 255.0f);
+    if (p_glFogCoordf) p_glFogCoordf(1.0f - (v->specular >> 24) / 255.0f);
     glTexCoord2f(v->u, v->v);
     float x = v->x / (float)g_w * 2.0f - 1.0f, y = 1.0f - v->y / (float)g_h * 2.0f, z = v->z * 2.0f - 1.0f;
     glVertex4f(x * w, y * w, z * w, w);
@@ -129,15 +133,33 @@ static void gl_present(void)
     g_stats.frames++; g_stats.draws = g_stats.verts = 0;
 }
 
+static int g_vx, g_vy, g_vw, g_vh;     /* the picture's place in the window */
+
+/* the picture back as 640x480-ish 1555 (scaled windows and fullscreen sampled down) */
 static void gl_read_back(u16 *dst, u32 w, u32 h, u32 pitch)
 {
-    glPixelStorei(GL_PACK_ROW_LENGTH, (GLint)(pitch / 2));
-    glReadPixels(0, 0, (GLsizei)w, (GLsizei)h, GL_BGRA, GL_UNSIGNED_SHORT_1_5_5_5_REV, dst);
-    glPixelStorei(GL_PACK_ROW_LENGTH, 0);
-    u16 row[2048];
-    for (u32 y = 0; y < h / 2 && w <= 2048; y++) {          /* GL's rows bottom-up */
-        u16 *a = (u16 *)((u8 *)dst + y * pitch), *b = (u16 *)((u8 *)dst + (h - 1 - y) * pitch);
-        memcpy(row, a, w * 2); memcpy(a, b, w * 2); memcpy(b, row, w * 2);
+    if ((u32)g_vw == w && (u32)g_vh == h) {
+        glPixelStorei(GL_PACK_ROW_LENGTH, (GLint)(pitch / 2));
+        glReadPixels(g_vx, g_vy, (GLsizei)w, (GLsizei)h, GL_BGRA, GL_UNSIGNED_SHORT_1_5_5_5_REV, dst);
+        glPixelStorei(GL_PACK_ROW_LENGTH, 0);
+        u16 row[2048];
+        for (u32 y = 0; y < h / 2 && w <= 2048; y++) {      /* GL's rows bottom-up */
+            u16 *a = (u16 *)((u8 *)dst + y * pitch), *b = (u16 *)((u8 *)dst + (h - 1 - y) * pitch);
+            memcpy(row, a, w * 2); memcpy(a, b, w * 2); memcpy(b, row, w * 2);
+        }
+        return;
+    }
+    static u8 *big; static size_t cap;
+    size_t need = (size_t)g_vw * g_vh * 4;
+    if (cap < need) { free(big); big = malloc(need); cap = big ? need : 0; if (!big) return; }
+    glReadPixels(g_vx, g_vy, g_vw, g_vh, GL_BGRA, GL_UNSIGNED_BYTE, big);
+    for (u32 y = 0; y < h; y++) {
+        const u8 *src = big + (size_t)(g_vh - 1 - (int)(y * (u32)g_vh / h)) * g_vw * 4;
+        u16 *d = (u16 *)((u8 *)dst + y * pitch);
+        for (u32 x = 0; x < w; x++) {
+            const u8 *p = src + (size_t)(x * (u32)g_vw / w) * 4;     /* B, G, R, A */
+            d[x] = (u16)(0x8000 | (p[2] >> 3) << 10 | (p[1] >> 3) << 5 | p[0] >> 3);
+        }
     }
 }
 
@@ -149,21 +171,34 @@ static void gl_texture_freed(u32 id)
 
 static const Renderer k_gl = {gl_begin_frame, gl_clear, gl_draw, gl_present, gl_read_back, gl_texture_freed};
 
-const Renderer *RenderGl_Open(int w, int h, int scale)
+/* windowed at w x h times scale, or fullscreen on the desktop's mode with the
+   picture kept 4:3 (black bars) */
+const Renderer *RenderGl_Open(int w, int h, int scale, int fullscreen)
 {
     if (SDL_Init(SDL_INIT_VIDEO) != 0) { fprintf(stderr, "SDL: %s\n", SDL_GetError()); return 0; }
     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
-    g_win = SDL_CreateWindow("Dino Crisis 2", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, w * scale, h * scale, SDL_WINDOW_OPENGL);
+    if (scale < 1) scale = 1;
+    g_win = SDL_CreateWindow("Dino Crisis 2", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, w * scale, h * scale,
+                             SDL_WINDOW_OPENGL | (fullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0));
     if (!g_win) { fprintf(stderr, "SDL: %s\n", SDL_GetError()); return 0; }
     g_ctx = SDL_GL_CreateContext(g_win);
     if (!g_ctx) { fprintf(stderr, "SDL: %s\n", SDL_GetError()); return 0; }
     SDL_GL_SetSwapInterval(0);
     g_w = w; g_h = h;
-    glViewport(0, 0, w * scale, h * scale);
+    int dw = w * scale, dh = h * scale;
+    SDL_GL_GetDrawableSize(g_win, &dw, &dh);
+    int vw = dw, vh = dh;
+    if (vw * h > vh * w) vw = vh * w / h; else vh = vw * h / w;
+    glClearColor(0, 0, 0, 1); glClear(GL_COLOR_BUFFER_BIT);
+    g_vx = (dw - vw) / 2; g_vy = (dh - vh) / 2; g_vw = vw; g_vh = vh;
+    glViewport(g_vx, g_vy, vw, vh);
+    if (fullscreen) SDL_ShowCursor(SDL_DISABLE);
     glMatrixMode(GL_PROJECTION); glLoadIdentity();
     glMatrixMode(GL_MODELVIEW); glLoadIdentity();
-    glProvokingVertex(GL_FIRST_VERTEX_CONVENTION);
+    p_glFogCoordf = (PFNGLFOGCOORDFPROC)SDL_GL_GetProcAddress("glFogCoordf");
+    p_glProvokingVertex = (PFNGLPROVOKINGVERTEXPROC)SDL_GL_GetProcAddress("glProvokingVertex");
+    if (p_glProvokingVertex) p_glProvokingVertex(GL_FIRST_VERTEX_CONVENTION);
     glDisable(GL_CULL_FACE);
     return &k_gl;
 }

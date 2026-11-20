@@ -27,7 +27,7 @@ One source tree, three builds:
 |---|---|---|
 | `build/dinput.dll` | hook DLL: put next to `Dino2.exe`, redirects the original functions to the C ones | runs inside the game |
 | `build/harness_stub.exe` + `harness.dll` | checks every C function against the original code | 858 functions + the PC layer (GPU memory side, drawing, JPEG), ~2 169 000 checks, 0 differences |
-| `build/dc2` (Linux) | the game started like WinMain: task system, root task, per-frame work; headless, prints a trace; needs only the game's `Data` (the tables of the exe are in `src/data`) | boots: CORE.DAT, warning and Capcom screens, save scan, title (menu, opening movie / attract demo in turn); buttons can be given on the command line; New Game runs the opening and the game task into room ST101 (file loads, room set-up, room script start); sets up the player; its first state loads the weapon set and stops at the model set-up (Model_Setup 0x48D8B0, not rewritten yet) |
+| `build/dc2` (Linux; `dc2.exe` on Windows) | the game started like WinMain: task system, root task, per-frame work; headless, prints a trace; needs only the game's `Data` (the tables of the exe are in `src/data`) | boots: CORE.DAT, warning and Capcom screens, save scan, title (menu, opening movie / attract demo in turn); buttons can be given on the command line; New Game runs the opening and the game task into room ST101 (file loads, room set-up, room script start); the attract demo and New Game play into the rooms (the trace is the same on Linux and on Windows, `dc2.exe`) |
 | `build/smoke` (Linux) | the C game code without the exe, on an emulated memory image | rooms loaded and set up by the game's own code (File_Process, Room_SetPointers, Script_Init), script VM, animation: 80 of 89 room scripts run 600 frames; 9 stop on cutscene data (SCxx.DAT) that is not loaded yet |
 
 The Dreamcast (KallistiOS) build will reuse the standalone path once the
@@ -52,6 +52,44 @@ whole game logic is in C.
     make check      # harness under wine (DINO2=.../Dino2.exe DATA=.../Data)
     make linux      # native static library + build/smoke + build/dc2
     make dc2gl      # build/dc2gl: dc2 in a window (SDL2 + OpenGL)
+
+### The game on Linux and Windows (CMake)
+
+The standalone game, `dinocrisis2` (SDL2 + OpenGL; `dinocrisis2.exe` on
+Windows), and the headless `dc2` build with CMake on both systems; game logic,
+renderer and sound are the same code, only the task switching differs
+(ucontext / Windows fibers):
+
+    # Linux (SDL2 development package installed)
+    cmake -S . -B build/cmake-linux -DCMAKE_BUILD_TYPE=Release
+    cmake --build build/cmake-linux -j
+
+    # Windows, cross-compiled with mingw-w64 (x86_64-w64-mingw32-gcc) and
+    # SDL2's mingw development package (SDL2-devel-2.x-mingw from libsdl.org)
+    cmake -S . -B build/cmake-win -DCMAKE_TOOLCHAIN_FILE=cmake/mingw-w64-x86_64.cmake \
+          -DSDL2_DIR=<SDL2-2.x>/x86_64-w64-mingw32/lib/cmake/SDL2 -DCMAKE_BUILD_TYPE=Release
+    cmake --build build/cmake-win -j
+    tools/package_windows.sh <SDL2-2.x>       # dist/dinocrisis2-windows-x64.zip
+
+    # Windows with Visual Studio (SDL2-devel-2.x-VC): not tried yet
+    cmake -S . -B build/vs -DSDL2_DIR=<SDL2-2.x>/cmake && cmake --build build/vs --config Release
+
+A release is `dinocrisis2.exe`, `SDL2.dll` and `config.ini` (from
+`config.ini.template`); no game data. The game looks for its `Data` folder
+next to the executable, or under `[Assets] Path` of `config.ini` (relative to
+the executable's folder), so it starts the same from a shortcut:
+
+    DinoCrisis2/
+      dinocrisis2.exe   (or dinocrisis2 on Linux)
+      SDL2.dll
+      config.ini        ([Display] Scale, FullScreen; [Assets] Path)
+      Data/             (the installed game's DATA folder)
+      MOVIE/, SPEECH/   (from the CD, optional)
+
+Fullscreen uses the desktop's resolution and keeps the picture 4:3. A
+`DATA_DIR` given on the command line overrides the search; the game runs until
+the window is closed (or for `FRAMES`). The Makefile's `dc2gl` is the same
+program.
 
 `dc2gl ROOT/Data [FRAMES] [presses]` takes the pad from the
 keyboard as well (arrows, Z confirm, X back, C action, Enter start; Escape
