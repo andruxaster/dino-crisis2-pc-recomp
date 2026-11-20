@@ -17,6 +17,7 @@
 #include <setjmp.h>
 #include <signal.h>
 #include "dc2/game.h"
+#include "dc2/pcinput.h"
 #include "dc2/orig.h"
 #include "dc2/pcio.h"
 #include "dc2/task.h"
@@ -148,7 +149,7 @@ static void game_reset(void)
     U8(0x87DD7C) = 1; U8(0x87DCEC) = 1;
     Light_SetFar(0);
     PcDraw_SetFogEnable(0);
-    U32(0x866140) = 0;                          /* Input_SetParam 0x4BF130 */
+    PcIn_FixedKeys(0);
 }
 
 /* the graphics part of the main loop (0x47053E): the last frame shown, this

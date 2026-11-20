@@ -670,12 +670,12 @@ static Stub g_stubs[] = {
     {0, ""}, {0x4C0600, "ddd"}, {0x4C0690, "d"}, {0x4C05D0, "dd"}, {0x4C06F0, "ddddd"},
     /* 71..: game task */
     {0, ""}, {0, "d"}, {0, ""}, {0, ""}, {0, ""}, {0, ""},
-    {0, ""}, {0x4BF130, "d"}, {0, ""}, {0, ""}, {0, ""}, {0, ""},
+    {0, ""}, {0, ""} /* (0x4BF130: rewritten) */, {0, ""}, {0, ""}, {0, ""}, {0, ""},
     {0, ""}, {0, ""}, {0, ""}, {0, ""}, {0, ""}, {0, ""},
     /* 89..: object handlers (collision) */
     {0, ""}, {0, ""},
     /* 91..: player */
-    {0, ""}, {0, ""}, {0x4BF330, ""},
+    {0, ""}, {0, ""}, {0, ""} /* (0x4BF330: rewritten) */,
     /* 94..: doors */
     {0, ""}, {0, ""}, {0, ""}, {0, ""}, {0, ""}, {0, ""}, {0, ""}, {0, ""},
     /* 102..: the frame of play */
@@ -2052,7 +2052,7 @@ static void test_player2(void)
                 U8(o + 0x56) = (u8)(rnd() % 4 ? rnd() % 2 : rnd() % 4);
                 U32(0x87DC08) = rnd() % 3 ? (rnd() & 0xF0FE) : rnd() % 2 ? 0x20 : (u32)(1u << (rnd() % 16));
                 U32(0x87DC94) = rnd() % 2 ? 0 : 1u << (rnd() % 8);
-                stub_at(0x4BF330)->ret = rnd() % 2;
+                U32(0x865EF8) = rnd() % 4 ? rnd() % 2 : rnd();
                 sprintf(g_what, "water %02X held %08X press %02X set %04X", U8(o + 0x56), U32(0x87DC08), U8(0x87DC94), U16(G() + 0x10B4));
                 check(r ? 0x47E640 : 0x47E050, r ? (void *)Player_WaterWalk : (void *)Player_WaterStand,
                       r ? "Player_WaterWalk" : "Player_WaterStand", 1, a, 0);
@@ -2095,7 +2095,7 @@ static void test_player2(void)
             U16(G() + 0x10B4) = (u16)(rnd() % 12 | (rnd() % 3 ? 0 : (rnd() % 10) << 8));
             U32(0x87DC08) = rnd() % 3 ? (rnd() & 0xF0FE) : rnd(); U32(0x87DC94) = rnd() % 2 ? 0 : rnd() % 2 ? (u8)rnd() : rnd();
             Flag_Set(2, 0x1C, rnd() % 2); Flag_Set(2, 0xE, rnd() % 4 == 0); Flag_Set(2, 4, rnd() % 4 == 0);
-            stub_at(0x4BF330)->ret = rnd() % 2;                             /* the heavy weapons' dodge */
+            U32(0x865EF8) = rnd() % 4 ? rnd() % 2 : rnd();                             /* the heavy weapons' dodge */
             U32(G() + 0x948) = O_K3; U16(O_K3 + 0x18) = (u16)(0x200 + rnd() % 0x900);   /* kind 5 (machine gun): the light's reach */
             for (u32 k = 0; k < 10; k++) U8(G() + 0x94C + k * 0x18 + 0xC) = (u8)(rnd() % 3 ? 1 : rnd());
             U8(o + 0x190 + 0xC) = (u8)rnd(); U8(o + 0x1A8 + 0xC) = (u8)rnd();
@@ -2226,7 +2226,7 @@ static void test_player2(void)
                 S16(px + 0x3C) = (s16)(rnd() % 0x14);
                 U32(0x87DC08) = rnd() % 3 ? (rnd() & 0xF0FE) : rnd() % 2 ? 0x28 : 0x28 | (rnd() % 2 ? 0x1000 : 0x4000) | (rnd() % 2 ? 0x2000 : 0x8000);
                 U32(0x87DC94) = rnd() % 2 ? 0 : rnd() % 3 ? 1u << rnd() % 8 : 2;
-                stub_at(0x4BF330)->ret = rnd() % 2;
+                U32(0x865EF8) = rnd() % 4 ? rnd() % 2 : rnd();
                 U16(o + 0x42) = (u16)(rnd() % 3 ? -(s16)(rnd() % 0x1800) : (s16)(rnd() % 0x400));
                 sprintf(g_what, "crouch %u px42 %04X 4C %04X 7D %u held %08X press %08X", U8(o + 0x56), U16(px + 0x42), U16(px + 0x4C),
                         U8(px + 0x7D), U32(0x87DC08), U32(0x87DC94));
@@ -4711,7 +4711,7 @@ static void test_turret(void)
     g_ign_objpads = 1; g_ign_campad = 1;
     stubs_install(1);
     for (int i = 0; i < iters; i++) {
-        for (unsigned j = 0; j < sizeof k / sizeof k[0] + 8; j++) {
+        for (unsigned j = 0; j < sizeof k / sizeof k[0] + 10; j++) {
             game_state(); objects_setup(); world_setup();
             gptr g = G(), c = g + 0x778;
             U32(0x87F940) = 1 + rnd() % 16;
@@ -4806,6 +4806,44 @@ static void test_turret(void)
                 u32 a[6] = {l, (u32)(s32)(s16)(rnd() % 0x140), (u32)(s32)(s16)(rnd() % 0xF0), rnd() % 0x40, (u32)(u16)rnd(),
                             rnd() % 2 ? 0x80008080 : rnd()};
                 check(0x4130B0, Sprites_Draw, "Sprites_Draw", 6, a, 0);
+            } else if (j == sizeof k / sizeof k[0] + 8) {
+                cam_view(c);                                /* the clouds: the camera anywhere */
+                if (rnd() % 3 == 0) S16(c + 0x2A) = (s16)(rnd() % 2 ? -1000 + (s32)(rnd() % 600) - 300 : (s32)(s16)rnd());
+                SetGeomScreen(rnd() % 4 ? 0x200 : 0x100 + rnd() % 0x300);
+                U8(g + 0xB4B) = (u8)(rnd() % 4 ? rnd() % 3 : rnd());
+                u32 a[1] = {e};
+                sprintf(g_what, "camera %d %d %d rot %X %X %X depth shift %u v %02X", S16(c + 0x28), S16(c + 0x2A), S16(c + 0x2C),
+                        U16(c), U16(c + 2), U16(c + 4), U8(g + 0xB4B), U8(e + 0x1C));
+                g_ign_addr = 0x87B3C6; g_ign_len = 2;       /* the GTE V0 pad */
+                check(0x410710, Turret_DrawClouds, "Turret_DrawClouds", 1, a, 0);
+                g_ign_len = 0;
+            } else if (j == sizeof k / sizeof k[0] + 9) {
+                gptr r = G_SCR + 0xB00, v = 0x6CE000, uv = 0x6CE040, out = 0x6CE100, nc = 0x6CE200;
+                for (u32 a = 0; a < 6; a += 2) U16(r + a) = (u16)(rnd() % 4 ? rnd() % 0x1000 : 0);
+                RotMatrix(r, GTE_RT);
+                if (rnd() % 4 == 0) for (u32 a = 0; a < 18; a += 2) U16(GTE_RT + a) = (u16)rnd();
+                s32 h = rnd() % 4 ? 0x200 : (s32)(2 + rnd() % 0x800);
+                SetGeomScreen(h);
+                s32 nz = S32(GTE_ZNEAR);
+                S32(GTE_TR) = (s32)(rnd() % 2000) - 1000; S32(GTE_TR + 4) = (s32)(rnd() % 2000) - 1000;
+                S32(GTE_TR + 8) = nz + (s32)(rnd() % 1200) - 600;
+                if (rnd() % 8 == 0) for (u32 a = 0; a < 12; a += 4) U32(GTE_TR + a) = rnd();
+                SetGeomOffset((s32)(rnd() % 4 ? 160 : rnd() % 640), (s32)(rnd() % 4 ? 120 : rnd() % 480));
+                for (u32 q = 0; q < 4; q++) {
+                    for (u32 a = 0; a < 6; a += 2) S16(v + 8 * q + a) = (s16)(rnd() % 4 ? (s32)(rnd() % 1600) - 800 : (s32)(s16)rnd());
+                    U16(v + 8 * q + 6) = (u16)rnd();
+                    U8(uv + 2 * q) = (u8)rnd(); U8(uv + 2 * q + 1) = (u8)rnd();
+                }
+                if (rnd() % 4 == 0) {                       /* a vertex just at the near plane (identity rotation) */
+                    memcpy(MEM(GTE_RT), MEM(GTE_IDENT), 18);
+                    u32 q = rnd() % 4;
+                    S16(v + 8 * q + 4) = (s16)(nz - S32(GTE_TR + 8) + (s32)(rnd() % 3) - 1);
+                }
+                for (u32 a = 0; a < 0x50; a += 4) U32(out + a) = rnd();
+                U32(nc) = rnd();
+                u32 a[5] = {v, uv, out, rnd() % 4 ? nc : 0, rnd() % 4 ? 4 : rnd() % 4};
+                sprintf(g_what, "n %u H %d TR %d %d %d", a[4], h, S32(GTE_TR), S32(GTE_TR + 4), S32(GTE_TR + 8));
+                check(0x4C24C0, PC_ClipProject, "PC_ClipProject", 5, a, 0xFFFFFFFF);
             } else if (j == sizeof k / sizeof k[0] + 7) {
                 gptr r = 0x6CE000;
                 for (u32 a = 0; a < 8; a += 2) U16(r + a) = (u16)(rnd() % 4 ? rnd() % 0x140 : rnd());
@@ -13704,6 +13742,11 @@ static void test_options(void)
             u32 b[8] = {d, w, v, v + 4, v + 8, v + 0xC, v + 0x10, (u32)A2_PICK(0, 1, -1, 2, (s32)rnd())};
             sprintf(g_what, "device %u window %u (can %u) modes %u size %ux%ux%u dir %d", d, w, U32(0x75DEFC + d * 0x164), U32(l), U32(v + 8), U32(v + 0xC), U32(v + 0x10), (s32)b[7]);
             check(0x4BB8D0, PcIn_DisplayStep, "PcIn_DisplayStep", 8, b, 0);
+            U32(0x865EF8) = rnd() % 2 ? rnd() % 2 : rnd();
+            a[0] = rnd() % 2 ? rnd() % 2 : rnd();
+            sprintf(g_what, "fixed keys %X (was %X), escape %X", a[0], U32(0x866140), U32(0x865EF8));
+            check(0x4BF130, PcIn_FixedKeys, "PcIn_FixedKeys", 1, a, 0);
+            check(0x4BF330, PcIn_ByEscape, "PcIn_ByEscape", 0, a, 0xFFFFFFFF);
         }
         o = opt_state();
         sprintf(g_what, "the keys");

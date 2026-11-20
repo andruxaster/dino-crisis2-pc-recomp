@@ -10,9 +10,6 @@
 #include "pcio.h"        /* (the GPU layer: Gpu_*, JPEG_Decode) */
 
 #define ORIG_LIST(F, V) \
-    V(Fn_4BF130,          0x4BF130, (u32 a), (a)) \
-    F(u32, Fn_4BF330,     0x4BF330, (void), ()) \
-    V(Fn_410710,          0x410710, (gptr e), (e)) \
 
 #define ORIG_DECL_F(ret, name, addr, params, args) ret DC2CALL name params;
 #define ORIG_DECL_V(name, addr, params, args) void DC2CALL name params;

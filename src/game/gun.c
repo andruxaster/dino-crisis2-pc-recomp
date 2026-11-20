@@ -8,6 +8,7 @@
  * target, 4 aimed turn back, 5 walk, 6 walk back, 7 turn, 8 nothing. */
 #include <string.h>
 #include "dc2/game.h"
+#include "dc2/pcinput.h"
 #include "dc2/orig.h"
 #include "dc2/gte.h"
 
@@ -103,7 +104,7 @@ static int dodge(gptr o)
 /* weapons 10 and 11: the dodge button only crouches (state 0x901) */
 static int heavy_dodge(gptr o)
 {
-    if (!(PRESSED & 0x40) || Fn_4BF330()) return 0;
+    if (!(PRESSED & 0x40) || PcIn_ByEscape()) return 0;
     Flag_Set(2, 0xD, 0);
     Flag_Set(1, 9, 1);
     U8(o + 0x11B) = 0;
@@ -1378,7 +1379,7 @@ void DC2CALL Player_Crouch(gptr o)                                  /* 0x47F0F0 
             break;
         }
         Anim_Step(o);
-        if ((PRESSED & 0x40) && !Fn_4BF330() && !U8(PX() + 0x7A) && U8(o + 0x56) == 6) {
+        if ((PRESSED & 0x40) && !PcIn_ByEscape() && !U8(PX() + 0x7A) && U8(o + 0x56) == 6) {
             Flag_Set(2, 0xD, 0);
             Flag_Set(1, 9, 1);
             U8(o + 0x11B) = 0;
@@ -1392,7 +1393,7 @@ void DC2CALL Player_Crouch(gptr o)                                  /* 0x47F0F0 
     case 3:                                                 /* standing up */
         if (!Anim_Step(o)) break;
         U16(o + 0x174) = 0; U8(o + 0x17B) = 0; U8(PX() + 0x7A) = 0;
-        if ((PRESSED & 0x40) && !Fn_4BF330()) { U32(o + 0x1DC) = 4; U32(o + 0x54) = 0x901; break; }
+        if ((PRESSED & 0x40) && !PcIn_ByEscape()) { U32(o + 0x1DC) = 4; U32(o + 0x54) = 0x901; break; }
         Flag_Set(1, 9, 0);
         U32(o + 0x1DC) = 4; U32(o + 0x54) = 1;
         break;

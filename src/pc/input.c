@@ -33,6 +33,14 @@ void DC2CALL PcIn_BindKey(u32 b, u32 k)                              /* 0x4BF210
         if (U16(0x865EFE + 4 * i) == b) { U16(0x865EFC + 4 * i) = (u16)k; return; }
 }
 
+/* 1: the pad read from the fixed keys (0x73BEE0, 14 per device) rather than
+   the bound ones (menus that must not depend on the bindings) */
+void DC2CALL PcIn_FixedKeys(u32 on) { U32(0x866140) = on; }          /* 0x4BF130 */
+
+/* whether the last bound key held this frame was Escape (DirectInput key
+   1): the back button pressed with it is not taken as the action key */
+u32 DC2CALL PcIn_ByEscape(void) { return U32(0x865EF8); }            /* 0x4BF330 */
+
 /* the default keys */
 void DC2CALL PcIn_DefaultKeys(void)                                  /* 0x4BF250 */
 {

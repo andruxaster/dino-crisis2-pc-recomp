@@ -5,6 +5,7 @@
  * +0x36 frame counter, +0x3A breath (0x20..0xE0), +0x79 idle counter. */
 #include <string.h>
 #include "dc2/game.h"
+#include "dc2/pcinput.h"
 #include "dc2/orig.h"
 #include "dc2/gte.h"
 #include "dc2/pcio.h"
@@ -846,7 +847,7 @@ static int water_step(gptr o)
 static int water_buttons(gptr o)
 {
     u8 pr = U8(0x87DC94);
-    if ((pr & 0x40) && !Fn_4BF330()) {
+    if ((pr & 0x40) && !PcIn_ByEscape()) {
         Flag_Set(2, 0xD, 0);
         Flag_Set(1, 9, 1);
         U8(o + 0x11B) = 0;
@@ -1079,7 +1080,7 @@ static int turn_common(gptr o)
 {
     u8 pr = U8(0x87DC94);
     if (U8(G() + 0x108F) == 2) {
-        if ((pr & 0x40) && !Fn_4BF330()) {
+        if ((pr & 0x40) && !PcIn_ByEscape()) {
             Flag_Set(2, 0xD, 0);
             Flag_Set(1, 9, 1);
             U8(o + 0x11B) = 0;

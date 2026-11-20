@@ -121,4 +121,5 @@ void DC2CALL PC_stsz3_g3(gptr p);                                    /* 0x4C2390
 void DC2CALL PC_stsz3_gt3(gptr p);                                   /* 0x4C2420 */
 void DC2CALL PC_stsz4_gt4(gptr p);                                   /* 0x4C2460 */
 void DC2CALL gte_stszotz(gptr p);                                    /* 0x4C24B0 */
+s32  DC2CALL PC_ClipProject(gptr v, gptr uv, gptr out, gptr nclip, s32 n); /* 0x4C24C0 */
 #endif

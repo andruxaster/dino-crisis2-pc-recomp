@@ -5,6 +5,7 @@
  * {s8 cursor, s8 difficulty cursor, 5 animated labels of 12 bytes at +4
  * (see Title_SetAnim)}. The clear data: 0x87F4E0, 0x460 bytes (G+0x108C). */
 #include "dc2/game.h"
+#include "dc2/pcinput.h"
 #include "dc2/orig.h"
 #include "dc2/pcio.h"
 #include "dc2/task.h"
@@ -156,7 +157,7 @@ void DC2CALL Title2_Extra(gptr t)                                   /* 0x4A69C0:
     case 1:
         if (Flag_Check(2, 6)) break;
         Flag_Set(2, 0x21, 0);
-        Fn_4BF130(0);
+        PcIn_FixedKeys(0);
         U8(G() + 0xB48) = 0;
         G16(0x76E) = 0; G16(0x770) = 0;
         Game_Start(0x19);

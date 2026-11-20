@@ -2,6 +2,7 @@
  * The hook build writes a JMP at each address; the harness checks each
  * pair against the original code. Keep this list in address order. */
 #include "dc2/game.h"
+#include "dc2/pcinput.h"
 #include "dc2/gte.h"
 #include "dc2/task.h"
 #include "hooks.h"
@@ -2301,6 +2302,9 @@ const Hook g_hooks[] = {
     {0x4C0920, (void *)rcos,                "rcos"},
     {0x4C0940, (void *)ratan2,              "ratan2"},
     {0x4C0960, (void *)SquareRoot0,         "SquareRoot0"},
+    {0x4C24C0, (void *)PC_ClipProject,      "PC_ClipProject"},
+    {0x4BF130, (void *)PcIn_FixedKeys,      "PcIn_FixedKeys"},
+    {0x4BF330, (void *)PcIn_ByEscape,       "PcIn_ByEscape"},
     {0x4C0970, (void *)SquareRoot12,        "SquareRoot12"},
     {0x4C0990, (void *)InitGeom,            "InitGeom"},
     {0x4C09E0, (void *)SetGeomOffset,       "SetGeomOffset"},
@@ -2405,6 +2409,7 @@ const Hook g_hooks[] = {
     {0x410500, (void *)Turret_DrawHit,      "Turret_DrawHit"},
     {0x40FCD0, (void *)Turret_Draw,         "Turret_Draw"},
     {0x410D10, (void *)Turret_DrawSky,      "Turret_DrawSky"},
+    {0x410710, (void *)Turret_DrawClouds,   "Turret_DrawClouds"},
     {0x4134C0, (void *)Water, "Water"},
     {0x4134E0, (void *)Water_Init, "Water_Init"},
     {0x413530, (void *)Water_Step, "Water_Step"},

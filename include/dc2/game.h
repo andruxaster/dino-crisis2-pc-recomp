@@ -2420,6 +2420,7 @@ void DC2CALL Turret_DrawGauge(gptr e);                                  /* 0x40F
 void DC2CALL Turret_DrawHit(gptr e);                                    /* 0x410500 */
 void DC2CALL Turret_Draw(gptr e);                                       /* 0x40FCD0 */
 void DC2CALL Turret_DrawSky(gptr e);                                    /* 0x410D10 */
+void DC2CALL Turret_DrawClouds(gptr e);                                 /* 0x410710 */
 void DC2CALL Water(gptr e);                                             /* 0x4134C0 */
 void DC2CALL Water_Init(gptr e);                                        /* 0x4134E0 */
 void DC2CALL Water_Step(gptr e);                                        /* 0x413530 */

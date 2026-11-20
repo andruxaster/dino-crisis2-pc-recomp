@@ -9,6 +9,7 @@
  * +0x5C}. The characters (0x723B30, 12 of 20 bytes): {model, u16 file,
  * u16 id, label, distance, name}. */
 #include "dc2/game.h"
+#include "dc2/pcinput.h"
 #include "dc2/orig.h"
 #include "dc2/pcio.h"
 #include "dc2/task.h"
@@ -97,7 +98,7 @@ void DC2CALL Extra_Menu(gptr t)                                       /* 0x46E44
     static const gptr idle[3] = {0x5FFFA4, 0x5FFFAC, 0x5FFFB4};
     switch (U8(t + 1)) {
     case 0:
-        Fn_4BF130(0);
+        PcIn_FixedKeys(0);
         U8(t + 1)++;
         U32(0x87DE00) = 0;
         Strm_Start(0, 5);
@@ -147,7 +148,7 @@ void DC2CALL Extra_Menu(gptr t)                                       /* 0x46E44
             U8(t + 1) = 0;
             U8(G() + 0x84C) = 5;
             Flag_Set(2, 0x21, 1);
-            Fn_4BF130(1);
+            PcIn_FixedKeys(1);
             Flag_Set(1, 0, 0);
         } else {
             U8(G() + 0x927) = 1;
@@ -155,7 +156,7 @@ void DC2CALL Extra_Menu(gptr t)                                       /* 0x46E44
             U8(t)++;
             U8(G() + 0x84C) = 0;
             Flag_Set(2, 0x21, 0);
-            Fn_4BF130(0);
+            PcIn_FixedKeys(0);
         }
         U8(G() + 0x108E) = 1;
         U8(t + 9) = 0;

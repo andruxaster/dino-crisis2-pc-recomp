@@ -3,6 +3,7 @@
  * with its modes: init, area tables, room enter, play. Plus the file loads
  * of rooms, doors and armour, and the checkpoint copy of the game state. */
 #include "dc2/game.h"
+#include "dc2/pcinput.h"
 #include "dc2/orig.h"
 #include "dc2/pcio.h"
 #include "dc2/task.h"
@@ -271,7 +272,7 @@ void DC2CALL Game_RoomEnter(void)                                    /* 0x451330
     switch (G8(0x927)) {
     case 0: Player_Setup(pl); break;
     case 1: if (G8(0x108F) == 3) Flag_Set(7, 0x11, 1); Player_Setup(pl); break;
-    case 2: Flag_Set(2, 0x21, 1); Fn_4BF130(1); break;
+    case 2: Flag_Set(2, 0x21, 1); PcIn_FixedKeys(1); break;
     default: break;
     }
     if (G8(0x662)) { G8(0x662) = 0; Flag_Set(2, 0x23, 1); }

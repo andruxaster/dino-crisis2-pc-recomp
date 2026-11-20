@@ -615,6 +615,71 @@ static void tu_back(float x0, float y0, float x1, float y1, u8 u0, u8 u1, u16 tp
     U32(0x87DC98) += 0x48;
 }
 
+/* a vertex of PC_ClipProject's output into a packet: x, y, z / (0x400 << (G+0xB4B + 1)), u v */
+static void cl_vert(gptr p, gptr q)
+{
+    s32 d = (s32)(0x400u << ((U8(G() + 0xB4B) + 1) & 31));
+    U32(p) = U32(q); U32(p + 4) = U32(q + 4);
+    F32(p + 8) = (float)((long double)F32(q + 8) / (long double)d);
+    U16(p + 0xC) = U16(q + 0xC);
+}
+
+/* a packet linked at the front of the table: header len, code word c */
+static void cl_link(gptr p, u32 c, u32 len)
+{
+    gptr ot = 0x87CBFC + (U32(0x87DE0C) << 12);
+    U32(p + 4) = c; U16(p + 0x16) = 0x7E45; U16(p + 0x26) = 0x18;
+    U32(p) = U32(ot) | len << 24; U32(ot) = p & 0xFFFFFF;
+}
+
+/* the clouds: a plane at height -1000 under the camera's matrix, 10 x 10
+   textured quads 6000 apart (each 59536 wide), scrolled by e+0x1C in v,
+   clipped at the near plane (3, 4 or 5 corners: a triangle, a quad, a quad
+   and a triangle) */
+void DC2CALL Turret_DrawClouds(gptr e)                               /* 0x410710 */
+{
+    gptr g = G(), m = g + 0x778;
+    gptr sv = Tmp_Push(8), tm = Tmp_Push(0x20), uv = Tmp_Push(8), v = Tmp_Push(0x20), out = Tmp_Push(0x50);
+    S16(sv) = (s16)-U16(g + 0x7A0); S16(sv + 2) = (s16)-U16(g + 0x7A2); S16(sv + 4) = (s16)-U16(m + 0x2C);
+    ApplyMatrixSV(m, sv, sv);
+    S32(tm + 0x14) = S16(m + 0x30) + S16(sv);
+    S32(tm + 0x18) = S16(m + 0x32) + S16(sv + 2);
+    S32(tm + 0x1C) = (s32)U16(m + 0x34) + S16(sv + 4);
+    SetTransMatrix(tm);
+    u8 a = U8(e + 0x1C);
+    U8(uv) = 0x80; U8(uv + 1) = a; U8(uv + 2) = 0xBF; U8(uv + 3) = a;
+    U8(uv + 4) = 0x80; U8(uv + 5) = (u8)(a + 0x40); U8(uv + 6) = 0xBF; U8(uv + 7) = (u8)(a + 0x40);
+    for (u32 k = 0; k < 4; k++) U16(v + 8 * k + 2) = (u16)-1000;
+    U16(v + 4) = 0x7360; U16(v + 0xC) = 0x7360; U16(v + 0x14) = (u16)-0x7530; U16(v + 0x1C) = (u16)-0x7530;
+    SetRotMatrix(m);
+    for (u32 i = 0; i < 10; i++) {
+        for (u32 k = 0; k < 4; k++) U16(v + 8 * k + 4) += 0x1770;
+        U16(v + 0x10) = 0x7360; U16(v) = 0x7360; U16(v + 0x18) = (u16)-0x7530; U16(v + 8) = (u16)-0x7530;
+        for (u32 j = 0; j < 10; j++) {
+            for (u32 k = 0; k < 4; k++) U16(v + 8 * k) += 0x1770;
+            s32 n = PC_ClipProject(v, uv, out, 0, 4);
+            gptr p = U32(0x87DC98);
+            if (n == 5) {
+                cl_vert(p + 8, out); cl_vert(p + 0x18, out + 0x10); cl_vert(p + 0x28, out + 0x40); cl_vert(p + 0x38, out + 0x20);
+                cl_link(p, 0x2C808080, 9);
+                p += 0x48; U32(0x87DC98) = p;
+                cl_vert(p + 8, out + 0x20); cl_vert(p + 0x18, out + 0x30); cl_vert(p + 0x28, out + 0x40);
+                cl_link(p, 0x24808080, 7);
+                U32(0x87DC98) = p + 0x38;
+            } else if (n == 4) {
+                cl_vert(p + 8, out); cl_vert(p + 0x18, out + 0x10); cl_vert(p + 0x28, out + 0x30); cl_vert(p + 0x38, out + 0x20);
+                cl_link(p, 0x2C808080, 9);
+                U32(0x87DC98) = p + 0x48;
+            } else if (n == 3) {
+                cl_vert(p + 8, out); cl_vert(p + 0x18, out + 0x10); cl_vert(p + 0x28, out + 0x20);
+                cl_link(p, 0x24808080, 7);
+                U32(0x87DC98) = p + 0x38;
+            }
+        }
+    }
+    Tmp_Pop(8 + 0x20 + 8 + 0x20 + 0x50);
+}
+
 /* the sky behind: three 256-wide pictures scrolled by the camera's yaw and
    pitch (the middle one, one to the side of it, one mirrored) */
 void DC2CALL Turret_DrawSky(gptr e)                                  /* 0x410D10 */
@@ -775,7 +840,7 @@ void DC2CALL Turret_Draw(gptr e)                                     /* 0x40FCD0
     Turret_DrawCombo(e);
     Turret_DrawGauge(e);
     Turret_DrawHit(e);
-    Fn_410710(e);
+    Turret_DrawClouds(e);
     Turret_DrawSky(e);
     Turret_Hud(e);
     s16 hp = S16(TU_HP), shown = S16(0x746E38);

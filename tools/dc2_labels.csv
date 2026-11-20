@@ -94,7 +94,7 @@ address,kind,name,category,confidence,notes
 0x4B4F90,func,PC_DDrawClear,d3d,low,"DDBLTFX fill; called from 0x473210/0x4732C0; rewritten: src/pc/drawot.c"
 0x4BEAC0,func,Masks_Upload,masks,high,"(again): vertices into the vertex buffer (made again when asked or missing: 0x4BEB30); rewritten: src/pc/drawot.c"
 0x4BB8D0,func,PcIn_DisplayStep,d3d,high,"next/previous display mode of a device (modes 0x75BE70, devices 0x75DEFC stride 0x164); rewritten: src/pc/input.c"
-0x4C24C0,func,PC_DrawSpecial,d3d,low,768 bytes x87; called once from 0x410710
+0x4C24C0,func,PC_ClipProject,pc-only,high,"(v, uv, out, nclip, n): RT/TR, cut at the near plane, projected; {x,y,z,u,v} per corner; rewritten: src/game/gte.c"
 0x4C0490,func,PCcreat,libsn,medium,
 0x4C0510,func,PCwrite,libsn,high,
 0x4BF970,func,Snd_Play,sound,medium,DSound slot table 0x878328 (stride 12)
@@ -125,8 +125,8 @@ address,kind,name,category,confidence,notes
 0x4BF690,func,Movie_Poll,movie,low,
 0x4BF180,func,Input_ReadKey,input,high,"the key pressed this frame (DirectInput); pcio.c wrapper"
 0x4BEF40,func,Input_ReadPad,input,low,
-0x4BF130,func,Input_SetParam,input,low,-> 0x866140
-0x4BF330,func,Input_GetParam,input,low,<- 0x865EF8
+0x4BF130,func,PcIn_FixedKeys,input,high,"(on) -> 0x866140: the pad from the fixed keys 0x73BEE0 (menus); rewritten: src/pc/input.c"
+0x4BF330,func,PcIn_ByEscape,input,high,"<- 0x865EF8: the last bound key held was Escape (back without the action); rewritten: src/pc/input.c"
 0x4BF250,func,PcIn_DefaultKeys,input,high,"copies 0x100 bytes 0x73BDB8 -> 0x865EFC; rewritten: src/pc/input.c"
 0x4BF1E0,func,PcIn_KeyOf,input,high,"key bound to pad bit (64 x {key,bit} @0x865EFC); rewritten: src/pc/input.c"
 0x4BF210,func,PcIn_BindKey,input,high,"pad bit bound to key; rewritten: src/pc/input.c"
@@ -2767,3 +2767,4 @@ address,kind,name,category,confidence,notes
 0x4755E0,func,ObjEff_Burst3,game,high,"object effect (area 9 #16): burst 0x64CE28; steps 0x737900"
 0x475600,func,ObjEff_Burst3End,game,high,"burst effect end: Effect_Spawn 0x64CE28, free"
 0x454950,func,Wall_Farthest,game,high,"of the nearest walls along +z/+x/-z/-x, the farthest: its crossing point; rewritten: src/game/object.c"
+0x410710,func,Turret_DrawClouds,game,high,"the cloud plane at -1000: 10x10 quads clipped at the near plane; src/game/stagefx.c"

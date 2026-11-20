@@ -515,3 +515,75 @@ void DC2CALL PC_stsz4_gt4(gptr p)                                    /* 0x4C2460
     F32(p + 0x38) = zf(GTE_SZ_A); F32(p + 0x4C) = zf(GTE_SZ3);
 }
 void DC2CALL gte_stszotz(gptr p) { S32(p) = S32(GTE_SZ3) >> 2; }     /* 0x4C24B0 */
+
+/* ---- a polygon clipped at the near plane (PC only) ---------------------------
+ * n SVECTORs v (3: in the order 0 1 2, 4: 0 1 3 2) with their u, v bytes uv
+ * through RT and TR; the edges cut at z = GTE_ZNEAR (H / 2, so a cut point
+ * projects as 2x, 2y). out: {float x, y, z; u8 u, v; 2 bytes kept} for each
+ * vertex left (up to n + 1); nclip (when not 0 and 3 or more are left): the
+ * winding of the first, second and last of them. Returns the count. */
+static void clip_xform(gptr v, s32 *x, s32 *y, s32 *z)
+{
+    s32 a = S16(v), b = S16(v + 2), c = S16(v + 4);
+    *x = (s32)((u32)(dot3(GTE_RT, 0, a, b, c) >> 12) + U32(GTE_TR));
+    *y = (s32)((u32)(dot3(GTE_RT, 1, a, b, c) >> 12) + U32(GTE_TR + 4));
+    *z = (s32)((u32)(dot3(GTE_RT, 2, a, b, c) >> 12) + U32(GTE_TR + 8));
+}
+
+static void clip_put(gptr o, s32 x, s32 y, s32 z, u8 u, u8 v)
+{
+    long double lz = (long double)z;
+    F32(o + 8) = (float)lz;
+    F32(o) = (float)((long double)(s32)((u32)S32(GTE_H) * (u32)x) / lz + (long double)S32(GTE_OFX));
+    F32(o + 4) = (float)((long double)(s32)((u32)S32(GTE_H) * (u32)y) / lz + (long double)S32(GTE_OFY));
+    U8(o + 0xC) = u; U8(o + 0xD) = v;
+}
+
+s32 DC2CALL PC_ClipProject(gptr v, gptr uv, gptr out, gptr nclip, s32 n) /* 0x4C24C0 */
+{
+    static const u8 order4[4] = {1, 3, 2, 0}, order3[4] = {1, 2, 0, 0};
+    const u8 *ord = n == 4 ? order4 : order3;
+    s32 near = S32(GTE_ZNEAR), cnt = 0;
+    s32 fx, fy, fz, px, py, pz;
+    clip_xform(v, &fx, &fy, &fz);
+    px = fx; py = fy; pz = fz;
+    u8 fu = U8(uv), fv = U8(uv + 1), pu = fu, pv = fv;
+    s32 fbehind = fz < near, pbehind = fbehind;
+    gptr o = out;
+    for (s32 i = 0; i < n; i++) {
+        s32 cx, cy, cz, cbehind;
+        u8 cu, cv;
+        if (i == 3) { cx = fx; cy = fy; cz = fz; cu = fu; cv = fv; cbehind = fbehind; }
+        else {
+            u32 k = ord[i];
+            clip_xform(v + k * 8, &cx, &cy, &cz);
+            cu = U8(uv + k * 2); cv = U8(uv + k * 2 + 1);
+            cbehind = cz < near;
+        }
+        if (pbehind + cbehind == 0) {               /* both in front: the previous one */
+            clip_put(o, px, py, pz, pu, pv);
+            cnt++; o += 0x10;
+        } else if (pbehind + cbehind == 1) {        /* crossing: the cut point (after the previous one when it is in front) */
+            long double t = (long double)(s32)(pz - near) / (long double)(s32)(pz - cz);
+            float X = (float)((long double)px - (long double)(s32)(px - cx) * t);
+            float Y = (float)((long double)py - (long double)(s32)(py - cy) * t);
+            float U = (float)((long double)pu - (long double)((s32)pu - cu) * t);
+            long double V = (long double)pv - (long double)((s32)pv - cv) * t;
+            if (!pbehind) { clip_put(o, px, py, pz, pu, pv); cnt++; o += 0x10; }
+            F32(o + 8) = (float)(long double)near;
+            F32(o) = (float)((long double)X + X + (long double)S32(GTE_OFX));
+            F32(o + 4) = (float)((long double)Y + Y + (long double)S32(GTE_OFY));
+            U8(o + 0xC) = (u8)ftol(U);
+            U8(o + 0xD) = (u8)ftol(V);
+            cnt++; o += 0x10;
+        }
+        px = cx; py = cy; pz = cz; pu = cu; pv = cv; pbehind = cbehind;
+    }
+    if (nclip && cnt >= 3) {
+        gptr l = out + (u32)cnt * 0x10 - 0x10;
+        long double x0 = F32(out), y0 = F32(out + 4);
+        S32(nclip) = ftol(((long double)F32(l + 4) - y0) * ((long double)F32(out + 0x10) - x0)
+                          - ((long double)F32(out + 0x14) - y0) * ((long double)F32(l) - x0));
+    }
+    return cnt;
+}
