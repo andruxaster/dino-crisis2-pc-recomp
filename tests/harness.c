@@ -5668,11 +5668,11 @@ static Fake *fk_new(u32 kind, u32 w, u32 h)
     u32 id = U32(FK_NOBJ)++;
     if (id >= 512) { printf("fake COM: out of objects\n"); fflush(stdout); TerminateProcess(GetCurrentProcess(), 3); }
     Fake *f = &g_fo[id];
-    u32 bpp = U8(0x87BB43) == 4 ? 4 : 2;
+    u32 bpp = U8(0x87BB43) == 4 ? 4 : U8(0x87BB43) == 3 ? 3 : 2;
     f->vt = g_fvt[kind]; f->kind = kind; f->id = id; f->w = w; f->h = h; f->bpp = bpp;
     if (w) {
         if (g_fcap[id] < w * h * 4) { free(g_fpix[id]); g_fcap[id] = w * h * 4; g_fpix[id] = malloc(g_fcap[id]); }
-        memset(g_fpix[id], 0xCD, w * h * bpp);
+        memset(g_fpix[id], 0xCD, getenv("FKFULL") ? g_fcap[id] : w * h * bpp);
     }
     f->pix = g_fpix[id];
     return f;
@@ -5680,6 +5680,7 @@ static Fake *fk_new(u32 kind, u32 w, u32 h)
 static u32 fk_hash(const u8 *p, u32 n) { u32 h = 0x811C9DC5; for (u32 i = 0; i < n; i++) h = (h ^ p[i]) * 0x01000193; return h; }
 
 #define ST __attribute__((stdcall))
+static int g_fk_logpa;              /* (debugging: the rasterizers' parameters logged at each unlock, pixels at each lock) */
 /* the device */
 static u32 ST d_begin(Fake *t) { (void)t; fk_log(0x10024); return 0; }
 static u32 ST d_end(Fake *t) { (void)t; fk_log(0x10028); return 0; }
@@ -5735,11 +5736,12 @@ static u32 ST s_lock(Fake *t, const u32 *r, u8 *desc, u32 fl, u32 ev)
     fk_log(0x30064); fk_log(t->id); fk_logract(r); fk_log(fl); fk_log(ev);
     *(u32 *)(desc + 8) = t->h; *(u32 *)(desc + 0xC) = t->w; *(u32 *)(desc + 0x10) = t->w * t->bpp;
     *(u8 **)(desc + 0x24) = t->pix;
+    if (g_fk_logpa) fk_log(fk_hash(t->pix, t->w * t->h * t->bpp));
     return 0;
 }
 static u32 ST s_restore(Fake *t) { fk_log(0x3006C); fk_log(t->id); return 0; }
 static u32 ST s_colorkey(Fake *t, u32 fl, const u32 *k) { fk_log(0x30074); fk_log(t->id); fk_log(fl); fk_logmem(k, 8); return 0; }
-static u32 ST s_unlock(Fake *t, const u32 *r) { fk_log(0x30080); fk_log(t->id); fk_logract(r); fk_log(fk_hash(t->pix, t->w * t->h * t->bpp)); return 0; }
+static u32 ST s_unlock(Fake *t, const u32 *r) { fk_log(0x30080); fk_log(t->id); fk_logract(r); fk_log(fk_hash(t->pix, t->w * t->h * t->bpp)); if (g_fk_logpa) fk_logmem(MEM(0x75CEC0), 0x28); return 0; }
 /* the viewport, the material */
 static u32 ST vp_clear(Fake *t, u32 n, const u32 *r, u32 fl) { (void)t; fk_log(0x50030); fk_log(n); fk_logmem(r, 16 * n); fk_log(fl); return 0; }
 static u32 ST vp_setbg(Fake *t, u32 h) { (void)t; fk_log(0x50020); fk_log(h); return 0; }
@@ -5840,14 +5842,31 @@ static int check_fk(u32 addr, void *fn, const char *name, int nargs, const u32 *
     g_cur_name = name; g_cur_orig = 1;
     snap(snap0); fk_pix(1, 0);
     u32 nobj0 = U32(FK_NOBJ);
+    u32 hb0 = getenv("FKPIX") ? fk_hash(g_fo[4].pix, 640 * 480 * g_fo[4].bpp) : 0;
     clear_stack();
     u32 r0 = call((void *)(uintptr_t)addr, nargs, args);
     snap(snap1); fk_pix(1, 1);
     u32 nobj1 = U32(FK_NOBJ);
     restore(snap0); U32(FK_NOBJ) = nobj0; fk_pix(0, 0);
+    if (getenv("FKPIX")) printf("  [hb0 %08X restored %08X]\n", hb0, fk_hash(g_fo[4].pix, 640 * 480 * g_fo[4].bpp));
+    if (getenv("FKPIX") && hb0 != fk_hash(g_fo[4].pix, 640 * 480 * g_fo[4].bpp))
+        printf("  back buffer not restored: pix %p g_fpix %p cap %u, objects %u -> %u\n", (void *)g_fo[4].pix, (void *)g_fpix[4], g_fcap[4], nobj0, nobj1);
     g_cur_orig = 0;
+    if (getenv("FKCLR")) clear_stack();
     u32 r1 = call(fn, nargs, args);
     int ok = compare(name, r0, r1, 0);
+    if (!ok && getenv("FKPIX")) {               /* (debugging: the first pixel that differs, per object) */
+        for (u32 k = 0; k < U32(FK_NOBJ) && k < 512; k++) {
+            if (!g_fpix[k] || !g_fkpix_save[1][k]) continue;
+            u32 n = g_fo[k].w * g_fo[k].h * g_fo[k].bpp;
+            for (u32 b = 0; b < n; b++)
+                if (g_fpix[k][b] != g_fkpix_save[1][k][b]) {
+                    printf("  object %u (%ux%u x%u): byte %u (x %u, y %u): %02X original %02X\n", k, g_fo[k].w, g_fo[k].h, g_fo[k].bpp,
+                           b, b % (g_fo[k].w * g_fo[k].bpp) / g_fo[k].bpp, b / (g_fo[k].w * g_fo[k].bpp), g_fpix[k][b], g_fkpix_save[1][k][b]);
+                    break;
+                }
+        }
+    }
     restore(snap1); (void)nobj1; fk_pix(0, 1);
     return ok;
 }
@@ -5859,7 +5878,7 @@ static void fk_dump(gptr ot)
     for (gptr q = ot, n = 0; q != 0xFFFFFF && n < 40; q = U32(q) & 0xFFFFFF, n++) printf(" %X:%02X", q, U8(q + 7));
     printf("\n");
 
-    restore(snap0); PcDraw_DrawOTag(ot);
+    restore(snap0); fk_pix(0, 0); PcDraw_DrawOTag(ot);
     u32 n = U32(FK_LOGN), no = *(u32 *)(snap1[0] + FK_LOGN - RW[0].lo), k = 0;
     const u32 *o = (const u32 *)(snap1[0] + FK_LOG - RW[0].lo), *c = (const u32 *)MEM(FK_LOG);
     while (k < n / 4 && k < no / 4 && o[k] == c[k]) k++;
@@ -5879,6 +5898,19 @@ static void fk_dump(gptr ot)
             if (ov != U32(a)) { printf("  arena %X: %08X original %08X\n", a, U32(a), ov); nd++; }
         }
         for (u32 r = 0; r < 512; r++) if (U32(0x75CEEC + 8 * r)) printf("  row %u: slot %X stamp %u\n", r, U32(0x75CEEC + 8 * r), U32(0x75CEE8 + 8 * r));
+        {   int nd = 0;
+            for (gptr a = RW[1].lo; a < RW[1].hi && nd < 24; a += 4) {
+                if (a >= FK_LOG && a < FK_LOG + FK_LOGMAX) continue;
+                u32 ov = *(const u32 *)(snap1[1] + a - RW[1].lo);
+                if (ov != U32(a)) { printf("  mem %X: %08X original %08X\n", a, U32(a), ov); nd++; }
+            }
+        }
+        printf("  rasterizer parameters:");
+        for (gptr a = 0x75CEC0; a < 0x75CEE8; a += 4) printf(" %08X/%08X", U32(a), *(const u32 *)(snap1[1] + a - RW[1].lo));
+        printf("\n");
+        printf("  0x84 slot:");                       /* (new / original) */
+        for (gptr a = 0x865D98; a < 0x865DC0; a += 4) printf(" %08X/%08X", U32(a), *(const u32 *)(snap1[1] + a - RW[1].lo));
+        printf("\n");
     }
     restore(snap1);
 }
@@ -5935,6 +5967,12 @@ static void pkt_random(gptr p, u32 code)
         for (u32 i = 0; i < 4; i++) rnd_xyz(p + 8 + 0xC * i, 0);
         U16(p + 0x12) = cluts[rnd() % 4]; U16(p + 0x1E) = (u16)(rnd() % 3 ? rnd() % 8 : rnd() % 64);
         break;
+    case 0x84:                                                               /* (the pieces: set by the caller) */
+        rnd_xyz(p + 8, 0);
+        F32(p + 0x10) = rnd() % 4 ? rndf(0.25f, 3.0f) : rndf(-3.0f, 3.0f); F32(p + 0x14) = rnd() % 4 ? rndf(0.25f, 3.0f) : rndf(-3.0f, 3.0f);
+        if (rnd() % 8 == 0) F32(p + 0x14) = F32(p + 0x10);
+        U16(p + 0x1E) = (u16)rnd();
+        break;
     case 0x88: U32(p + 8) = rnd() % 64; U16(p + 0xC) = (u16)(rnd() % 32); U16(p + 0xE) = (u16)(rnd() % 4); break;
     case 0x8C:
         rnd_xyz(p + 8, 0); U16(p + 0x14) = (u16)(rnd() % 320); U16(p + 0x16) = (u16)(rnd() % 240);
@@ -5973,7 +6011,10 @@ static void twin_random(gptr a)
 static void test_pcdraw(void)
 {
     static const u8 codes[] = {0x20, 0x24, 0x28, 0x2C, 0x30, 0x34, 0x38, 0x3C, 0x40, 0x48, 0x4C, 0x50, 0x58, 0x5C, 0x60, 0x64,
-                               0x68, 0x6C, 0x74, 0x7C, 0x80, 0x88, 0x8C, 0xEC, 0xFC, 0x2C, 0x3C, 0x64, 0x6C, 0x34};
+                               0x68, 0x6C, 0x74, 0x7C, 0x80, 0x84, 0x88, 0x8C, 0xEC, 0xFC, 0x2C, 0x3C, 0x64, 0x6C, 0x34, 0x84};
+    static const u16 cluts[4] = {0x7800, 0x7810, 0x7840, 0x7C00};
+    u32 sa = 0, sn = 0, sc = 0;                     /* the pieces of the code 0x84 sprites */
+    u8 pieces[5][8];
     unsigned fpu = _controlfp(0, 0);
     _controlfp(_PC_24, _MCW_PC);                    /* the x87 as Direct3D leaves it in the game */
     u8 saved[5]; u8 *c = MEM(0x4DD711); memcpy(saved, c, 5);
@@ -5984,7 +6025,7 @@ static void test_pcdraw(void)
     U32(0x865EE4) = 0x660000;                           /* the font: 64 glyphs */
     for (u32 k = 0; k < 64 * 0x188; k += 4) U32(0x660000 + k) = rnd();
     for (int i = 0; i < iters; i++) {
-        if (i % 16 == 0) { fk_reset(); fk_pixfmt(i % 64 == 32); }
+        if (i % 16 == 0) { fk_reset(); fk_pixfmt(i % 64 == 32); memset(MEM(0x865D98), 0, 0x28); }
         U32(FK_LOGN) = 0;
         /* VRAM: some palettes and texels changed */
         for (int k = rnd() % 4; k; k--) U16(VRAM_BASE + 2 * (480 * 1024 + rnd() % 2048)) = (u16)(rnd() % 4 ? rnd() : 0x8000);   /* (0x8000: black, not transparent) */
@@ -6005,6 +6046,37 @@ static void test_pcdraw(void)
         U8(0x865E44) = (u8)(rnd() % 4 ? 2 : rnd() & 0x22); U32(0x865E6C) = rnd() % 2 ? 0 : 8; U32(0x865E70) = rnd() % 2 ? 0 : 8;
         U32(0x865E74) = rnd() % 2 ? 1024 : 256; U32(0x865E78) = rnd() % 2 ? 1024 : 128;
         for (int k = 0; k < 256; k++) if (rnd() % 16 == 0) U16(0x8644D0 + k * 0x14) = (u16)(rnd() % 2);
+        /* code 0x84: one set of pieces per frame (in VRAM: 0x75CEB8 + a*8), often the slot's again;
+           no VRAM moves then (a slot used this frame whose pieces changed: the port writes slot "a") */
+        int m84 = rnd() % 2;
+        if (m84) {
+            if (!sn || rnd() % 3 == 0) {
+                sa = 0xEC0 + rnd() % 0x8000; sn = rnd() % 16 ? 1 + rnd() % 5 : 0; sc = cluts[rnd() % 4];
+                for (u32 k = 0; k < sn; k++) {
+                    gptr E = 0x75CEB8 + (sa + k) * 8;
+                    u32 w = 1 + rnd() % 15, h = 1 + rnd() % 15;
+                    if (rnd() % 2) { w = 1 + rnd() % 4; h = 1 + rnd() % 4; }
+                    S16(E) = (s16)(rnd() % 4 == 0 ? -0xA0 + (s32)(rnd() % 8) : -0xA0 + (s32)(rnd() % (0x100 - 8 * w + 1)));
+                    U8(E + 2) = (u8)(s8)(rnd() % 4 == 0 ? -(s32)(rnd() % 3) : -0x80 + (s32)(rnd() % (0x100 - 8 * h + 1)));
+                    U8(E + 3) = (u8)(w | h << 4);
+                    U16(E + 4) = (u16)((rnd() & 0x1F) | (rnd() & 0x660) | (rnd() % 4) << 9 | (rnd() & 0xF000));
+                    U8(E + 6) = (u8)rnd(); U8(E + 7) = (u8)rnd();
+                    if (sn == 1 && rnd() % 6 == 0) { S16(E) = 1; U8(E + 3) = (u8)(8 | h << 4); }   /* (65 wide: a texture of 64 one less) */
+                    memcpy(pieces[k], MEM(E), 8);
+                }
+            }
+            else if (rnd() % 6 == 0) sc = cluts[rnd() % 4];        /* (the same pieces in another palette) */
+            for (u32 k = 0; k < sn; k++) memcpy(MEM(0x75CEB8 + (sa + k) * 8), pieces[k], 8);   /* (VRAM's random writes undone) */
+            if (rnd() % 4 == 0) {                   /* (colours 0 in the palette: left out; the slot's palette changed) */
+                for (int k = 1 + rnd() % 3; k; k--) U16(VRAM_BASE + 2 * (((u32)sc >> 6) * 1024 + (sc & 0x3F) * 16 + rnd() % 16)) = 0;
+                PcDraw_ClutRowConvert(0, (u32)sc >> 6, 0x400);
+            }
+            u32 sum = 0;
+            for (u32 k = 0; k < sn * 8; k += 4) sum += U32(0x75CEB8 + sa * 8 + k);
+            if (U32(0x865D98) && !(U16(0x865DAA) == sn && U16(0x865DA8) == sc && U32(0x865DB0) == sum)) U16(0x865DAC) = 0;
+            if (rnd() % 4 == 0) U16(0x865DAE) = (u16)(rnd() % 8);
+            if (rnd() % 4 == 0) U32(0x865E74) = rnd() % 2 ? 64 : 128;      /* (the texture narrower: its height scaled) */
+        }
         /* the order table: n packets, a few draw-mode packets between */
         u32 n = 1 + rnd() % 12; gptr p = DO_OT, first = p; int spec = 0;
         for (u32 k = 0; k < n; k++) {
@@ -6017,8 +6089,11 @@ static void test_pcdraw(void)
                 U32(p + 4) = 0xF0000000; U32(p + 8) = p + 0x10; twin_random(p + 0x10);
             } else {
                 u32 code = codes[rnd() % sizeof codes];
+                if (code == 0x84 && !m84) code = 0x2C;
+                if ((code == 0xEC || code == 0xFC) && m84) code = 0x84;
                 pkt_random(p, code);
                 if (code == 0x8C) spec = 1;
+                if (code == 0x84) { U16(p + 0x18) = (u16)sa; U16(p + 0x1A) = (u16)sn; U16(p + 0x1C) = (u16)sc; }
             }
             U32(p) = (rnd() % 8 ? 0x80000000u : 0) | nx;
             p = nx;
@@ -6063,6 +6138,130 @@ static void test_pcdraw(void)
 
 /* the background masks against the fake Direct3D: tiles made, placed,
    sorted and packed into textures, uploaded, shifted, their markers */
+/* without a 3D device (0x75DEF0 bit 0): the packets drawn into the back buffer by the
+   software rasterizers (its pixels hashed when unlocked); 16-bit 555 / 565 and 32-bit */
+static void test_pcsoft(void)
+{
+    static const u8 codes[] = {0x20, 0x24, 0x28, 0x2C, 0x30, 0x34, 0x38, 0x3C, 0x60, 0x64, 0x68, 0x6C, 0x74, 0x7C, 0x84,
+                               0x40, 0x50, 0x80, 0x88, 0x8C, 0x24, 0x2C, 0x34, 0x3C, 0x64, 0x6C, 0x84, 0xEC, 0xFC};
+    static const u16 cluts[4] = {0x7800, 0x7810, 0x7840, 0x7C00};
+    unsigned fpu = _controlfp(0, 0);
+    _controlfp(_PC_24, _MCW_PC);
+    u8 saved[5]; u8 *c = MEM(0x4DD711); memcpy(saved, c, 5);
+    c[0] = 0xE9; *(u32 *)(c + 1) = (u32)(uintptr_t)fk_det_malloc - (0x4DD711 + 5);
+    for (u32 k = 0; k < 0x100000; k += 4) U32(VRAM_BASE + k) = rnd();
+    U32(0x865EE4) = 0x660000;                           /* the font: 64 glyphs */
+    for (u32 k = 0; k < 64 * 0x188; k += 4) U32(0x660000 + k) = rnd();
+    u32 sa = 0, sn = 0, sc = 0;
+    u8 pieces[5][8];
+    g_fk_logpa = getenv("FKPA") != 0;
+    for (int i = 0; i < iters; i++) {
+        if (i % 16 == 0) {                              /* (the format first: the back buffer is made in it) */
+            int f = i / 16 % 4;
+            fk_pixfmt(f >= 2);
+            if (f == 1) {                               /* 565 */
+                U32(0x87BB44) = 8; U32(0x87BB48) = 13; U32(0x87BB4C) = 19;
+                U32(0x87BB50) = 0xF800; U32(0x87BB54) = 0x7E0; U32(0x87BB58) = 0x1F; U32(0x87BB5C) = 0;
+            }
+            if (f == 3) { U8(0x87BB42) = 0x18; U8(0x87BB43) = 3; U32(0x87BB5C) = 0; }   /* 24-bit */
+            U8(0x87BB41) = (u8)(rnd() % 2);
+            fk_reset();
+            memset(MEM(0x865D98), 0, 0x28);
+            U32(0x87BB3C) = 640 * U8(0x87BB43);
+            ((void (*)(void))0x4C3C81)();               /* the rasterizers' setup for the format */
+            sn = 0;
+        }
+        U32(FK_LOGN) = 0;
+        U32(0x75DEF0) = 1 | (rnd() % 2 ? 0x20 : 0);
+        U32(0x73B668) = 640; U32(0x73B66C) = 480;
+        for (int k = rnd() % 4; k; k--) U16(VRAM_BASE + 2 * (480 * 1024 + rnd() % 2048)) = (u16)(rnd() % 4 ? rnd() : 0x8000);
+        for (int k = rnd() % 64; k; k--) U32(VRAM_BASE + 4 * (rnd() % 0x40000)) = rnd();
+        if (rnd() % 8 == 0) PcDraw_ClutRowConvert(0, 480 + rnd() % 2, 0x400);
+        U16(0x87BAF4) = (u16)(rnd() & 0x3FFF); U8(0x87BAF7) = rnd() % 16 != 0; U8(0x87BAF6) = (u8)(rnd() % 2);
+        twin_random(0x87BAEC);
+        F32(0x8644BC) = rnd() % 2 ? 2.0f : rndf(0.5f, 3.0f); F32(0x8644B8) = rnd() % 2 ? 2.0f : rndf(0.5f, 3.0f);
+        U16(0x865D4A) = 0; U16(0x865D48) = 0;
+        for (int k = 0; k < 256; k++) if (rnd() % 16 == 0) U16(0x8644D0 + k * 0x14) = (u16)(rnd() % 2);
+        /* code 0x84's pieces (as in "pc draw"; at least 8 x 8, scaled to at least a pixel) */
+        int m84 = rnd() % 2;
+        if (m84) {
+            if (!sn || rnd() % 3 == 0) {
+                sa = 0xEC0 + rnd() % 0x8000; sn = 1 + rnd() % 5; sc = cluts[rnd() % 4];
+                for (u32 k = 0; k < sn; k++) {
+                    gptr E = 0x75CEB8 + (sa + k) * 8;
+                    u32 w = 1 + rnd() % 15, h = 1 + rnd() % 15;
+                    if (rnd() % 2) { w = 1 + rnd() % 4; h = 1 + rnd() % 4; }
+                    S16(E) = (s16)(-0xA0 + (s32)(rnd() % (0x100 - 8 * w + 1)));
+                    U8(E + 2) = (u8)(s8)(rnd() % 4 == 0 ? -(s32)(rnd() % 3) : -0x80 + (s32)(rnd() % (0x100 - 8 * h + 1)));
+                    U8(E + 3) = (u8)(w | h << 4);
+                    U16(E + 4) = (u16)((rnd() & 0x1F) | (rnd() & 0x660) | (rnd() % 4) << 9 | (rnd() & 0xF000));
+                    U8(E + 6) = (u8)rnd(); U8(E + 7) = (u8)rnd();
+                    if (sn == 1 && rnd() % 6 == 0) { S16(E) = 1; U8(E + 3) = (u8)(8 | h << 4); }   /* (65 wide: a texture of 64 one less) */
+                    memcpy(pieces[k], MEM(E), 8);
+                }
+            }
+            else if (rnd() % 6 == 0) sc = cluts[rnd() % 4];        /* (the same pieces in another palette) */
+            for (u32 k = 0; k < sn; k++) memcpy(MEM(0x75CEB8 + (sa + k) * 8), pieces[k], 8);   /* (VRAM's random writes undone) */
+            if (rnd() % 4 == 0) {                   /* (colours 0 in the palette: left out; the slot's palette changed) */
+                for (int k = 1 + rnd() % 3; k; k--) U16(VRAM_BASE + 2 * (((u32)sc >> 6) * 1024 + (sc & 0x3F) * 16 + rnd() % 16)) = 0;
+                PcDraw_ClutRowConvert(0, (u32)sc >> 6, 0x400);
+            }
+            u32 sum = 0;
+            for (u32 k = 0; k < sn * 8; k += 4) sum += U32(0x75CEB8 + sa * 8 + k);
+            if (U32(0x865D98) && !(U16(0x865DAA) == sn && U16(0x865DA8) == sc && U32(0x865DB0) == sum)) U16(0x865DAC) = 0;
+        }
+        u32 n = 1 + rnd() % 10; gptr p = DO_OT, first = p;
+        for (u32 k = 0; k < n; k++) {
+            gptr nx = p + 0x60;
+            if (rnd() % 6 == 0) {
+                U32(p + 4) = 0xE1000000 | (rnd() & 0x30000) | (rnd() & 0x3FFF);
+                U32(p + 8) = rnd() % 2 ? 0 : p + 0x10;
+                twin_random(p + 0x10);
+            } else {
+                u32 code = codes[rnd() % sizeof codes];
+                if (code == 0x84 && !m84) code = 0x2C;
+                if ((code == 0xEC || code == 0xFC) && m84) code = 0x84;
+                pkt_random(p, code);
+                if (code == 0x84) {
+                    U16(p + 0x18) = (u16)sa; U16(p + 0x1A) = (u16)sn; U16(p + 0x1C) = (u16)sc;
+                    for (int j = 0; j < 2; j++) {               /* (scale at least 1/4: no division by 0, nor
+                                                                   reads left of the texture's rows) */
+                        float f = F32(p + 0x10 + 4 * j);
+                        if (f < 0) f = -f;
+                        if (f < 0.25f) f += 0.25f;
+                        F32(p + 0x10 + 4 * j) = f;
+                    }
+                }
+                if (code == 0x6C) {                     /* text: inside the screen (not clipped) */
+                    float x0 = (float)(rnd() % 100), y0 = (float)(rnd() % 80), w, h;
+                    if (rnd() % 3 == 0) { F32(0x8644BC) = F32(0x8644B8) = 2.0f; w = h = 14.0f; }   /* (28 x 28: copied) */
+                    else { w = (float)((s32)(rnd() % 69) - 8); h = (float)((s32)(rnd() % 69) - 8); }
+                    F32(p + 8) = x0; F32(p + 0xC) = y0; F32(p + 0x14) = x0 + w; F32(p + 0x24) = y0 + h;
+                    U8(p + 0x34) = (u8)(rnd() % 16); U8(p + 0x35) = (u8)(rnd() % 16);   /* (the glyph's size in 2-texel units: rows past 32 read outside it) */
+                }
+            }
+            U32(p) = (rnd() % 8 ? 0x80000000u : 0) | nx;
+            p = nx;
+        }
+        U32(p) = 0xFFFFFFFF;
+        u32 a[1] = {first};
+        for (u32 pg = 0; pg < 32; pg++)                 /* (a page's 32 slots full: the port locks slot 0 of nothing) */
+            if (U8(0x75E488 + (pg * 32 + 24) * 0x18)) memset(MEM(0x75E488 + pg * 32 * 0x18), 0, 32 * 0x18);
+        if (getenv("FKONE")) U32(DO_OT + 0x60) = 0xFFFFFFFF;
+        if (getenv("FKSHOW") && atoi(getenv("FKSHOW")) == i)
+            for (gptr q = first; q != 0xFFFFFF && U32(q) != 0xFFFFFFFF; q = U32(q) & 0xFFFFFF) {
+                printf("  pkt %X:", q);
+                for (u32 k = 0; k < 0x58; k += 4) printf(" %08X", U32(q + k));
+                printf("\n");
+            }
+        sprintf(g_what, "iteration %d, %u packets, %u-bit", i, n, U8(0x87BB42));
+        if (!check_fk(0x4B50F0, getenv("FKSELF") ? (void *)0x4B50F0 : (void *)PcDraw_DrawOTag, "PcDraw_DrawOTag", 1, a) && getenv("FKDUMP")) fk_dump(first);
+    }
+    U32(0x75DEF0) = 0;
+    memcpy(c, saved, 5);
+    _controlfp(fpu, _MCW_PC);
+}
+
 static void test_pcmasks(void)
 {
     unsigned fpu = _controlfp(0, 0);
@@ -16879,7 +17078,7 @@ __declspec(dllexport) void harness_main(int argc, char **argv)
         {"data tables", test_data}, {"flags", test_flags}, {"geometry", test_geom}, {"script values", test_script_values},
         {"script opcodes", test_script_ops}, {"script objects", test_objects},
         {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"objects 2", test_object}, {"collision", test_collision}, {"player", test_player}, {"player states", test_player2}, {"zones", test_zones}, {"loading", test_room}, {"title", test_title}, {"game task", test_game}, {"doors", test_doors}, {"frame", test_frame}, {"enemy sets", test_enemyset}, {"enemies", test_enemies}, {"raptor", test_raptor}, {"oviraptor", test_ovi}, {"allosaurus", test_allo}, {"pteranodon", test_ptera}, {"area pteranodon", test_ptera2}, {"tyrannosaurus", test_trex}, {"plesiosaurus", test_plesio}, {"water plesiosaurs", test_pw}, {"roamer", test_roam}, {"giganotosaurus", test_gig},
-    {"inostrancevia", test_ino}, {"triceratops", test_tri}, {"mosasaurus", test_mosa}, {"compsognathus", test_compso}, {"duel inostrancevia", test_kof_ino}, {"duel triceratops", test_kof_tri}, {"duel raptor", test_kof_rap}, {"duel oviraptor", test_kof_ovi}, {"duel allosaurus", test_kof_allo}, {"duel tyrannosaurus", test_kof_rex}, {"duel compsognathus", test_kof_comp}, {"duel human", test_kof_human}, {"extra human 20", test_xh20}, {"extra human 21", test_xh21}, {"extra human 22", test_xh22}, {"extra human 24", test_xh24}, {"extra human 25", test_xh25}, {"extra human 26", test_xh26}, {"vehicle gun", test_vgun}, {"area falling piece", test_ao_drop}, {"area flying shell", test_ao_shell}, {"area moving piece", test_ao_mover}, {"area bird", test_ao_bird}, {"area rock", test_ao_rock}, {"area insect", test_ao_bug}, {"area poison plant", test_ao_plant}, {"area burner", test_ao_burner}, {"area 9 objects", test_aobj9}, {"weapon objects", test_ao_weapons}, {"area 4/8 objects", test_aobj2}, {"area effects", test_k2_area}, {"sound slots", test_snd_slots}, {"menus", test_menu}, {"title 2", test_title2}, {"result", test_result}, {"extra crisis", test_extra}, {"models", test_model}, {"ending 3d", test_ending3d}, {"ending", test_ending}, {"options", test_options}, {"save slots", test_savefile}, {"save room", test_shop}, {"aot kinds", test_aot_kinds}, {"object effects", test_obj_effects}, {"effect slots", test_k2}, {"effect drops", test_k2_drops}, {"effect emitters", test_eff_slots}, {"effect slots 3", test_k2_more}, {"camera effect", test_camfx}, {"turret", test_turret}, {"water", test_water}, {"blasts", test_blast}, {"ride", test_ride}, {"meter", test_meter}, {"multi camera", test_multicam}, {"duel arena", test_duel}, {"waves", test_waves}, {"versus", test_versus}, {"vehicle", test_vehicle}, {"effect burst", test_fxburst}, {"flamethrower", test_flame}, {"effect pieces", test_fxpieces}, {"screen tint", test_tint}, {"area effects 2", test_fxmisc}, {"area effects 3", test_fxmisc2}, {"helpers", test_helpers}, {"draw", test_draw}, {"pc gpu", test_pcgpu}, {"pc draw", test_pcdraw}, {"pc masks", test_pcmasks}, {"pc frame", test_pcframe},
+    {"inostrancevia", test_ino}, {"triceratops", test_tri}, {"mosasaurus", test_mosa}, {"compsognathus", test_compso}, {"duel inostrancevia", test_kof_ino}, {"duel triceratops", test_kof_tri}, {"duel raptor", test_kof_rap}, {"duel oviraptor", test_kof_ovi}, {"duel allosaurus", test_kof_allo}, {"duel tyrannosaurus", test_kof_rex}, {"duel compsognathus", test_kof_comp}, {"duel human", test_kof_human}, {"extra human 20", test_xh20}, {"extra human 21", test_xh21}, {"extra human 22", test_xh22}, {"extra human 24", test_xh24}, {"extra human 25", test_xh25}, {"extra human 26", test_xh26}, {"vehicle gun", test_vgun}, {"area falling piece", test_ao_drop}, {"area flying shell", test_ao_shell}, {"area moving piece", test_ao_mover}, {"area bird", test_ao_bird}, {"area rock", test_ao_rock}, {"area insect", test_ao_bug}, {"area poison plant", test_ao_plant}, {"area burner", test_ao_burner}, {"area 9 objects", test_aobj9}, {"weapon objects", test_ao_weapons}, {"area 4/8 objects", test_aobj2}, {"area effects", test_k2_area}, {"sound slots", test_snd_slots}, {"menus", test_menu}, {"title 2", test_title2}, {"result", test_result}, {"extra crisis", test_extra}, {"models", test_model}, {"ending 3d", test_ending3d}, {"ending", test_ending}, {"options", test_options}, {"save slots", test_savefile}, {"save room", test_shop}, {"aot kinds", test_aot_kinds}, {"object effects", test_obj_effects}, {"effect slots", test_k2}, {"effect drops", test_k2_drops}, {"effect emitters", test_eff_slots}, {"effect slots 3", test_k2_more}, {"camera effect", test_camfx}, {"turret", test_turret}, {"water", test_water}, {"blasts", test_blast}, {"ride", test_ride}, {"meter", test_meter}, {"multi camera", test_multicam}, {"duel arena", test_duel}, {"waves", test_waves}, {"versus", test_versus}, {"vehicle", test_vehicle}, {"effect burst", test_fxburst}, {"flamethrower", test_flame}, {"effect pieces", test_fxpieces}, {"screen tint", test_tint}, {"area effects 2", test_fxmisc}, {"area effects 3", test_fxmisc2}, {"helpers", test_helpers}, {"draw", test_draw}, {"pc gpu", test_pcgpu}, {"pc draw", test_pcdraw}, {"pc draw soft", test_pcsoft}, {"pc masks", test_pcmasks}, {"pc frame", test_pcframe},
     };
     for (unsigned i = 0; i < sizeof T / sizeof T[0]; i++) {
         int f0 = g_fail, t0 = g_tests;

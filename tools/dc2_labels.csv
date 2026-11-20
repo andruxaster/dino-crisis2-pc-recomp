@@ -188,11 +188,11 @@ address,kind,name,category,confidence,notes
 0x4B8B20,func,PC_Draw_Sprt8,pc-draw,high,0x74; rewritten: src/pc/drawot.c
 0x4B8CF0,func,PC_Draw_Sprt16,pc-draw,high,0x7C; rewritten: src/pc/drawot.c
 0x4B8930,func,PC_Draw_SprtZ,pc-draw,medium,"0x80 PC-only, size / z; rewritten: src/pc/drawot.c"
-0x4B9400,func,PC_Draw_SprtScaled,pc-draw,medium,0x84 PC-only
+0x4B9400,func,PC_Draw_SprtScaled,pc-draw,high,"0x84 PC-only: pieces (0x75CEB8 + a*8) in one texture (slot 0x865D98), scaled; rewritten: src/pc/drawot.c"
 0x4BA120,func,PC_Draw_MaskMarker,pc-draw,medium,0x88: draws mask group (reads via other reg); rewritten: src/pc/drawot.c
 0x4B9EA0,func,PC_Draw_Sprt8C,pc-draw,low,0x8C PC-only; rewritten: src/pc/drawot.c
 0x4B5F20,func,PC_CalcVertexColour,pc-draw,high,"(r,g,b,code,tpage,&argb): alpha by abr (0x80/0xFF/0xFF/0x40); COLOROP MODULATE2X or MODULATE with x2 clamp; rewritten: src/pc/drawot.c"
-0x4BA1D0,func,PC_DrawA_PolyF3,pc-draw,medium,path A handlers 0x4BA1D0..0x4BB3B0 mirror path B
+0x4BA1D0,func,PC_DrawA_PolyF3,pc-draw,high,"no 3D device: F3 into the rasterizer parameters 0x75CEC0, 0x4C3FFE; rewritten: src/pc/drawot.c"
 0x402520,func,NullDraw,pc-draw,high,bare ret; path A handler for all lines
 0x87BAF4,data,g_drawmode_tpage,data,high,
 0x87BAF6,data,g_drawmode_dfe,data,medium,
@@ -214,7 +214,7 @@ address,kind,name,category,confidence,notes
 0x4C2D5F,func,TexConv_15bpp,pc-tex,high,"asm, table 0x73C900[2]; 16-bit fast path when bpp==16; rewritten: src/pc/drawot.c"
 0x4C3DAC,func,TexConv_PackRGB,pc-tex,low,helper used by converters
 0x4B9100,func,PC_ClutStaleCheck_A,pc-tex,low,compares entry stamp with g_vram_row stamp; rewritten: src/pc/drawot.c
-0x4BA430,func,PC_ClutStaleCheck_B,pc-tex,low,checks entry state == 2
+0x4BA430,func,PC_DrawA_TexLock,pc-tex,high,"(tpage, clut, &surf): the slot found/made/reloaded, its surface locked; rewritten: src/pc/drawot.c"
 0x75E488,data,g_tex_cache,data,high,PC_TEXCACHE_ENTRY[32][32]
 0x75CEE8,data,g_vram_row,data,high,PC_VRAM_ROW[512]
 0x865ECC,data,g_tex_staging,data,high,IDirectDrawSurface4* staging
@@ -2952,3 +2952,29 @@ address,kind,name,category,confidence,notes
 0x4AA5F0,func,Xh24_Flinch2,enemy,high,"area 9 extra human (type 24): Flinch2; rewritten: src/game/xhum_b.c"
 0x4AA660,func,Xh24_Down,enemy,high,"area 9 extra human (type 24): Down; rewritten: src/game/xhum_b.c"
 0x4AA6E0,func,Xh24_Fall,enemy,high,"area 9 extra human (type 24): Fall; rewritten: src/game/xhum_b.c"
+0x4B93C0,func,PC_SurfClear,pc-draw,high,"(surf): Blt colour fill 0; rewritten: src/pc/drawot.c"
+0x4B9690,func,PC_SprtScaled_Find,pc-draw,high,"the 0x84 slot by the pieces' sum; made or redrawn; marked used; rewritten: src/pc/drawot.c"
+0x4B97D0,func,PC_SprtScaled_Make,pc-draw,high,"pieces into staging around 160,128; bounds; texture; rewritten: src/pc/drawot.c"
+0x4B9C00,func,PC_SprtScaled_Free,pc-draw,high,"slot released and zeroed; rewritten: src/pc/drawot.c"
+0x4B9C40,func,PC_SprtScaled_Redo,pc-draw,high,"pieces drawn again (palette changed); rewritten: src/pc/drawot.c"
+0x4C306E,func,Conv_Piece4,pc-tex,high,"4-bit piece, colour 0 left out (0x4C3216 x-mirrored, 0x4C33CE y, 0x4C3585 both); rewritten: src/pc/drawot.c"
+0x4BA2D0,func,PC_DrawA_PolyFT3,pc-draw,high,"no 3D device; rewritten: src/pc/drawot.c"
+0x4BA3B0,func,PC_DrawA_Textured,pc-draw,high,"back buffer and texture locked, 0x4C3E1F; rewritten: src/pc/drawot.c"
+0x4BA4E0,func,PC_DrawA_PolyF4,pc-draw,high,"corners 0,1,3,2; rewritten: src/pc/drawot.c"
+0x4BA600,func,PC_DrawA_PolyFT4,pc-draw,high,"rewritten: src/pc/drawot.c"
+0x4BA720,func,PC_DrawA_PolyG3,pc-draw,high,"four-corner flag set (4th stale), 0x4C4149; rewritten: src/pc/drawot.c"
+0x4BA830,func,PC_DrawA_PolyGT3,pc-draw,high,"rewritten: src/pc/drawot.c"
+0x4BA910,func,PC_DrawA_PolyG4,pc-draw,high,"rewritten: src/pc/drawot.c"
+0x4BAA50,func,PC_DrawA_PolyGT4,pc-draw,high,"rewritten: src/pc/drawot.c"
+0x4BAB70,func,PC_DrawA_Tile,pc-draw,high,"rewritten: src/pc/drawot.c"
+0x4BAC90,func,PC_DrawA_Tile1,pc-draw,high,"calls the empty 0x4C4148; rewritten: src/pc/drawot.c"
+0x4BAD40,func,PC_DrawA_Sprt,pc-draw,high,"rewritten: src/pc/drawot.c"
+0x4BAE70,func,PC_DrawA_Sprt8,pc-draw,high,"rewritten: src/pc/drawot.c"
+0x4BAF80,func,PC_DrawA_Sprt16,pc-draw,high,"rewritten: src/pc/drawot.c"
+0x4BB090,func,PC_DrawA_Text,pc-draw,high,"28x28: 0x4C42F3, else scaled by hand; rewritten: src/pc/drawot.c"
+0x4BB3B0,func,PC_DrawA_SprtScaled,pc-draw,high,"0x84 scaled by hand, clipped to 0x73B668; rewritten: src/pc/drawot.c"
+0x4C3E1F,func,Raster_Tex,pc-draw,medium,"software rasterizer: textured polygon (edges 0x4C4336, spans table 0x7423B0)"
+0x4C3FFE,func,Raster_Flat,pc-draw,medium,"software rasterizer: flat polygon (edges 0x4C44D0, spans 0x74242C)"
+0x4C4149,func,Raster_Gouraud,pc-draw,medium,"software rasterizer: gouraud polygon"
+0x4C42F3,func,Raster_Glyph,pc-draw,medium,"software rasterizer: 28x28 glyph copy"
+0x4C3C81,func,Raster_Init,pc-draw,medium,"spans and colour converters for the pixel format; MMX if present (0x4C2A60)"

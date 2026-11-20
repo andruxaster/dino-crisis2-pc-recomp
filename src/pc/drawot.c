@@ -4,8 +4,10 @@
  * for call (Direct3D through include/dc2/gpudev.h), so the renderer behind it
  * sees exactly what the original sends; the harness checks the calls.
  *
- * Only the port's normal path is here: the flags at 0x75DEF0 are 0 (bit 0
- * would select a second set of drawers, never set by the game).
+ * Both of the port's paths are here: the Direct3D one, and the one without a
+ * 3D device (0x75DEF0 bit 0, never set by the game) that draws into the back
+ * buffer through the port's software rasterizers (asm at 0x4C3E1F.., still
+ * called at their addresses: include/dc2/orig.h).
  *
  * Floats: the game runs the x87 at single precision (Direct3D sets it), so
  * every operation rounds to a float; float constants are objects (no x87
@@ -142,6 +144,16 @@ static void draw(u32 type, u32 n) { Dev_DrawPrimitive(type, FVF_TL, G_VTX, n, 0)
 
 /* ---- the texture cache ------------------------------------------------------------------- */
 
+static int surface_create(u32 w, u32 h, gptr surf, u32 fmt);
+
+/* a surface filled with 0 */
+static void surf_clear(u32 surf)                                     /* 0x4B93C0 */
+{
+    u8 fx[0x64];
+    memset(fx, 0, sizeof fx); *(u32 *)fx = 0x64;
+    Surf_Blt(surf, 0, 0, 0, 0x1000400, fx);
+}
+
 /* a 16- or 32-bit texel from a PS1 colour: the format's shifts and masks;
    0 stays transparent, a colour that comes out 0 becomes 1 */
 static u32 dev_colour(u32 p)
@@ -272,15 +284,16 @@ static gptr texc_src(u32 page, u32 mode, gptr tw)
     return VRAM_BASE + (u32)(y << 11) + (u32)x;
 }
 
-/* the staging surface filled from VRAM (a w x h window repeated) */
-static int texc_fill(gptr src, u32 mode, u32 clut, s32 w, s32 h)
+/* a surface (the staging one, or the texture itself without a 3D device) filled
+   from VRAM (a w x h window repeated) */
+static int texc_fill(u32 surf, gptr src, u32 mode, u32 clut, s32 w, s32 h)
 {
     u8 desc[SD_SIZE];
     gptr pal = mode & 2 ? 0 : clut_converted(clut);
     memset(desc, 0, sizeof desc); *(u32 *)desc = SD_SIZE; *(u32 *)(desc + SD_PIXFMT) = 0x20;
-    if (Surf_Lock(U32(A_STAGING), 0, desc, 1)) return 0;
+    if (Surf_Lock(surf, 0, desc, 1)) return 0;
     k_conv[mode & 2 ? 2 : mode](*(u8 **)(desc + SD_SURFACE), src, pal, w, h, *(s32 *)(desc + SD_PITCH));
-    Surf_Unlock(U32(A_STAGING), 0);
+    Surf_Unlock(surf, 0);
     return 1;
 }
 
@@ -303,21 +316,32 @@ static int tex_create_surface(u32 w, u32 h, gptr surf, gptr tex, u32 fmt)   /* 0
 static const u8 k_full_rect[16] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0};   /* 0, 0, 256, 256 */
 
 /* a new slot for (page, clut, mode): the texture made from VRAM; its texture
-   (0: no free slot or no surface) */
+   (0: no free slot or no surface). Without a 3D device: a plain surface filled
+   directly, the slot's index returned. */
 static u32 texc_create(u32 page, u32 clut, u32 mode)                 /* 0x4B6510 */
 {
     u32 i = 0;
     while (i < 32 && U8(texc(page, i))) i++;
     if (i == 32) return 0;
     gptr e = texc(page, i);
-    if (!tex_create_surface(0x100, 0x100, e + 0x10, e + 0x14, 0)) return 0;
-    if (U8(0x75DEF0) & 0x20) { u32 key[2] = {0, 0}; Surf_SetColorKey(U32(e + 0x10), 8, key); }
-    if (!texc_fill(texc_src(page, mode, G_TWIN), mode, clut, S16(G_TWIN + 4), S16(G_TWIN + 6))) return 0;
-    if (!(mode & 2)) { U16(e + 2) = (u16)clut; U32(e + 4) = U32(CLUTROW + ((s32)clut >> 6) * 8); }
-    Surf_Blt(U32(e + 0x10), k_full_rect, U32(A_STAGING), k_full_rect, 0x1000000, 0);
+    u32 r;
+    if (U8(0x75DEF0) & 1) {
+        if (!surface_create(0x100, 0x100, e + 0x10, 0)) return 0;
+        if (!texc_fill(U32(e + 0x10), texc_src(page, mode, G_TWIN), mode, clut, S16(G_TWIN + 4), S16(G_TWIN + 6))) return 0;
+        if (!(mode & 2)) { U16(e + 2) = (u16)clut; U32(e + 4) = U32(CLUTROW + ((s32)clut >> 6) * 8); }
+        U32(e + 0x14) = 0;
+        r = i;
+    } else {
+        if (!tex_create_surface(0x100, 0x100, e + 0x10, e + 0x14, 0)) return 0;
+        if (U8(0x75DEF0) & 0x20) { u32 key[2] = {0, 0}; Surf_SetColorKey(U32(e + 0x10), 8, key); }
+        if (!texc_fill(U32(A_STAGING), texc_src(page, mode, G_TWIN), mode, clut, S16(G_TWIN + 4), S16(G_TWIN + 6))) return 0;
+        if (!(mode & 2)) { U16(e + 2) = (u16)clut; U32(e + 4) = U32(CLUTROW + ((s32)clut >> 6) * 8); }
+        Surf_Blt(U32(e + 0x10), k_full_rect, U32(A_STAGING), k_full_rect, 0x1000000, 0);
+        r = U32(e + 0x14);
+    }
     U8(e) = 1; U8(e + 1) = (u8)mode;
     U32(e + 8) = U32(G_TWIN); U32(e + 0xC) = U32(G_TWIN + 4);
-    return U32(e + 0x14);
+    return r;
 }
 
 /* a slot marked dirty: filled again from VRAM (its own window and mode) */
@@ -326,8 +350,12 @@ static void texc_reload(u32 page, u32 i)                             /* 0x4B6A00
     gptr e = texc(page, i);
     u32 mode = U8(e + 1);
     U8(e) = 1;
-    if (!texc_fill(texc_src(page, mode, e + 8), mode, U16(e + 2), S16(e + 0xC), S16(e + 0xE))) return;
-    Surf_Blt(U32(e + 0x10), k_full_rect, U32(A_STAGING), k_full_rect, 0x1000000, 0);
+    if (U8(0x75DEF0) & 1) {                     /* (no 3D device: the surface itself) */
+        if (!texc_fill(U32(e + 0x10), texc_src(page, mode, e + 8), mode, U16(e + 2), S16(e + 0xC), S16(e + 0xE))) return;
+    } else {
+        if (!texc_fill(U32(A_STAGING), texc_src(page, mode, e + 8), mode, U16(e + 2), S16(e + 0xC), S16(e + 0xE))) return;
+        Surf_Blt(U32(e + 0x10), k_full_rect, U32(A_STAGING), k_full_rect, 0x1000000, 0);
+    }
     if (!(mode & 2)) U32(e + 4) = U32(CLUTROW + (U16(e + 2) >> 6) * 8);
 }
 
@@ -551,16 +579,27 @@ static const u8 k_glyph_rect[16] = {0, 0, 0, 0, 0, 0, 0, 0, 0x1C, 0, 0, 0, 0x1C,
 static void glyph_make(u32 i, u32 glyph, u32 clut)                   /* 0x4B91E0 */
 {
     gptr pal = clut_converted(clut), src = U32(0x865EE4) + glyph * 0x188, e = GLYPHS + i * 0x14;
-    if (!U32(e + 8)) {
-        if (!tex_create_surface(0x20, 0x20, e + 8, e + 0xC, 0)) return;
-        if (U8(0x75DEF0) & 0x20) { u32 key[2] = {0, 0}; Surf_SetColorKey(U32(e + 8), 8, key); }
-    }
     u8 desc[SD_SIZE];
     memset(desc, 0, sizeof desc); *(u32 *)desc = SD_SIZE; *(u32 *)(desc + SD_PIXFMT) = 0x20;
-    if (Surf_Lock(U32(A_STAGING), 0, desc, 1)) return;
-    conv_glyph(*(u8 **)(desc + SD_SURFACE), src, pal, *(s32 *)(desc + SD_PITCH));
-    Surf_Unlock(U32(A_STAGING), 0);
-    Surf_Blt(U32(e + 8), k_glyph_rect, U32(A_STAGING), k_glyph_rect, 0x1000000, 0);
+    if (U8(0x75DEF0) & 1) {                     /* (no 3D device: a plain 32 x 32 surface, drawn into) */
+        if (!U32(e + 8)) {
+            if (!surface_create(0x20, 0x20, e + 8, 0)) return;
+            surf_clear(U32(e + 8));
+            U32(e + 0xC) = 0;
+        }
+        if (Surf_Lock(U32(e + 8), 0, desc, 1)) return;
+        conv_glyph(*(u8 **)(desc + SD_SURFACE), src, pal, *(s32 *)(desc + SD_PITCH));
+        Surf_Unlock(U32(e + 8), 0);
+    } else {
+        if (!U32(e + 8)) {
+            if (!tex_create_surface(0x20, 0x20, e + 8, e + 0xC, 0)) return;
+            if (U8(0x75DEF0) & 0x20) { u32 key[2] = {0, 0}; Surf_SetColorKey(U32(e + 8), 8, key); }
+        }
+        if (Surf_Lock(U32(A_STAGING), 0, desc, 1)) return;
+        conv_glyph(*(u8 **)(desc + SD_SURFACE), src, pal, *(s32 *)(desc + SD_PITCH));
+        Surf_Unlock(U32(A_STAGING), 0);
+        Surf_Blt(U32(e + 8), k_glyph_rect, U32(A_STAGING), k_glyph_rect, 0x1000000, 0);
+    }
     U16(e) = (u16)glyph; U16(e + 2) = (u16)clut;
     U32(e + 4) = U32(CLUTROW + ((s32)clut >> 6) * 8);
 }
@@ -576,11 +615,14 @@ static u32 glyph_bind(u32 glyph, u32 clut)                           /* 0x4B9100
     }
     if (i == 0x100 && fr != -1) {
         i = fr;
-        Dev_EndScene();
-        glyph_make((u32)fr, glyph, clut);
-        Dev_BeginScene();
+        if (U8(0x75DEF0) & 1) glyph_make((u32)fr, glyph, clut);
+        else {
+            Dev_EndScene();
+            glyph_make((u32)fr, glyph, clut);
+            Dev_BeginScene();
+        }
     }
-    Dev_SetTexture(0, U32(GLYPHS + i * 0x14 + 0xC));
+    if (!(U8(0x75DEF0) & 1)) Dev_SetTexture(0, U32(GLYPHS + i * 0x14 + 0xC));
     U16(GLYPHS + i * 0x14 + 0x10) = 1;
     return (u32)i;
 }
@@ -730,7 +772,7 @@ void PcDraw_MoveImage(gptr r, s32 x, s32 y) { vram_move(r, x, y); }   /* 0x4B4B3
 /* ---- the copy of the frame (code 0x8C draws it) ---------------------------------------------- */
 
 /* a texture size the device takes for w x h (powers of 2, minimum, maximum, square) */
-static void tex_size(u32 w, u32 h, gptr ow, gptr oh)                 /* 0x4B5AE0 */
+static void tex_fit(u32 w, u32 h, u32 *ow, u32 *oh)                  /* 0x4B5AE0 */
 {
     u32 caps = U8(0x865E44);
     if (caps & 2) {
@@ -743,7 +785,15 @@ static void tex_size(u32 w, u32 h, gptr ow, gptr oh)                 /* 0x4B5AE0
     if (w > U32(0x865E74)) w = U32(0x865E74);
     if (h > U32(0x865E78)) h = U32(0x865E78);
     if ((caps & 0x20) && w != h) { if ((s32)w > (s32)h) h = w; else w = h; }
-    U32(ow) = w; U32(oh) = h;                   /* (dwords: the second write covers half the first) */
+    *ow = w; *oh = h;
+}
+
+/* the same into game memory (dwords: the second write covers half the first) */
+static void tex_size(u32 w, u32 h, gptr ow, gptr oh)
+{
+    u32 a, b;
+    tex_fit(w, h, &a, &b);
+    U32(ow) = a; U32(oh) = b;
 }
 
 static const float k_1_320 = 0.003125f, k_65536 = 65536.0f;
@@ -798,12 +848,478 @@ static void grab(void)                                               /* 0x4B5820
     Surf_Blt(U32(0x865D5C), r2, U32(0x865D58), r1, 0x1000000, 0);
 }
 
+/* ---- code 0x84: a sprite put together from pieces of VRAM, drawn scaled ---------------------- */
+
+/* (no game code makes the packet: x, y +8, scale x, y +0x10 (floats), pieces a +0x18, count
+   +0x1A, clut +0x1C, tpage +0x1E (0x400: mirrored)) */
+#define SPR     0x865D98u      /* its texture, one slot of 0x28: w, h, texture w, h (u16); bounds x0, x1, y0, y1 (s16);
+                                  clut, n, used this frame, uses (u16); the pieces' sum, the palette's stamp; surface, texture */
+#define PIECES  0x75CEB8u      /* pieces (8 bytes): x s16, y s8, w/8 | h/8 << 4, tpage u16, u, v */
+
+static const float k_half = 0.5f;
+
+/* a 4-bit piece, w x h texels from src, over dst (colour 0 left out); flip bit 0 mirrors
+   it in x, bit 1 in y. (Only the 4-bit converters are reachable: the port indexes its
+   table 0x73C90C by bits 9-10 plus (tpage & 0x180) * 4, past the table for other modes.) */
+static void conv_piece(u8 *dst, gptr src, gptr pal, u32 w, u32 h, s32 pitch, u32 flip)
+{                                       /* 0x4C306E, 0x4C3216 (x), 0x4C33CE (y), 0x4C3585 (both) */
+    int b16 = U8(PIXFMT + 2) == 0x10, bpp = b16 ? 2 : 4;
+    s32 sx = 4, sy = 0x800;
+    if (flip & 1) { src += (w >> 1) - 4; sx = -4; }
+    if (flip & 2) { src += (h - 1) << 11; sy = -0x800; }
+    u32 y = h;
+    do {
+        gptr s = src; u8 *d = dst; u32 x = w;
+        do {
+            u32 v = U32(s);
+            for (int k = 0; k < 8; k++, d += bpp) {
+                u32 i = (flip & 1 ? v >> (28 - 4 * k) : v >> 4 * k) & 0xF;
+                if (b16) { u32 c = U16(pal + 2 * i); if (c) *(u16 *)d = (u16)c; }
+                else { u32 c = U32(pal + 4 * i); if (c) *(u32 *)d = c; }
+            }
+            s += (u32)sx; x -= 8;
+        } while (x);
+        src += (u32)sy; dst += pitch;
+    } while (--y);
+}
+
+/* piece E converted into the locked staging surface (desc), around 160, 128 */
+static void piece_draw(gptr E, u8 *desc, gptr pal)
+{
+    s32 dx = S16(E), dy = S8(E + 2);
+    u32 tp = U16(E + 4), b = U8(E + 3);
+    u32 u = tp & 0x180 ? U8(E + 6) : (u32)U8(E + 6) >> 1;
+    gptr src = VRAM_BASE + ((((tp & 0x10) << 4) + U8(E + 7)) << 11) + u + ((tp & 0xF) << 7);
+    s32 pitch = *(s32 *)(desc + SD_PITCH);
+    u8 *dst = *(u8 **)(desc + SD_SURFACE) + (dx + 0xA0) * (s32)U8(PIXFMT + 3) + (dy + 0x80) * pitch;
+    conv_piece(dst, src, pal, (b & 0xF) << 3, b >> 1 & 0x78, pitch, (tp >> 9 & 3) + (tp & 0x180) * 4);
+}
+
+/* slot i: its texture and surface released, emptied */
+static void spr_free(u32 i)                                          /* 0x4B9C00 */
+{
+    gptr e = SPR + i * 0x28;
+    if (U32(e + 0x24)) Obj_Release(U32(e + 0x24));
+    if (U32(e + 0x20)) Obj_Release(U32(e + 0x20));
+    memset(MEM(e), 0, 0x28);
+}
+
+/* the staging surface (bounds of slot e, from 160, 128) copied to the slot's surface: dr */
+static void spr_copy(gptr e, const s32 *sr, const s32 *dr)
+{
+    Surf_Blt(U32(e + 0x20), dr, U32(A_STAGING), sr, 0x1000000, 0);
+}
+
+/* slot i made for pieces a .. a+n-1: drawn into the staging surface, their bounds
+   copied to a new texture (smaller when the device's is: the height scaled) */
+static void spr_make(u32 i, u32 a, u32 n, u32 clut)                  /* 0x4B97D0 */
+{
+    s32 x0 = 0, x1 = 0, y0 = 0, y1 = 0;
+    u32 sum = 0;
+    u8 desc[SD_SIZE];
+    surf_clear(U32(A_STAGING));
+    memset(desc, 0, sizeof desc); *(u32 *)desc = SD_SIZE; *(u32 *)(desc + SD_PIXFMT) = 0x20;
+    if (Surf_Lock(U32(A_STAGING), 0, desc, 1)) return;
+    gptr pal = clut_converted(clut);
+    for (u32 k = 0; k < n; k++) {
+        gptr E = PIECES + (a + k) * 8;
+        s32 dx = S16(E), dy = S8(E + 2), w = (s32)((U8(E + 3) & 0xF) << 3), h = (s32)(U8(E + 3) >> 1 & 0x78);
+        piece_draw(E, desc, pal);
+        if (x0 > dx) x0 = dx;                   /* (the bounds start at 0, 0, 0, 0) */
+        if (x1 < dx + w) x1 = dx + w;
+        if (y0 > dy) y0 = dy;
+        if (y1 < h + dy) y1 = h + dy;
+        sum += U32(E) + U32(E + 4);
+    }
+    Surf_Unlock(U32(A_STAGING), 0);
+    spr_free(i);
+    gptr e = SPR + i * 0x28;
+    S16(e + 8) = (s16)x0; S16(e + 0xA) = (s16)x1; S16(e + 0xC) = (s16)y0; S16(e + 0xE) = (s16)y1;
+    U16(e) = (u16)(x1 - x0); U16(e + 2) = (u16)(y1 - y0);
+    U16(e + 0x12) = (u16)n; U16(e + 0x10) = (u16)clut;
+    U32(e + 0x18) = sum; U32(e + 0x1C) = U32(CLUTROW + (clut >> 6) * 8);
+    s32 sr[4] = {x0 + 0xA0, y0 + 0x80, x1 + 0xA0, y1 + 0x80}, dr[4] = {0, 0, U16(e), U16(e + 2)};
+    if (U8(0x75DEF0) & 1) {                     /* (no 3D device: a plain surface) */
+        if (!surface_create(U16(e), U16(e + 2), e + 0x20, 0)) return;
+        spr_copy(e, sr, dr);
+        U16(e + 4) = (u16)((U16(e) + 3) & ~3u); U16(e + 6) = (u16)((U16(e + 2) + 3) & ~3u);
+        return;
+    }
+    Dev_EndScene();
+    u32 tw, th;
+    tex_fit(U16(e), U16(e + 2), &tw, &th);
+    if (!tex_create_surface(tw, th, e + 0x20, e + 0x24, 0)) return;   /* (the scene left ended) */
+    s32 w = U16(e);
+    if ((s32)tw < w) {
+        float f = (float)(s32)tw / (float)w;
+        f = f * (float)(s32)U16(e + 2);
+        U16(e + 2) = (u16)(s32)f;
+        U16(e) = (u16)tw;
+        dr[2] = (s32)(tw & 0xFFFF); dr[3] = U16(e + 2);
+    }
+    spr_copy(e, sr, dr);
+    U16(e + 4) = (u16)tw; U16(e + 6) = (u16)th;
+    Dev_BeginScene();
+}
+
+/* slot i's pieces drawn again (their palette changed) into its texture */
+static void spr_redo(u32 i, u32 a, u32 n, u32 clut)                  /* 0x4B9C40 */
+{
+    u8 desc[SD_SIZE];
+    surf_clear(U32(A_STAGING));
+    memset(desc, 0, sizeof desc); *(u32 *)desc = SD_SIZE; *(u32 *)(desc + SD_PIXFMT) = 0x20;
+    if (Surf_Lock(U32(A_STAGING), 0, desc, 1)) return;
+    gptr pal = clut_converted(clut);
+    for (u32 k = 0; k < n; k++) piece_draw(PIECES + (a + k) * 8, desc, pal);
+    Surf_Unlock(U32(A_STAGING), 0);
+    gptr e = SPR + i * 0x28;
+    U32(e + 0x1C) = U32(CLUTROW + (clut >> 6) * 8);
+    s32 sr[4] = {S16(e + 8) + 0xA0, S16(e + 0xC) + 0x80, S16(e + 0xA) + 0xA0, S16(e + 0xE) + 0x80};
+    s32 dr[4] = {0, 0, U16(e), U16(e + 2)};
+    if (U8(0x75DEF0) & 1) { spr_copy(e, sr, dr); return; }
+    Dev_EndScene();
+    spr_copy(e, sr, dr);
+    Dev_BeginScene();
+}
+
+/* the slot for pieces a .. a+n-1 in clut: the one made for them (by their sum; drawn
+   again if the palette changed and it is not used yet this frame), else made in the
+   least used slot not used this frame; marked used, its texture set */
+#define SPR_SLOTS 1
+static u32 spr_find(u32 a, u32 n, u32 clut)                          /* 0x4B9690 */
+{
+    u32 best = 0xFFFF, bi = a, i;               /* (none free: the port makes "slot" a) */
+    for (i = 0; i < SPR_SLOTS; i++) {
+        gptr e = SPR + i * 0x28;
+        if (!U32(e)) { spr_make(i, a, n, clut); break; }
+        if (U16(e + 0x12) == n && U16(e + 0x10) == clut) {
+            u32 sum = 0;
+            for (u32 k = 0; k < n * 8; k += 4) sum += U32(PIECES + a * 8 + k);
+            if (U32(e + 0x18) == sum) {
+                if (U32(e + 0x1C) != U32(CLUTROW + (clut >> 6) * 8) && !U16(e + 0x14)) spr_redo(i, a, n, clut);
+                break;
+            }
+        }
+        if ((s32)best > (s32)U16(e + 0x16) && !U16(e + 0x14)) { best = U16(e + 0x16); bi = i; }
+    }
+    if (i == 1) { i = bi; spr_make(i, a, n, clut); }   /* (the port tests for 1, its slot count) */
+    gptr e = SPR + i * 0x28;
+    U16(e + 0x16)++;
+    U16(e + 0x14) = 1;
+    if (!(U8(0x75DEF0) & 1)) Dev_SetTexture(0, U32(e + 0x24));
+    return i;
+}
+
+static void sprite_scaled(gptr p)                                    /* 0x4B9400 (code 0x84) */
+{
+    u32 c = vertex_colour(U8(p + 4), U8(p + 5), U8(p + 6), U8(p + 7), U16(p + 0x1E));
+    gptr e = SPR + spr_find(U16(p + 0x18), U16(p + 0x1A), U16(p + 0x1C)) * 0x28;
+    float x = F32(p + 8), y = F32(p + 0xC), sx = F32(p + 0x10), sy = F32(p + 0x14);
+    float xa, xb;
+    if (U8(p + 0x1F) & 4) {
+        xa = (x - (float)S16(e + 8) * sx) * F32(G_SCALE_X);
+        xb = (x - (float)S16(e + 0xA) * sx) * F32(G_SCALE_X);
+    } else {
+        xa = ((float)S16(e + 8) * sx + x) * F32(G_SCALE_X);
+        xb = ((float)S16(e + 0xA) * sx + x) * F32(G_SCALE_X);
+    }
+    float ya = ((float)S16(e + 0xC) * sy + y) * F32(G_SCALE_Y), yb = ((float)S16(e + 0xE) * sy + y) * F32(G_SCALE_Y);
+    float tw = (float)(s32)U16(e + 4), th = (float)(s32)U16(e + 6);
+    float u0 = k_half / tw, v0 = k_half / th;
+    float u1 = ((float)(s32)U16(e) - k_half) / tw, v1 = ((float)(s32)U16(e + 2) - k_half) / th;
+    float xs[4] = {xa, xb, xa, xb}, ys[4] = {ya, ya, yb, yb}, us[4] = {u0, u1, u0, u1}, vs[4] = {v0, v0, v1, v1};
+    for (u32 i = 0; i < 4; i++) {
+        gptr v = G_VTX + i * 0x20;
+        F32(v) = xs[i]; F32(v + 4) = ys[i]; U32(v + 8) = 0x3C23D70A; U32(v + 0xC) = 0x3DCCCCCD;
+        U32(v + 0x10) = c;
+        F32(v + 0x18) = us[i]; F32(v + 0x1C) = vs[i];
+    }
+    depth(0x400);
+    blend(U8(p + 7), U16(p + 0x1E));
+    shade(1);
+    draw(5, 4);
+}
+
+/* ---- without a 3D device (0x75DEF0 bit 0): drawn into the back buffer by the port's
+   software rasterizers (asm; still the original's) ------------------------------------------- */
+
+#define PA      0x75CEC0u      /* the rasterizers' parameters: colour (r, g, b; abr + 1 when
+                                  semi-transparent, | 0x80: four corners), the gouraud colours
+                                  2-4 (+4); corners y, x (s16, +0x10); their uvs (u16, +0x20) */
+#define BB_PITCH 0x87BB3Cu     /* the back buffer's pitch */
+
+static u16 pa_ftol(float f) { return (u16)(long long)f; }
+
+/* corner k from the packet's floats x, y (screen-scaled, truncated) */
+static void pa_xy(u32 k, gptr xy)
+{
+    U16(PA + 0x12 + 4 * k) = pa_ftol(F32(G_SCALE_X) * F32(xy));
+    U16(PA + 0x10 + 4 * k) = pa_ftol(F32(G_SCALE_Y) * F32(xy + 4));
+}
+
+/* the colour and its flags: blending by tpage's abr (byte), four corners */
+static void pa_head(gptr p, u32 tp, u32 quad)
+{
+    U32(PA) = U32(p + 4);
+    U8(PA + 3) = (u8)((U8(p + 7) & 2 ? (tp >> 5 & 3) + 1 : 0) | quad);
+}
+
+static u8 *pa_lock(u32 surf, u8 *desc)
+{
+    memset(desc, 0, SD_SIZE); *(u32 *)desc = SD_SIZE;
+    Surf_Lock(surf, 0, desc, 1);                /* (not checked) */
+    return *(u8 **)(desc + SD_SURFACE);
+}
+
+static void pa_flat(void (DC2CALL *raster)(void *, gptr))
+{
+    u8 d[SD_SIZE];
+    raster(pa_lock(U32(A_BACK), d), PA);
+    Surf_Unlock(U32(A_BACK), 0);
+}
+
+/* the texture surface for (tpage, clut), made or reloaded first, locked: its pixels */
+static u8 *pa_tex_lock(u32 tpage, u32 clut, u32 *surf, u8 *desc)     /* 0x4BA430 */
+{
+    u32 page = tpage & 0x1F, mode = tpage >> 7 & 3;
+    u32 i = texc_find(page, clut, mode);
+    if (i == 0x20) i = texc_create(page, clut, mode);       /* (its index here; 0 if it failed) */
+    else if (U8(texc(page, i)) == 2) texc_reload(page, i);
+    *surf = U32(texc(page, i) + 0x10);
+    return pa_lock(*surf, desc);
+}
+
+static void pa_textured(u32 tpage, u32 clut)                         /* 0x4BA3B0 */
+{
+    u8 d[SD_SIZE], td[SD_SIZE];
+    u8 *dst = pa_lock(U32(A_BACK), d);
+    u32 ts;
+    u8 *tex = pa_tex_lock(tpage, clut, &ts, td);
+    Raster_Tex(dst, tex, PA);
+    Surf_Unlock(ts, 0);
+    Surf_Unlock(U32(A_BACK), 0);
+}
+
+static void pa_uv(u32 k, gptr uv) { U16(PA + 0x20 + 2 * k) = U16(uv); }
+
+/* polygons: quads' corners in the order 0, 1, 3, 2 (gouraud colours not reordered) */
+static void pa_poly_f(gptr p, u32 n)                                 /* 0x4BA1D0 F3, 0x4BA4E0 F4 */
+{
+    static const u8 f3[3] = {8, 0x14, 0x20}, f4[4] = {8, 0x14, 0x2C, 0x20};
+    pa_head(p, U8(G_TPAGE), n == 4 ? 0x80 : 0);
+    for (u32 k = 0; k < n; k++) pa_xy(k, p + (n == 4 ? f4 : f3)[k]);
+    pa_flat(Raster_Flat);
+}
+
+static void pa_poly_ft(gptr p, u32 n)                                /* 0x4BA2D0 FT3, 0x4BA600 FT4 */
+{
+    static const u8 o3[3] = {0, 0x10, 0x20}, o4[4] = {0, 0x10, 0x30, 0x20};
+    pa_head(p, U8(p + 0x26), n == 4 ? 0x80 : 0);
+    for (u32 k = 0; k < n; k++) pa_xy(k, p + 8 + (n == 4 ? o4 : o3)[k]);
+    for (u32 k = 0; k < n; k++) pa_uv(k, p + 0x14 + (n == 4 ? o4 : o3)[k]);
+    pa_textured(U16(p + 0x26), U16(p + 0x16));
+}
+
+static void pa_poly_g(gptr p, u32 n)                                 /* 0x4BA720 G3, 0x4BA910 G4 */
+{
+    static const u8 o3[3] = {0, 0x10, 0x20}, o4[4] = {0, 0x10, 0x30, 0x20};
+    U32(PA) = U32(p + 4);
+    for (u32 k = 1; k < n; k++) U32(PA + 4 * k) = U32(p + 4 + 0x10 * k);
+    U8(PA + 3) = (u8)((U8(p + 7) & 2 ? (U8(G_TPAGE) >> 5 & 3) + 1 : 0) | 0x80);   /* (G3 too: its 4th corner stale) */
+    for (u32 k = 0; k < n; k++) pa_xy(k, p + 8 + (n == 4 ? o4 : o3)[k]);
+    pa_flat(Raster_Gouraud);
+}
+
+static void pa_poly_gt(gptr p, u32 n)                                /* 0x4BA830 GT3, 0x4BAA50 GT4 */
+{
+    static const u8 o3[3] = {0, 0x14, 0x28}, o4[4] = {0, 0x14, 0x3C, 0x28};
+    pa_head(p, U8(p + 0x2A), n == 4 ? 0x80 : 0);
+    for (u32 k = 0; k < n; k++) pa_xy(k, p + 8 + (n == 4 ? o4 : o3)[k]);
+    for (u32 k = 0; k < n; k++) pa_uv(k, p + 0x14 + (n == 4 ? o4 : o3)[k]);
+    pa_textured(U16(p + 0x2A), U16(p + 0x16));
+}
+
+/* a screen rect from x0, y0 (scaled) to x1, y1 (already scaled): corners
+   (x0, y0), (x1, y0), (x1, y1), (x0, y1) */
+static void pa_rect(gptr p, u16 x1, u16 y1)
+{
+    u16 x0 = pa_ftol(F32(G_SCALE_X) * F32(p + 8)), y0 = pa_ftol(F32(G_SCALE_Y) * F32(p + 0xC));
+    U16(PA + 0x12) = x0; U16(PA + 0x10) = y0;
+    U16(PA + 0x16) = x1; U16(PA + 0x14) = y0;
+    U16(PA + 0x1A) = x1; U16(PA + 0x18) = y1;
+    U16(PA + 0x1E) = x0; U16(PA + 0x1C) = y1;
+}
+
+static void pa_tile(gptr p)                                          /* 0x4BAB70 */
+{
+    pa_head(p, U8(G_TPAGE), 0x80);
+    pa_rect(p, pa_ftol(((float)S16(p + 0x14) + F32(p + 8)) * F32(G_SCALE_X)),
+            pa_ftol(((float)S16(p + 0x16) + F32(p + 0xC)) * F32(G_SCALE_Y)));
+    pa_flat(Raster_Flat);
+}
+
+static void DC2CALL raster_dot(void *dst, gptr prm) { (void)dst; (void)prm; }   /* 0x4C4148: empty */
+
+static void pa_tile1(gptr p)                                         /* 0x4BAC90 */
+{
+    pa_head(p, U8(G_TPAGE), 0);
+    pa_xy(0, p + 8);
+    pa_flat(raster_dot);
+}
+
+/* sprites: w, h from the packet (size 0) or 8, 16; uvs u0..u0+w-1 (bytes) */
+static void pa_sprite(gptr p, const float *size)                     /* 0x4BAD40, 0x4BAE70 (8), 0x4BAF80 (16) */
+{
+    u32 tp = U32(G_TPAGE);
+    pa_head(p, tp & 0xFF, 0x80);
+    u16 x1, y1;
+    u8 du, dv;
+    if (size) {
+        x1 = pa_ftol((F32(p + 8) + *size) * F32(G_SCALE_X));
+        y1 = pa_ftol((F32(p + 0xC) + *size) * F32(G_SCALE_Y));
+        du = dv = (u8)(*size == 8.0f ? 7 : 0xF);
+    } else {
+        x1 = pa_ftol(((float)S16(p + 0x18) + F32(p + 8)) * F32(G_SCALE_X));
+        y1 = pa_ftol(((float)S16(p + 0x1A) + F32(p + 0xC)) * F32(G_SCALE_Y));
+        du = (u8)(U8(p + 0x18) - 1); dv = (u8)(U8(p + 0x1A) - 1);
+    }
+    pa_rect(p, x1, y1);
+    u8 u0 = U8(p + 0x14), v0 = U8(p + 0x15), u1 = (u8)(u0 + du), v1 = (u8)(v0 + dv);
+    U8(PA + 0x20) = u0; U8(PA + 0x21) = v0; U8(PA + 0x22) = u1; U8(PA + 0x23) = v0;
+    U8(PA + 0x24) = u1; U8(PA + 0x25) = v1; U8(PA + 0x26) = u0; U8(PA + 0x27) = v1;
+    pa_textured(tp & 0xFFFF, U16(p + 0x16));
+}
+
+/* a pixel of the back buffer's format (bytes 2, 3 or 4) from a 32-bit read of the source */
+static void pa_put(u8 *d, const u8 *s, u32 bytes, int glyph24)
+{
+    if (bytes == 2) { u32 c = *(const u16 *)s; if (c) *(u16 *)d = (u16)c; return; }
+    u32 c = *(const u32 *)s;
+    if (!c) return;
+    if (bytes == 4) { *(u32 *)d = c; return; }
+    *(u16 *)d = (u16)c;
+    d[glyph24 ? 1 : 2] = (u8)(c >> 16);         /* (the text's copy writes the third byte at +1) */
+}
+
+/* text: the glyph's 28 x 28 texture scaled to the quad (or copied when 28 x 28) */
+static void pa_text(gptr p)                                          /* 0x4BB090 */
+{
+    pa_head(p, U8(G_TPAGE), 0x80);
+    pa_xy(0, p + 8);
+    s32 w = (s32)(long long)((F32(p + 0x14) - F32(p + 8)) * F32(G_SCALE_X));
+    s32 h = (s32)(long long)((F32(p + 0x24) - F32(p + 0xC)) * F32(G_SCALE_Y));
+    if (!w || !h) return;
+    u32 g = glyph_bind(U16(p + 0x1E), U16(p + 0x12));
+    u8 d[SD_SIZE], gd[SD_SIZE];
+    u8 *dst = pa_lock(U32(A_BACK), d);
+    const u8 *src = pa_lock(U32(GLYPHS + g * 0x14 + 8), gd);
+    if (w == 0x1C && h == 0x1C) Raster_Glyph(dst, src, PA);
+    else {
+        u32 bytes = U8(PIXFMT + 2) >> 3, pitch = U32(BB_PITCH);
+        u8 *row = dst + S16(PA + 0x10) * (s32)pitch + (s32)bytes * S16(PA + 0x12);
+        s32 us = (s32)((u32)U8(p + 0x34) << 17) / w, vs = (s32)((u32)U8(p + 0x35) << 17) / h;
+        u32 v = 0;
+        for (s32 y = h; y > 0; y--, v += (u32)vs, row += pitch) {
+            u32 u = 0;
+            const u8 *srow = src + ((s32)v >> 16 << (bytes == 2 ? 6 : 7));
+            for (s32 x = 0; x < (s32)bytes * w; x += (s32)bytes, u += (u32)us)
+                pa_put(row + x, srow + (bytes == 2 ? (u >> 15 & 0x1FFFE) : (u >> 14 & 0x3FFFC)), bytes, 1);
+        }
+    }
+    Surf_Unlock(U32(GLYPHS + g * 0x14 + 8), 0);
+    Surf_Unlock(U32(A_BACK), 0);
+}
+
+/* code 0x84: the pieces' surface scaled into the back buffer, clipped to 640 x 480 (0x73B668) */
+static void pa_sprite_scaled(gptr p)                                 /* 0x4BB3B0 */
+{
+    gptr e = SPR + spr_find(U16(p + 0x18), U16(p + 0x1A), U16(p + 0x1C)) * 0x28;
+    U32(PA) = U32(p + 4);
+    s32 W = U16(e), H = U16(e + 2);
+    s32 w = (s32)(long long)((float)W * F32(p + 0x10) * F32(G_SCALE_X));
+    s32 h = (s32)(long long)((float)H * F32(p + 0x14) * F32(G_SCALE_Y));
+    s32 x, u0, n = w;
+    if (U8(p + 0x1F) & 4) {                     /* mirrored: right to left */
+        x = (s32)(long long)((F32(p + 8) - (float)S16(e + 0xA) * F32(p + 0x10)) * F32(G_SCALE_X));
+        u0 = (W << 16) - 1;
+        n = -w;
+    } else {
+        x = (s32)(long long)(((float)S16(e + 8) * F32(p + 0x10) + F32(p + 8)) * F32(G_SCALE_X));
+        u0 = 0;
+    }
+    s32 y = (s32)(long long)(((float)S16(e + 0xC) * F32(p + 0x14) + F32(p + 0xC)) * F32(G_SCALE_Y));
+    s32 us = (W << 16) / n, v0 = 0, vs = (H << 16) / h;
+    if (n < 0) n = -n;
+    s32 mx = S32(0x73B668), my = S32(0x73B66C);
+    if (x + n < 0 || x > mx || y + h < 0 || y > my) return;
+    if (x < 0) { u0 = (s32)((u32)u0 - (u32)us * (u32)x); n += x; x = 0; }
+    if (x + n >= mx) n = mx - x;
+    if (y < 0) { v0 = (s32)(0u - (u32)vs * (u32)y); h += y; y = 0; }
+    if (y + h > my) h = my - y;
+    u8 d[SD_SIZE], sd[SD_SIZE];
+    u8 *dst = pa_lock(U32(A_BACK), d);
+    const u8 *src = pa_lock(U32(e + 0x20), sd);
+    u32 bytes = U8(PIXFMT + 2) >> 3, pitch = U32(BB_PITCH);
+    u8 *row = dst + (s32)pitch * y + (s32)bytes * x;
+    s32 v = v0;
+    for (s32 r = h; r > 0; r--, v = (s32)((u32)v + (u32)vs), row += pitch) {
+        const u8 *srow = src + (s32)(U16(e + 4) * (bytes == 2 ? 2 : 4)) * (v >> 16);
+        s32 u = u0;
+        for (s32 k = 0; k < (s32)bytes * n; k += (s32)bytes, u = (s32)((u32)u + (u32)us))
+            pa_put(row + k, srow + (u >> 16) * (bytes == 2 ? 2 : 4), bytes, 0);
+    }
+    Surf_Unlock(U32(e + 0x20), 0);
+    Surf_Unlock(U32(A_BACK), 0);
+}
+
 /* ---- the walk --------------------------------------------------------------------------------- */
+
+/* the packets both paths share: draw mode, texture window, VRAM moves */
+static void draw_mode(gptr p)
+{
+    switch (U8(p + 7) & 0xFC) {
+    case 0xE0: case 0xE8:                           /* draw mode: dtd, dfe, tpage, texture window */
+        U8(0x87BAF7) = U8(p + 6) & 1;
+        U8(0x87BAF6) = U8(p + 6) >> 1 & 1;
+        U16(G_TPAGE) = U16(p + 4);
+        if (U32(p + 8)) { U32(G_TWIN) = U32(U32(p + 8)); U32(G_TWIN + 4) = U32(U32(p + 8) + 4); }
+        break;
+    case 0xEC: vram_copy(p + 8, S32(p + 0x10), S32(p + 0x14)); break;
+    case 0xF0:                                      /* texture window */
+        U32(G_TWIN) = U32(U32(p + 8)); U32(G_TWIN + 4) = U32(U32(p + 8) + 4);
+        break;
+    case 0xFC: vram_move(p + 8, S32(p + 0x10), S32(p + 0x14)); break;
+    }
+}
 
 void PcDraw_DrawOTag(gptr ot)                                        /* 0x4B50F0 */
 {
     if (!U8(0x87BAF7)) return;
     if (U16(0x865D4A)) U16(0x865D4A) = 0;
+    if (U8(0x75DEF0) & 1) {                     /* no 3D device: lines, codes 0x80, 0x88, 0x8C not drawn */
+        for (gptr p = ot; U32(p) != 0xFFFFFFFF; p = U32(p) & 0xFFFFFF) {
+            if (!(U32(p) & 0xFF000000)) continue;
+            switch (U8(p + 7) & 0xFC) {
+            case 0x20: pa_poly_f(p, 3); break;
+            case 0x24: pa_poly_ft(p, 3); break;
+            case 0x28: pa_poly_f(p, 4); break;
+            case 0x2C: pa_poly_ft(p, 4); break;
+            case 0x30: pa_poly_g(p, 3); break;
+            case 0x34: pa_poly_gt(p, 3); break;
+            case 0x38: pa_poly_g(p, 4); break;
+            case 0x3C: pa_poly_gt(p, 4); break;
+            case 0x60: pa_tile(p); break;
+            case 0x64: pa_sprite(p, 0); break;
+            case 0x68: pa_tile1(p); break;
+            case 0x6C: pa_text(p); break;
+            case 0x74: pa_sprite(p, &k_8); break;
+            case 0x7C: pa_sprite(p, &k_16); break;
+            case 0x84: pa_sprite_scaled(p); break;
+            default: draw_mode(p); break;
+            }
+        }
+        goto done;
+    }
     Dev_BeginScene();
     for (gptr p = ot; U32(p) != 0xFFFFFFFF; p = U32(p) & 0xFFFFFF) {
         if (!(U32(p) & 0xFF000000)) continue;
@@ -829,22 +1345,14 @@ void PcDraw_DrawOTag(gptr ot)                                        /* 0x4B50F0
         case 0x74: sprite(p, U8(p + 7), 8, 8, 1, &k_8); break;
         case 0x7C: sprite(p, U8(p + 7), 16, 16, 1, &k_16); break;
         case 0x80: sprite(p, U8(p + 7) | 4, S16(p + 0x18), S16(p + 0x1A), 2, 0); break;
+        case 0x84: sprite_scaled(p); break;
         case 0x88: mask_marker(p); break;
         case 0x8C: screen_quad(p); break;
-        case 0xE0: case 0xE8:                       /* draw mode: dtd, dfe, tpage, texture window */
-            U8(0x87BAF7) = U8(p + 6) & 1;
-            U8(0x87BAF6) = U8(p + 6) >> 1 & 1;
-            U16(G_TPAGE) = U16(p + 4);
-            if (U32(p + 8)) { U32(G_TWIN) = U32(U32(p + 8)); U32(G_TWIN + 4) = U32(U32(p + 8) + 4); }
-            break;
-        case 0xEC: vram_copy(p + 8, S32(p + 0x10), S32(p + 0x14)); break;
-        case 0xF0:                                  /* texture window */
-            U32(G_TWIN) = U32(U32(p + 8)); U32(G_TWIN + 4) = U32(U32(p + 8) + 4);
-            break;
-        case 0xFC: vram_move(p + 8, S32(p + 0x10), S32(p + 0x14)); break;
+        default: draw_mode(p); break;
         }
     }
     Dev_EndScene();
+done:
     for (gptr a = 0x8644D0; a < 0x8658D0; a += 0x14) U16(a) = 0;
     U16(0x865DAC) = 0;
     if (U16(0x865D4A)) { grab(); U16(0x865D48) = 1; } else U16(0x865D48) = 0;
