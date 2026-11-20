@@ -16148,9 +16148,14 @@ static void xh_run(const XhFn *F, int nf, const u32 (*tabs)[2], int nt, gptr v, 
                 if (rnd() % 2) {                          /* (in a blow's frames) */
                     U16(o + 0x92) = (u16)(rnd() % 2 ? 0xB + rnd() % 0x14 : A2_PICK(0x18, 0x19, 0x1C, 0x1D, 0x24, 0x25, 0x31, 0x32, 0x33));
                     U8(o + 0x57) = (u8)(rnd() % 3); U8(o + 0x56) = (u8)(rnd() % 5);
+                    if (rnd() % 4 == 0) U16(o + 0x92) = (u16)(0x1D + rnd() % 0xB);           /* (the spin's) */
+                    if (rnd() % 6 == 0) {                 /* (the animation's last key: Anim_Step ends it) */
+                        U16(o + 0x94) = (u16)(U16(o + 0x90) - 1); U16(o + 0x98) = 8; U16(o + 0x102) &= ~0x20;
+                    }
+                    if (rnd() % 4 == 0) { U16(held) |= 0x4000; U8(v) |= 0x40; }            /* (the kick back) */
                 }
                 Obj_UpdateMatrix(o);                      /* (the parts where its blow will find them) */
-                gptr at = Obj_Part(U32(o + 0x64), rnd() % 2 ? 4 : 0);
+                gptr at = Obj_Part(U32(o + 0x64), (u32[]){4, 0, 0xE, 0xF}[rnd() % 4]);
                 for (u32 j = 1; at && j < U32(0x87F940) && j < 16; j++) {
                     gptr ob = O_OBJ + j * 0x260, d = U32(ob + 0x134);
                     if (ob == o || !d) continue;
