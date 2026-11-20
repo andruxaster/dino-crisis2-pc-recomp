@@ -16109,6 +16109,16 @@ static gptr xh_setup(gptr v, gptr held, const u8 *kinds, int nk)
     return o;
 }
 typedef struct { u32 addr; void *fn; const char *name; u8 field, max; } XhFn;   /* (a dispatcher: o+field below max) */
+static int g_xh_place;                  /* the others placed at its fist or foot (see xh_run) */
+/* the button sequence c (index, timer, buttons up to 0xFFFF) one press from its end, the press in v */
+static void xh_combo(gptr c, gptr v)
+{
+    u32 n = 0;
+    while (n < 16 && U16(c + 4 + 2 * n) != 0xFFFF) n++;
+    if (!n || rnd() % 3) return;
+    U16(c) = (u16)(n - 1); U16(c + 2) = (u16)(1 + rnd() % 9);
+    U16(v) |= U16(c + 4 + 2 * (n - 1));
+}
 static void xh_run(const XhFn *F, int nf, const u32 (*tabs)[2], int nt, gptr v, gptr held, gptr cyl, gptr spheres, const u8 *kinds, int nk,
                    void (*more)(gptr o))
 {
@@ -16133,7 +16143,7 @@ static void xh_run(const XhFn *F, int nf, const u32 (*tabs)[2], int nt, gptr v, 
                 }
             }
             if (nk > 1 && U32(o + 0x64) && rnd() % 2) U16(U32(o + 0x64) + 0x4A) = (u16)rnd();
-            if (nk > 1 && rnd() % 2) {                    /* the fighters (20, 21): the others at its fist or foot, blows land */
+            if ((nk > 1 || g_xh_place) && rnd() % 2) {   /* the fighters (20, 21), the pack (25): the others at its fist or foot, blows land */
                 if (rnd() % 2) {                          /* (in a blow's frames) */
                     U16(o + 0x92) = (u16)(rnd() % 2 ? 0xB + rnd() % 0x14 : A2_PICK(0x18, 0x19, 0x1C, 0x1D, 0x24, 0x25, 0x31, 0x32, 0x33));
                     U8(o + 0x57) = (u8)(rnd() % 3); U8(o + 0x56) = (u8)(rnd() % 5);
@@ -16229,6 +16239,12 @@ static void xh22_vars(gptr o)
 {
     xh_gun_vars(o, 0x746C9A, 0x746C94, 0x746C50, 0x746C58, 0x746C76, 0x746C80, 0x746C82, 0x746C84);
     U8(o + 0x57) = (u8)(rnd() % 4 ? rnd() % 2 : rnd());
+    if (rnd() % 4 == 0) U16(0x746C98) = (u16)A2_PICK(0x8008, 0x2008, 0x4008, 0xA008);   /* (aiming, a side step) */
+    if (rnd() % 3 == 0) U16(o + 0x92) = (u16)A2_PICK(9, 0xA, 0xB, 0xF, 0x10, 0x22, 0x23, 0x2B, 0x2C, 0x33, 0x34, 0x35, 0x55, 0x56);
+    if (rnd() % 4 == 0) U16(o + 0x178) = (u16)((U16(o + 0x4A) + 0x800 + rnd() % 3 - 1) & 0xFFF);   /* (hit from straight behind) */
+    if (rnd() % 4 == 0) S16(0x746C80) = (s16)(Damage_Scale(U16(o + 0x176)) + rnd() % 3 - 1);   /* (the armour just used up) */
+    if (rnd() % 4 == 0) U8(o + 0x56) = 3;               /* (dead: lost) */
+    xh_combo(0x71B0A0, 0x746C48);
 }
 static void test_xh22(void)
 {
@@ -16288,6 +16304,7 @@ static void xh24_vars(gptr o)
     U8(o + 0x57) = (u8)(rnd() % 4 ? rnd() % 2 : rnd());
     if (rnd() % 4 == 0) U16(o + 0x92) = (u16)A2_PICK(0xE, 0xF, 0x10, 0x29, 0x2A, 0x2B);   /* (the charge's, the burst's ends) */
     if (rnd() % 2) U16(o + 0xF4) = (u16)A2_PICK(0, 0x12C, 0x12B, 0x12D, 0x2580, 0x257F, 0x2581, 0x2460, -0x50, -0x4F, 0x5A);
+    xh_combo(0x73B334, 0x75BD58);
 }
 static void test_xh24(void)
 {
@@ -16346,6 +16363,8 @@ static void xh25_vars(gptr o)
     }
     U32(0x746CD4) = U32(o + 0x40) + (rnd() % 2000 - 1000); U16(0x746CD8) = (u16)(U16(o + 0x44) + rnd() % 2000 - 1000);
     U32(0x87DCA0) = TYPE_TAB;                           /* (the pack's handler: a recorder) */
+    if (rnd() % 4 == 0) U16(0x746CE4) = (u16)A2_PICK(0x6FF, 0x700, 0x701);   /* (the spin about its end) */
+    xh_combo(0x71D604, 0x746CA8);
     for (int j = 0; j < 64; j++) U32(TYPE_TAB + 4 * j) = (u32)(uintptr_t)g_recs[STUB_TYPE];
     U8(o + 0x57) = (u8)(rnd() % 4 ? rnd() % 2 : rnd());
 }
@@ -16383,7 +16402,9 @@ static void test_xh25(void)
         {0x408580, Xh25_Summon, "Xh25_Summon"}};
     static const u32 tabs[][2] = {{0x71D614, 4}, {0x71D624, 9}, {0x71D648, 9}, {0x71D66C, 9}, {0x71D690, 9}, {0x71D6B4, 9}, {0x71D6EC, 4}};
     static const u8 kinds[] = {0x1F};
+    g_xh_place = 1;
     xh_run(F, sizeof F / sizeof F[0], tabs, 7, 0x746CA8, 0x746D08, 0x71D5D8, 0x71D5F8, kinds, 1, xh25_vars);
+    g_xh_place = 0;
 }
 
 static void xh26_vars(gptr o)
@@ -16399,6 +16420,7 @@ static void xh26_vars(gptr o)
                                      0x2C, 0x2D, 0x2E, 0x31, 0x32, 0x35, 0x36, 0x40, 0x41);
     if (rnd() % 4 == 0) U16(o + 0x92) = (u16)(0x2B + rnd() % 3);   /* (the dead one's prop at 0x2D) */
     if (rnd() % 4 == 0) U8(o + 0x57) = (u8)(0x12 + rnd() % 3);     /* (the turn to the foe gives up at 0x14) */
+    xh_combo(0x722518, 0x74B1A8);
 }
 static void test_xh26(void)
 {
