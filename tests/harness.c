@@ -16134,6 +16134,11 @@ static void xh_run(const XhFn *F, int nf, const u32 (*tabs)[2], int nt, gptr v, 
             }
             if (nk > 1 && U32(o + 0x64) && rnd() % 2) U16(U32(o + 0x64) + 0x4A) = (u16)rnd();
             if (nk > 1 && rnd() % 2) {                    /* the fighters (20, 21): the others at its fist or foot, blows land */
+                if (rnd() % 2) {                          /* (in a blow's frames) */
+                    U16(o + 0x92) = (u16)(rnd() % 2 ? 0xB + rnd() % 0x14 : A2_PICK(0x18, 0x19, 0x1C, 0x1D, 0x24, 0x25, 0x31, 0x32, 0x33));
+                    U8(o + 0x57) = (u8)(rnd() % 3); U8(o + 0x56) = (u8)(rnd() % 5);
+                }
+                Obj_UpdateMatrix(o);                      /* (the parts where its blow will find them) */
                 gptr at = Obj_Part(U32(o + 0x64), rnd() % 2 ? 4 : 0);
                 for (u32 j = 1; at && j < U32(0x87F940) && j < 16; j++) {
                     gptr ob = O_OBJ + j * 0x260, d = U32(ob + 0x134);
@@ -16281,6 +16286,8 @@ static void xh24_vars(gptr o)
     xh_gun_vars(o, 0x75BDA6, 0x75BDA0, 0x75BD60, 0x75BD68, 0x75BD6E, 0x75BD70, 0x75BD72, 0x75BD74);
     U32(0x75BD70) = (u32)A2_PICK(0, 1, 2, 3, 0xA0, 0x9F, (s32)(rnd() % 0x100), (s32)rnd());
     U8(o + 0x57) = (u8)(rnd() % 4 ? rnd() % 2 : rnd());
+    if (rnd() % 4 == 0) U16(o + 0x92) = (u16)A2_PICK(0xE, 0xF, 0x10, 0x29, 0x2A, 0x2B);   /* (the charge's, the burst's ends) */
+    if (rnd() % 2) U16(o + 0xF4) = (u16)A2_PICK(0, 0x12C, 0x12B, 0x12D, 0x2580, 0x257F, 0x2581, 0x2460, -0x50, -0x4F, 0x5A);
 }
 static void test_xh24(void)
 {
