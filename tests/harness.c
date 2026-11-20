@@ -6143,7 +6143,8 @@ static void test_pcdraw(void)
 static void test_pcsoft(void)
 {
     static const u8 codes[] = {0x20, 0x24, 0x28, 0x2C, 0x30, 0x34, 0x38, 0x3C, 0x60, 0x64, 0x68, 0x6C, 0x74, 0x7C, 0x84,
-                               0x40, 0x50, 0x80, 0x88, 0x8C, 0x24, 0x2C, 0x34, 0x3C, 0x64, 0x6C, 0x84, 0xEC, 0xFC};
+                               0x40, 0x50, 0x80, 0x88, 0x8C, 0x24, 0x2C, 0x34, 0x3C, 0x64, 0x6C, 0x84, 0xEC, 0xFC,
+                               0x30, 0x38, 0x30, 0x38, 0x20, 0x28, 0x60};
     static const u16 cluts[4] = {0x7800, 0x7810, 0x7840, 0x7C00};
     unsigned fpu = _controlfp(0, 0);
     _controlfp(_PC_24, _MCW_PC);
@@ -6157,18 +6158,32 @@ static void test_pcsoft(void)
     g_fk_logpa = getenv("FKPA") != 0;
     for (int i = 0; i < iters; i++) {
         if (i % 16 == 0) {                              /* (the format first: the back buffer is made in it) */
-            int f = i / 16 % 4;
-            fk_pixfmt(f >= 2);
+            int f = i / 16 % 5;
+            fk_pixfmt(f >= 2 && f != 4);
             if (f == 1) {                               /* 565 */
                 U32(0x87BB44) = 8; U32(0x87BB48) = 13; U32(0x87BB4C) = 19;
                 U32(0x87BB50) = 0xF800; U32(0x87BB54) = 0x7E0; U32(0x87BB58) = 0x1F; U32(0x87BB5C) = 0;
             }
             if (f == 3) { U8(0x87BB42) = 0x18; U8(0x87BB43) = 3; U32(0x87BB5C) = 0; }   /* 24-bit */
+            if (f == 4) {                               /* 444 */
+                U32(0x87BB44) = 12; U32(0x87BB48) = 8; U32(0x87BB4C) = 4;
+                U32(0x87BB50) = 0xF00; U32(0x87BB54) = 0xF0; U32(0x87BB58) = 0xF; U32(0x87BB5C) = 0xF000;
+            }
             U8(0x87BB41) = (u8)(rnd() % 2);
             fk_reset();
             memset(MEM(0x865D98), 0, 0x28);
             U32(0x87BB3C) = 640 * U8(0x87BB43);
-            ((void (*)(void))0x4C3C81)();               /* the rasterizers' setup for the format */
+            {   /* the rasterizers' setup for the format; without MMX every other time (0x4C2A60 made to say so) */
+                static const u8 nommx[3] = {0x31, 0xC0, 0xC3};
+                static u8 keep[3];
+                int mmx = i / 80 % 2 == 0;
+                if (!mmx) { memcpy(keep, MEM(0x4C2A60), 3); memcpy(MEM(0x4C2A60), nommx, 3); }
+                g_soft_mmx = mmx;
+                sprintf(g_what, "block %d: %u-bit, MMX %d", i / 16, U8(0x87BB42), mmx);
+                check_fk(0x4C3C81, PcSoft_Init, "PcSoft_Init", 0, 0);
+                if (!mmx) memcpy(MEM(0x4C2A60), keep, 3);
+                g_soft_mmx = -1;
+            }
             sn = 0;
         }
         U32(FK_LOGN) = 0;

@@ -6,8 +6,7 @@
  *
  * Both of the port's paths are here: the Direct3D one, and the one without a
  * 3D device (0x75DEF0 bit 0, never set by the game) that draws into the back
- * buffer through the port's software rasterizers (asm at 0x4C3E1F.., still
- * called at their addresses: include/dc2/orig.h).
+ * buffer through the port's software rasterizers (src/pc/soft.c).
  *
  * Floats: the game runs the x87 at single precision (Direct3D sets it), so
  * every operation rounds to a float; float constants are objects (no x87
@@ -1041,7 +1040,7 @@ static void sprite_scaled(gptr p)                                    /* 0x4B9400
 }
 
 /* ---- without a 3D device (0x75DEF0 bit 0): drawn into the back buffer by the port's
-   software rasterizers (asm; still the original's) ------------------------------------------- */
+   software rasterizers (soft.c) ------------------------------------------------ */
 
 #define PA      0x75CEC0u      /* the rasterizers' parameters: colour (r, g, b; abr + 1 when
                                   semi-transparent, | 0x80: four corners), the gouraud colours
@@ -1071,7 +1070,7 @@ static u8 *pa_lock(u32 surf, u8 *desc)
     return *(u8 **)(desc + SD_SURFACE);
 }
 
-static void pa_flat(void (DC2CALL *raster)(void *, gptr))
+static void pa_flat(void (*raster)(void *, gptr))
 {
     u8 d[SD_SIZE];
     raster(pa_lock(U32(A_BACK), d), PA);
@@ -1158,7 +1157,7 @@ static void pa_tile(gptr p)                                          /* 0x4BAB70
     pa_flat(Raster_Flat);
 }
 
-static void DC2CALL raster_dot(void *dst, gptr prm) { (void)dst; (void)prm; }   /* 0x4C4148: empty */
+static void raster_dot(void *dst, gptr prm) { (void)dst; (void)prm; }   /* 0x4C4148: empty */
 
 static void pa_tile1(gptr p)                                         /* 0x4BAC90 */
 {

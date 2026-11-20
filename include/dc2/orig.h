@@ -10,10 +10,6 @@
 #include "pcio.h"        /* (the GPU layer: Gpu_*, JPEG_Decode) */
 
 #define ORIG_LIST(F, V) \
-    V(Raster_Tex, 0x4C3E1F, (void *dst, const void *tex, gptr prm), (dst, tex, prm)) \
-    V(Raster_Flat, 0x4C3FFE, (void *dst, gptr prm), (dst, prm)) \
-    V(Raster_Gouraud, 0x4C4149, (void *dst, gptr prm), (dst, prm)) \
-    V(Raster_Glyph, 0x4C42F3, (void *dst, const void *glyph, gptr prm), (dst, glyph, prm)) \
 
 #define ORIG_DECL_F(ret, name, addr, params, args) ret DC2CALL name params;
 #define ORIG_DECL_V(name, addr, params, args) void DC2CALL name params;

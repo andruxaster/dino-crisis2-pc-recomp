@@ -26,4 +26,13 @@ void PcDraw_Present(void);                                         /* 0x4B5070 *
 void PcDraw_SetBackground(u32 r, u32 g, u32 b);                    /* 0x4BB7C0 */
 void PcDraw_PutDispEnv(gptr env);                                  /* 0x4C0770 */
 void PcDraw_PutDrawEnv(gptr env);                                  /* 0x4C07A0 */
+
+/* the software rasterizers (src/pc/soft.c; no 3D device): parameters at prm (0x75CEC0),
+   dst the locked back buffer's pixels */
+void Raster_Flat(void *dst, gptr prm);                             /* 0x4C3FFE */
+void Raster_Tex(void *dst, const void *tex, gptr prm);             /* 0x4C3E1F */
+void Raster_Gouraud(void *dst, gptr prm);                          /* 0x4C4149 */
+void Raster_Glyph(void *dst, const void *glyph, gptr prm);         /* 0x4C42F3 */
+void PcSoft_Init(void);                                            /* 0x4C3C81: spans for the pixel format */
+extern int g_soft_mmx;                                             /* -1: ask the CPU (tests set 0 / 1) */
 #endif
