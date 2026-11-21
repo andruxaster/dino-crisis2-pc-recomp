@@ -32,7 +32,7 @@ DC_ASM    := src/port/dc/ctx_sh4.S
 
 OBJS := $(patsubst %.c,$(BUILD)/%.o,$(GAME_SRCS) $(DC_SRCS)) $(patsubst %.S,$(BUILD)/%.o,$(DC_ASM))
 
-DEFS := $(if $(filter 1,$(DC2_UNALIGNED)),-DDC2_UNALIGNED) -DDC2_LOWMEM -DDC2_MOVIE_AVI -DHEAP_SIZE=$(DC2_DC_HEAP)u -DDC2_DC_ROOT='"$(DC2_DC_ROOT)"' -DDC2_DC_AUDIO=$(DC2_DC_AUDIO) \
+DEFS := $(if $(filter 1,$(DC2_UNALIGNED)),-DDC2_UNALIGNED) -DDC2_LOWMEM -DDC2_MOVIE_AVI -DDC2_MIX_SMOOTH -DHEAP_SIZE=$(DC2_DC_HEAP)u -DDC2_DC_ROOT='"$(DC2_DC_ROOT)"' -DDC2_DC_AUDIO=$(DC2_DC_AUDIO) \
         -DDC2_DC_MOVIES=$(DC2_DC_MOVIES) -DDC2_DC_VERBOSE=$(DC2_DC_VERBOSE)
 # -fno-strict-aliasing: game memory is read through U8/U16/U32 of any type
 # (plain aligned accesses; the rare unaligned ones are emulated by
