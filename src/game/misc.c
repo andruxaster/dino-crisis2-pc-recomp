@@ -952,6 +952,94 @@ void DC2CALL Lights_Run(void)                                       /* 0x478CF0 
     if (Flag_Check(2, 4)) { U8(0x74E351) = 0; U8(0x74E350) = 0; }
 }
 
+/* ---- the marked lights' two kinds (0x737A50, by a light's +0xC bit 1) ----------
+ * A light record (0x18 bytes): +0 a blink program (+3 the first state, +1 its
+ * repeats) and +4 its run lengths (one byte a run), +8 a fade program (pairs
+ * {frames, level}); +0xC flags (1 running, 2 the kind, 4 which count it sets,
+ * 0x40 the blink running, 0x80 the fade running), +0xD the blink's state,
+ * +0xE frames left in the run, +0xF frames left in the fade step, +0x10 the
+ * level's step (8.8), +0x12 the level (8.8), +0x14 / +0x15 the blink's and the
+ * fade's stage, +0x16 the blink's repeats left, +0x17 the fade's steps left.
+ * Their result: 0x74E350 the blink's state, 0x74E351 the level. */
+
+/* the blink: runs of frames that flip the state, the program's runs repeated */
+static void Light_Blink(gptr l)                                     /* 0x4788B0 */
+{
+    gptr prog = U32(l), run = U32(l + 4);
+    switch (U8(l + 0x14)) {
+    case 0:
+        U8(l + 0x14)++;
+        U8(l + 0xD) = U8(prog + 3);
+        U8(l + 0x16) = U8(prog + 1);
+        U8(l + 0xE) = U8(run);
+        /* fall through */
+    case 1:
+        if (!U8(l + 0xE)) {
+            if (!--U8(l + 0x16)) { U8(l + 0x14)++; return; }
+            U8(l + 0xE) = U8(run + 1);
+            U8(l + 0xD) ^= 1;
+            U32(l + 4) = run + 1;
+        }
+        U8(l + 0xE)--;
+        U8(0x74E350) = U8(l + 0xD);
+        return;
+    case 2:
+        U8(l + 0xC) &= 0xBF;
+        return;
+    }
+}
+
+/* the fade: the level moved by steps toward each next {frames, level} pair */
+static void Light_Fade(gptr l)                                      /* 0x478940 */
+{
+    gptr p = U32(l + 8);
+    switch (U8(l + 0x15)) {
+    case 0: {
+        U8(l + 0x15)++;
+        U8(l + 0x17) = U8(U32(l) + 2);
+        u8 n = U8(p);
+        U8(l + 0xF) = n;
+        if (n) U16(l + 0x10) = (u16)((s32)(U8(p + 1) << 8) / (s32)n);
+        else { U8(l + 0x12) = 0; U8(l + 0x13) = U8(p + 1); }
+        U16(l + 0x12) = 0;                      /* (the original clears the level either way) */
+    }
+        /* fall through */
+    case 1:
+        if (!U8(l + 0xF)) {
+            if (!--U8(l + 0x17)) { U8(l + 0x15)++; return; }
+            p += 2;
+            U32(l + 8) = p;
+            u8 n = U8(p);
+            U8(l + 0xF) = n;
+            if (n) U16(l + 0x10) = (u16)((((s32)U8(p + 1) - (s32)U8(p - 1)) << 8) / (s32)n);
+            else { U16(l + 0x10) = 0; U8(l + 0xF) = 1; }
+        }
+        U8(l + 0xF)--;
+        U8(0x74E351) = U8(l + 0x13);
+        if (U8(l + 0xF)) U16(l + 0x12) += U16(l + 0x10);
+        else { U8(l + 0x12) = 0; U8(l + 0x13) = U8(p + 1); }
+        return;
+    case 2:
+        U8(l + 0xC) &= 0x7F;
+        return;
+    }
+}
+
+/* kind 0: the blink and the fade, the light off when neither runs */
+void DC2CALL Light_Run0(gptr l)                                      /* 0x478870 */
+{
+    if (U8(l + 0xC) & 0x40) Light_Blink(l);
+    if (U8(l + 0xC) & 0x80) Light_Fade(l);
+    if (!(U8(l + 0xC) & 0xC0)) U8(l + 0xC) &= 0xFE;
+}
+
+/* kind 1: a level for +0xE frames more, into the count +0xC bit 2 picks */
+void DC2CALL Light_Run1(gptr l)                                      /* 0x478A30 */
+{
+    U8(0x74E350 + ((U8(l + 0xC) >> 2) & 1)) = U8(l + 0x13);
+    if (!U8(l + 0xE)--) U8(l + 0xC) &= 0xFE;
+}
+
 /* held, newly pressed, the held before */
 void DC2CALL Pad_Map(gptr src, gptr dst)                            /* 0x478DF0 */
 {

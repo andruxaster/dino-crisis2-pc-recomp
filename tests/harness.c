@@ -3572,6 +3572,76 @@ static void test_k2(void)
     g_ign_objpads = 0;
 }
 
+/* ---- weapon 1's object (0x44E530): its set-up and flight ------------------------ */
+static void test_weapon1(void)
+{
+    static const struct { u32 addr; void *fn; const char *name; } k[] = {
+        {0x44E570, WeaponObj1_Init, "WeaponObj1_Init"}, {0x44E740, WeaponObj1_Fly, "WeaponObj1_Fly"}, {0x44E530, WeaponObj1, "WeaponObj1"}};
+    g_ign_objpads = 1;
+    stubs_install(1);
+    for (int i = 0; i < iters; i++) {
+        for (unsigned j = 0; j < 3; j++) {
+            game_state(); objects_setup(); world_setup();
+            for (u32 q = 0; q < 16; q++) U8(O_OBJ + q * 0x260 + 0xFD) &= 1;
+            U32(0x87F940) = 16;
+            gptr kk = O_K2 + 0xAC * (rnd() % 14);
+            for (u32 a = 0x20; a < 0xAC; a += 4) U32(kk + a) = rnd() % 3 ? rnd() % 0x10000 : rnd();
+            U8(kk + 0x50) = (u8)(1 | (rnd() & 6));
+            U8(kk + 0x7B) = rnd() % 10; U8(kk + 0x55) = rnd() % 3;
+            U8(kk + 0x54) = j == 0 ? 0 : j == 1 ? 1 : rnd() % 3;
+            U8(kk + 0x7A) = (u8)(U8(kk + 0x54) == 0 ? rnd() % 5 : rnd() % 8);   /* the set-up's kinds 0..4; flight 0..6 and past the switch */
+            U8(kk + 0x46) = rnd() % 3; U8(kk + 0x87) = (u8)((kk - O_K2) / 0xAC); U8(kk + 0x86) = 0xFF;
+            U32(kk + 0x8C) = 0;
+            u32 pr = rnd() % 3;
+            U32(kk + 0x60) = pr == 0 ? 0 : pr == 1 ? O_OBJ + 0x260 * (rnd() % 16) : O_K2 + 0xAC * (rnd() % 14);
+            gptr an = 0x6CF900;
+            for (u32 a = 0; a < 0x80; a += 4) U32(an + a) = rnd();
+            for (u32 q = 0; q < 16; q++) { U8(an + 8 * q + 4) = (u8)((rnd() % 4 == 0 ? 0x20 * (rnd() % 8) : 0) | (rnd() % 16)); U8(an + 8 * q + 5) = rnd() % 3; }
+            U32(kk + 0x90) = an; U32(kk + 0x94) = an + 8 * (rnd() % 8); U16(kk + 0x82) = rnd() % 3;
+            U16(kk + 0x98) = rnd() % 4 ? rnd() % 4 : (u16)rnd();
+            /* the bounce's edges: its time (+0x9E, +0x6C) about out, a floor bounce about to stop */
+            U16(kk + 0x9E) = (u16)(rnd() % 2 ? rnd() % 3 : rnd());
+            U16(kk + 0x6C) = (u16)(rnd() % 2 ? rnd() % 3 : rnd());
+            U16(kk + 0x9A) = (u16)(rnd() % 2 ? rnd() % 0x20 : rnd());
+            S16(kk + 0x7E) = (s16)(rnd() % 2 ? (s32)(rnd() % 0x60) - 0x30 : (s32)(u16)rnd());
+            if (rnd() % 3 == 0) S16(kk + 0x42) = (s16)(-(s32)(rnd() % 3) - S16(kk + 0x7E));   /* about at the floor */
+            for (u32 q = 14; q < 20; q++) U8(O_K2 + 0xAC * q + 0x50) = rnd() % 4 ? 0 : 1;   /* the copies' slots from the back, sometimes none */
+            U32(G() + 0xA70) = rnd() % 4 ? 0 : rnd() % 14;
+            U8(G() + 0xF) = (u8)rnd();
+            U8(G() + 0x852) = rnd() % 4 ? (u8)(rnd() % 20) : 0xFF;
+            u32 a[1] = {kk};
+            U32(LOG_BASE) = 0;
+            sprintf(g_what, "slot %X step %u kind %u motion %u", kk, U8(kk + 0x54), U8(kk + 0x7A), U8(kk + 0x7B));
+            check(k[j].addr, k[j].fn, k[j].name, 1, a, 0);
+        }
+    }
+    stubs_install(0);
+    g_ign_objpads = 0;
+}
+
+/* ---- the marked lights' kinds (0x478870 blink and fade, 0x478A30 a level) ---------- */
+static void test_light_kinds(void)
+{
+    for (int i = 0; i < iters; i++) {
+        for (int j = 0; j < 2; j++) {
+            game_state();
+            gptr l = 0x6DE200, prog = 0x6DE300, runs = 0x6DE320, fade = 0x6DE340;
+            for (u32 q = 0; q < 0x60; q++) U8(prog + q) = (u8)(rnd() % 3 ? rnd() % 4 : rnd());   /* runs and steps of 0 and 1 */
+            for (u32 q = 0; q < 0x18; q += 4) U32(l + q) = rnd();
+            U32(l) = prog; U32(l + 4) = runs + rnd() % 8; U32(l + 8) = fade + 2 * (rnd() % 8) + (rnd() % 4 == 0);
+            U8(l + 0xC) = (u8)(rnd() | (rnd() % 4 ? 1 : 0));
+            U8(l + 0xE) = (u8)(rnd() % 3 ? rnd() % 3 : rnd()); U8(l + 0xF) = (u8)(rnd() % 3 ? rnd() % 3 : rnd());
+            U8(l + 0x14) = rnd() % 4; U8(l + 0x15) = rnd() % 4;
+            U8(l + 0x16) = (u8)(rnd() % 3 ? rnd() % 3 : rnd()); U8(l + 0x17) = (u8)(rnd() % 3 ? rnd() % 3 : rnd());
+            U8(0x74E350) = (u8)rnd(); U8(0x74E351) = (u8)rnd();
+            u32 a[1] = {l};
+            sprintf(g_what, "flags %02X stages %u/%u runs %u/%u", U8(l + 0xC), U8(l + 0x14), U8(l + 0x15), U8(l + 0xE), U8(l + 0xF));
+            if (j == 0) check(0x478870, Light_Run0, "Light_Run0", 1, a, 0);
+            else check(0x478A30, Light_Run1, "Light_Run1", 1, a, 0);
+        }
+    }
+}
+
 /* ---- effect slots: falling drops, bubbles, a sprite stuck to an effect ------------- */
 static void test_k2_drops(void)
 {
@@ -17136,7 +17206,7 @@ __declspec(dllexport) void harness_main(int argc, char **argv)
         {"data tables", test_data}, {"flags", test_flags}, {"geometry", test_geom}, {"script values", test_script_values},
         {"script opcodes", test_script_ops}, {"script objects", test_objects},
         {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"objects 2", test_object}, {"collision", test_collision}, {"player", test_player}, {"player states", test_player2}, {"zones", test_zones}, {"loading", test_room}, {"title", test_title}, {"game task", test_game}, {"doors", test_doors}, {"frame", test_frame}, {"enemy sets", test_enemyset}, {"enemies", test_enemies}, {"raptor", test_raptor}, {"oviraptor", test_ovi}, {"allosaurus", test_allo}, {"pteranodon", test_ptera}, {"area pteranodon", test_ptera2}, {"tyrannosaurus", test_trex}, {"plesiosaurus", test_plesio}, {"water plesiosaurs", test_pw}, {"roamer", test_roam}, {"giganotosaurus", test_gig},
-    {"inostrancevia", test_ino}, {"triceratops", test_tri}, {"mosasaurus", test_mosa}, {"compsognathus", test_compso}, {"duel inostrancevia", test_kof_ino}, {"duel triceratops", test_kof_tri}, {"duel raptor", test_kof_rap}, {"duel oviraptor", test_kof_ovi}, {"duel allosaurus", test_kof_allo}, {"duel tyrannosaurus", test_kof_rex}, {"duel compsognathus", test_kof_comp}, {"duel human", test_kof_human}, {"extra human 20", test_xh20}, {"extra human 21", test_xh21}, {"extra human 22", test_xh22}, {"extra human 24", test_xh24}, {"extra human 25", test_xh25}, {"extra human 26", test_xh26}, {"vehicle gun", test_vgun}, {"area falling piece", test_ao_drop}, {"area flying shell", test_ao_shell}, {"area moving piece", test_ao_mover}, {"area bird", test_ao_bird}, {"area rock", test_ao_rock}, {"area insect", test_ao_bug}, {"area poison plant", test_ao_plant}, {"area burner", test_ao_burner}, {"area 9 objects", test_aobj9}, {"weapon objects", test_ao_weapons}, {"area 4/8 objects", test_aobj2}, {"area effects", test_k2_area}, {"sound slots", test_snd_slots}, {"menus", test_menu}, {"title 2", test_title2}, {"result", test_result}, {"extra crisis", test_extra}, {"models", test_model}, {"ending 3d", test_ending3d}, {"ending", test_ending}, {"options", test_options}, {"save slots", test_savefile}, {"save room", test_shop}, {"aot kinds", test_aot_kinds}, {"object effects", test_obj_effects}, {"effect slots", test_k2}, {"effect drops", test_k2_drops}, {"effect emitters", test_eff_slots}, {"effect slots 3", test_k2_more}, {"camera effect", test_camfx}, {"turret", test_turret}, {"water", test_water}, {"blasts", test_blast}, {"ride", test_ride}, {"meter", test_meter}, {"multi camera", test_multicam}, {"duel arena", test_duel}, {"waves", test_waves}, {"versus", test_versus}, {"vehicle", test_vehicle}, {"effect burst", test_fxburst}, {"flamethrower", test_flame}, {"effect pieces", test_fxpieces}, {"screen tint", test_tint}, {"area effects 2", test_fxmisc}, {"area effects 3", test_fxmisc2}, {"helpers", test_helpers}, {"draw", test_draw}, {"pc gpu", test_pcgpu}, {"pc draw", test_pcdraw}, {"pc draw soft", test_pcsoft}, {"pc masks", test_pcmasks}, {"pc frame", test_pcframe},
+    {"inostrancevia", test_ino}, {"triceratops", test_tri}, {"mosasaurus", test_mosa}, {"compsognathus", test_compso}, {"duel inostrancevia", test_kof_ino}, {"duel triceratops", test_kof_tri}, {"duel raptor", test_kof_rap}, {"duel oviraptor", test_kof_ovi}, {"duel allosaurus", test_kof_allo}, {"duel tyrannosaurus", test_kof_rex}, {"duel compsognathus", test_kof_comp}, {"duel human", test_kof_human}, {"extra human 20", test_xh20}, {"extra human 21", test_xh21}, {"extra human 22", test_xh22}, {"extra human 24", test_xh24}, {"extra human 25", test_xh25}, {"extra human 26", test_xh26}, {"vehicle gun", test_vgun}, {"area falling piece", test_ao_drop}, {"area flying shell", test_ao_shell}, {"area moving piece", test_ao_mover}, {"area bird", test_ao_bird}, {"area rock", test_ao_rock}, {"area insect", test_ao_bug}, {"area poison plant", test_ao_plant}, {"area burner", test_ao_burner}, {"area 9 objects", test_aobj9}, {"weapon objects", test_ao_weapons}, {"area 4/8 objects", test_aobj2}, {"area effects", test_k2_area}, {"sound slots", test_snd_slots}, {"menus", test_menu}, {"title 2", test_title2}, {"result", test_result}, {"extra crisis", test_extra}, {"models", test_model}, {"ending 3d", test_ending3d}, {"ending", test_ending}, {"options", test_options}, {"save slots", test_savefile}, {"save room", test_shop}, {"aot kinds", test_aot_kinds}, {"object effects", test_obj_effects}, {"effect slots", test_k2}, {"weapon 1 object", test_weapon1}, {"light kinds", test_light_kinds}, {"effect drops", test_k2_drops}, {"effect emitters", test_eff_slots}, {"effect slots 3", test_k2_more}, {"camera effect", test_camfx}, {"turret", test_turret}, {"water", test_water}, {"blasts", test_blast}, {"ride", test_ride}, {"meter", test_meter}, {"multi camera", test_multicam}, {"duel arena", test_duel}, {"waves", test_waves}, {"versus", test_versus}, {"vehicle", test_vehicle}, {"effect burst", test_fxburst}, {"flamethrower", test_flame}, {"effect pieces", test_fxpieces}, {"screen tint", test_tint}, {"area effects 2", test_fxmisc}, {"area effects 3", test_fxmisc2}, {"helpers", test_helpers}, {"draw", test_draw}, {"pc gpu", test_pcgpu}, {"pc draw", test_pcdraw}, {"pc draw soft", test_pcsoft}, {"pc masks", test_pcmasks}, {"pc frame", test_pcframe},
     };
     for (unsigned i = 0; i < sizeof T / sizeof T[0]; i++) {
         int f0 = g_fail, t0 = g_tests;

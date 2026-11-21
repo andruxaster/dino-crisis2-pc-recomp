@@ -852,6 +852,8 @@ void DC2CALL Se_StopGroup(u32 g);                                       /* 0x48C
 void DC2CALL Strm_Halt(u32 n);                                          /* 0x48CE60 */
 u32 DC2CALL Text_Draw(gptr s, u32 x, u32 y, u32 n, u32 col, u32 z, u32 mode);/* 0x494BA0 */
 void DC2CALL Lights_Run(void);                                          /* 0x478CF0 */
+void DC2CALL Light_Run0(gptr l);                                        /* 0x478870 */
+void DC2CALL Light_Run1(gptr l);                                        /* 0x478A30 */
 void DC2CALL Pad_Map(gptr src, gptr dst);                               /* 0x478DF0 */
 void DC2CALL Input_Frame(void);                                         /* 0x478BF0 */
 u32 DC2CALL Light_Try(gptr p, gptr l, u32 slot);                        /* 0x46BC20 */
@@ -2213,6 +2215,9 @@ void DC2CALL Burner_Cool(gptr o);   /* 0x427E70 */
 void DC2CALL Burner_Show(gptr o);   /* 0x427F30 */
 void DC2CALL WeaponObj_Type(gptr o); /* 0x4488C0 */
 void DC2CALL SubWeaponObj_Type(gptr o); /* 0x4488E0 */
+void DC2CALL WeaponObj1(gptr o);          /* 0x44E530 */
+void DC2CALL WeaponObj1_Init(gptr o);     /* 0x44E570 */
+void DC2CALL WeaponObj1_Fly(gptr o);      /* 0x44E740 */
 void DC2CALL Pt2_Type(gptr o);      /* 0x431F70 */
 void DC2CALL Pt2_Handler(gptr o);   /* 0x431F80 */
 void DC2CALL Pt2_Init(gptr o);      /* 0x432240 */
