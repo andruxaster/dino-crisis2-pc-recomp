@@ -261,6 +261,23 @@ alone and the harness ignores them.
 
 ## Next
 
+### Not rewritten yet
+
+Game functions reached only through the game's handler tables, which the
+standalone builds still skip (`Orig_Call1` finds no C version and prints
+`not rewritten yet: handler 0x...`, once each). Seen on the Dreamcast in the
+first rooms (101-102); the PC runs of the test routes did not reach them.
+
+| address | reached through | what |
+|---|---|---|
+| 0x478870 | `Lights_Run` (0x737A50 [0], by a light's +0xC bit 1) | a marked light's run, kind 0 |
+| 0x478A30 | `Lights_Run` (0x737A50 [1]) | a marked light's run, kind 1 |
+| 0x44E530 | the weapon object type (`aobj.c`, 0x72160C [1], by the weapon in hand G+0x10B4 & 0xF) | the object of weapon 1 |
+
+Each goes into `src/hook/hooks.c` and the harness like the others once it is
+rewritten.
+
+
 The script VM, the keyframe animation, the generic object handler (type 1), object collision, the zone navigation, the player (all states and substates, all weapons and sub-weapons), the velociraptor, the oviraptor, the allosaurus, the pteranodon, the tyrannosaurus, the plesiosaurs, the giganotosaurus, the inostrancevia, the triceratops, the mosasaurus, the compsognathus and the duel's inostrancevia, triceratops, raptor, oviraptor, allosaurus, tyrannosaurus, compsognathus and human, and the vehicle's gun are complete; the standalone build plays the opening of room 101 and, with buttons held from the command line,
 walks the player through its door into room 102 (`dc2 ROOT/Data 9300 400:820 700:820 760:820
 9093-9125:2000 9133-9148:1000 9153-9203:20`, after the title and opening movies; with
