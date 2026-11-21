@@ -224,7 +224,7 @@ u32 DC2CALL ScrOp_Original(gptr t)
     ScrOpFn orig = (ScrOpFn)(uintptr_t)U32(A_SCR_OPTABLE + op * 4);
     return orig(t);
 #else
-    fprintf(stderr, "script: opcode %02X at %08X not reimplemented, thread stopped\n", op, PC(t));
+    fprintf(stderr, "script: opcode %02X at %08X not reimplemented, thread stopped\n", (unsigned)op, (unsigned)PC(t));
     U8(THR(t, T_STATE)) = 0;
     return 1;
 #endif

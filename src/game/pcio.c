@@ -166,16 +166,16 @@ gptr DC2CALL Crt_malloc(u32 n)
         U32(b) = sz | 1;
         if (b + 4 + sz - HEAP_BASE > g_heap_peak) g_heap_peak = b + 4 + sz - HEAP_BASE;
         if (n >= 0x10000 && getenv("DC2_HEAPLOG"))
-            fprintf(stderr, "heap: %u KB at +%u KB (file %u)\n", n >> 10, (b - HEAP_BASE) >> 10, U16(0x87FFE8));
+            fprintf(stderr, "heap: %u KB at +%u KB (file %u)\n", (unsigned)(n >> 10), (unsigned)((b - HEAP_BASE) >> 10), (unsigned)U16(0x87FFE8));
         return b + 4;
     }
-    fprintf(stderr, "Crt_malloc: out of heap (%u bytes)\n", n);
+    fprintf(stderr, "Crt_malloc: out of heap (%u bytes)\n", (unsigned)n);
     return 0;
 }
 void DC2CALL Crt_free(gptr p)
 {
     if (!p) return;
-    if ((U32(p - 4) & ~1u) >= 0x10000 && getenv("DC2_HEAPLOG")) fprintf(stderr, "heap: free %u KB at +%u KB\n", U32(p - 4) >> 10, (p - 4 - HEAP_BASE) >> 10);
+    if ((U32(p - 4) & ~1u) >= 0x10000 && getenv("DC2_HEAPLOG")) fprintf(stderr, "heap: free %u KB at +%u KB\n", (unsigned)(U32(p - 4) >> 10), (unsigned)((p - 4 - HEAP_BASE) >> 10));
     U32(p - 4) &= ~1u;
 }
 void DC2CALL Crt_sprintf3(gptr b, gptr f, u32 x, u32 y, u32 z)

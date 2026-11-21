@@ -105,7 +105,7 @@ void DC2CALL Save_ScanTask(void)                                    /* 0x403920 
     for (u32 i = 0; flags < 0x87F4D1; i++, flags += 4, info += 0x10) {
         gptr path = Tmp_Push(0x14);
         char name[16];
-        snprintf(name, sizeof name, "SAVE%02u.DAT", i);
+        snprintf(name, sizeof name, "SAVE%02u.DAT", (unsigned)i);
         memcpy(MEM(path), name, strlen(name) + 1);
         U8(flags - 1) = 0; U8(flags) = 0; U8(flags + 1) = 0;
         s32 fd = Pc_Open(path, 0, 0);

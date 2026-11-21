@@ -80,6 +80,21 @@ void DC2CALL Voice_Play(u32 kind, u32 id)                           /* 0x48D070 
     if (Flag_Check(2, 0)) Voice_Stop();
     gptr name = Tmp_Push(0x28);
     Crt_sprintf1(name, 0x738DCC, id);
+#if defined(DC2_LOWMEM) && !defined(DC2_IN_PROCESS)
+    /* small-memory builds (the Dreamcast): played from the disc, not read
+       whole into the heap (up to 1.5 MB); a small stand-in as its data, which
+       Voice_Stop frees */
+    u32 vh = Snd_OpenFileVoice((const char *)MEM(name));
+    Tmp_Pop(0x28);
+    if (vh == 0xFFFFFFFF) return;
+    U32(A_VOICE + 4) = Crt_malloc(16);
+    U32(A_VOICE) = vh;
+    U32(A_VOICE + 8) = 0;
+    Snd_Play(U32(A_VOICE), 0, 0);
+    Snd_SetVolume(U32(A_VOICE), Voice_Volume(kind));
+    Flag_Set(2, 0, 1);
+    return;
+#endif
     s32 fd = Pc_Open(name, 0, 0);
     Tmp_Pop(0x28);
     if (fd == -1) return;

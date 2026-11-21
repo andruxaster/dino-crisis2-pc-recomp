@@ -29,7 +29,7 @@ static int g_log = -1;   /* DC2_SNDLOG: the calls on stderr */
 
 typedef struct {
     FILE *f;            /* a stream played from a file (Strm_OpenFile): IMA ADPCM WAV */
-    u32 data_off, data_len, data_read, align, spb;
+    u32 data_off, data_len, data_read, align, spb, fmt, bits;   /* fmt 0x11 IMA ADPCM, 1 PCM (spb: frames a block) */
     u8 *blk;            /* one block of the file */
     s16 *pcm;           /* frames x channels (a file stream: the block decoded) */
     u32 frames, ch, rate;
@@ -108,11 +108,70 @@ static int file_next_block(Voice *v)
         fseek(v->f, (long)v->data_off, SEEK_SET);
         v->data_read = 0;
     }
-    u32 n = v->data_len - v->data_read < v->align ? v->data_len - v->data_read : v->align;
+    u32 blk = v->fmt == 1 ? v->spb * v->align : v->align;
+    u32 n = v->data_len - v->data_read < blk ? v->data_len - v->data_read : blk;
     if (fread(v->blk, 1, n, v->f) != n) return 0;
     v->data_read += n;
-    v->frames = PcAudio_ImaBlock(v->blk, n, v->ch, v->pcm, v->spb);
+    if (v->fmt == 1) {                          /* PCM: 16-bit little-endian or 8-bit unsigned */
+        u32 k = n / v->align * v->ch;
+        for (u32 i = 0; i < k; i++)
+            v->pcm[i] = v->bits == 8 ? (s16)((v->blk[i] - 0x80) << 8) : (s16)(v->blk[2 * i] | v->blk[2 * i + 1] << 8);
+        v->frames = n / v->align;
+    } else v->frames = PcAudio_ImaBlock(v->blk, n, v->ch, v->pcm, v->spb);
     return v->frames != 0;
+}
+
+/* a WAV file (IMA ADPCM, or PCM when pcm_ok) set up in v to be played from
+   the file a block at a time; 0 when it is not one */
+static int file_voice(Voice *v, FILE *f, u32 loop, int pcm_ok)
+{
+    u8 hd[12];
+    u32 ch = 0, rate = 0, align = 0, fmt = 0, bits = 0, data_off = 0, data_len = 0;
+    if (fread(hd, 1, 12, f) == 12 && !memcmp(hd, "RIFF", 4) && !memcmp(hd + 8, "WAVE", 4)) {
+        u8 c[8];
+        while (fread(c, 1, 8, f) == 8) {
+            u32 n = (u32)(c[4] | c[5] << 8 | c[6] << 16 | (u32)c[7] << 24);
+            if (!memcmp(c, "fmt ", 4)) {
+                u8 fm[16];
+                if (n < 16 || fread(fm, 1, 16, f) != 16) break;
+                fmt = (u32)(fm[0] | fm[1] << 8); ch = (u32)(fm[2] | fm[3] << 8);
+                rate = (u32)(fm[4] | fm[5] << 8 | fm[6] << 16 | (u32)fm[7] << 24); align = (u32)(fm[12] | fm[13] << 8);
+                bits = (u32)(fm[14] | fm[15] << 8);
+                fseek(f, (long)(n - 16 + (n & 1)), SEEK_CUR);
+            } else if (!memcmp(c, "data", 4)) { data_off = (u32)ftell(f); data_len = n; break; }
+            else fseek(f, (long)(n + (n & 1)), SEEK_CUR);
+        }
+    }
+    if ((ch != 1 && ch != 2) || !rate || !data_off) return 0;
+    if (fmt == 0x11 && align >= 4 * ch) {
+        v->spb = (align / ch - 4) * 2 + 1;
+        v->blk = malloc(align);
+    } else if (fmt == 1 && pcm_ok && (bits == 8 || bits == 16) && align == ch * bits / 8) {
+        v->spb = 2048;                          /* frames read at a time */
+        v->blk = malloc(v->spb * align);
+    } else return 0;
+    v->pcm = malloc((size_t)v->spb * ch * sizeof(s16));
+    v->f = f; v->fmt = fmt; v->bits = bits; v->data_off = data_off; v->data_len = data_len; v->align = align;
+    v->ch = ch; v->rate = rate; v->frames = 0; v->pos = 0; v->data_read = 0;
+    v->used = 1; v->loop = loop != 0; v->vol = 0; v->pan = 0; gains(v);
+    return 1;
+}
+
+/* small-memory builds: the voice (Speech\NNNN.DAT, a PCM wave of up to
+   1.5 MB) played from the disc as the voice buffer (handle 0) rather than
+   read whole into the game's heap and copied; 0, or 0xFFFFFFFF when the
+   file is missing or not a wave */
+u32 Snd_OpenFileVoice(const char *game_path)
+{
+    char path[512];
+    Pc_HostPath(game_path, path, sizeof path);
+    FILE *f = fopen(path, "rb");
+    if (!f) return 0xFFFFFFFF;
+    Voice *v = &g_buf[0];
+    voice_free(v);
+    if (!file_voice(v, f, 0, 1)) { fclose(f); memset(v, 0, sizeof *v); return 0xFFFFFFFF; }
+    SLOG("voice %s: %u Hz, %u ch, %u bits, %u bytes\n", path, (unsigned)v->rate, (unsigned)v->ch, (unsigned)v->bits, (unsigned)v->data_len);
+    return 0;
 }
 
 /* ---- buffers ---- */
@@ -146,13 +205,14 @@ void DC2CALL Snd_Play(u32 h, u32 freq, u32 loop)
     Voice *v = &g_buf[h];
     if (freq) v->freq = freq;
     v->pos = 0; v->playing = 1; v->paused = 0; v->loop = loop != 0;
-    SLOG("snd %u play freq %u loop %u (%u frames at %u)\n", h, freq, loop, v->frames, v->rate);
+    if (v->f) { fseek(v->f, (long)v->data_off, SEEK_SET); v->data_read = 0; v->frames = 0; }
+    SLOG("snd %u play freq %u loop %u (%u frames at %u)\n", (unsigned)h, (unsigned)freq, (unsigned)loop, (unsigned)v->frames, (unsigned)v->rate);
 }
 void DC2CALL Snd_SetVolume(u32 h, s32 vol)
 {
     if (h >= NBUF || !g_buf[h].used) return;
     g_buf[h].vol = clamp_cb(cb_of(vol, 3000.0f), -10000, 0); gains(&g_buf[h]);
-    SLOG("snd %u volume %d (%d)\n", h, vol, g_buf[h].vol);
+    SLOG("snd %u volume %d (%d)\n", (unsigned)h, (int)vol, (int)g_buf[h].vol);
 }
 void DC2CALL Snd_SetPan(u32 h, u32 pan)
 {
@@ -196,7 +256,7 @@ u32 DC2CALL Strm_Open(gptr mp3, u32 size, u32 loop)
     }
     v->pcm = pcm; v->frames = (u32)n; v->ch = 2; v->rate = rate;
     v->used = 1; v->loop = loop != 0; v->vol = 0; v->pan = 0; gains(v);
-    SLOG("strm %u open %u bytes: %u frames at %u loop %u\n", h, size, v->frames, rate, loop);
+    SLOG("strm %u open %u bytes: %u frames at %u loop %u\n", (unsigned)h, (unsigned)size, (unsigned)v->frames, (unsigned)rate, (unsigned)loop);
     return h;
 }
 /* a stream played from the disc rather than memory (DC2_LOWMEM builds: the
@@ -228,52 +288,31 @@ u32 Strm_OpenFile(const char *file, u32 rec, u32 loop)
         }
         e += l; while (*e == '\r' || *e == '\n') e++;
     }
-    if (!e || !*e) { SLOG("strm: %s record %u not in BGM\\INDEX.TXT\n", file, rec); return 0xFFFFFFFF; }
+    if (!e || !*e) { SLOG("strm: %s record %u not in BGM\\INDEX.TXT\n", file, (unsigned)rec); return 0xFFFFFFFF; }
     char wav[64];
     snprintf(wav, sizeof wav, "data\\BGM\\%s.WAV", line + strlen(want));
     Pc_HostPath(wav, path, sizeof path);
     FILE *f = fopen(path, "rb");
     if (!f) { SLOG("strm: no %s\n", path); return 0xFFFFFFFF; }
-    u8 hd[12];
-    u32 ch = 0, rate = 0, align = 0, fmt = 0, data_off = 0, data_len = 0;
-    if (fread(hd, 1, 12, f) == 12 && !memcmp(hd, "RIFF", 4) && !memcmp(hd + 8, "WAVE", 4)) {
-        u8 c[8];
-        while (fread(c, 1, 8, f) == 8) {
-            u32 n = (u32)(c[4] | c[5] << 8 | c[6] << 16 | (u32)c[7] << 24);
-            if (!memcmp(c, "fmt ", 4)) {
-                u8 fm[16];
-                if (n < 16 || fread(fm, 1, 16, f) != 16) break;
-                fmt = (u32)(fm[0] | fm[1] << 8); ch = (u32)(fm[2] | fm[3] << 8);
-                rate = (u32)(fm[4] | fm[5] << 8 | fm[6] << 16 | (u32)fm[7] << 24); align = (u32)(fm[12] | fm[13] << 8);
-                fseek(f, (long)(n - 16 + (n & 1)), SEEK_CUR);
-            } else if (!memcmp(c, "data", 4)) { data_off = (u32)ftell(f); data_len = n; break; }
-            else fseek(f, (long)(n + (n & 1)), SEEK_CUR);
-        }
-    }
-    if (fmt != 0x11 || (ch != 1 && ch != 2) || !rate || align < 4 * ch || !data_off) {
-        SLOG("strm: %s is not an IMA ADPCM WAV\n", path); fclose(f); return 0xFFFFFFFF;
-    }
     u32 h = 0;
     while (h < NSTRM && g_strm[h].used) h++;
     if (h == NSTRM) { fclose(f); return 0xFFFFFFFF; }
     Voice *v = &g_strm[h];
     memset(v, 0, sizeof *v);
-    v->f = f; v->data_off = data_off; v->data_len = data_len; v->align = align;
-    v->spb = (align / ch - 4) * 2 + 1;
-    v->blk = malloc(align); v->pcm = malloc((size_t)v->spb * ch * sizeof(s16));
-    v->ch = ch; v->rate = rate; v->frames = 0; v->pos = 0;
-    v->used = 1; v->loop = loop != 0; v->vol = 0; v->pan = 0; gains(v);
-    SLOG("strm %u open %s: %u Hz, %u ch, loop %u\n", h, path, rate, ch, loop);
+    if (!file_voice(v, f, loop, 0)) {
+        SLOG("strm: %s is not an IMA ADPCM WAV\n", path); fclose(f); memset(v, 0, sizeof *v); return 0xFFFFFFFF;
+    }
+    SLOG("strm %u open %s: %u Hz, %u ch, loop %u\n", (unsigned)h, path, (unsigned)v->rate, (unsigned)v->ch, (unsigned)loop);
     return h;
 }
 
-void DC2CALL Strm_Play(u32 h) { SLOG("strm %u play\n", h); if (h < NSTRM && g_strm[h].used) { g_strm[h].playing = 1; g_strm[h].paused = 0; } }
+void DC2CALL Strm_Play(u32 h) { SLOG("strm %u play\n", (unsigned)h); if (h < NSTRM && g_strm[h].used) { g_strm[h].playing = 1; g_strm[h].paused = 0; } }
 void DC2CALL Strm_Stop(u32 h) { if (h < NSTRM) g_strm[h].playing = 0; }
 void DC2CALL Strm_SetVolume(u32 h, s32 vol)
 {
     if (h >= NSTRM || !g_strm[h].used) return;
     g_strm[h].vol = clamp_cb(cb_of(vol, 10000.0f), -10000, 0); gains(&g_strm[h]);
-    SLOG("strm %u volume %d (%d)\n", h, vol, g_strm[h].vol);
+    SLOG("strm %u volume %d (%d)\n", (unsigned)h, (int)vol, (int)g_strm[h].vol);
 }
 void DC2CALL Strm_Close(u32 h) { if (h < NSTRM) voice_free(&g_strm[h]); }
 void DC2CALL Strm_Pause(u32 h) { if (h < NSTRM && g_strm[h].playing) { g_strm[h].playing = 0; g_strm[h].paused = 1; } }

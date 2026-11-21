@@ -29,6 +29,10 @@ PC builds (which keep using the originals):
   movie that has none. ffmpeg's Cinepak encoder is slow (here ~10 s a second
   of movie); the 12 movies come to ~320 MB.
 
+`SPEECH/` stays as it is (PCM waves): the Dreamcast build plays each line
+from the disc as it goes (`Snd_OpenFileVoice`, `src/pc/audio.c`) instead of
+reading it whole into the game heap and copying it (the longest is 1.5 MB).
+
 With both, `Data` (~250 MB), `MOVIE` (~320 MB) and `SPEECH` (43 MB) fit on an
 80-minute CD-R.
 

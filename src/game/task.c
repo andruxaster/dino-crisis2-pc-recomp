@@ -130,7 +130,7 @@ static void task_entry(int slot)
     gptr fn = g_entry[slot];
     void (DC2CALL *f)(void) = (void (DC2CALL *)(void))Hook_Find(fn);
     if (f) f();
-    else fprintf(stderr, "task %d: 0x%06X not rewritten yet (task stopped)\n", slot, fn);
+    else fprintf(stderr, "task %d: 0x%06X not rewritten yet (task stopped)\n", slot, (unsigned)fn);
     /* a task function never returns in the game; stop the slot */
     U16(A_TASK_SLOTS + slot * 0x20) = 0;
     ctx_end((u32)slot);
