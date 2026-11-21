@@ -5,4 +5,6 @@
 
 /* the PVR set up (640 x 480 video already); NULL on failure */
 const Renderer *RenderPvr_Open(void);
+/* textures dropped from VRAM for room so far */
+u32 RenderPvr_Evicted(void);
 #endif
