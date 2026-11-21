@@ -8,6 +8,30 @@ The code paths it uses were checked on Linux in the same configuration (see
 Toolchain: KallistiOS (master, 2026-10), GCC 15.2 / binutils 2.45.1 / newlib
 (`kos-chain` "stable" profile).
 
+## Preparing the data (once, on a copy of your game)
+
+The Dreamcast build reads the music and the movies in other formats than the
+PC builds (which keep using the originals):
+
+    tools/dreamcast/dc2_music.py  /srv/dc2/Data --strip        # music: MP3 -> Data/BGM/*.WAV (IMA ADPCM)
+    tools/dreamcast/dc2_movies.sh /srv/dc2/MOVIE --remove-dat  # movies: MPEG-1 -> MOVIE/*.AVI (Cinepak)
+
+- **Music.** Each area's `MS_*.DAT` holds its music as MP3 streams that the PC
+  game loads whole (8 MB and more). `dc2_music.py` writes each distinct stream
+  once as a WAV with IMA ADPCM at 22050 Hz stereo (39 streams, ~59 MB) and
+  `Data/BGM/INDEX.TXT` (which file and record uses which WAV); `--strip` cuts
+  the `MS_*.DAT` down to their 2 KB header (the originals go to `MS_ORIG/`
+  next to `Data`). The game plays the WAV from the disc as it goes, one
+  ADPCM block in memory (`Strm_OpenFile`, `src/pc/audio.c`).
+- **Movies.** `dc2_movies.sh` makes `NAME.AVI` (Cinepak video, same size and
+  frame rate, IMA ADPCM sound at 22050 Hz) next to each `NAME.DAT`; the
+  Dreamcast build plays only the `.AVI` (`src/pc/movie_avi.c`) and skips a
+  movie that has none. ffmpeg's Cinepak encoder is slow (here ~10 s a second
+  of movie); the 12 movies come to ~320 MB.
+
+With both, `Data` (~250 MB), `MOVIE` (~320 MB) and `SPEECH` (43 MB) fit on an
+80-minute CD-R.
+
 ## Building
 
     source /opt/toolchains/dc/kos/environ.sh
@@ -23,7 +47,7 @@ reads `/cd/Data/...`.
 |---|---|---|
 | `DC2_DC_ROOT` | `/cd` | the folder that holds `Data/` (`/pc/<dir>` under dcload) |
 | `DC2_DC_AUDIO` | `1` | `0`: no sound at all |
-| `DC2_DC_MOVIES` | `0` | `1`: play the MPEG-1 movies (pl_mpeg; likely too slow on the SH-4) |
+| `DC2_DC_MOVIES` | `1` | `0`: skip the movies |
 | `DC2_DC_VERBOSE` | `1` | every 300 frames: game mode, room, game heap and surface peaks, malloc in use, free VRAM |
 | `DC2_DC_HEAP` | `0x300000` | the game heap (the PC build's 32 MB holds the music) |
 
@@ -42,8 +66,11 @@ And in the shared code, behind switches that the PC builds leave off:
 
 - **`DC2_LOWMEM`** (`src/game/file.c`): containers are read record by record
   instead of whole, and the room music's streams (record type 4, the MP3 of
-  `MS_*.DAT`, several MB) stay on the disc: the music is silent for now.
-  With it the game heap peaks at ~2 MB instead of ~19 MB.
+  `MS_*.DAT`) are not read: they play from `Data/BGM/` (above). The game heap
+  peaks at ~2.5 MB instead of ~19 MB.
+- **`DC2_MOVIE_AVI`** (`src/pc/movie.c`, `movie_avi.c`): the movies as Cinepak
+  AVI, decoded straight to ARGB1555 (checked against ffmpeg's decoder: the
+  same frames, differences only in the last bit of 5).
 - **Unaligned access** (`include/dc2/types.h`): on the SH-4 every `U16/U32/
   S16/S32/F32/D64` goes through a packed member, because the game's data was
   laid out for the x86 and may be unaligned anywhere. Correct, but slower;
@@ -89,10 +116,14 @@ and the map, and gives the same trace as the normal build. Debug switches of
 `dc2`: `DC2_HEAPSTAT=1` (game heap and surface peaks), `DC2_HEAPLOG=1` (heap
 blocks of 64 KB and more), `DC2_SURFLOG=1` (the live surfaces at each new peak).
 
+On Linux, `dc2` built with `DC2_LOWMEM DC2_MOVIE_AVI` and the converted data
+plays the room music with the same loudness, 10 s window by window, as the PC
+build's MP3, and the title's movie and attract loop with the same timing
+(one frame longer per movie: pl_mpeg, in the PC builds, does not give the
+MPEG files' last picture).
+
 ## Not done yet
 
-- music (streams from the disc, likely re-encoded to ADPCM like the RE port's);
-- movies (MPEG-1 is too heavy for the SH-4: re-encode, e.g. Cinepak);
 - the renderer's alpha test (punch-through list), read-back (frame copies see black);
 - saves on the VMU (the game writes `SAVExx.DAT` with plain file calls);
 - the memory cut above, and speed work after profiling on the console.

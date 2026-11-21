@@ -28,7 +28,10 @@ static int g_log = -1;   /* DC2_SNDLOG: the calls on stderr */
 #define NSTRM 16
 
 typedef struct {
-    s16 *pcm;           /* frames x channels */
+    FILE *f;            /* a stream played from a file (Strm_OpenFile): IMA ADPCM WAV */
+    u32 data_off, data_len, data_read, align, spb;
+    u8 *blk;            /* one block of the file */
+    s16 *pcm;           /* frames x channels (a file stream: the block decoded) */
     u32 frames, ch, rate;
     u32 freq;           /* playing rate (0: its own) */
     double pos;         /* in frames */
@@ -54,7 +57,63 @@ static s32 clamp_cb(s32 v, s32 lo, s32 hi) { return v < lo ? lo : v > hi ? hi : 
 /* v / 127 * range - range, as the PC layer's float to int (towards 0) */
 static s32 cb_of(s32 v, float range) { return (s32)((float)v * 0.007874016f * range - range); }
 
-static void voice_free(Voice *v) { free(v->pcm); memset(v, 0, sizeof *v); }
+static void voice_free(Voice *v) { if (v->f) fclose(v->f); free(v->blk); free(v->pcm); memset(v, 0, sizeof *v); }
+
+/* ---- IMA ADPCM (WAV format 0x11): blocks of {s16 sample, u8 index, 0} per
+   channel, then groups of 4 bytes per channel, 8 samples each, low nibble
+   first ---- */
+static const s16 k_ima_step[89] = {
+    7, 8, 9, 10, 11, 12, 13, 14, 16, 17, 19, 21, 23, 25, 28, 31, 34, 37, 41, 45, 50, 55, 60, 66, 73, 80, 88, 97, 107, 118,
+    130, 143, 157, 173, 190, 209, 230, 253, 279, 307, 337, 371, 408, 449, 494, 544, 598, 658, 724, 796, 876, 963, 1060,
+    1166, 1282, 1411, 1552, 1707, 1878, 2066, 2272, 2499, 2749, 3024, 3327, 3660, 4026, 4428, 4871, 5358, 5894, 6484,
+    7132, 7845, 8630, 9493, 10442, 11487, 12635, 13899, 15289, 16818, 18500, 20350, 22385, 24623, 27086, 29794, 32767};
+static const s8 k_ima_index[16] = {-1, -1, -1, -1, 2, 4, 6, 8, -1, -1, -1, -1, 2, 4, 6, 8};
+static s16 ima_nibble(s32 *pred, s32 *idx, u32 nib)
+{
+    s32 step = k_ima_step[*idx], d = step >> 3;
+    if (nib & 4) d += step;
+    if (nib & 2) d += step >> 1;
+    if (nib & 1) d += step >> 2;
+    *pred += nib & 8 ? -d : d;
+    if (*pred > 32767) *pred = 32767; else if (*pred < -32768) *pred = -32768;
+    *idx += k_ima_index[nib & 15];
+    if (*idx < 0) *idx = 0; else if (*idx > 88) *idx = 88;
+    return (s16)*pred;
+}
+/* a block of n bytes into frames (interleaved by ch); the frames decoded */
+u32 PcAudio_ImaBlock(const u8 *b, u32 n, u32 ch, s16 *out, u32 spb)
+{
+    s32 pred[2], idx[2];
+    if (n < 4 * ch) return 0;
+    for (u32 c = 0; c < ch; c++) {
+        pred[c] = (s16)(b[4 * c] | b[4 * c + 1] << 8);
+        idx[c] = b[4 * c + 2] > 88 ? 88 : b[4 * c + 2];
+        out[c] = (s16)pred[c];
+    }
+    u32 frames = 1;
+    const u8 *p = b + 4 * ch, *end = b + n;
+    while (p + 4 * ch <= end && frames + 8 <= spb) {
+        for (u32 c = 0; c < ch; c++, p += 4)
+            for (u32 k = 0; k < 8; k++)
+                out[(frames + k) * ch + c] = ima_nibble(&pred[c], &idx[c], (p[k >> 1] >> ((k & 1) * 4)) & 15);
+        frames += 8;
+    }
+    return frames;
+}
+/* the next block of a file stream into v->pcm; 0 at the end of the data */
+static int file_next_block(Voice *v)
+{
+    if (v->data_read >= v->data_len) {
+        if (!v->loop) return 0;
+        fseek(v->f, (long)v->data_off, SEEK_SET);
+        v->data_read = 0;
+    }
+    u32 n = v->data_len - v->data_read < v->align ? v->data_len - v->data_read : v->align;
+    if (fread(v->blk, 1, n, v->f) != n) return 0;
+    v->data_read += n;
+    v->frames = PcAudio_ImaBlock(v->blk, n, v->ch, v->pcm, v->spb);
+    return v->frames != 0;
+}
 
 /* ---- buffers ---- */
 
@@ -140,6 +199,74 @@ u32 DC2CALL Strm_Open(gptr mp3, u32 size, u32 loop)
     SLOG("strm %u open %u bytes: %u frames at %u loop %u\n", h, size, v->frames, rate, loop);
     return h;
 }
+/* a stream played from the disc rather than memory (DC2_LOWMEM builds: the
+   room music converted by tools/dreamcast/dc2_music.py): record rec of the
+   game's file id, looked up in data\BGM\INDEX.TXT ("MS_0001 3 1A2B3C4D"),
+   played from data\BGM\1A2B3C4D.WAV (IMA ADPCM). 0xFFFFFFFF: not there. */
+static char *g_bgm_index;
+u32 Strm_OpenFile(const char *file, u32 rec, u32 loop)
+{
+    char path[512], want[64], line[96];
+    if (!g_bgm_index) {
+        Pc_HostPath("data\\BGM\\INDEX.TXT", path, sizeof path);
+        FILE *ix = fopen(path, "rb");
+        if (!ix) { g_bgm_index = calloc(1, 1); SLOG("no %s: the music stays silent\n", path); return 0xFFFFFFFF; }
+        fseek(ix, 0, SEEK_END); long n = ftell(ix); fseek(ix, 0, SEEK_SET);
+        g_bgm_index = calloc(1, (size_t)n + 1);
+        if (fread(g_bgm_index, 1, (size_t)n, ix) != (size_t)n) g_bgm_index[0] = 0;
+        fclose(ix);
+    }
+    size_t k = 0;
+    for (; file[k] && file[k] != '.' && k < 40; k++) want[k] = (char)(file[k] >= 'a' && file[k] <= 'z' ? file[k] - 32 : file[k]);
+    snprintf(want + k, sizeof want - k, " %u ", (unsigned)rec);
+    const char *e = g_bgm_index;
+    while (e && *e) {
+        size_t l = strcspn(e, "\r\n");
+        if (l < sizeof line && !strncmp(e, want, strlen(want))) {
+            memcpy(line, e, l); line[l] = 0;
+            break;
+        }
+        e += l; while (*e == '\r' || *e == '\n') e++;
+    }
+    if (!e || !*e) { SLOG("strm: %s record %u not in BGM\\INDEX.TXT\n", file, rec); return 0xFFFFFFFF; }
+    char wav[64];
+    snprintf(wav, sizeof wav, "data\\BGM\\%s.WAV", line + strlen(want));
+    Pc_HostPath(wav, path, sizeof path);
+    FILE *f = fopen(path, "rb");
+    if (!f) { SLOG("strm: no %s\n", path); return 0xFFFFFFFF; }
+    u8 hd[12];
+    u32 ch = 0, rate = 0, align = 0, fmt = 0, data_off = 0, data_len = 0;
+    if (fread(hd, 1, 12, f) == 12 && !memcmp(hd, "RIFF", 4) && !memcmp(hd + 8, "WAVE", 4)) {
+        u8 c[8];
+        while (fread(c, 1, 8, f) == 8) {
+            u32 n = (u32)(c[4] | c[5] << 8 | c[6] << 16 | (u32)c[7] << 24);
+            if (!memcmp(c, "fmt ", 4)) {
+                u8 fm[16];
+                if (n < 16 || fread(fm, 1, 16, f) != 16) break;
+                fmt = (u32)(fm[0] | fm[1] << 8); ch = (u32)(fm[2] | fm[3] << 8);
+                rate = (u32)(fm[4] | fm[5] << 8 | fm[6] << 16 | (u32)fm[7] << 24); align = (u32)(fm[12] | fm[13] << 8);
+                fseek(f, (long)(n - 16 + (n & 1)), SEEK_CUR);
+            } else if (!memcmp(c, "data", 4)) { data_off = (u32)ftell(f); data_len = n; break; }
+            else fseek(f, (long)(n + (n & 1)), SEEK_CUR);
+        }
+    }
+    if (fmt != 0x11 || (ch != 1 && ch != 2) || !rate || align < 4 * ch || !data_off) {
+        SLOG("strm: %s is not an IMA ADPCM WAV\n", path); fclose(f); return 0xFFFFFFFF;
+    }
+    u32 h = 0;
+    while (h < NSTRM && g_strm[h].used) h++;
+    if (h == NSTRM) { fclose(f); return 0xFFFFFFFF; }
+    Voice *v = &g_strm[h];
+    memset(v, 0, sizeof *v);
+    v->f = f; v->data_off = data_off; v->data_len = data_len; v->align = align;
+    v->spb = (align / ch - 4) * 2 + 1;
+    v->blk = malloc(align); v->pcm = malloc((size_t)v->spb * ch * sizeof(s16));
+    v->ch = ch; v->rate = rate; v->frames = 0; v->pos = 0;
+    v->used = 1; v->loop = loop != 0; v->vol = 0; v->pan = 0; gains(v);
+    SLOG("strm %u open %s: %u Hz, %u ch, loop %u\n", h, path, rate, ch, loop);
+    return h;
+}
+
 void DC2CALL Strm_Play(u32 h) { SLOG("strm %u play\n", h); if (h < NSTRM && g_strm[h].used) { g_strm[h].playing = 1; g_strm[h].paused = 0; } }
 void DC2CALL Strm_Stop(u32 h) { if (h < NSTRM) g_strm[h].playing = 0; }
 void DC2CALL Strm_SetVolume(u32 h, s32 vol)
@@ -156,10 +283,15 @@ void DC2CALL Strm_Resume(u32 h) { if (h < NSTRM && g_strm[h].paused) { g_strm[h]
 
 static void mix_voice(Voice *v, float *acc, u32 frames)
 {
-    if (!v->playing || !v->frames) { if (v->playing) v->playing = 0; return; }
+    if (!v->playing || (!v->frames && !v->f)) { if (v->playing) v->playing = 0; return; }
     double step = (double)(v->freq ? v->freq : v->rate) / g_rate;
     for (u32 i = 0; i < frames; i++) {
-        if (v->pos >= v->frames) {
+        while (v->pos >= v->frames) {
+            if (v->f) {                             /* a file stream: its next block */
+                v->pos -= v->frames;
+                if (!file_next_block(v)) { v->playing = 0; v->frames = 0; return; }
+                continue;
+            }
             if (!v->loop) { v->playing = 0; return; }
             v->pos -= v->frames;
         }

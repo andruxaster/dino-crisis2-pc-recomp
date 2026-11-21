@@ -12,7 +12,10 @@
  * the 320 x 240 screen, scaled like the original's blit (0x4BD530); 1 once
  * the video has ended (the movie closed). The sound goes to the mixer as a
  * source, pulled with the same clock (PcAudio_Frame after each frame).
- * DC2_NOMOVIES=1: every movie missing. */
+ * DC2_NOMOVIES=1: every movie missing.
+ * The Dreamcast build (DC2_MOVIE_AVI, Makefile.dreamcast only) plays
+ * MOVIE\NAME.AVI instead (Cinepak, made by tools/dreamcast/dc2_movies.sh;
+ * movie_avi.c): 16-bit frames, the same clock. The PC builds play the .DAT. */
 #ifndef DC2_IN_PROCESS
 #include <stdio.h>
 #include <stdlib.h>
@@ -24,6 +27,9 @@
 #define PLM_NO_STDIO
 #include "../../third_party/pl_mpeg/pl_mpeg.h"
 #include "../../third_party/minimp3/minimp3.h"
+#ifdef DC2_MOVIE_AVI
+#include "movie_avi.h"
+#endif
 
 #define MOVIE_TEX_ID 0x7FFFFF00u        /* the frame's texture (apart from the PC layer's objects) */
 
@@ -43,7 +49,29 @@ static struct {
     s16 pcm[MINIMP3_MAX_SAMPLES_PER_FRAME];
     u32 pcm_n, pcm_ch, pcm_hz;
     double pcm_pos;
+    int avi;                            /* a Cinepak AVI (movie_avi.c) */
+    u32 avi_frame;                      /* frames shown */
 } M;
+
+#ifdef DC2_MOVIE_AVI
+static u32 avi_sound(float *lr, u32 frames) { return M.running ? Avi_Sound(lr, frames, PcAudio_Rate()) : 0; }
+
+/* NAME.AVI for the game's "movie\NAME.dat"; 1 when it opened */
+static int open_avi(const char *game_path)
+{
+    char p[256], host[1024];
+    snprintf(p, sizeof p, "%s", game_path);
+    char *dot = strrchr(p, '.');
+    if (!dot || strlen(dot) != 4) return 0;
+    strcpy(dot, ".AVI");
+    Pc_HostPath(p, host, sizeof host);
+    if (!Avi_Open(host)) return 0;
+    M.avi = 1;
+    M.w = Avi_Width(); M.h = Avi_Height();
+    PcAudio_SetSource(avi_sound);
+    return 1;
+}
+#endif
 
 static void in_load(plm_buffer_t *b, void *user)
 {
@@ -109,6 +137,9 @@ static u32 add_sound(float *lr, u32 frames)
 void DC2CALL Movie_Close(void)                                       /* 0x4BF340 */
 {
     PcAudio_SetSource(0);
+#ifdef DC2_MOVIE_AVI
+    if (M.avi) Avi_Close();
+#endif
     if (M.vid) plm_video_destroy(M.vid);
     if (M.dmx) plm_demux_destroy(M.dmx);
     if (M.in) plm_buffer_destroy(M.in);
@@ -121,6 +152,10 @@ u32 DC2CALL Movie_Open(gptr name, u32 x, u32 y)                      /* 0x4BF3A0
 {
     Movie_Close();
     if (getenv("DC2_NOMOVIES")) return 1;
+#ifdef DC2_MOVIE_AVI
+    if (open_avi((const char *)MEM(name))) { M.x = (s32)x; M.y = (s32)y; return 0; }
+    return 1;                           /* (the Dreamcast plays only the converted movies) */
+#endif
     char host[1024];
     Pc_HostPath((const char *)MEM(name), host, sizeof host);
     if (!(M.f = fopen(host, "rb"))) return 1;
@@ -142,11 +177,37 @@ u32 DC2CALL Movie_Open(gptr name, u32 x, u32 y)                      /* 0x4BF3A0
     return 0;
 }
 
-void DC2CALL Movie_Ctl1(void) { if (M.vid) M.running = 1; }         /* 0x4BF650 */
+void DC2CALL Movie_Ctl1(void) { if (M.vid || M.avi) M.running = 1; } /* 0x4BF650 */
 void DC2CALL Movie_Ctl0(void) { M.running = 0; }                    /* 0x4BF670 */
+
+#ifdef DC2_MOVIE_AVI
+static u32 poll_avi(void)
+{
+    if (M.running) {
+        double ft = Avi_FrameTime();
+        while ((double)M.avi_frame * ft <= M.clock + 1e-6) {
+            if (!Avi_NextFrame()) { Movie_Close(); return 1; }
+            M.avi_frame++; M.version++;
+            if (M.avi_frame == Avi_Frames()) break;
+        }
+        /* the last frame drawn: ended now, as the MPEG player does */
+        if (Avi_Frames() && M.avi_frame >= Avi_Frames()) { Movie_Close(); return 1; }
+        M.clock += (double)(U32(0x87DE00) ? U32(0x87DE00) : 1) / 60.0;
+    }
+    if (M.version) {
+        float sx = F32(0x8644BC), sy = F32(0x8644B8);
+        PcSoft_DrawImage(MOVIE_TEX_ID, M.version, Avi_Pixels(), M.w, M.h, 2, (s32)((float)M.x * sx), (s32)((float)M.y * sy),
+                         (s32)((float)(M.x + (s32)M.w) * sx), (s32)((float)(M.y + (s32)M.h) * sy));
+    }
+    return 0;
+}
+#endif
 
 u32 DC2CALL Movie_Poll(void)                                         /* 0x4BF690 */
 {
+#ifdef DC2_MOVIE_AVI
+    if (M.avi) return poll_avi();
+#endif
     if (!M.vid) return 1;
     if (M.running) {
         if (!M.next && !M.video_end && !(M.next = plm_video_decode(M.vid))) M.video_end = 1;
