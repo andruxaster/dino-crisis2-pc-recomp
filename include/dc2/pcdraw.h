@@ -7,6 +7,7 @@
 void PcDraw_DrawOTag(gptr ot);                                   /* 0x4B50F0 */
 void PcDraw_ClutRowConvert(u32 x, u32 row, s32 n);               /* 0x4B4BF0 */
 void PcDraw_InvalidateRect(gptr rect, u32 mark);                 /* 0x4B4790 */
+void PcDraw_DropTextures(void);                                         /* (port) every cached texture dropped: rebuilt from VRAM */
 void PcDraw_VramCopy(gptr rect, s32 x, s32 y);                   /* 0x4B4A60 */
 void PcDraw_MoveImage(gptr rect, s32 x, s32 y);                  /* 0x4B4B30 */
 /* the background masks (the PC layer's 0x4BE330.. module) */
