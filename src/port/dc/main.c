@@ -37,6 +37,7 @@
 #include "vmu_save.h"
 #include "unaligned.h"
 #include "dc2/stall.h"
+#include "prof.h"
 
 unsigned g_stall_us[STALL_N];
 
@@ -269,6 +270,9 @@ int main(int argc, char **argv)
     Task_Start(0, U8(0x87DE08) ? 0x471EC0 : 0x46D710);
 
     pace_init();
+#if DC2_DC_VERBOSE
+    Prof_Init();
+#endif
     int quit = 0;
     for (u32 f = 0; !quit; f++) {
         g_pad_raw[0] = read_pad(&quit);
@@ -286,6 +290,7 @@ int main(int argc, char **argv)
 #if DC2_DC_VERBOSE
         /* a frame over 100 ms (a stall: loading, uploads, the disc), a few a report */
         static u32 slow_n;
+        Prof_FrameEnd(tg > 100000 || td > 100000);
         if (f % 300 == 0) slow_n = 0;
         if ((tg > 100000 || td > 100000) && slow_n++ < 4)
             printf("slow frame %u: game %u ms, drawing %u ms (disc %u, JPEG %u, textures %u ms; game mode %u room %X%02X)\n", (unsigned)f,
@@ -302,6 +307,7 @@ int main(int argc, char **argv)
                    (unsigned)(mi.uordblks >> 10), (unsigned)(pvr_mem_available() >> 10), (unsigned)RenderPvr_Evicted(), (unsigned)RenderPvr_Fragmented(), (unsigned)Host_ReadFailures());
             DcUnaligned_Report();
             timing_report();
+            if (f % 1800 == 0 && f) Prof_Report();
         }
 #endif
         u32 tasks = 0;

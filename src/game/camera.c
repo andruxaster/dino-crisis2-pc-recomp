@@ -59,21 +59,48 @@ void DC2CALL Camera_Tick(void)                                     /* 0x403570 *
 /* The Dreamcast: the camera records of the room read from the disc once and
  * kept in RAM (CAM_CACHE_BYTES at most, the oldest dropped first; all of
  * them on a room change), so that a camera switch back to one already seen
- * does not wait for the drive. The record as Camera_Load reads it: the
+ * does not wait for the drive, nor for the JPEG: its decoded background is
+ * kept with it (CAM_PIC_BYTES more). The record as Camera_Load reads it: the
  * file's sectors from sec, size bytes, into a block of the game's heap
  * (0 when the file does not open, as the original returns then). */
 #include <stdlib.h>
-#define CAM_CACHE_BYTES 0x120000u
+#define CAM_CACHE_BYTES 0x140000u
 #define CAM_CACHE_N 24
-static struct { char name[0x28]; u32 sec, size, used; void *data; } g_cc[CAM_CACHE_N];
+#define CAM_PIC_BYTES (320 * 240 * 2)
+static struct { char name[0x28]; u32 sec, size, used; void *data, *pic; } g_cc[CAM_CACHE_N];
 static u32 g_cc_bytes, g_cc_clock;
+static int g_cc_last = -1;                          /* the entry of the record just read */
 
-static void cc_drop(int i) { free(g_cc[i].data); g_cc_bytes -= g_cc[i].size; g_cc[i].data = NULL; }
+static void cc_drop(int i)
+{
+    free(g_cc[i].data); g_cc_bytes -= g_cc[i].size; g_cc[i].data = NULL;
+    if (g_cc[i].pic) { free(g_cc[i].pic); g_cc_bytes -= CAM_PIC_BYTES; g_cc[i].pic = NULL; }
+    if (g_cc_last == i) g_cc_last = -1;
+}
+
+/* the record's background as decoded before, if kept: 1 when put at dst */
+static int cam_cache_picture(void *dst)
+{
+    if (g_cc_last < 0 || !g_cc[g_cc_last].pic) return 0;
+    memcpy(dst, g_cc[g_cc_last].pic, CAM_PIC_BYTES);
+    return 1;
+}
+
+/* keep the background just decoded with its record, if there is room */
+static void cam_cache_keep_picture(const void *src)
+{
+    int i = g_cc_last;
+    if (i < 0 || g_cc[i].pic || g_cc_bytes + CAM_PIC_BYTES > CAM_CACHE_BYTES) return;
+    if (!(g_cc[i].pic = malloc(CAM_PIC_BYTES))) return;
+    memcpy(g_cc[i].pic, src, CAM_PIC_BYTES);
+    g_cc_bytes += CAM_PIC_BYTES;
+}
 
 static gptr cam_cache_read(gptr gname, u32 sec, u32 size)
 {
     const char *name = (const char *)MEM(gname);
     int free_i = -1;
+    g_cc_last = -1;
     for (int i = 0; i < CAM_CACHE_N; i++) {
         if (!g_cc[i].data) { if (free_i < 0) free_i = i; continue; }
         if (strncmp(g_cc[i].name, name, sizeof g_cc[i].name)) { cc_drop(i); if (free_i < 0) free_i = i; continue; }   /* another room's */
@@ -81,6 +108,7 @@ static gptr cam_cache_read(gptr gname, u32 sec, u32 size)
             gptr p = Crt_malloc(size);
             memcpy(MEM(p), g_cc[i].data, size);
             g_cc[i].used = ++g_cc_clock;
+            g_cc_last = i;
             return p;
         }
     }
@@ -90,8 +118,8 @@ static gptr cam_cache_read(gptr gname, u32 sec, u32 size)
     Pc_Seek(fd, (s32)(sec << 11), 1);
     Pc_Read(fd, p, size);
     Pc_Close(fd);
-    if (size > CAM_CACHE_BYTES) return p;
-    while (g_cc_bytes + size > CAM_CACHE_BYTES || free_i < 0) {     /* room: the least recently used out */
+    if (size + CAM_PIC_BYTES > CAM_CACHE_BYTES) return p;
+    while (g_cc_bytes + size + CAM_PIC_BYTES > CAM_CACHE_BYTES || free_i < 0) {   /* (room for its picture too) */     /* room: the least recently used out */
         int o = -1;
         for (int i = 0; i < CAM_CACHE_N; i++) if (g_cc[i].data && (o < 0 || g_cc[i].used < g_cc[o].used)) o = i;
         if (o < 0) break;
@@ -105,6 +133,7 @@ static gptr cam_cache_read(gptr gname, u32 sec, u32 size)
         g_cc[free_i].name[sizeof g_cc[free_i].name - 1] = 0;
         g_cc[free_i].sec = sec; g_cc[free_i].size = size; g_cc[free_i].used = ++g_cc_clock; g_cc[free_i].data = copy;
         g_cc_bytes += size;
+        g_cc_last = free_i;
     }
     return p;
 }
@@ -137,7 +166,16 @@ void DC2CALL Camera_Load(void)                                     /* 0x403AC0 *
 #endif
     memmove(MEM(0x6B9500), MEM(p + 0x800), U32(p + 4));
     gptr jpg = p + 0x1000;
+#ifdef DC2_CAM_CACHE
+    if (!cam_cache_picture(MEM(0x6C1500))) {
+        u32 js = U32(p + 0x24);
+        JPEG_Decode(0x6C1500, jpg, js, 2);
+        if (js >= 2 && U8(jpg + js - 2) == 0xFF && U8(jpg + js - 1) == 0xD9)   /* (whole: decoding it again does nothing more) */
+            cam_cache_keep_picture(MEM(0x6C1500));
+    }
+#else
     JPEG_Decode(0x6C1500, jpg, U32(p + 0x24), 2);
+#endif
     if (U16(G() + 0x664) != 4) Flag_Set(3, 0, 1);
     U32(G() + 8) = 0x6C1500;
     gptr q = jpg + (((U32(p + 0x24) + 0x7FF) >> 2) & 0x3FFFFE00) * 4;
