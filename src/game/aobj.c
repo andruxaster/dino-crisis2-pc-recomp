@@ -906,6 +906,89 @@ void DC2CALL Plant_Matrix(gptr o)                                   /* 0x428F30 
     Tmp_Pop(0x10);
 }
 
+/* ---- an emitter's script (Light_Step's steps 0 and 1, 0x71E1B4): records
+ * of 0x28 bytes from l+0xC {u8 kind, u8 w, u8 h, u8 flags, u16 sprite, u8 +6,
+ * -, u32 pos x/y, u32 pos z, u32 speed x/y, u32 speed z, -, u16 +0x7A, -,
+ * u8 part (+0x1F), u32 +0x98, u32 +0x9C; +0xF its frame}, -1 the end; l+0x10
+ * / +0x11 the first and last record made, +0x12 the frame, +0x13 the
+ * record, +0x14 its object, +0x18 flags (1 start at the first record's
+ * frame, 2 on the object, 4 at its place, 8 looped), +0x1C the slots' size */
+
+/* the frame's records made: each a slot (K2_AllocBack) of the record's
+   kind, at its place, on the object (or its part, or at its place), its
+   size scaled by the object's (+0x6C, 4096 = 1); at the end the script
+   runs again (flag 8) or the emitter is off */
+void DC2CALL Emit_Run(gptr l)                                        /* 0x4132F0 */
+{
+    gptr r = U32(l + 0xC);
+    s32 t = (s32)S8(l + 0x12);
+    if ((s32)U8(r + 0xF) <= t) {
+        do {
+            if (U32(r) == 0xFFFFFFFF) {
+                if (!(U8(l + 0x18) & 8)) { Eff_Off(l); break; }
+                u8 c = U8(l + 0x10), d = U8(l + 0x13);
+                U8(l + 0x12) = 0xFF;
+                U8(l + 0x13) = c;
+                U32(l + 0xC) += (u32)(((s32)c - (s32)d) * 0x28);
+                U8(l + 0x12)++;
+                return;
+            }
+            if (t == (s32)U8(r + 0xF)) {
+                u8 a = U8(l + 0x13);
+                if (U8(l + 0x10) <= a && U8(l + 0x11) >= a) {
+                    gptr e = K2_AllocBack();
+                    if (!e) break;
+                    U32(e + 0x8C) = l;
+                    U8(e + 0x58) = U8(r);
+                    U16(e + 0x64) = U16(r + 4);
+                    U8(e + 0x66) = U8(r + 6);
+                    U32(e + 0x40) = U32(r + 8);
+                    U32(e + 0x44) = U32(r + 0xC);
+                    U32(e + 0x7C) = U32(r + 0x10);
+                    U32(e + 0x80) = U32(r + 0x14);
+                    U16(e + 0x7A) = U16(r + 0x1C);
+                    U8(e + 0x84) = U8(r + 3);
+                    if (U16(l + 0x1C)) U32(e + 0x68) = U32(l + 0x1C);
+                    u32 f = U32(l + 0x18);
+                    if (f & 2) U32(e + 0x60) = U32(l + 0x14);
+                    else if (f & 4) {
+                        gptr o = U32(l + 0x14);
+                        U16(e + 0x40) += U16(o + 0x40); U16(e + 0x42) += U16(o + 0x42); U16(e + 0x44) += U16(o + 0x44);
+                    } else U32(e + 0x60) = Obj_Part(U32(U32(l + 0x14) + 0x64), U8(r + 0x1F));
+                    if (U32(e + 0x60)) {
+                        U16(e + 0x6C) = (u16)(((s32)U8(r + 1) * S32(U32(l + 0x14) + 0x6C)) / 4096);
+                        U16(e + 0x6E) = (u16)(((s32)U8(r + 2) * S32(U32(l + 0x14) + 0x6C)) / 4096);
+                    } else {
+                        U16(e + 0x6C) = U8(r + 1);
+                        U16(e + 0x6E) = U8(r + 2);
+                    }
+                    U32(e + 0x98) = U32(r + 0x20);
+                    U32(e + 0x9C) = U32(r + 0x24);
+                }
+                U8(l + 0x13)++;
+            }
+            U32(l + 0xC) += 0x28;
+            r += 0x28;
+            t = (s32)S8(l + 0x12);
+        } while ((s32)U8(r + 0xF) <= t);
+    }
+    U8(l + 0x12)++;
+}
+
+/* the script's start: from record +0x10 (the frame its first's, flag 1),
+   the last made at least the first; then the first frame */
+void DC2CALL Emit_Start(gptr l)                                      /* 0x4132A0 */
+{
+    u8 first = U8(l + 0x10);
+    gptr r = U32(l + 0xC);
+    U32(l + 0xC) = r + first * 0x28;
+    U8(l + 0x12) = (U8(l + 0x18) & 1) ? U8(r + 0xF) : 0;
+    U8(l + 0x13) = first;
+    if (first >= U8(l + 0x11)) U8(l + 0x11) = 0xFF;
+    U8(l + 3)++;
+    Emit_Run(l);
+}
+
 /* a light's step by its script (0x71E1B4 by l+3); the next step when the
    script's record is the end (-1) */
 void DC2CALL Light_Step(gptr l)                                     /* 0x413270 */
@@ -1191,6 +1274,822 @@ void DC2CALL WeaponObj1(gptr o)                                      /* 0x44E530
     K2_SyncParent(o);
     if (!--U8(o + 0x46)) K2_Detach(o);
 }
+
+/* ---- the weapons' and sub-weapons' objects (0x72160C, 0x721640): effect
+ * slots of the K2 kind like weapon 1's above. Each is run by a handler: the
+ * motion step (0x7215E4 by +0x7B), its own step (+0x54: 0 set up, 1 run,
+ * 2 K2_Unlink), K2_SyncParent, and most count +0x46 down to K2_Detach. A
+ * kind (+0x7A) picks a record of the object's table {u8 flags, u8 tpage,
+ * u8 clut, -, u32 animation}; kind 0 (some: another) is only a light.
+ * Shared below: the record's look, the light-only set-up, the move. ---- */
+
+/* the record of kind +0x7A in rec: animation, sprite page and CLUT, drawn */
+static void wo_look(gptr o, gptr rec)
+{
+    u32 k = U8(o + 0x7A);
+    K2_SetAnim(o, U32(rec + 4 + k * 8));
+    U16(o + 0x6A) = (u16)(U8(rec + 1 + k * 8) << 5 | 0xA);
+    U16(o + 0x68) = (u16)(U8(rec + 2 + k * 8) + 0x7E08);
+    U32(o + 0x50) |= 2;
+    U8(o + 0x67) |= U8(rec + k * 8);
+}
+
+/* the kind that is only a light: lit, not drawn */
+static void wo_lit(gptr o)
+{
+    K2_Light(o, 0);
+    U8(o + 0x50) &= 0xFD;
+}
+
+/* turned by (0, ry, 0) (RotMatrix of a vector on the tmp stack) */
+static void wo_turn(gptr o, u16 ry)
+{
+    gptr v = Tmp_Push(8);
+    U16(v) = 0; U16(v + 2) = ry; U16(v + 4) = 0; U16(v + 6) = 0;
+    RotMatrix(v, o + 0x20);
+    Tmp_Pop(8);
+}
+
+/* moved by its speed (+0x7C, +0x7E, +0x80), the last position kept at +0x74 */
+static void wo_move(gptr o)
+{
+    u32 old = U32(o + 0x40);
+    U16(o + 0x40) += U16(o + 0x7C);
+    U32(o + 0x74) = old;
+    U16(o + 0x42) += U16(o + 0x7E);
+    u16 z = U16(o + 0x44);
+    U16(o + 0x78) = z;
+    U16(o + 0x44) = (u16)(U16(o + 0x80) + z);
+}
+
+static void wo_burst(gptr o, gptr anim, int clear_again);
+
+/* the standard step 0: +0x54 on; kind 0 a light; else upright, the look */
+static void wo_init(gptr o, gptr rec)
+{
+    U8(o + 0x54)++;
+    if (!U8(o + 0x7A)) { wo_lit(o); return; }
+    wo_turn(o, 0);
+    wo_look(o, rec);
+}
+
+/* the standard step 1: moved; kind 0 gone (G+0xF cleared), else on when its
+   animation ends */
+static void wo_fly(gptr o)
+{
+    wo_move(o);
+    if (!U8(o + 0x7A)) { U8(G() + 0xF) = 0; K2_Unlink(o); return; }
+    if (K2_AnimStep(o)) U8(o + 0x54)++;
+}
+
+/* the handlers: motion, step, parent, and (most) the countdown +0x46 */
+#define WO_NOCOUNT  1           /* no countdown */
+#define WO_KEEP3    2           /* no countdown for kind 3 */
+#define WO_HIDDEN   4           /* K2_UpdateHidden after, when +0x50 bit 2 */
+#define WO_SYNCFIRST 8          /* the parent's sync before the steps */
+static void wo_handler(gptr o, gptr steps, u32 how)
+{
+    if (how & WO_SYNCFIRST) K2_SyncParent(o);
+    Orig_Call1(U32(0x7215E4 + U8(o + 0x7B) * 4), o);
+    Orig_Call1(U32(steps + U8(o + 0x54) * 4), o);
+    if (!(how & WO_SYNCFIRST)) K2_SyncParent(o);
+    if (!(how & WO_NOCOUNT) && !((how & WO_KEEP3) && U8(o + 0x7A) == 3))
+        if (!--U8(o + 0x46)) K2_Detach(o);
+    if ((how & WO_HIDDEN) && (U8(o + 0x50) & 4)) K2_UpdateHidden(o);
+}
+
+/* -- sub-weapon 2 (0x721640 [2]): steps 0x721F80, records 0x721F60 -- */
+void DC2CALL SubWObj2_Init(gptr o) { wo_init(o, 0x721F60); }       /* 0x44DA20 */
+void DC2CALL SubWObj_Fly(gptr o) { wo_fly(o); }                     /* 0x44DAD0 (also 5, 8 and 9's) */
+void DC2CALL SubWObj2(gptr o) { wo_handler(o, 0x721F80, 0); }       /* 0x44D9E0 */
+
+/* -- sub-weapon 3 (0x721640 [3]): steps 0x721FB0, records 0x721F90. Set
+   down on the floor below its parent's place, facing +0xA0; gone if a wall
+   is between or the floor is on another level. Run: on its animation (kind
+   2 stays), and every other frame a hit at its place (Weapon_Hit 0x14) -- */
+void DC2CALL SubWObj3_Init(gptr o)                                   /* 0x44DB60 */
+{
+    u16 ry = U16(o + 0xA0);
+    U8(o + 0x54)++;
+    if (!U8(o + 0x7A)) { wo_lit(o); return; }
+    U16(o + 0x42) += 0xFF38;
+    wo_turn(o, ry);
+    /* a stand-in effect (the original's on its stack): its place, where it
+       comes from (the parent's), the wall test's level and flags */
+    gptr e = Tmp_Push(0x90);
+    memset(MEM(e), 0, 0x90);
+    K2_ToWorld(o, e + 0x40);
+    U32(o + 0x60) = 0;
+    U16(e + 0x5A) = (u16)(S16(e + 0x42) / -1000);
+    U16(e + 0x74) = U16(o + 0x34);
+    U32(o + 0x40) = U32(e + 0x40);
+    U32(o + 0x44) = U32(e + 0x44);
+    U16(e + 0x76) = U16(o + 0x38);
+    U16(e + 0x78) = U16(o + 0x3C);
+    U8(e + 0x85) = 0x10;
+    if (Eff_WallHit(e)) { Tmp_Pop(0x90); K2_Unlink(o); return; }
+    gptr a = e + 0x74;                          /* the floor under it, from 1000 up */
+    U32(a) = U32(e + 0x40); U32(a + 4) = U32(e + 0x44);
+    U16(a + 2) = 1000;
+    s16 h = (s16)Floor_Height(a, e + 0x40, 0x10, 0);
+    U16(a + 2) = (u16)h;
+    s32 y = S16(e + 0x42);
+    Tmp_Pop(0x90);
+    if (h / 1000 != y / 1000) { K2_Unlink(o); return; }
+    wo_turn(o, ry);
+    wo_look(o, 0x721F90);
+    gptr v = Tmp_Push(8);
+    U16(v) = 0x400; U16(v + 2) = ry; U16(v + 4) = 0; U16(v + 6) = 0;
+    RotMatrixZYX(v, o + 0x20);
+    Tmp_Pop(8);
+}
+
+void DC2CALL SubWObj3_Run(gptr o)                                    /* 0x44DD60 */
+{
+    if (!U8(o + 0x7A)) { U8(G() + 0xF) = 0; K2_Unlink(o); return; }
+    if (K2_AnimStep(o) && U8(o + 0x7A) != 2) U8(o + 0x54)++;
+    U16(o + 0xA0) ^= 1;
+    if (U16(o + 0xA0)) Weapon_Hit(o + 0x20, o + 0x40, 0x14);
+}
+
+void DC2CALL SubWObj3(gptr o) { wo_handler(o, 0x721FB0, WO_NOCOUNT); }   /* 0x44DB30 */
+
+/* -- sub-weapon 4 (0x721640 [4]): steps 0x721FE8, records 0x721FC0; and 6
+   (0x722018). Kind 3 follows its parent while the parent lives (+0x50 bit
+   0), with the record after the table's four (another blend, CLUT base
+   0x7DC0); gone without it -- */
+static void wo_init_follow(gptr o, gptr rec)
+{
+    U8(o + 0x54)++;
+    if (!U8(o + 0x7A)) { wo_lit(o); return; }
+    wo_turn(o, 0);
+    u32 k = U8(o + 0x7A);
+    K2_SetAnim(o, U32(rec + 4 + k * 8));
+    U32(o + 0x50) |= 2;
+    U8(o + 0x67) |= U8(rec + k * 8);
+    if (k == 3) {
+        if (!(U8(U32(o + 0x60) + 0x50) & 1)) { K2_Unlink(o); return; }
+        U16(o + 0x6A) = (u16)(U8(rec + 0x19) << 5 | 0xB);
+        U16(o + 0x68) = (u16)(U8(rec + 0x1A) + 0x7DC0);
+        return;
+    }
+    U16(o + 0x6A) = (u16)(U8(rec + 1 + k * 8) << 5 | 0xA);
+    U16(o + 0x68) = (u16)(U8(rec + 2 + k * 8) + 0x7E08);
+}
+
+void DC2CALL SubWObj4_Init(gptr o) { wo_init_follow(o, 0x721FC0); }   /* 0x44DE10 */
+
+/* step 1 of sub-weapons 4 and 6: moved; kind 0 gone (G+0xF cleared), 1 gone,
+   3 gone with its parent, the others on when their animation ends */
+void DC2CALL SubWObj4_Fly(gptr o)                                    /* 0x44DF10 */
+{
+    wo_move(o);
+    switch (U8(o + 0x7A)) {
+    case 0: U8(G() + 0xF) = 0; /* fall through */
+    case 1: K2_Unlink(o); return;
+    case 3:
+        K2_AnimStep(o);
+        if (!(U8(U32(o + 0x60) + 0x50) & 1)) K2_Unlink(o);
+        return;
+    default:
+        if (K2_AnimStep(o)) U8(o + 0x54)++;
+        return;
+    }
+}
+
+void DC2CALL SubWObj4(gptr o) { wo_handler(o, 0x721FE8, WO_KEEP3); }   /* 0x44DDC0 */
+
+/* -- sub-weapon 5 (0x721640 [5]): steps 0x722008 (1: SubWObj_Fly), records
+   0x721FF8; one sprite page and CLUT for all kinds -- */
+void DC2CALL SubWObj5_Init(gptr o)                                   /* 0x44DFE0 */
+{
+    U8(o + 0x54)++;
+    if (!U8(o + 0x7A)) { wo_lit(o); return; }
+    wo_turn(o, 0);
+    u32 k = U8(o + 0x7A);
+    K2_SetAnim(o, U32(0x721FFC + k * 8));
+    U16(o + 0x6A) = 0x3A;
+    U32(o + 0x50) |= 2;
+    U16(o + 0x68) = 0x7F80;
+    U8(o + 0x67) |= U8(0x721FF8 + k * 8);
+}
+
+void DC2CALL SubWObj5(gptr o) { wo_handler(o, 0x722008, 0); }       /* 0x44DFA0 */
+
+/* -- sub-weapon 6 (0x721640 [6]): steps 0x722040 (1: SubWObj4_Fly), as 4 -- */
+void DC2CALL SubWObj6_Init(gptr o) { wo_init_follow(o, 0x722018); }   /* 0x44E0D0 */
+void DC2CALL SubWObj6(gptr o) { wo_handler(o, 0x722040, WO_KEEP3); }  /* 0x44E080 */
+
+/* -- sub-weapons 8 and 9 (0x721640 [8], [9]; [7] has none): steps 0x722070
+   / 0x722090 (1: SubWObj_Fly), records 0x722050 / 0x722080 -- */
+void DC2CALL SubWObj8_Init(gptr o) { wo_init(o, 0x722050); }       /* 0x44E210 */
+void DC2CALL SubWObj8(gptr o) { wo_handler(o, 0x722070, 0); }       /* 0x44E1D0 */
+void DC2CALL SubWObj9_Init(gptr o) { wo_init(o, 0x722080); }       /* 0x44E300 */
+void DC2CALL SubWObj9(gptr o) { wo_handler(o, 0x722090, 0); }       /* 0x44E2C0 */
+
+/* the record's look, its flags also into +0x50 (most weapons' objects) */
+static void wo_look_f(gptr o, gptr rec)
+{
+    u32 k = U8(o + 0x7A);
+    K2_SetAnim(o, U32(rec + 4 + k * 8));
+    U16(o + 0x6A) = (u16)(U8(rec + 1 + k * 8) << 5 | 0xA);
+    U16(o + 0x68) = (u16)(U8(rec + 2 + k * 8) + 0x7E08);
+    U32(o + 0x50) |= U8(rec + k * 8) | 2u;
+    U8(o + 0x67) |= U8(rec + k * 8);
+}
+
+/* -- weapon 0 (0x72160C [0]): steps 0x7220B8, records 0x7220A0; kind 2 a
+   light (let go of its parent first); its parent synced before its steps -- */
+void DC2CALL WObj0_Init(gptr o)                                      /* 0x44E3F0 */
+{
+    U8(o + 0x54)++;
+    if (U8(o + 0x7A) == 2) { K2_Detach(o); wo_lit(o); return; }
+    wo_turn(o, 0);
+    wo_look_f(o, 0x7220A0);
+}
+
+/* step 1 of weapon 0: moved; kinds 0/1 on when their animation ends, 2 gone
+   (G+0xF cleared), the others stay */
+void DC2CALL WObj0_Fly(gptr o)                                       /* 0x44E4C0 */
+{
+    wo_move(o);
+    u8 k = U8(o + 0x7A);
+    if (k <= 1) { if (K2_AnimStep(o)) U8(o + 0x54)++; }
+    else if (k == 2) { U8(G() + 0xF) = 0; K2_Unlink(o); }
+}
+
+void DC2CALL WObj0(gptr o) { wo_handler(o, 0x7220B8, WO_SYNCFIRST); }   /* 0x44E3B0 */
+
+/* -- weapon 2 (0x72160C [2]): steps 0x722148, records 0x722110; as weapon
+   1's: kind 2 a light, 3 thrown with a random push and bouncing (+0xA0
+   frames, then +0x6C bounces), 4 a burst of three -- */
+void DC2CALL WObj2_Init(gptr o)                                      /* 0x44E950 */
+{
+    U8(o + 0x54)++;
+    if (U8(o + 0x7A) == 2) { wo_lit(o); return; }
+    wo_turn(o, 0);
+    wo_look_f(o, 0x722110);
+    u8 k = U8(o + 0x7A);
+    if (k == 3) {
+        U8(o + 0x85) = 0x10;
+        U8(o + 0x84) &= 0xFE;
+        U16(o + 0x7C) += (u16)((Rand8() >> 4) - 8);
+        U16(o + 0x7E) += (u16)((Rand8() >> 3) - 0x10);
+        U16(o + 0x80) += (u16)((Rand8() >> 3) - 0x10);
+        U16(o + 0xA0) = 0x1E;
+    } else if (k == 4) wo_burst(o, 0x72213C, 1);
+}
+
+/* a thrown object's bounce (kind 3 of weapons 2's and others'): back off
+   the floor slower (losing speed, sound 0x13), off the walls turned round;
+   gone after its time (+timer) and (counted) +0x6C bounces more. In room
+   0x402 one that falls under -10000 is lifted by 10000 (the floor below) */
+static void wo_bounce(gptr o, u32 timer, int room402, int counted)
+{
+    gptr pos = o + 0x40, last = o + 0x74;
+    s16 y = S16(o + 0x42);
+    U16(o + 0x5A) = (u16)(y / -1000);
+    if (room402 && U16(G() + 0x1090) == 0x402 && y < -10000) {
+        U16(o + 0x76) += 10000;
+        U16(o + 0x42) = (u16)(y + 10000);
+    }
+    U16(o + 0x4C) += 0xFE00;
+    u16 r = (u16)Floor_Cross(pos, last, pos, 0x10);
+    if (r == 0xFFFE) { U8(o + 0x54) = 2; return; }
+    if (!r) {
+        U16(pos) = U16(last);
+        U16(o + 0x42) = U16(o + 0x76);
+        U16(o + 0x44) = U16(o + 0x78);
+        s32 v = -(S16(o + 0x7E) * 3) / 5;
+        U16(o + 0x7E) = (u16)v;
+        if ((s32)(s16)v + S16(o + 0x9A) > -1) { U16(o + 0x9A) = 0; U16(o + 0x7E) = 0; }
+        Se_Play(U32(G() + 0x940), 0x13);
+    }
+    if (Eff_WallHit(o)) {
+        U16(pos) = U16(last);
+        U16(o + 0x44) = U16(o + 0x78);
+        U16(o + 0x80) = (u16)-U16(o + 0x80);
+        U16(o + 0x7C) = (u16)-U16(o + 0x7C);
+        Se_Play(U32(G() + 0x940), 0x13);
+    }
+    if (--S16(o + timer) <= 0 && (!counted || !--S16(o + 0x6C))) K2_Unlink(o);
+}
+
+void DC2CALL WObj2_Fly(gptr o)                                       /* 0x44EB30 */
+{
+    wo_move(o);
+    switch (U8(o + 0x7A)) {
+    case 0: case 1: if (K2_AnimStep(o)) U8(o + 0x54) = 2; return;
+    case 2: U8(G() + 0xF) = 0; K2_Unlink(o); return;
+    case 3: wo_bounce(o, 0xA0, 1, 1); return;
+    case 4: case 5: case 6: K2_Unlink(o); return;
+    }
+}
+
+void DC2CALL WObj2(gptr o) { wo_handler(o, 0x722148, 0); }          /* 0x44E910 */
+
+/* -- weapon 3 (0x72160C [3]): steps 0x722188, records 0x722158; kind 2 a
+   light; none without a living parent; +0x50 bit 2 (K2_UpdateHidden after
+   each run) but for kinds 3 and 5; kind 3 runs while its parent lives -- */
+void DC2CALL WObj3_Init(gptr o)                                      /* 0x44ED70 */
+{
+    U8(o + 0x54)++;
+    if (U8(o + 0x7A) == 2) { wo_lit(o); return; }
+    gptr p = U32(o + 0x60);
+    if (p && !(U8(p + 0x50) & 1)) { K2_Unlink(o); return; }
+    wo_turn(o, 0);
+    u32 k = U8(o + 0x7A);
+    K2_SetAnim(o, U32(0x72215C + k * 8));
+    U16(o + 0x6A) = (u16)(U8(0x722159 + k * 8) << 5 | 0xA);
+    U16(o + 0x68) = (u16)(U8(0x72215A + k * 8) + 0x7E08);
+    u32 f = U32(o + 0x50) | 2;
+    U32(o + 0x50) = f;
+    U8(o + 0x67) |= U8(0x722158 + k * 8);
+    U16(o + 0xA2) = 0;
+    U32(o + 0x50) = (k == 5 || k == 3) ? f & ~4u : f | 4;
+}
+
+void DC2CALL WObj3_Fly(gptr o)                                       /* 0x44EE70 */
+{
+    wo_move(o);
+    switch (U8(o + 0x7A)) {
+    case 0: case 1: case 4: if (K2_AnimStep(o)) U8(o + 0x54) = 2; return;
+    case 2: U8(G() + 0xF) = 0; K2_Unlink(o); return;
+    case 3:
+        if (!(U8(U32(o + 0x60) + 0x50) & 1)) { U8(o + 0x54) = 2; return; }
+        K2_AnimStep(o);
+        return;
+    case 5: K2_Unlink(o); return;
+    }
+}
+
+void DC2CALL WObj3(gptr o) { wo_handler(o, 0x722188, WO_HIDDEN); }  /* 0x44ED20 */
+
+/* -- weapon 4 (0x72160C [4]): steps 0x7221E8, records 0x722198; kind 2 a
+   light; kinds 0/1 upright, the others keep their turn and +0x46 cleared;
+   kind 9 hits at its place in the world every other frame (0x9E set: 3,
+   else 4) -- */
+void DC2CALL WObj4_Init(gptr o)                                      /* 0x44EF50 */
+{
+    U8(o + 0x54)++;
+    if (U8(o + 0x7A) == 2) { wo_lit(o); return; }
+    wo_look_f(o, 0x722198);
+    if (U8(o + 0x7A) <= 1) wo_turn(o, 0);
+    else U8(o + 0x46) = 0;
+}
+
+void DC2CALL WObj4_Fly(gptr o)                                       /* 0x44F030 */
+{
+    wo_move(o);
+    u8 k = U8(o + 0x7A);
+    if (k == 2) { U8(G() + 0xF) = 0; K2_Unlink(o); return; }
+    if (k == 9) {
+        gptr w = Tmp_Push(8);
+        K2_ToWorld(o, w);
+        U16(o + 0xA0) ^= 1;
+        if (U16(o + 0xA0)) Weapon_Hit(o + 0x20, w, U16(o + 0x9E) ? 3 : 4);
+        Tmp_Pop(8);
+    }
+    if (K2_AnimStep(o)) U8(o + 0x54) = 2;
+}
+
+void DC2CALL WObj4(gptr o) { wo_handler(o, 0x7221E8, 0); }          /* 0x44EF10 */
+
+/* -- weapon 5 (0x72160C [5]): steps 0x72222C, records 0x7221F8; its
+   handler runs only its step and the parent's sync (kinds 0/1 run their
+   motion in the step). Kind 3 tries a hit (Weapon_Hit 0x1B at its place) for
+   20 frames over the reach +0xA0 (less +0x74 a frame); out of reach, the
+   fourth time on (count 0x74B170) it falls back as kind 1, started again.
+   Kinds 4 and 5 fade (+0x64..+0x66, by 8 and 2) after +0x98 frames -- */
+void DC2CALL WObj5_Init(gptr o)                                      /* 0x44F140 */
+{
+    U8(o + 0x54)++;
+    if (U8(o + 0x7A) == 2) { wo_lit(o); return; }
+    wo_turn(o, 0);
+    wo_look(o, 0x7221F8);
+    U16(o + 0xA2) = 0;
+}
+
+static void wo_fade(gptr o, u8 by)
+{
+    U8(o + 0x65) += by; U8(o + 0x64) += by; U8(o + 0x66) += by;
+}
+
+void DC2CALL WObj5_Fly(gptr o)                                       /* 0x44F200 */
+{
+    U16(o + 0x40) += U16(o + 0x7C);
+    U16(o + 0x42) += U16(o + 0x7E);
+    U16(o + 0x44) += U16(o + 0x80);
+    switch (U8(o + 0x7A)) {
+    case 0: case 1:
+        Orig_Call1(U32(0x7215E4 + U8(o + 0x7B) * 4), o);
+        if (K2_AnimStep(o)) U8(o + 0x54) = 2;
+        return;
+    case 2: U8(o + 0x54) = 2; return;
+    case 3: {
+        if (K2_AnimStep(o)) { U8(o + 0x54) = 2; return; }
+        if (++S16(o + 0xA2) > 0x14) return;
+        if (Weapon_Hit(o, o + 0x40, 0x1B)) { U8(o + 0x54) = 2; return; }
+        U16(o + 0xA0) -= U16(o + 0x74);
+        if (S16(o + 0xA0) >= 0) return;
+        s8 c = (s8)U8(0x74B170);
+        U8(0x74B170) = (u8)(c + 1);
+        if (c <= 3) { U8(o + 0x54) = 2; return; }
+        U16(o + 0x40) -= U16(o + 0x7C);
+        U16(o + 0x44) -= U16(o + 0x80);
+        U8(0x74B170) = 0;
+        U8(o + 0x54) = 0; U8(o + 0x7A) = 1; U8(o + 0x7B) = 0;
+        U16(o + 0x6E) = 0xF; U16(o + 0x6C) = 0xF;
+        U16(o + 0x7C) = 0;
+        U16(o + 0x7E) = (u16)(-0x19 - (Rand8() & 0x1F));
+        U16(o + 0x80) = 0;
+        WObj5_Init(o);
+        return;
+    }
+    case 4:
+        if (--S16(o + 0x98) < 0) {
+            if (U16(o + 0x6C)) U16(o + 0x6C)--;
+            if (U16(o + 0x6E)) U16(o + 0x6E)--;
+            wo_fade(o, 0xF8);
+            if (!U8(o + 0x64)) { U8(o + 0x54)++; K2_AnimStep(o); return; }
+        }
+        K2_AnimStep(o);
+        return;
+    case 5:
+        if (--S16(o + 0x98) < 0) {
+            wo_fade(o, 0xFE);
+            if (!U8(o + 0x64)) U8(o + 0x54) = 2;
+            if (U16(o + 0x6C)) U16(o + 0x6C)--;
+            if (U16(o + 0x6E)) U16(o + 0x6E)--;
+        }
+        K2_AnimStep(o);
+        return;
+    }
+}
+
+void DC2CALL WObj5(gptr o)                                           /* 0x44F120 */
+{
+    Orig_Call1(U32(0x72222C + U8(o + 0x54) * 4), o);
+    K2_SyncParent(o);
+}
+
+/* the burst of three (kind 4 of weapons 2 and 6): two copies made behind
+   it (one turned 0x400 about z and x, one about z), it raised 0x80 */
+static void wo_burst(gptr o, gptr anim, int clear_again)
+{
+    U16(o + 0x4C) = 0x400; U16(o + 0x4A) = 0x400;
+    U8(o + 0x84) |= 1;
+    U8(o + 0x46) = 0;
+    gptr a = K2_AllocBack();
+    if (!a) { K2_Unlink(o); return; }
+    memcpy(MEM(a), MEM(o), 0xAC);
+    K2_SyncParent(a);
+    U16(o + 0x4A) = 0;
+    gptr b = K2_AllocBack();
+    if (!b) { K2_Unlink(o); return; }
+    memcpy(MEM(b), MEM(o), 0xAC);
+    K2_SyncParent(b);
+    U16(o + 0x42) += 0x80;
+    if (clear_again) U16(o + 0x4A) = 0;
+    U16(o + 0x48) = 0x400;
+    K2_SetAnim(o, U32(anim));
+}
+
+/* -- weapon 6 (0x72160C [6]): steps 0x722278, records 0x722238; kind 2 a
+   light, 3 thrown (a random push, bouncing for +0x9E frames), 4..6 a
+   burst of three -- */
+void DC2CALL WObj6_Init(gptr o)                                      /* 0x44F450 */
+{
+    U8(o + 0x54)++;
+    if (U8(o + 0x7A) == 2) { wo_lit(o); return; }
+    wo_turn(o, 0);
+    wo_look(o, 0x722238);
+    u8 k = U8(o + 0x7A);
+    if (k == 3) {
+        U8(o + 0x85) = 0x10;
+        U8(o + 0x84) &= 0xFE;
+        U16(o + 0x7C) += (u16)((Rand8() >> 4) - 8);
+        U16(o + 0x7E) += (u16)((Rand8() >> 3) - 0x10);
+        U16(o + 0x80) -= (u16)(Rand8() >> 2);
+        U16(o + 0x9E) = 0x19;
+    } else if (k >= 4 && k <= 6) wo_burst(o, 0x722274, 0);
+}
+
+void DC2CALL WObj6_Fly(gptr o)                                       /* 0x44F620 */
+{
+    wo_move(o);
+    switch (U8(o + 0x7A)) {
+    case 0: case 1: if (K2_AnimStep(o)) U8(o + 0x54) = 2; return;
+    case 2: U8(G() + 0xF) = 0; K2_Unlink(o); return;
+    case 3: wo_bounce(o, 0x9E, 1, 0); return;
+    case 4: case 5: case 6: case 7: K2_Unlink(o); return;
+    }
+}
+
+void DC2CALL WObj6(gptr o) { wo_handler(o, 0x722278, 0); }          /* 0x44F410 */
+
+/* -- weapon 7 (0x72160C [7]): steps 0x722338, records 0x722288; made only
+   while the player is in state 6 (or 5, its sub-state 5 or 6). Kind 2 a
+   light, 3 thrown (bouncing, halved; +0x9E frames, then +0x6C bounces), 4/5
+   a burst of three, 8/9 a pair turned by the table 0x7222D8 (+0x98) -- */
+void DC2CALL WObj7_Init(gptr o)                                      /* 0x44F840 */
+{
+    gptr pl = U32(G() + 0x940);
+    u8 st = U8(pl + 0x55);
+    if (st != 6 && !(st == 5 && (U8(pl + 0x56) == 5 || U8(pl + 0x56) == 6))) { K2_Unlink(o); return; }
+    U8(o + 0x54)++;
+    if (U8(o + 0x7A) == 2) { wo_lit(o); return; }
+    wo_turn(o, 0);
+    wo_look_f(o, 0x722288);
+    u8 k = U8(o + 0x7A);
+    switch (k) {
+    case 3:
+        U8(o + 0x85) = 0x10;
+        U8(o + 0x84) &= 0xFE;
+        U16(o + 0x7C) += (u16)((Rand8() >> 4) - 8);
+        U16(o + 0x7E) -= (u16)(Rand8() >> 2);
+        U16(o + 0x80) -= (u16)(Rand8() >> 2);
+        U16(o + 0x9E) = (u16)(0x1E - Rand8() % 20);
+        return;
+    case 4: case 5:
+        wo_burst(o, 0x72229C + k * 8, 0);
+        return;
+    case 8: case 9: {
+        s32 i = S16(o + 0x98) * 3;
+        U32(o + 0x48) = U32(0x7222D8 + i * 8);
+        U32(o + 0x4C) = U32(0x7222DC + i * 8);
+        gptr a = K2_AllocBack();
+        if (!a) { K2_Unlink(o); return; }
+        memcpy(MEM(a), MEM(o), 0xAC);
+        K2_SyncParent(a);
+        i = S16(o + 0x98) * 3;
+        U32(o + 0x48) = U32(0x7222E0 + i * 8);
+        U32(o + 0x4C) = U32(0x7222E4 + i * 8);
+        return;
+    }
+    }
+}
+
+/* step 1 of weapons 7 and 9: moved; kinds 0/1 on when their animation
+   ends, 2 gone (G+0xF cleared), 3 bouncing (its speed halved off the floor;
+   lifted in room 0x402 only for the tests), 4..last gone */
+static void wo_fly_halved(gptr o, u8 last_kind)
+{
+    gptr pos = o + 0x40, last = o + 0x74;
+    wo_move(o);
+    u8 k = U8(o + 0x7A);
+    if (k > last_kind) return;
+    if (k <= 1) { if (K2_AnimStep(o)) U8(o + 0x54) = 2; return; }
+    if (k == 2) { U8(G() + 0xF) = 0; K2_Unlink(o); return; }
+    if (k != 3) { K2_Unlink(o); return; }
+    s16 y = S16(o + 0x42);
+    U16(o + 0x4C) += 0xFE00;
+    U16(o + 0x5A) = (u16)(y / -1000);
+    int lifted = 0;
+    if (U16(G() + 0x1090) == 0x402 && y < -10000) {
+        U16(o + 0x76) += 10000;
+        U16(o + 0x42) = (u16)(y + 10000);
+        lifted = 1;
+    }
+    u16 r = (u16)Floor_Cross(pos, last, pos, 0x10);
+    if (r == 0xFFFE) { U8(o + 0x54) = 2; return; }
+    if (!r) {
+        U16(pos) = U16(last);
+        U16(o + 0x44) = U16(o + 0x78);
+        U16(o + 0x42) = U16(o + 0x76);
+        s32 v = -(S16(o + 0x7E) / 2);
+        U16(o + 0x7E) = (u16)v;
+        if ((s32)(s16)v + S16(o + 0x9A) > -1) { U16(o + 0x9A) = 0; U16(o + 0x7E) = 0; }
+        Se_Play(U32(G() + 0x940), 0x13);
+    }
+    if (Eff_WallHit(o)) {
+        U16(pos) = U16(last);
+        U16(o + 0x44) = U16(o + 0x78);
+        U16(o + 0x80) = (u16)-U16(o + 0x80);
+        U16(o + 0x7C) = (u16)-U16(o + 0x7C);
+        Se_Play(U32(G() + 0x940), 0x13);
+    }
+    if (lifted) { U16(o + 0x42) += 0xD8F0; U16(o + 0x76) += 0xD8F0; }
+    K2_AnimStep(o);
+    if (--S16(o + 0x9E) > 0) return;
+    if (--S16(o + 0x6C)) return;
+    U8(o + 0x54) = 2;
+}
+
+void DC2CALL WObj7_Fly(gptr o) { wo_fly_halved(o, 11); }            /* 0x44FAF0 */
+
+void DC2CALL WObj7(gptr o) { wo_handler(o, 0x722338, 0); }          /* 0x44F800 */
+
+/* -- weapon 8 (0x72160C [8]): steps 0x722390, records 0x722348; kind 2 a
+   light; none without a living parent; kind 3 runs while its parent lives,
+   8 is gone at once -- */
+void DC2CALL WObj8_Init(gptr o)                                      /* 0x44FD30 */
+{
+    U8(o + 0x54)++;
+    if (U8(o + 0x7A) == 2) { wo_lit(o); return; }
+    gptr p = U32(o + 0x60);
+    if (p && !(U8(p + 0x50) & 1)) { K2_Unlink(o); return; }
+    wo_turn(o, 0);
+    wo_look(o, 0x722348);
+}
+
+void DC2CALL WObj8_Fly(gptr o)                                       /* 0x44FE00 */
+{
+    wo_move(o);
+    switch (U8(o + 0x7A)) {
+    case 2: U8(G() + 0xF) = 0; K2_Unlink(o); return;
+    case 3:
+        if (!(U8(U32(o + 0x60) + 0x50) & 1)) { K2_Unlink(o); return; }
+        K2_AnimStep(o);
+        return;
+    case 8: K2_Unlink(o); return;
+    default: if (K2_AnimStep(o)) U8(o + 0x54) = 2; return;
+    }
+}
+
+void DC2CALL WObj8(gptr o) { wo_handler(o, 0x722390, 0); }          /* 0x44FCF0 */
+
+/* -- weapon 9 (0x72160C [9]): steps 0x7223E8, records 0x7223A0; turned
+   upright first; kind 2 a light; 3 thrown (a random push, 50 frames), its
+   push turned back if a wall stands between the player and where it starts
+   in the world; 4 a fan of three (turned 0x400 apart) -- */
+void DC2CALL WObj9_Init(gptr o)                                      /* 0x44FF00 */
+{
+    wo_turn(o, 0);
+    U8(o + 0x54)++;
+    if (U8(o + 0x7A) == 2) { wo_lit(o); return; }
+    wo_look_f(o, 0x7223A0);
+    u8 k = U8(o + 0x7A);
+    if (k == 3) {
+        U8(o + 0x85) = 0x10;
+        U8(o + 0x84) &= 0xFE;
+        U16(o + 0x9E) = 0x32;
+        U16(o + 0x7C) += (u16)((Rand8() >> 4) - 8);
+        U16(o + 0x7E) += (u16)((Rand8() >> 3) - 0x10);
+        U16(o + 0x80) += (u16)((Rand8() >> 3) - 0x10);
+        u16 x = U16(o + 0x40), y = U16(o + 0x42), z = U16(o + 0x44);
+        gptr pl = U32(G() + 0x940);
+        U16(o + 0x74) = U16(pl + 0x40);
+        U16(o + 0x78) = U16(pl + 0x44);
+        ApplyMatrixSV(U32(o + 0x60) + 0x20, o + 0x40, o + 0x40);
+        gptr p = U32(o + 0x60);
+        U16(o + 0x40) += U16(p + 0x40);
+        U16(o + 0x42) += U16(p + 0x42);
+        U16(o + 0x44) += U16(p + 0x44);
+        U16(o + 0x5A) = (u16)(S16(o + 0x42) / -1000);
+        if (Eff_WallHit(o)) {
+            U16(o + 0x7E) = (u16)-U16(o + 0x7E);
+            U16(o + 0x7C) = (u16)-U16(o + 0x7C);
+        }
+        U16(o + 0x40) = x; U16(o + 0x42) = y; U16(o + 0x44) = z;
+    } else if (k == 4) {
+        U8(o + 0x7B) = 0;
+        U8(o + 0x84) |= 1;
+        U8(o + 0x46) = 0;
+        U16(o + 0x4A) += 0x400;
+        U16(o + 0x4C) += 0x400;
+        gptr a = K2_AllocBack();
+        if (!a) { K2_Unlink(o); return; }
+        memcpy(MEM(a), MEM(o), 0xAC);
+        K2_SyncParent(a);
+        U16(o + 0x4A) += 0xFC00;
+        gptr b = K2_AllocBack();
+        if (!b) { K2_Unlink(o); return; }
+        memcpy(MEM(b), MEM(o), 0xAC);
+        K2_SyncParent(b);
+        U16(o + 0x4C) += 0xFC00;
+        U16(o + 0x48) += 0x400;
+        U16(o + 0x42) += 0x80;
+        K2_SetAnim(o, U32(0x7223E4));
+    }
+}
+
+void DC2CALL WObj9_Fly(gptr o) { wo_fly_halved(o, 8); }             /* 0x450180 */
+void DC2CALL WObj9(gptr o) { wo_handler(o, 0x7223E8, 0); }          /* 0x44FEC0 */
+
+/* -- weapon 10 (0x72160C [10]): steps 0x722418, records 0x7223F8; upright
+   first; kind 2 a light of style 2; 3 a pair (one copy, then turned 0xC00
+   about x), its own page and CLUT; it does not move -- */
+void DC2CALL WObj10_Init(gptr o)                                     /* 0x4503C0 */
+{
+    U8(o + 0x54)++;
+    wo_turn(o, 0);
+    u8 k = U8(o + 0x7A);
+    if (k <= 1) {
+        U32(o + 0x50) |= 2;
+        K2_SetAnim(o, U32(0x7223FC + k * 8));
+        k = U8(o + 0x7A);
+        U16(o + 0x6A) = (u16)(U8(0x7223F9 + k * 8) << 5 | 0xA);
+        U16(o + 0x68) = (u16)(U8(0x7223FA + k * 8) + 0x7E08);
+        U8(o + 0x67) |= U8(0x7223F8 + k * 8);
+    } else if (k == 2) {
+        K2_Light(o, 2);
+        U8(o + 0x50) &= 0xFD;
+    } else if (k == 3) {
+        K2_SetAnim(o, U32(0x722414));
+        U32(o + 0x50) |= 2;
+        U16(o + 0x6A) = 0x7B;
+        U16(o + 0x68) = 0x7F80;
+        U8(o + 0x67) |= U8(0x7223F8 + U8(o + 0x7A) * 8);
+        U8(o + 0x84) |= 1;
+        U16(o + 0x4C) = 0x400;
+        gptr a = K2_AllocBack();
+        if (!a) { K2_Unlink(o); return; }
+        memcpy(MEM(a), MEM(o), 0xAC);
+        K2_SyncParent(a);
+        U16(o + 0x4A) = 0xC00;
+    }
+}
+
+void DC2CALL WObj10_Run(gptr o)                                      /* 0x450520 */
+{
+    U32(o + 0x74) = U32(o + 0x40);
+    U16(o + 0x78) = U16(o + 0x44);
+    switch (U8(o + 0x7A)) {
+    case 0: case 1: if (K2_AnimStep(o)) U8(o + 0x54) = 2; return;
+    case 2: U8(G() + 0xF) = 0; K2_Unlink(o); return;
+    case 3: K2_Unlink(o); return;
+    }
+}
+
+void DC2CALL WObj10(gptr o) { wo_handler(o, 0x722418, 0); }         /* 0x450380 */
+
+/* -- weapon 11 (0x72160C [11]): steps 0x722450, records 0x722428; kind 2
+   a light of style 2; kinds 3/4 blended otherwise (0x1C), kinds past 4 keep
+   their blend -- */
+void DC2CALL WObj11_Init(gptr o)                                     /* 0x4505C0 */
+{
+    U8(o + 0x54)++;
+    if (U8(o + 0x7A) == 2) { K2_Light(o, 2); U8(o + 0x50) &= 0xFD; return; }
+    wo_turn(o, 0);
+    u32 k = U8(o + 0x7A);
+    K2_SetAnim(o, U32(0x72242C + k * 8));
+    U8(o + 0x50) |= 2;
+    k = U8(o + 0x7A);
+    U16(o + 0xA2) = 0;
+    U8(o + 0x67) |= U8(0x722428 + k * 8);
+    U16(o + 0x68) = (u16)(U8(0x72242A + k * 8) + 0x7E08);
+    if (k <= 1) U16(o + 0x6A) = (u16)(U8(0x722429 + k * 8) << 5 | 0xA);
+    else if (k == 3 || k == 4) U16(o + 0x6A) = (u16)(U8(0x722429 + k * 8) << 5 | 0x1C);
+}
+
+void DC2CALL WObj11_Fly(gptr o)                                      /* 0x4506C0 */
+{
+    wo_move(o);
+    u8 k = U8(o + 0x7A);
+    if (k == 2) { U8(G() + 0xF) = 0; K2_Unlink(o); return; }
+    if (k <= 4 && K2_AnimStep(o)) U8(o + 0x54) = 2;
+}
+
+void DC2CALL WObj11(gptr o) { wo_handler(o, 0x722450, 0); }         /* 0x450580 */
+
+/* -- weapon 12 (0x72160C [12]): steps 0x722498, records 0x722460; kind 2 a
+   light; +0x50 bit 2 (K2_UpdateHidden) but for kinds 3, 5 and 6; kind 6 a
+   flash on its own page (G+0x927 picks it) that dims the screen unless flag
+   2/6; kind 3 runs while its parent's +0x50 is not 0 -- */
+void DC2CALL WObj12_Init(gptr o)                                     /* 0x4507B0 */
+{
+    U8(o + 0x54)++;
+    if (U8(o + 0x7A) == 2) { wo_lit(o); return; }
+    wo_turn(o, 0);
+    u8 k = U8(o + 0x7A);
+    K2_SetAnim(o, U32(0x722464 + k * 8));
+    u32 f = U32(o + 0x50) | 4;
+    U32(o + 0x50) = f;
+    if (k == 6) {
+        if (U8(G() + 0x927)) { U16(o + 0x6A) = 0x37; U16(o + 0x68) = 0x7F42; }
+        else { U16(o + 0x6A) = 0x38; U16(o + 0x68) = 0x7E80; }
+        U32(o + 0x50) = f & ~4u;
+    } else {
+        U16(o + 0x6A) = (u16)(U8(0x722461 + k * 8) << 5 | 0xA);
+        U16(o + 0x68) = (u16)(U8(0x722462 + k * 8) + 0x7E08);
+    }
+    f = U32(o + 0x50) | 2;
+    U32(o + 0x50) = f;
+    U16(o + 0xA2) = 0;
+    U8(o + 0x67) |= U8(0x722460 + k * 8);
+    if (k == 5 || k == 3) U32(o + 0x50) = f & ~4u;
+    if (k == 6 && !Flag_Check(2, 6)) {
+        U8(G() + 0x814) = 1;
+        Fade_Set(0, 0xF, 2);
+    }
+}
+
+void DC2CALL WObj12_Fly(gptr o)                                      /* 0x450900 */
+{
+    wo_move(o);
+    switch (U8(o + 0x7A)) {
+    case 0: case 1: case 4: case 6: if (K2_AnimStep(o)) U8(o + 0x54) = 2; return;
+    case 2: U8(G() + 0xF) = 0; K2_Unlink(o); return;
+    case 3:
+        if (!U32(U32(o + 0x60) + 0x50)) K2_Unlink(o);
+        K2_AnimStep(o);
+        return;
+    case 5: K2_Unlink(o); return;
+    }
+}
+
+void DC2CALL WObj12(gptr o) { wo_handler(o, 0x722498, WO_HIDDEN); }  /* 0x450760 */
 
 void DC2CALL SubWeaponObj_Type(gptr o)                              /* 0x4488E0 */
 {
