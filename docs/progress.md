@@ -80,15 +80,10 @@ dispatches through `Orig_Call*`: those entries are reached in play, and the
 standalone builds then print `not rewritten yet: handler 0x...` (once each)
 or stop the task (`task 0: 0x... not rewritten yet`).
 
-At the time of writing (1868 entries found, 1792 rewritten):
-
-| address | reached through | what |
-|---|---|---|
-| 0x44E3B0, 0x44E910, 0x44ED20, 0x44EF10, 0x44F120, 0x44F410, 0x44F800, 0x44FCF0, 0x44FEC0, 0x450380, 0x450580, 0x450760 | the weapon object type (`aobj.c`, 0x72160C [0, 2..12], by the weapon in hand G+0x10B4 & 0xF) | the objects of the other weapons (weapon 1's, 0x44E530, is done) |
-| their steps: tables 0x7220B8 .. 0x722498 (two each) | the objects above (+0x54) | rewritten with them |
-| 0x44D9E0, 0x44DB30, 0x44DDC0, 0x44DFA0, 0x44E080, 0x44E1D0, 0x44E2C0 | the sub-weapon object type (`aobj.c`, 0x721640, by G+0x10B4 >> 8) | the sub-weapons' objects |
-| their steps: tables 0x721F80 .. 0x722090 | the objects above | rewritten with them |
-| 0x4132A0, 0x4132F0 | a light's script step (`aobj.c`, 0x71E1B4 by l+3) | two of the steps |
+At the time of writing (1868 entries found, 1847 rewritten), nothing the C
+code dispatches by address is left: the weapons' and sub-weapons' objects
+(0x72160C, 0x721640) with their steps and the emitter script's steps
+(0x71E1B4) are rewritten (`aobj.c`).
 
 Listed by the tool but not to rewrite as such: the `obj_set` / `obj_get`
 kinds (0x738B20, 0x738B44: rewritten as static functions of their C
