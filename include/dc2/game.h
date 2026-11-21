@@ -336,6 +336,7 @@ void DC2CALL Game_AreaLoad(void);                                       /* 0x451
 void DC2CALL Game_RoomEnter(void);                                      /* 0x451330 */
 void DC2CALL Game_Play(void);                                           /* 0x451790 */
 void DC2CALL GameTask(void);                                            /* 0x4510F0 */
+void DC2CALL Game_Resume(void);                                         /* 0x451660: back to play after a terminal */
 
 /* handler used for an opcode that is not reimplemented yet: in the hook
  * build it calls the original code, elsewhere it reports and stops the thread */

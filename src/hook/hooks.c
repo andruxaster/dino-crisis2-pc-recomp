@@ -1735,6 +1735,7 @@ const Hook g_hooks[] = {
     {0x450E00, (void *)Game_NewState,       "Game_NewState"},
     {0x4510D0, (void *)Game_ClearState,     "Game_ClearState"},
     {0x4510F0, (void *)GameTask,            "GameTask"},
+    {0x451660, (void *)Game_Resume,       "Game_Resume"},
     {0x451120, (void *)Game_Init,           "Game_Init"},
     {0x4512F0, (void *)Game_AreaLoad,       "Game_AreaLoad"},
     {0x451330, (void *)Game_RoomEnter,      "Game_RoomEnter"},

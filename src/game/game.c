@@ -207,6 +207,42 @@ void DC2CALL OpeningTask(void)                                       /* 0x475630
     }
 }
 
+/* ---- back to play (0x451660): after a save room's terminal (Shop_Leave) or
+ * flag 2/0x11 in play: first the game's state again (Game_Start 1, G+0x76C
+ * set); then the camera from before restored and loaded, a fade in, the
+ * frame rate (area 7's rooms: 20 a second, their fog colour), the pads
+ * cleared, and on to the game task ---- */
+void DC2CALL Game_Resume(void)                                       /* 0x451660 */
+{
+    gptr g = G();
+    if (!U16(g + 0x76C)) {
+        U16(g + 0x76C) = 1;
+        Game_Start(1);
+        return;
+    }
+    gptr c = g + 0x778;
+    U8(g + 0xB49) = 1;
+    u32 cam = (g & 0xFFFF0000u) | U8(c + 0x4C);     /* (the original pushes cx over the G pointer's high half) */
+    U8(c + 0x4C) = U8(c + 0x4E);
+    U8(g + 0x84B) = 0xFF;
+    Camera_Switch(cam);
+    Camera_Load();
+    U8(G() + 0xB48) = 0;
+    Fade_Set(1, 1, 1);
+    Task_Sleep(1);
+    Fade_Set(0, 0xF, 1);
+    g = G();
+    U32(U32(g + 0x940) + 0x54) = 1;
+    if (U8(g + 0x1091) == 7) {
+        U8(g + 0xB58) = 0x70; U8(g + 0xB59) = 0x70; U8(g + 0xB5A) = 0x70;
+        U8(g + 0xB5B) = 0; U8(g + 0xB5C) = 0;
+        U32(0x87DE00) = 3;
+    } else U32(0x87DE00) = 2;
+    U16(0x87DC08) = 0; U16(0x87DC94) = 0; U16(0x87DDFC) = 0; U16(0x87DC00) = 0;
+    U16(g + 0x76C) = 0;
+    Task_Chain(0x4510F0);
+}
+
 /* ---- the game task (0x4510F0): G+0x664 mode ------------------------------------------------- */
 void DC2CALL Game_Init(void)                                         /* 0x451120  mode 0 */
 {

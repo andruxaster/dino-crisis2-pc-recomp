@@ -2997,3 +2997,4 @@ address,kind,name,category,confidence,notes
 0x44E570,func,WeaponObj1_Init,game,high,"weapon 1 object step 0: kind records 0x7220C8; kind 4 two copies, kind 3 random bounce"
 0x44E740,func,WeaponObj1_Fly,game,high,"weapon 1 object step 1: flight, kind 3 bounces off floor (Floor_Cross) and walls (Eff_WallHit)"
 0x4713F0,func,Box_CloseResult,message,high,"box mode 0x723F70[20]: closed, BOX+0x14 to G+0xB14, flag 2:0xC by BOX+0x18 bit 0; src/game/misc.c"
+0x451660,func,Game_Resume,game,high,"back to play after a terminal (Shop_Leave) or flag 2/0x11: Game_Start 1, camera restored, fade, frame rate, GameTask"
