@@ -15,6 +15,7 @@ PC builds (which keep using the originals):
 
     tools/dreamcast/dc2_music.py  /srv/dc2/Data --strip        # music: MP3 -> Data/BGM/*.WAV (IMA ADPCM)
     tools/dreamcast/dc2_movies.sh /srv/dc2/MOVIE --remove-dat  # movies: MPEG-1 -> MOVIE/*.AVI (Cinepak)
+    tools/dreamcast/dc2_speech.py /srv/dc2/SPEECH              # voices: PCM -> IMA ADPCM 22050 Hz, in place
 
 - **Music.** Each area's `MS_*.DAT` holds its music as MP3 streams that the PC
   game loads whole (8 MB and more). `dc2_music.py` writes each distinct stream
@@ -33,12 +34,19 @@ PC builds (which keep using the originals):
   so the picture stays with the sound. The file is read once, in order; video
   chunks the sound reads past wait in a queue.
 
-`SPEECH/` stays as it is (PCM waves): the Dreamcast build plays each line
-from the disc as it goes (`Snd_OpenFileVoice`, `src/pc/audio.c`) instead of
-reading it whole into the game heap and copying it (the longest is 1.5 MB).
+The Dreamcast build plays each voice from the disc as it goes
+(`Snd_OpenFileVoice`, `src/pc/audio.c`) instead of reading it whole into the
+game heap and copying it (the longest is 1.5 MB). The originals are PCM
+waves, the lines at 18900 Hz mono and the films' sound effects
+(`1000.DAT` on, roars among them) at 37800 Hz stereo: 151 KB a second, read
+in the sound thread under the mixer's lock (holding up the sound and the
+game's sound calls while the disc seeks) and resampled to the mix's rate.
+`dc2_speech.py` makes them IMA ADPCM at 22050 Hz, channels kept, as the
+music: 11 KB a second mono, 22 KB stereo, played as they are (~35 dB SNR,
+the originals kept in `SPEECH_ORIG/`). Unconverted voices still play.
 
-With both, `Data` (~250 MB), `MOVIE` (~320 MB) and `SPEECH` (43 MB) fit on an
-80-minute CD-R.
+With all three, `Data` (~250 MB), `MOVIE` (~320 MB) and `SPEECH` (~10 MB,
+43 MB unconverted) fit on an 80-minute CD-R.
 
 ## Building
 

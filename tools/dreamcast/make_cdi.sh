@@ -22,6 +22,10 @@ fi
 if find "$ROOT" -maxdepth 2 -ipath '*movie/*.dat' | grep -q . && ! find "$ROOT" -maxdepth 2 -ipath '*movie/*.avi' | grep -q .; then
     echo "WARNING: MOVIE/ has no .AVI - the Dreamcast skips the movies (run dc2_movies.sh)."
 fi
+sp=$(find "$ROOT" -maxdepth 2 -ipath '*speech/1000.dat' | head -1)
+if [ -n "$sp" ] && [ "$(od -An -tu2 -j20 -N2 "$sp" | tr -d ' ')" = "1" ]; then
+    echo "NOTE: SPEECH/ is still PCM - run dc2_speech.py (IMA ADPCM 22050 Hz: less to read from the disc)."
+fi
 kb=$(du -sk "$ROOT" | cut -f1)
 if [ "$kb" -gt $((680 * 1024)) ]; then
     echo "WARNING: $ROOT is $((kb / 1024)) MB - more than an 80-minute CD-R holds (emulators may still load it)."
