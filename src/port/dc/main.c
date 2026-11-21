@@ -36,6 +36,9 @@
 #include "ctx_sh4.h"
 #include "vmu_save.h"
 #include "unaligned.h"
+#include "dc2/stall.h"
+
+unsigned g_stall_us[STALL_N];
 
 #ifndef DC2_DC_ROOT
 #define DC2_DC_ROOT "/cd"
@@ -269,6 +272,7 @@ int main(int argc, char **argv)
     int quit = 0;
     for (u32 f = 0; !quit; f++) {
         g_pad_raw[0] = read_pad(&quit);
+        memset(g_stall_us, 0, sizeof g_stall_us);
         uint64_t t0 = timer_us_gettime64();
         Port_GameFrame();
         uint64_t t1 = timer_us_gettime64();
@@ -284,7 +288,8 @@ int main(int argc, char **argv)
         static u32 slow_n;
         if (f % 300 == 0) slow_n = 0;
         if ((tg > 100000 || td > 100000) && slow_n++ < 4)
-            printf("slow frame %u: game %u ms, drawing %u ms (game mode %u room %X%02X)\n", (unsigned)f, (unsigned)(tg / 1000), (unsigned)(td / 1000),
+            printf("slow frame %u: game %u ms, drawing %u ms (disc %u, JPEG %u, textures %u ms; game mode %u room %X%02X)\n", (unsigned)f,
+                   (unsigned)(tg / 1000), (unsigned)(td / 1000), g_stall_us[STALL_DISC] / 1000, g_stall_us[STALL_JPEG] / 1000, g_stall_us[STALL_TEX] / 1000,
                    (unsigned)U16(G() + 0x664), (unsigned)U8(G() + 0x1091), (unsigned)U8(G() + 0x1090));
 #endif
 #if DC2_DC_VERBOSE

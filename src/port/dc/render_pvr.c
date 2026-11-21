@@ -24,6 +24,8 @@
 #include "dc2/render.h"
 #include "render_pvr.h"
 #include "pvr_tile.h"
+#include "pvr_twiddle.h"
+#include "dc2/stall.h"
 
 #define VERTEX_BUF   (512 * 1024)
 #define NTEX         1024
@@ -129,14 +131,26 @@ static u16 to1555(const u8 *p) { return (u16)((p[3] >= 128 ? 0x8000 : 0) | (p[2]
 /* texels x0.. x0+tw, y0.. y0+th of t into a pw x ph piece at mem (32-bit
    pixels made 1555; the padding repeats the last row and column, for the
    filtering), through a temporary unless the texels fit as they are */
+static int tex_upload1(const RTexture *t, pvr_ptr_t mem, u32 x0, u32 y0, u32 tw, u32 th, u32 pw, u32 ph);
 static int tex_upload(const RTexture *t, pvr_ptr_t mem, u32 x0, u32 y0, u32 tw, u32 th, u32 pw, u32 ph)
 {
-    if (t->bpp == 2 && x0 == 0 && y0 == 0 && pw == t->w && ph == t->h && t->pitch == t->w * 2) {
-        pvr_txr_load_ex((void *)t->pixels, mem, pw, ph, PVR_TXRLOAD_16BPP);
+    STALL_BEGIN();
+    int r = tex_upload1(t, mem, x0, y0, tw, th, pw, ph);
+    STALL_END(STALL_TEX);
+    return r;
+}
+static int tex_upload1(const RTexture *t, pvr_ptr_t mem, u32 x0, u32 y0, u32 tw, u32 th, u32 pw, u32 ph)
+{
+    u16 *tw16 = memalign(32, pw * ph * 2);
+    if (!tw16) return 0;
+    if (t->bpp == 2 && x0 == 0 && y0 == 0 && pw == t->w && ph == t->h && !(t->pitch & 1)) {
+        pvr_twiddle16(t->pixels, t->pitch / 2, pw, ph, tw16);    /* (as it is: twiddled straight from the surface) */
+        pvr_txr_load(tw16, mem, pw * ph * 2);
+        free(tw16);
         return 1;
     }
     u16 *tmp = memalign(32, pw * ph * 2);
-    if (!tmp) return 0;
+    if (!tmp) { free(tw16); return 0; }
     for (u32 y = 0; y < th; y++) {
         const u8 *src = (const u8 *)t->pixels + (y0 + y) * t->pitch + x0 * t->bpp;
         u16 *row = tmp + y * pw;
@@ -145,8 +159,9 @@ static int tex_upload(const RTexture *t, pvr_ptr_t mem, u32 x0, u32 y0, u32 tw, 
         for (u32 x = tw; x < pw; x++) row[x] = row[tw - 1];
     }
     for (u32 y = th; y < ph; y++) memcpy(tmp + y * pw, tmp + (th - 1) * pw, pw * 2);
-    pvr_txr_load_ex(tmp, mem, pw, ph, PVR_TXRLOAD_16BPP);
-    free(tmp);
+    pvr_twiddle16(tmp, pw, pw, ph, tw16);
+    pvr_txr_load(tw16, mem, pw * ph * 2);
+    free(tmp); free(tw16);
     return 1;
 }
 

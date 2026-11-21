@@ -11,6 +11,7 @@
 #include <math.h>
 #include "dc2/types.h"
 #include "dc2/gpu.h"
+#include "dc2/stall.h"
 
 typedef struct {
     int id, h, v, tq;                 /* sampling factors, quantization table */
@@ -23,12 +24,16 @@ typedef struct {
 typedef struct {                      /* one Huffman table (jdhuff.c's derived form) */
     int maxcode[18], valoffset[17];
     unsigned char huffval[256];
+    unsigned short look[256];         /* the next 8 bits: length << 8 | value, 0 for a longer code */
     int present;
 } Huff;
 
 typedef struct {
     const unsigned char *p, *end;
-    unsigned buf; int bits;           /* bit buffer */
+    unsigned buf; int bits;           /* bit buffer: up to 4 bytes ahead of what is read */
+    int rbits;                        /* of its bits, those of the data (the rest: zeros past it) */
+    unsigned nbytes;                  /* bytes put in it so far */
+    const unsigned char *after[8];    /* p after each of the last of them */
     int marker;                       /* a marker hit: zeros from now on */
     int short_data;                   /* bits were wanted past it: MCUs left empty (jdhuff.c) */
     int eoi;                          /* the data's own EOI was reached */
@@ -61,14 +66,23 @@ static void huff_build(Huff *t, const unsigned char *bits, const unsigned char *
     }
     t->maxcode[17] = 0x7FFFFFFF;
     t->present = 1;
+    for (int b = 0; b < 256; b++) {                /* huff_decode's walk for codes of up to 8 bits */
+        int c = b >> 7, l = 1;
+        while (l <= 8 && c > t->maxcode[l]) { l++; if (l <= 8) c = c << 1 | (b >> (8 - l) & 1); }
+        t->look[b] = (unsigned short)(l <= 8 ? l << 8 | t->huffval[(c + t->valoffset[l]) & 0xFF] : 0);
+    }
 }
 
-/* the next bit of the scan; past its end (a marker, or the data's end, where
-   the port's source gives an EOI) zeros, and the data is short from then on */
-static int get_bit(Jpeg *j)
+/* The bits of the scan, read a byte at a time as libjpeg reads them; past
+ * the scan's end (a marker, or the data's end, where the port's source gives
+ * an EOI) zeros, and the data is short from the first of them on. The buffer
+ * runs ahead (for the 8-bit Huffman lookahead): rbits says which bits are
+ * the data's, after[] where the scan was after each byte, so that the end
+ * is found from the byte the last bit read came from (scan_end). */
+static void fill(Jpeg *j)
 {
-    if (!j->bits) {
-        int b = 0;
+    while (j->bits <= 24) {
+        int b = -1;
         if (!j->marker && j->p < j->end) {
             const unsigned char *q = j->p;
             b = *q++;
@@ -77,21 +91,51 @@ static int get_bit(Jpeg *j)
                 if (q < j->end && *q == 0) j->p = q + 1;    /* a stuffed FF */
                 else { j->marker = 1; b = -1; }
             } else j->p = q;
-        } else b = -1;
-        if (b < 0) { b = 0; j->short_data = 1; }
-        j->buf = (unsigned)b; j->bits = 8;
+        }
+        if (b < 0) b = 0; else if (j->rbits == j->bits) j->rbits += 8;
+        j->buf = j->buf << 8 | (unsigned)b; j->bits += 8;
+        j->after[j->nbytes++ & 7] = j->p;
     }
-    j->bits--;
-    return (int)(j->buf >> j->bits) & 1;
 }
 
-static int get_bits(Jpeg *j, int n) { int v = 0; while (n--) v = v << 1 | get_bit(j); return v; }
+static inline void skip_bits(Jpeg *j, int n)
+{
+    j->bits -= n;
+    if (n > j->rbits) { j->rbits = 0; j->short_data = 1; } else j->rbits -= n;
+}
+
+static inline int get_bit(Jpeg *j)
+{
+    if (!j->bits) fill(j);
+    int v = (int)(j->buf >> (j->bits - 1)) & 1;
+    skip_bits(j, 1);
+    return v;
+}
+
+static int get_bits(Jpeg *j, int n)
+{
+    if (n > 16) { int v = 0; while (n--) v = v << 1 | get_bit(j); return v; }
+    if (j->bits < n) fill(j);
+    int v = (int)(j->buf >> (j->bits - n)) & ((1 << n) - 1);
+    skip_bits(j, n);
+    return v;
+}
 
 static int huff_decode(Jpeg *j, const Huff *t)
 {
+    if (j->bits < 8) fill(j);
+    unsigned k = t->look[(j->buf >> (j->bits - 8)) & 0xFF];
+    if (k) { skip_bits(j, (int)(k >> 8)); return (int)(k & 0xFF); }
     int code = get_bit(j), l = 1;
     while (code > t->maxcode[l]) { code = code << 1 | get_bit(j); if (++l > 16) return 0; }
     return t->huffval[(code + t->valoffset[l]) & 0xFF];
+}
+
+/* where reading the scan a byte at a time would have left it */
+static void scan_end(Jpeg *j, const unsigned char *start)
+{
+    unsigned used = j->nbytes - (unsigned)j->bits / 8;
+    j->p = used ? j->after[(used - 1) & 7] : start;
 }
 
 static int extend(int v, int s) { return v < (1 << (s - 1)) ? v - (1 << s) + 1 : v; }
@@ -171,6 +215,11 @@ static void idct_float(const short *in, const float *q, unsigned char *out, int 
     }
     for (int r = 0; r < 8; r++) {
         const float *w = ws + 8 * r; unsigned char *o = out + r * stride;
+        if (w[1] == 0 && w[2] == 0 && w[3] == 0 && w[4] == 0 && w[5] == 0 && w[6] == 0 && w[7] == 0) {
+            unsigned char v = OUT(w[0]);                /* (every sum below is w[0] then, exactly) */
+            for (int i = 0; i < 8; i++) o[i] = v;
+            continue;
+        }
         float t10 = w[0] + w[4], t11 = w[0] - w[4], t13 = w[2] + w[6], t12 = (w[2] - w[6]) * K1_414 - t13;
         float t0 = t10 + t13, t3 = t10 - t13, t1 = t11 + t12, t2 = t11 - t12;
         float z13 = w[5] + w[3], z10 = w[5] - w[3], z11 = w[1] + w[7], z12 = w[1] - w[7];
@@ -257,7 +306,9 @@ static void upsample_row(const Comp *c, int y, unsigned char *out)
 
 /* ---- colour --------------------------------------------------------------------------------- */
 
-static unsigned char clamp255(int v) { return (unsigned char)(v < 0 ? 0 : v > 255 ? 255 : v); }
+/* 0..255, by a table (Y + a chroma term is within -256..511) */
+static unsigned char g_clamp[768];
+#define CLAMP(v) g_clamp[(v) + 256]
 
 /* the decoder: 0 when the stream is not one it knows */
 static int jpeg_run(Jpeg *j, gptr dst)
@@ -312,8 +363,9 @@ static int jpeg_run(Jpeg *j, gptr dst)
                 if (seg[1 + 2 * i] != j->c[i].id) return 0;
                 j->c[i].td = seg[2 + 2 * i] >> 4 & 3; j->c[i].ta = seg[2 + 2 * i] & 3; j->c[i].pred = 0;
             }
-            j->p = next; j->bits = 0; j->marker = 0; j->short_data = 0;
+            j->p = next; j->bits = j->rbits = 0; j->nbytes = 0; j->marker = 0; j->short_data = 0;
             scan(j);
+            scan_end(j, next);
             while (j->p + 1 < j->end && !(j->p[0] == 0xFF && j->p[1] != 0 && !(j->p[1] >= 0xD0 && j->p[1] <= 0xD7))) j->p++;
             continue; }
         default:
@@ -331,6 +383,7 @@ static int jpeg_run(Jpeg *j, gptr dst)
             crr[i] = (91881 * x + 32768) >> 16; cbb[i] = (116130 * x + 32768) >> 16;
             crg[i] = -46802 * x; cbg[i] = -22554 * x + 32768;
         }
+        for (int i = 0; i < 768; i++) g_clamp[i] = (unsigned char)(i < 256 ? 0 : i > 511 ? 255 : i - 256);
         built = 1;
     }
     unsigned char *r0 = malloc((size_t)j->width * 3 + 16), *r1 = r0 + j->width + 8, *r2 = r1 + j->width + 4;   /* (h2v2 writes 2*dw) */
@@ -342,7 +395,7 @@ static int jpeg_run(Jpeg *j, gptr dst)
         upsample_row(&j->c[2], y, r2);
         for (int x = 0; x < j->width; x++) {
             int Y = r0[x], cb = r1[x], cr = r2[x];
-            int r = clamp255(Y + crr[cr]), g = clamp255(Y + ((cbg[cb] + crg[cr]) >> 16)) & 0xF8, b = clamp255(Y + cbb[cb]) & 0xF8;
+            int r = CLAMP(Y + crr[cr]), g = CLAMP(Y + ((cbg[cb] + crg[cr]) >> 16)) & 0xF8, b = CLAMP(Y + cbb[cb]) & 0xF8;
             U16(o + 2 * x) = (u16)(((b << 5 | g) << 2) | r >> 3);           /* blue high (the PC's texture order) */
         }
     }
@@ -356,9 +409,11 @@ void DC2CALL PcJpeg_Decode(gptr dst, gptr src, u32 size, u32 mode)  /* 0x4D2990 
     if (mode != 2) return;
     Jpeg *j = calloc(1, sizeof *j);
     if (!j) return;
+    STALL_BEGIN();
     j->p = (const unsigned char *)MEM(src); j->end = j->p + size;
     jpeg_run(j, dst);
     if (!j->eoi) { U8(0x87B728) = 0xFF; U8(0x87B729) = 0xD9; }  /* the port's source ran dry: its fake EOI */
     for (int i = 0; i < 4; i++) free(j->c[i].plane);
     free(j);
+    STALL_END(STALL_JPEG);
 }

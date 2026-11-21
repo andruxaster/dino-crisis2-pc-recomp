@@ -47,10 +47,17 @@ $(OUT)/dc2: src/port/dc2.c src/port/frame.c $(OUT)/libdc2game.a
 $(OUT)/movie_test: tests/movie_test.c $(OUT)/libdc2game.a
 	$(CC) $(CFLAGS) -o $@ $^ -lm
 # the Dreamcast's large textures in pieces, checked on the host (tests/pvr_tile_test.c)
-$(OUT)/pvr_tile_test: tests/pvr_tile_test.c src/port/dc/pvr_tile.h
+$(OUT)/pvr_tile_test: tests/pvr_tile_test.c src/port/dc/pvr_tile.h src/port/dc/pvr_twiddle.h
 	$(CC) -O1 -Wall -Isrc/port/dc -o $@ $< -lm
 pvr-tile-test: $(OUT)/pvr_tile_test
 	$(OUT)/pvr_tile_test
+# the JPEG backgrounds kept to the same pixels without wine (tests/jpeg_test.c):
+# make jpeg-test JPEG_REF=file (written by "jpeg_test game/Data write file" before a change)
+JPEG_REF ?= build/jpeg_ref.txt
+$(OUT)/jpeg_test: tests/jpeg_test.c src/pc/jpeg.c
+	$(CC) -O2 -w -std=gnu11 -Iinclude -fexcess-precision=standard -o $@ $^ -lm
+jpeg-test: $(OUT)/jpeg_test
+	$(OUT)/jpeg_test game/Data check $(JPEG_REF)
 # the mix's resampling (DC2_MIX_SMOOTH), checked on the host (tests/mix_test.c)
 $(OUT)/mix_test: tests/mix_test.c src/pc/mix_tap.h
 	$(CC) -O1 -Wall -Isrc/pc -o $@ $< -lm
@@ -69,4 +76,4 @@ $(OUT)/dc2gl: src/port/dc2.c src/port/frame.c src/port/render_gl.c src/port/rend
 
 clean:
 	rm -rf $(OUT)
-.PHONY: all check linux dc2gl clean pvr-tile-test mix-test aica-test
+.PHONY: all check linux dc2gl clean pvr-tile-test mix-test aica-test jpeg-test
