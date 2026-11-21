@@ -80,6 +80,15 @@ void DC2CALL Fog_Enable(u32 on)                 { ORIG(0x4B4F50, void (DC2CALL *
 #endif
 
 const char *g_pc_root = ".";
+const char *g_pc_save_root;       /* the save files' folder (NULL: g_pc_root) */
+void (*g_pc_save_written)(const char *host, const char *name);
+
+/* SAVExx.DAT and other bare names the game writes: in g_pc_save_root when set */
+static int is_save_name(const char *p)
+{
+    if (strchr(p, '\\') || strchr(p, '/')) return 0;
+    return (p[0] | 32) == 's' && (p[1] | 32) == 'a' && (p[2] | 32) == 'v' && (p[3] | 32) == 'e';
+}
 
 static FILE *g_files[16];
 static int resolve(const char *game_path, char *out, size_t n);
@@ -90,7 +99,7 @@ int Pc_HostPath(const char *game_path, char *out, unsigned long n) { return reso
 static int resolve(const char *game_path, char *out, size_t n)
 {
     char comp[256];
-    snprintf(out, n, "%s", g_pc_root);
+    snprintf(out, n, "%s", g_pc_save_root && is_save_name(game_path) ? g_pc_save_root : g_pc_root);
     for (const char *s = game_path; *s;) {
         size_t k = 0;
         while (*s && *s != '\\' && *s != '/' && k < sizeof comp - 1) comp[k++] = *s++;
@@ -133,7 +142,20 @@ u32 DC2CALL Pc_Size(s32 fd)
 }
 s32 DC2CALL Pc_Seek(s32 fd, s32 off, u32 w) { return fseek(g_files[fd], off, (int)w); }
 s32 DC2CALL Pc_SeekSet(s32 fd, s32 off) { return fseek(g_files[fd], off, SEEK_SET); }
-void DC2CALL Pc_Close(s32 fd) { if (g_files[fd]) fclose(g_files[fd]); g_files[fd] = NULL; }
+static char g_created[16][64];     /* files made by Pc_Creat: their game names (g_pc_save_written) */
+void DC2CALL Pc_Close(s32 fd)
+{
+    if (g_files[fd]) fclose(g_files[fd]);
+    g_files[fd] = NULL;
+    if (g_created[fd][0]) {
+        if (g_pc_save_written) {
+            char host[1024];
+            resolve(g_created[fd], host, sizeof host);
+            g_pc_save_written(host, g_created[fd]);
+        }
+        g_created[fd][0] = 0;
+    }
+}
 s32 DC2CALL Pc_Creat(gptr path)
 {
     int fd = 0;
@@ -141,7 +163,8 @@ s32 DC2CALL Pc_Creat(gptr path)
     if (fd == 16) return -1;
     char host[1024];
     resolve((const char *)MEM(path), host, sizeof host);
-    g_files[fd] = fopen(host, "wb");
+    if (!(g_files[fd] = fopen(host, "wb"))) return -1;
+    snprintf(g_created[fd], sizeof g_created[fd], "%s", (const char *)MEM(path));
     return fd;
 }
 s32 DC2CALL Pc_Write(s32 fd, gptr buf, u32 n) { return g_files[fd] ? (s32)fwrite(MEM(buf), 1, n, g_files[fd]) : 0; }

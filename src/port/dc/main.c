@@ -32,6 +32,7 @@
 #include "../port.h"
 #include "render_pvr.h"
 #include "ctx_sh4.h"
+#include "vmu_save.h"
 
 #ifndef DC2_DC_ROOT
 #define DC2_DC_ROOT "/cd"
@@ -196,6 +197,7 @@ int main(int argc, char **argv)
         if (!t) { printf("the game's Data folder was not found (%s)\n", probe); return 1; }
         fclose(t);
     }
+    DcSave_Import();                               /* saves: /ram, mirrored to the VMU */
 #if DC2_DC_AUDIO
     audio_open();
 #endif
