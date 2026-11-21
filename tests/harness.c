@@ -3140,6 +3140,18 @@ static void test_frame(void)
                     U32(0x87DE04), U32(0x87DC88), U16(U32(G() + 0x940) + 0x5A), U16(G() + 0x10B4));
             check(F[k].addr, F[k].fn, F[k].name, 0, NULL, 0);
         }
+        for (int r = 0; r < 3; r++) {                          /* back to play (0x451660): the state first, then the camera before */
+            frame_state(); aot_state(); obj_part_counts();
+            gptr g = G();
+            U16(g + 0x76C) = (u16)(r == 0 ? 0 : rnd() % 4 ? 1 : rnd());
+            U8(g + 0x7C6) = (u8)(rnd() % 2 ? U8(g + 0x7C4) : rnd() % 8);
+            U8(g + 0x1091) = (u8)(rnd() % 2 ? 7 : rnd() % 10);
+            U8(g + 0xB49) = (u8)rnd(); U8(g + 0xB48) = (u8)rnd(); U8(g + 0x84B) = (u8)rnd();
+            U32(0x87DE00) = rnd() % 4;
+            U32(LOG_BASE) = 0;
+            sprintf(g_what, "resume %X camera %u back to %u area %u", U16(g + 0x76C), U8(g + 0x7C4), U8(g + 0x7C6), U8(g + 0x1091));
+            check(0x451660, Game_Resume, "Game_Resume", 0, NULL, 0);
+        }
         for (int r = 0; r < 4; r++) {                          /* the camera events' areas */
             frame_state(); aot_state(); obj_part_counts(); Flag_Set(2, 0xA, 1); Flag_Set(2, 0x1D, 0);
             U32(LOG_BASE) = 0;
