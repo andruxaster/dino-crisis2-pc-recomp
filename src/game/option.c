@@ -737,6 +737,164 @@ void DC2CALL Opt_ToGame(void)                                        /* 0x478E20
     Frame_Draw();
 }
 
+/* ---- the pause screen (G flag 2:0x10, set by pad 0x800 in Game_Play) ------------------
+ * 0x74E378 the stage reloaded on the way back (cleared: Opt_ToGame loads the
+ * options first), 0x74E379 choice (0 options, 1 back to the game; only 1 in
+ * rooms 1 and 0x80A), 0x74E37B frames since the last key (keys after 2),
+ * 0x737A58 the backdrop's slide (0..2). */
+#define P_STAGE   0x74E378u
+#define P_CHOICE  0x74E379u
+#define P_FRAMES  0x74E37Bu
+#define P_SLIDE   0x737A58u
+
+/* a sprite r {x, y, w, h} from u, v (code 0x64, semi 0x66) in the pause OT slot */
+void DC2CALL Pause_Sprite(gptr r, u32 u, u32 v, u32 tp, u32 color, u32 semi) /* 0x4795E0 */
+{
+    gptr p = U32(0x87DC98);
+    F32(p + 8) = (float)S16(r);
+    F32(p + 0xC) = (float)S16(r + 2);
+    U32(p + 0x10) = 0x3C23D70A;                             /* z 0.01 */
+    U16(p + 0x18) = U16(r + 4); U16(p + 0x1A) = U16(r + 6);
+    U8(p + 0x14) = (u8)u; U8(p + 0x15) = (u8)v; U16(p + 0x16) = (u16)tp;
+    U32(p + 4) = color | ((u16)semi ? 0x66000000 : 0x64000000);
+    gptr ot = U32(0x87F94C) + 0x74;
+    U32(p) = U32(ot) | 0x04000000;
+    U32(ot) = p & 0xFFFFFF;
+    U32(0x87DC98) += 0x1C;
+}
+
+/* sprites from a frame f (count at f+6) of 8-byte parts {u, v, w, h, s8 dx,
+ * s8 dy, ...} at x, y (w taken as it is: no 0 -> 256); color bit 31 blends;
+ * then a draw mode packet E1 with tpage (dfe on) */
+void DC2CALL Pause_Frames(gptr f, u32 x, u32 y, u32 tpage, u32 tp, u32 color) /* 0x479500 */
+{
+    u32 n = U8(f + 6);
+    if (n) {
+        gptr r = Tmp_Push(8);
+        u32 semi = color >> 31, c = color & 0xFFFFFF;
+        for (; n; n--, f += 8) {
+            U16(r) = (u16)((s8)U8(f + 4) + x); U16(r + 2) = (u16)((s8)U8(f + 5) + y);
+            U16(r + 4) = U8(f + 2); U16(r + 6) = U8(f + 3);
+            Pause_Sprite(r, U8(f), U8(f + 1), tp, c, semi);
+        }
+        Tmp_Pop(8);
+    }
+    gptr p = U32(0x87DC98);
+    U32(p + 4) = tpage | 0xE1000400;
+    U32(p + 8) = 0;
+    gptr ot = U32(0x87F94C) + 0x74;
+    U32(p) = U32(ot) | 0x02000000;
+    U32(ot) = p & 0xFFFFFF;
+    U32(0x87DC98) += 0xC;
+}
+
+/* the backdrop: the frame's picture in four 160x120 quarters (port code
+ * 0x8E), drawn a little smaller each of the first frames (P_SLIDE) */
+void DC2CALL Pause_Back(void)                                        /* 0x479240 */
+{
+    s16 t = S16(P_SLIDE);
+    for (u32 k = 0; k < 4; k++) {
+        gptr p = U32(0x87DC98);
+        u32 right = k & 1, low = k >> 1;
+        F32(p + 8) = right ? 160.0f : (float)t;
+        F32(p + 0xC) = low ? 120.0f : (float)t;
+        U16(p + 0x14) = (u16)(0xA0 - U16(P_SLIDE));
+        U16(p + 0x16) = (u16)(0x78 - U16(P_SLIDE));
+        U16(p + 0x10) = right ? 0xA0 : 0;
+        U16(p + 0x18) = 0xA0;
+        U8(p + 0x12) = low ? 0x78 : 0;
+        U16(p + 0x1A) = 0x78;
+        U8(p + 0x13) = 0;
+        U32(p + 4) = 0x8E808080;
+        gptr ot = U32(0x87F94C) + 0x78;
+        U32(p) = U32(ot) | 0x02000000;
+        U32(ot) = p & 0xFFFFFF;
+        U32(0x87DC98) += 0x1C;
+    }
+}
+
+static int pause_one_choice(void)
+{
+    u16 room = U16(G() + 0x1090);
+    return room == 0x80A || room == 1;
+}
+
+static void pause_resume(void)
+{
+    Flag_Set(2, 4, (u32)(s32)(s8)U8(G() + 0x14F0));
+    Snd_Unduck();
+    Flag_Set(2, 0x10, 0);
+    Flag_Set(2, 0x22, 0);
+    U16(0x87DC08) = 0; U16(0x87DC94) = 0; U16(0x87DDFC) = 0; U16(0x87DC00) = 0;
+    Task_Chain(0x4510F0);
+}
+
+/* the task: the game paused under its last picture; up/down choose, 0x20
+ * takes the choice (the options through Opt_ToGame, or back), 0x840 goes
+ * back to the game */
+void DC2CALL Pause_Task(void)                                        /* 0x478F40 */
+{
+    Flag_Set(2, 0x22, 1);
+    Flag_Set(2, 1, 0);
+    Flag_Set(2, 0xD, 0);
+    Flag_Set(2, 4, 1);
+    Lights_Unmark();
+    U8(P_STAGE) = 0; U8(P_CHOICE) = 0; U8(P_FRAMES) = 0; U8(0x74E37A) = 0;
+    U16(P_SLIDE) = 0;
+    if (pause_one_choice()) U8(P_CHOICE) = 1;
+    Snd_Duck();
+    Shake_Off();
+    for (;;) {
+        if (!pause_one_choice()) {
+            u32 a = 0xC0C0, b = 0xC0C0;
+            if (!U8(P_CHOICE)) b = 0x303030; else a = 0x303030;
+            Pause_Frames(0x685D50, 0x6A, 0x50, 9, 0x7DCB, 0x1537D1);
+            Pause_Frames(0x685D58, 0x78, 0x6C, 9, 0x7DCB, a);
+            Pause_Frames(0x685D88, 0x8A, 0x7A, 9, 0x7DCB, b);
+        } else {
+            Pause_Frames(0x685D50, 0x6A, 0x70, 9, 0x7DCB, 0x1537D1);
+        }
+        Pause_Back();
+        Frame_Draw();
+        s8 fr = (s8)(U8(P_FRAMES) + 1);
+        if (fr > 10) fr = 0xB;
+        U8(P_FRAMES) = (u8)fr;
+        s16 sl = (s16)(U16(P_SLIDE) + 1);
+        if (sl > 2) sl = 2;
+        U16(P_SLIDE) = (u16)sl;
+        if (fr > 2) {
+            u32 pad = U32(0x87DC00);
+            if (pad & 0x5000) {
+                if (!pause_one_choice()) {
+                    U8(P_FRAMES) = 0;
+                    Se_Play(0, 0);
+                    U8(P_CHOICE) ^= 1;
+                } else {
+                    U8(P_CHOICE) = 1;
+                }
+            } else if (pad & 0x840) {
+                Flag_Set(2, 4, (u32)(s32)(s8)U8(G() + 0x14F0));
+                Se_Play(0, 1);
+                Snd_Unduck();
+                Flag_Set(2, 0x10, 0);
+                Flag_Set(2, 0x22, 0);
+                U16(0x87DC08) = 0; U16(0x87DC94) = 0; U16(0x87DDFC) = 0; U16(0x87DC00) = 0;
+                Task_Chain(0x4510F0);
+            } else if (U8(0x87DC00) & 0x20) {
+                Se_Play(0, 2);
+                if (U8(P_CHOICE)) {
+                    pause_resume();
+                } else {
+                    U8(G() + 0xB48) = 1;
+                    U8(P_STAGE) = 0;
+                    Task_Chain(0x478E20);
+                }
+            }
+        }
+        Task_Sleep(1);
+    }
+}
+
 /* the task: the state cleared, the main mode 2, then each frame its mode
    and the menu's order table */
 void DC2CALL Option_Task(void)                                       /* 0x475720 */

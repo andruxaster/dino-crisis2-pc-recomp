@@ -39,9 +39,12 @@ endif()
 add_executable(dc2 src/port/dc2.c)
 target_link_libraries(dc2 PRIVATE dc2game)
 
-if(NOT WIN32)
+if(NOT MSVC)
   add_executable(smoke src/port/smoke.c)
   target_link_libraries(smoke PRIVATE dc2game)
+  if(WIN32)
+    target_link_options(smoke PRIVATE -static-libgcc)
+  endif()
 endif()
 
 # the game in a window

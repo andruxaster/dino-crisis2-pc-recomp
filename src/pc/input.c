@@ -47,6 +47,12 @@ void DC2CALL PcIn_DefaultKeys(void)                                  /* 0x4BF250
     for (u32 i = 0; i < 0x100; i += 4) U32(0x865EFC + i) = U32(0x73BDB8 + i);
 }
 
+/* the default joystick buttons (10 x {u16 button, u16 pad bit}) */
+void DC2CALL PcIn_DefaultButtons(void)                               /* 0x4BF2E0 */
+{
+    for (u32 i = 0; i < 0x28; i += 4) U32(0x8660FC + i) = U32(0x73BEB8 + i);
+}
+
 /* pad bit b bound to joystick button n */
 void DC2CALL PcIn_BindButton(u32 b, u32 n)                           /* 0x4BF2A0 */
 {

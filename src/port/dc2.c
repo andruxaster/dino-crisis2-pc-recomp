@@ -131,6 +131,10 @@ static int load_image(void)
     g_membase = calloc(1, IMAGE_SIZE + TMP_SIZE + HEAP_SIZE);
     if (!g_membase) return 0;
     Data_Init();
+    /* as the PC layer's input start-up (0x4BEDD7) without saved settings
+       (0x866144 clear): the default keys and joystick buttons, which the
+       options screen reads (Opt_KeyNames) */
+    if (!U32(0x866144)) { PcIn_DefaultKeys(); PcIn_DefaultButtons(); }
     return 1;
 }
 
