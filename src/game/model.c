@@ -24,7 +24,7 @@ static u32 ot_slot(u32 z) { return (z & ~0xFu) >= 0x3FF0 ? 0x3FF : z >> 4; }
 static float depth(u32 z)
 {
     s32 sc = (s32)(0x400u << ((U8(G() + 0xB4B) + 1) & 31));
-    return (float)((long double)z / (long double)sc);
+    return (float)((xreal)z / (xreal)sc);
 }
 
 /* the vertices projected and lit; the env-map uv of each normal turned into view space */
@@ -414,7 +414,7 @@ void DC2CALL End1_Ground(gptr t)                                         /* 0x48
         d = d >> 4 << 4;
         for (u32 k = 0; k < 0x15; k++, x += 0x10) {
             gptr p = U32(0x87DC98);
-            F32(p + 8) = (float)(long double)x;          /* (the first column: unsigned, off screen when scrolled) */
+            F32(p + 8) = (float)(xreal)x;          /* (the first column: unsigned, off screen when scrolled) */
             F32(p + 0xC) = y; U32(p + 0x10) = 0x3C23D70A;
             U8(p + 0x14) = (u8)d;
             U8(p + 0x15) = (u8)(d >= 0x100 ? r + 0x80 : r);

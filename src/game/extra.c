@@ -118,7 +118,7 @@ void DC2CALL Extra_Menu(gptr t)                                       /* 0x46E44
         Fade_Set(0, 0xA, 1);
         break;
     case 1: {
-        u32 trig = U32(0x87DC12);
+        u32 trig = UU32(0x87DC12);
         s8 c = (s8)U8(t + 6);
         if (trig & 0x5000) {                      /* up / down */
             Se_Play(0, 0);

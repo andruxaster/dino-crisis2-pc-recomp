@@ -27,15 +27,16 @@ DC2_DC_VERBOSE ?= 1
 DC2_DC_HEAP    ?= 0x300000
 
 GAME_SRCS := $(wildcard src/game/*.c) $(wildcard src/pc/*.c) $(wildcard src/data/*.c) src/hook/hooks.c src/port/frame.c
-DC_SRCS   := src/port/dc/main.c src/port/dc/render_pvr.c src/port/dc/vmu_save.c
+DC_SRCS   := src/port/dc/main.c src/port/dc/render_pvr.c src/port/dc/vmu_save.c src/port/dc/unaligned.c
 DC_ASM    := src/port/dc/ctx_sh4.S
 
 OBJS := $(patsubst %.c,$(BUILD)/%.o,$(GAME_SRCS) $(DC_SRCS)) $(patsubst %.S,$(BUILD)/%.o,$(DC_ASM))
 
-DEFS := -DDC2_LOWMEM -DDC2_MOVIE_AVI -DHEAP_SIZE=$(DC2_DC_HEAP)u -DDC2_DC_ROOT='"$(DC2_DC_ROOT)"' -DDC2_DC_AUDIO=$(DC2_DC_AUDIO) \
+DEFS := $(if $(filter 1,$(DC2_UNALIGNED)),-DDC2_UNALIGNED) -DDC2_LOWMEM -DDC2_MOVIE_AVI -DHEAP_SIZE=$(DC2_DC_HEAP)u -DDC2_DC_ROOT='"$(DC2_DC_ROOT)"' -DDC2_DC_AUDIO=$(DC2_DC_AUDIO) \
         -DDC2_DC_MOVIES=$(DC2_DC_MOVIES) -DDC2_DC_VERBOSE=$(DC2_DC_VERBOSE)
-# -fno-strict-aliasing: game memory is read through U8/U16/U32 of any type;
-# the wider ones are packed (unaligned-safe) on the SH-4 (include/dc2/types.h)
+# -fno-strict-aliasing: game memory is read through U8/U16/U32 of any type
+# (plain aligned accesses; the rare unaligned ones are emulated by
+# src/port/dc/unaligned.c, DC2_UNALIGNED=1 makes every one byte-safe instead)
 CFLAGS_DC := -std=gnu11 -O2 -fno-strict-aliasing -fwrapv -Wall -Wno-unused-parameter -Wno-unused-function -Iinclude $(DEFS)
 
 # rebuild everything when the switches change (make does not track -D values)

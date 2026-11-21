@@ -283,7 +283,7 @@ void DC2CALL Title_Demo(gptr t)                                     /* 0x4A5BF0 
         U16(0x87DC94) = U16(e + 2);
         Game_Play();
         u16 tm = U16(t);
-        if (tm >= 0x244 || (tm > 0x14 && (U32(0x87DC12) & 0x970))) Fade_Set(1, 0xA, 1);
+        if (tm >= 0x244 || (tm > 0x14 && (UU32(0x87DC12) & 0x970))) Fade_Set(1, 0xA, 1);
         if (U8(G() + 0x814) == 1 && !Flag_Check(2, 6)) G16(0x770)++;
         break; }
     case 3:

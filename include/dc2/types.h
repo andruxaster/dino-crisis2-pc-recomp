@@ -28,17 +28,21 @@ extern u8 *g_membase;             /* host address of IMAGE_BASE */
 #define MEM(a)    (g_membase + ((u32)(a) - IMAGE_BASE))
 #define U8(a)     (*(u8 *)MEM(a))
 #define S8(a)     (*(s8 *)MEM(a))
-#if defined(__SH4__) || defined(__sh__) || defined(DC2_UNALIGNED)
-/* CPUs that fault on unaligned loads and stores (the Dreamcast's SH-4): the
-   game's data was laid out for the x86, so every wider access may be
-   unaligned and goes through a packed member (byte accesses when the
-   compiler cannot prove alignment) */
+/* packed members: byte accesses wherever the compiler cannot prove alignment */
 typedef struct __attribute__((packed, may_alias)) { u16 v; } dc2_pu16;
 typedef struct __attribute__((packed, may_alias)) { s16 v; } dc2_ps16;
 typedef struct __attribute__((packed, may_alias)) { u32 v; } dc2_pu32;
 typedef struct __attribute__((packed, may_alias)) { s32 v; } dc2_ps32;
 typedef struct __attribute__((packed, may_alias)) { float v; } dc2_pf32;
 typedef struct __attribute__((packed, may_alias)) { double v; } dc2_pf64;
+/* game data the x86 original reads unaligned (the pad at 0x87DC12 as a dword):
+   safe on CPUs that fault on unaligned accesses (the Dreamcast's SH-4) */
+#define UU16(a)   (((dc2_pu16 *)MEM(a))->v)
+#define UU32(a)   (((dc2_pu32 *)MEM(a))->v)
+#if defined(DC2_UNALIGNED)
+/* every wider access through a packed member (slow on the SH-4: a debugging
+   aid; the Dreamcast build emulates the rare unaligned accesses left in its
+   exception handler instead, src/port/dc/unaligned.c) */
 #define U16(a)    (((dc2_pu16 *)MEM(a))->v)
 #define S16(a)    (((dc2_ps16 *)MEM(a))->v)
 #define U32(a)    (((dc2_pu32 *)MEM(a))->v)
@@ -55,6 +59,22 @@ typedef struct __attribute__((packed, may_alias)) { double v; } dc2_pf64;
 #endif
 /* game address of a host pointer into the image */
 #define GADDR(p)  ((gptr)((const u8 *)(p) - g_membase) + IMAGE_BASE)
+
+/* the x87's extended precision, which the game's float maths runs in: the PC
+   builds repeat it (long double; bit-identical on the 32-bit x86, see gte.c),
+   the SH-4 computes in single precision (its doubles go through the FPU's
+   mode switch, its long double is double: both slow) */
+#if defined(__SH4__) || defined(__sh__)
+typedef float xreal;
+#define XSQRT(x)     sqrtf(x)
+#define XATAN2(y, x) atan2f(y, x)
+#define XR(c)        ((xreal)(c))
+#else
+typedef long double xreal;
+#define XSQRT(x)     sqrtl(x)
+#define XATAN2(y, x) atan2l(y, x)
+#define XR(c)        (c##L)
+#endif
 
 /* calling convention of the original code (MSVC6 cdecl) */
 #if defined(_WIN32) && defined(__i386__)

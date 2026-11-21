@@ -1399,7 +1399,7 @@ void DC2CALL K2Burst_Draw(gptr k, gptr pos, gptr vel, gptr col, gptr tm) /* 0x44
     gptr p = U32(0x87DC98);
     U8(p + 4) = 0x80; U8(p + 5) = 0x80; U8(p + 6) = 0x80; U8(p + 7) = 0x62;
     U32(p + 8) = sx; U32(p + 0xC) = sy;
-    F32(p + 0x10) = (float)((long double)z / (long double)div);
+    F32(p + 0x10) = (float)((xreal)z / (xreal)div);
     U16(p + 0x14) = 1; U16(p + 0x16) = 1;
     gptr ot = 0x87BC00 + 4 * ((U32(0x87DE0C) << 10) + (u32)z);
     U32(p) = U32(ot) | 0x3000000; U32(ot) = p & 0xFFFFFF;

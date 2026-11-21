@@ -55,7 +55,7 @@ static void show_picture(gptr r, u32 n, int skippable)
         break;
     case 2:
         U16(r + 4)--;
-        if (skippable && (U32(0x87DC12) & 0x820)) { U16(r + 4) = 0; U8(r + 3) = 1; }
+        if (skippable && (UU32(0x87DC12) & 0x820)) { U16(r + 4) = 0; U8(r + 3) = 1; }
         if (!U16(r + 4)) { U8(r + 2)++; Fade_Set(1, 0x14, 1); }
         break;
     case 3:

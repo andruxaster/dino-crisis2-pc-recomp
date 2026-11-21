@@ -17,6 +17,12 @@
 #include <math.h>
 #include "dc2/types.h"
 #include "dc2/pcio.h"
+/* the mixer's positions: double on the PC, float on the SH-4 (its doubles are slow) */
+#if defined(__SH4__) || defined(__sh__)
+typedef float xreal_pos;
+#else
+typedef double xreal_pos;
+#endif
 #define MINIMP3_IMPLEMENTATION
 #include "../../third_party/minimp3/minimp3.h"
 #include <stdio.h>
@@ -34,7 +40,7 @@ typedef struct {
     s16 *pcm;           /* frames x channels (a file stream: the block decoded) */
     u32 frames, ch, rate;
     u32 freq;           /* playing rate (0: its own) */
-    double pos;         /* in frames */
+    xreal_pos pos;         /* in frames */
     u8 used, playing, loop, paused;
     float gl, gr;       /* volume and pan */
     s32 vol, pan;       /* hundredths of a dB */
@@ -43,7 +49,7 @@ typedef struct {
 static Voice g_buf[NBUF], g_strm[NSTRM];
 static u32 g_rate = 44100;
 static void (*g_sink)(const s16 *lr, u32 frames);
-static double g_carry;
+static xreal_pos g_carry;
 static u32 (*g_source)(float *lr, u32 frames);
 
 static float db_gain(s32 cb) { return cb <= -10000 ? 0.0f : (float)pow(10.0, cb / 2000.0); }
@@ -323,7 +329,7 @@ void DC2CALL Strm_Resume(u32 h) { if (h < NSTRM && g_strm[h].paused) { g_strm[h]
 static void mix_voice(Voice *v, float *acc, u32 frames)
 {
     if (!v->playing || (!v->frames && !v->f)) { if (v->playing) v->playing = 0; return; }
-    double step = (double)(v->freq ? v->freq : v->rate) / g_rate;
+    xreal_pos step = (xreal_pos)(v->freq ? v->freq : v->rate) / (xreal_pos)g_rate;
     for (u32 i = 0; i < frames; i++) {
         while (v->pos >= v->frames) {
             if (v->f) {                             /* a file stream: its next block */
@@ -367,7 +373,7 @@ void PcAudio_Init(u32 rate, void (*sink)(const s16 *lr, u32 frames)) { g_rate = 
 void PcAudio_Frame(u32 sixtieths)
 {
     static s16 out[2 * 8192];
-    g_carry += (double)g_rate * (sixtieths ? sixtieths : 1) / 60.0;
+    g_carry += (xreal_pos)g_rate * (xreal_pos)(sixtieths ? sixtieths : 1) / (xreal_pos)60;
     u32 n = (u32)g_carry;
     g_carry -= n;
     if (n > 8192) n = 8192;

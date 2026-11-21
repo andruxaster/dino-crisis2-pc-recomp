@@ -2,6 +2,7 @@
 #include "dc2/task.h"
 #include "dc2/pcio.h"
 #include "../hook/hooks.h"
+#include <stdlib.h>
 
 void DC2CALL Task_Kill(u32 slot)                                     /* 0x4C2A0D */
 {
@@ -13,10 +14,32 @@ void DC2CALL Task_Kill(u32 slot)                                     /* 0x4C2A0D
 #endif
 }
 
+/* the hook table by address: an index sorted once (by address, then by
+   position, so the first entry of an address wins as in a linear search),
+   searched by halves - the object and task handlers are looked up here many
+   times a frame */
+static u16 *g_hook_ix;
+static int hook_cmp(const void *a, const void *b)
+{
+    const Hook *x = &g_hooks[*(const u16 *)a], *y = &g_hooks[*(const u16 *)b];
+    if (x->addr != y->addr) return x->addr < y->addr ? -1 : 1;
+    return *(const u16 *)a < *(const u16 *)b ? -1 : 1;
+}
 void *Hook_Find(gptr addr)
 {
-    for (int i = 0; i < g_nhooks; i++) if (g_hooks[i].addr == addr) return g_hooks[i].fn;
-    return 0;
+    if (!g_hook_ix) {
+        u16 *ix = malloc((size_t)g_nhooks * sizeof *ix);
+        if (!ix) { for (int i = 0; i < g_nhooks; i++) if (g_hooks[i].addr == addr) return g_hooks[i].fn; return 0; }
+        for (int i = 0; i < g_nhooks; i++) ix[i] = (u16)i;
+        qsort(ix, (size_t)g_nhooks, sizeof *ix, hook_cmp);
+        g_hook_ix = ix;
+    }
+    int lo = 0, hi = g_nhooks;
+    while (lo < hi) {
+        int mid = (lo + hi) / 2;
+        if (g_hooks[g_hook_ix[mid]].addr < addr) lo = mid + 1; else hi = mid;
+    }
+    return lo < g_nhooks && g_hooks[g_hook_ix[lo]].addr == addr ? g_hooks[g_hook_ix[lo]].fn : 0;
 }
 
 #ifdef DC2_IN_PROCESS
