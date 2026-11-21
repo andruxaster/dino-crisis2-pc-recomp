@@ -13,6 +13,7 @@
  * now: the memory in use every 300 frames on the serial port / dcload
  * console). */
 #include <kos.h>
+#include <dc/vblank.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -148,28 +149,49 @@ static void audio_open(void)
 unsigned long long Port_TimeUs(void) { return timer_us_gettime64(); }
 
 /* ---- pacing: the game's frame lasts 0x87DE00 sixtieths of a second --------------------
- * Deadlines in a series (next = the last deadline + the frame's length), so
- * small delays even out. A late frame does not wait at all; one more than a
- * frame late starts the series again from now (no catching up). Long waits
- * sleep with a 12 ms margin (thd_sleep wakes late on the console), the rest is
- * spun out with thd_pass. */
-static uint64_t g_next_us;
+ * Counted in vertical blanks, not by a timer: the PVR shows a new picture
+ * only at a blank (pvr_wait_ready at the scene's start waits for it), so a
+ * frame paced by the clock to 33.3 ms began out of step with the blanks and
+ * waited for one more at its drawing: ~37 ms a frame (27 fps) with the work
+ * well under 33. A frame now ends at its blank: the last one's + the
+ * frame's length in blanks (2 at 30 fps; the display's rate is measured at
+ * the start, so a 50 Hz one counts its own). A late frame does not wait; a
+ * whole frame late starts the count again from now (no catching up). */
+static volatile u32 g_vbl;
+static u32 g_vbl_hz = 60, g_vbl_next, g_vbl_on;
+static void on_vblank(uint32_t code, void *data) { (void)code; (void)data; g_vbl++; }
+
+static void pace_init(void)
+{
+    vblank_handler_add(on_vblank, NULL);
+    u32 v = g_vbl;
+    uint64_t t = timer_us_gettime64();
+    while (g_vbl == v && timer_us_gettime64() - t < 100000) thd_pass();     /* (one blank to start on) */
+    v = g_vbl; t = timer_us_gettime64();
+    while (g_vbl - v < 10 && timer_us_gettime64() - t < 500000) thd_pass();
+    u32 n = g_vbl - v;
+    uint64_t us = timer_us_gettime64() - t;
+    if (n >= 10 && us) g_vbl_hz = (u32)((n * 1000000ull + us / 2) / us);
+    if (g_vbl_hz < 45 || g_vbl_hz > 65) g_vbl_hz = 60;                    /* (no blanks counted: as NTSC) */
+    printf("display: %u Hz, the frames paced by its blanks\n", (unsigned)g_vbl_hz);
+}
+
 static u32 pace(void)                              /* the time waited (us) */
 {
     u32 n = U32(0x87DE00) ? U32(0x87DE00) : 1;
-    uint64_t period = (uint64_t)n * 16667, w0 = timer_us_gettime64();
-    if (!g_next_us) g_next_us = w0;
-    g_next_us += period;
-    if (w0 >= g_next_us) {
-        if (w0 - g_next_us > period) g_next_us = w0;
+    u32 per = (n * g_vbl_hz + 30) / 60;
+    if (!per) per = 1;
+    uint64_t w0 = timer_us_gettime64();
+    if (!g_vbl_on) { g_vbl_next = g_vbl; g_vbl_on = 1; }
+    g_vbl_next += per;
+    if ((s32)(g_vbl - g_vbl_next) >= 0) {
+        if (g_vbl - g_vbl_next >= per) g_vbl_next = g_vbl;
         return 0;
     }
-    uint64_t now;
-    while ((now = timer_us_gettime64()) < g_next_us) {
-        uint64_t left = g_next_us - now;
-        if (left > 14000) thd_sleep((int)((left - 12000) / 1000)); else thd_pass();
+    while ((s32)(g_vbl - g_vbl_next) < 0) {
+        if ((s32)(g_vbl_next - g_vbl) > 1) thd_sleep(4); else thd_pass();
     }
-    return (u32)(now - w0);
+    return (u32)(timer_us_gettime64() - w0);
 }
 
 /* the frames' times, reported every 300 frames: real rate against the
@@ -243,6 +265,7 @@ int main(int argc, char **argv)
     Snd_ReleaseAll();
     Task_Start(0, U8(0x87DE08) ? 0x471EC0 : 0x46D710);
 
+    pace_init();
     int quit = 0;
     for (u32 f = 0; !quit; f++) {
         g_pad_raw[0] = read_pad(&quit);
@@ -256,6 +279,14 @@ int main(int argc, char **argv)
         g_tm.n++; g_tm.game += tg; g_tm.draw += td; g_tm.wait += w;
         if (tg > g_tm.game_max) g_tm.game_max = tg;
         if (td > g_tm.draw_max) g_tm.draw_max = td;
+#if DC2_DC_VERBOSE
+        /* a frame over 100 ms (a stall: loading, uploads, the disc), a few a report */
+        static u32 slow_n;
+        if (f % 300 == 0) slow_n = 0;
+        if ((tg > 100000 || td > 100000) && slow_n++ < 4)
+            printf("slow frame %u: game %u ms, drawing %u ms (game mode %u room %X%02X)\n", (unsigned)f, (unsigned)(tg / 1000), (unsigned)(td / 1000),
+                   (unsigned)U16(G() + 0x664), (unsigned)U8(G() + 0x1091), (unsigned)U8(G() + 0x1090));
+#endif
 #if DC2_DC_VERBOSE
         if (f % 300 == 0)
         {

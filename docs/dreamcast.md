@@ -134,6 +134,15 @@ work (`Port_GameFrame`: logic, models, the order table), of the drawing
 the next frame (0 when it runs late), and the share of the CPU the sound
 mixer takes.
 
+The frames are paced by the display's vertical blanks (`pace`,
+`src/port/dc/main.c`): a frame ends at the blank the game's length after
+the last one's (2 blanks at 30 fps), in step with the PVR, which shows a
+new picture only at a blank. (Paced by a timer they began out of step and
+waited for one blank more: ~37 ms a frame with the work under 33.) The
+display's rate is measured at the start (`display: 60 Hz` in the log). A
+frame over 100 ms prints `slow frame N: game X ms, drawing Y ms` (a few a
+report), to find stalls.
+
 The sound banks' sounds (`Snd_CreateBuffer`) are played by the AICA's own
 channels (`src/port/dc/aica_sfx.c`, `DC2_AICA`): uploaded to sound RAM once
 (stereo split into two channels, 8-bit made signed), then started, turned
