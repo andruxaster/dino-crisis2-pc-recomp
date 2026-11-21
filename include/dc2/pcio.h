@@ -46,6 +46,9 @@ u32  Strm_OpenFile(const char *file, u32 rec, u32 loop);
    file as the voice buffer, handle 0; -1 when it is not there */
 u32  Snd_OpenFileVoice(const char *game_path);
 /* an IMA ADPCM block (WAV format 0x11) of n bytes into up to spb frames of ch channels */
+/* the mixer's lock (the Dreamcast mixes in its sound thread): held by code
+   that shares data with a mixer source, such as the movie player */
+void PcAudio_Lock(int on);
 u32  PcAudio_ImaBlock(const u8 *b, u32 n, u32 ch, s16 *out, u32 spb);
 #endif
 

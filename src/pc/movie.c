@@ -134,7 +134,12 @@ static u32 add_sound(float *lr, u32 frames)
     return frames;
 }
 
+static void movie_close(void);
 void DC2CALL Movie_Close(void)                                       /* 0x4BF340 */
+{
+    PcAudio_Lock(1); movie_close(); PcAudio_Lock(0);
+}
+static void movie_close(void)
 {
     PcAudio_SetSource(0);
 #ifdef DC2_MOVIE_AVI
@@ -148,7 +153,13 @@ void DC2CALL Movie_Close(void)                                       /* 0x4BF340
     memset(&M, 0, sizeof M);
 }
 
+static u32 movie_open(gptr name, u32 x, u32 y);
 u32 DC2CALL Movie_Open(gptr name, u32 x, u32 y)                      /* 0x4BF3A0 */
+{
+    PcAudio_Lock(1); u32 r = movie_open(name, x, y); PcAudio_Lock(0);
+    return r;
+}
+static u32 movie_open(gptr name, u32 x, u32 y)
 {
     Movie_Close();
     if (getenv("DC2_NOMOVIES")) return 1;
@@ -203,7 +214,13 @@ static u32 poll_avi(void)
 }
 #endif
 
+static u32 movie_poll(void);
 u32 DC2CALL Movie_Poll(void)                                         /* 0x4BF690 */
+{
+    PcAudio_Lock(1); u32 r = movie_poll(); PcAudio_Lock(0);
+    return r;
+}
+static u32 movie_poll(void)
 {
 #ifdef DC2_MOVIE_AVI
     if (M.avi) return poll_avi();

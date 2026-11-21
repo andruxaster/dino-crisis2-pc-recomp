@@ -99,35 +99,24 @@ static u16 read_pad(int *quit)
     return p;
 }
 
-/* ---- the sound: the mixer's frames into a ring, the KOS stream takes them ---------------- */
+/* ---- the sound: the KOS stream pulls the mix as it plays ------------------------------------
+ * The stream's callback mixes the frames it asks for right there, in the sound
+ * thread (src/pc/audio.c holds its lock), so the sound keeps going at its own
+ * pace whatever a game frame costs; the game's calls only change the voices. */
 #if DC2_DC_AUDIO
 #define SND_RATE 22050
-#define RING (SND_RATE / 2)                       /* half a second of stereo frames */
-static s16 g_ring[RING * 2] __attribute__((aligned(32)));
-static volatile u32 g_rd, g_wr;                    /* in frames, wrapping at RING */
 static s16 g_out[4096 * 2] __attribute__((aligned(32)));
 static snd_stream_hnd_t g_strm = SND_STREAM_INVALID;
-
-static void audio_sink(const s16 *lr, u32 frames)
-{
-    for (u32 i = 0; i < frames; i++) {
-        u32 w = g_wr, nx = (w + 1) % RING;
-        if (nx == g_rd) break;                     /* full: the rest of the frame is dropped */
-        g_ring[w * 2] = lr[i * 2]; g_ring[w * 2 + 1] = lr[i * 2 + 1];
-        g_wr = nx;
-    }
-}
+static volatile u32 g_mix_us, g_mix_calls;         /* (the report: the mixer's time) */
 
 static void *stream_cb(snd_stream_hnd_t h, int req, int *got)
 {
     (void)h;
     u32 want = (u32)req / 4;                       /* bytes of stereo s16 */
     if (want > 4096) want = 4096;
-    for (u32 i = 0; i < want; i++) {
-        if (g_rd == g_wr) { g_out[i * 2] = g_out[i * 2 + 1] = 0; continue; }
-        g_out[i * 2] = g_ring[g_rd * 2]; g_out[i * 2 + 1] = g_ring[g_rd * 2 + 1];
-        g_rd = (g_rd + 1) % RING;
-    }
+    uint64_t t0 = timer_us_gettime64();
+    PcAudio_Mix(g_out, want);
+    g_mix_us += (u32)(timer_us_gettime64() - t0); g_mix_calls++;
     *got = (int)(want * 4);
     return g_out;
 }
@@ -144,7 +133,7 @@ static void audio_open(void)
     if (snd_stream_init() < 0) return;
     g_strm = snd_stream_alloc(stream_cb, SND_STREAM_BUFFER_MAX / 4);
     if (g_strm == SND_STREAM_INVALID) return;
-    PcAudio_Init(SND_RATE, audio_sink);
+    PcAudio_Init(SND_RATE, NULL);                  /* (no sink: mixed when the stream asks) */
     snd_stream_start(g_strm, SND_RATE, 1);
     kthread_attr_t a = {0};
     a.prio = PRIO_DEFAULT - 1;
@@ -155,8 +144,9 @@ static void audio_open(void)
 
 /* ---- pacing: the game's frame lasts 0x87DE00 sixtieths of a second -------------------- */
 static uint64_t g_next_us;
-static void pace(void)
+static u32 pace(void)                              /* the time waited (us) */
 {
+    uint64_t w0 = timer_us_gettime64();
     u32 n = U32(0x87DE00) ? U32(0x87DE00) : 1;
     uint64_t now = timer_us_gettime64();
     if (!g_next_us || now > g_next_us + 8000) g_next_us = now;   /* (late: start again from now) */
@@ -164,6 +154,31 @@ static void pace(void)
     while ((now = timer_us_gettime64()) < g_next_us) {
         if (g_next_us - now > 4000) thd_sleep(2); else thd_pass();
     }
+    return (u32)(timer_us_gettime64() - w0);
+}
+
+/* the frames' times, reported every 300 frames: real rate against the
+   game's, then the average and the worst of the game's work, the drawing
+   (the PVR included) and the wait */
+static struct { u32 n, game, draw, wait, game_max, draw_max; uint64_t t0; } g_tm;
+static void timing_report(void)
+{
+    uint64_t now = timer_us_gettime64();
+    if (g_tm.n && g_tm.t0) {
+        u32 span = (u32)(now - g_tm.t0), want = U32(0x87DE00) ? U32(0x87DE00) : 1;
+        printf("speed: %u.%u game frames/s (the game wants %u); game %u.%u ms (max %u), drawing %u.%u ms (max %u), waiting %u.%u ms",
+               (unsigned)(g_tm.n * 10000000ull / span / 10), (unsigned)(g_tm.n * 10000000ull / span % 10), (unsigned)(60 / want),
+               (unsigned)(g_tm.game / g_tm.n / 1000), (unsigned)(g_tm.game / g_tm.n / 100 % 10), (unsigned)(g_tm.game_max / 1000),
+               (unsigned)(g_tm.draw / g_tm.n / 1000), (unsigned)(g_tm.draw / g_tm.n / 100 % 10), (unsigned)(g_tm.draw_max / 1000),
+               (unsigned)(g_tm.wait / g_tm.n / 1000), (unsigned)(g_tm.wait / g_tm.n / 100 % 10));
+#if DC2_DC_AUDIO
+        printf("; sound mixing %u%% of the CPU", (unsigned)(g_mix_us / (span / 100 ? span / 100 : 1)));
+        g_mix_us = 0; g_mix_calls = 0;
+#endif
+        printf("\n");
+    }
+    memset(&g_tm, 0, sizeof g_tm);
+    g_tm.t0 = now;
 }
 
 /* the image without the original's code (0x400000..IMAGE_DATA, ~930 KB that
@@ -215,10 +230,16 @@ int main(int argc, char **argv)
     int quit = 0;
     for (u32 f = 0; !quit; f++) {
         g_pad_raw[0] = read_pad(&quit);
+        uint64_t t0 = timer_us_gettime64();
         Port_GameFrame();
-        PcAudio_Frame(U32(0x87DE00));
+        uint64_t t1 = timer_us_gettime64();
         Port_DrawFrame();
-        pace();
+        uint64_t t2 = timer_us_gettime64();
+        u32 w = pace();
+        u32 tg = (u32)(t1 - t0), td = (u32)(t2 - t1);
+        g_tm.n++; g_tm.game += tg; g_tm.draw += td; g_tm.wait += w;
+        if (tg > g_tm.game_max) g_tm.game_max = tg;
+        if (td > g_tm.draw_max) g_tm.draw_max = td;
 #if DC2_DC_VERBOSE
         if (f % 300 == 0)
         {
@@ -228,6 +249,7 @@ int main(int argc, char **argv)
                    (unsigned)(Pc_HeapPeak() >> 10), (unsigned)(HEAP_SIZE >> 10), (unsigned)(PcSoft_SurfacePeak() >> 10),
                    (unsigned)(mi.uordblks >> 10), (unsigned)(pvr_mem_available() >> 10));
             DcUnaligned_Report();
+            timing_report();
         }
 #endif
         u32 tasks = 0;

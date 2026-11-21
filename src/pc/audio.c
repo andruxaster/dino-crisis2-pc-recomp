@@ -23,6 +23,17 @@ typedef float xreal_pos;
 #else
 typedef double xreal_pos;
 #endif
+/* the Dreamcast mixes in its sound thread (pulled by the stream): every
+   call into this file holds a recursive lock there; none on the PC */
+#if defined(__DREAMCAST__)
+#include <kos/mutex.h>
+static mutex_t g_amx = RECURSIVE_MUTEX_INITIALIZER;
+#define ALOCK()   mutex_lock(&g_amx)
+#define AUNLOCK() mutex_unlock(&g_amx)
+#else
+#define ALOCK()   ((void)0)
+#define AUNLOCK() ((void)0)
+#endif
 #define MINIMP3_IMPLEMENTATION
 #include "../../third_party/minimp3/minimp3.h"
 #include <stdio.h>
@@ -167,7 +178,7 @@ static int file_voice(Voice *v, FILE *f, u32 loop, int pcm_ok)
    1.5 MB) played from the disc as the voice buffer (handle 0) rather than
    read whole into the game's heap and copied; 0, or 0xFFFFFFFF when the
    file is missing or not a wave */
-u32 Snd_OpenFileVoice(const char *game_path)
+static u32 locked_Snd_OpenFileVoice(const char *game_path)
 {
     char path[512];
     Pc_HostPath(game_path, path, sizeof path);
@@ -182,7 +193,7 @@ u32 Snd_OpenFileVoice(const char *game_path)
 
 /* ---- buffers ---- */
 
-u32 DC2CALL Snd_CreateBuffer(gptr w, u32 voice)
+static u32 locked_Snd_CreateBuffer(gptr w, u32 voice)
 {
     u32 h = 0;
     if (!voice) {
@@ -205,7 +216,7 @@ u32 DC2CALL Snd_CreateBuffer(gptr w, u32 voice)
     return h;
 }
 
-void DC2CALL Snd_Play(u32 h, u32 freq, u32 loop)
+static void locked_Snd_Play(u32 h, u32 freq, u32 loop)
 {
     if (h >= NBUF || !g_buf[h].used) return;
     Voice *v = &g_buf[h];
@@ -214,26 +225,26 @@ void DC2CALL Snd_Play(u32 h, u32 freq, u32 loop)
     if (v->f) { fseek(v->f, (long)v->data_off, SEEK_SET); v->data_read = 0; v->frames = 0; }
     SLOG("snd %u play freq %u loop %u (%u frames at %u)\n", (unsigned)h, (unsigned)freq, (unsigned)loop, (unsigned)v->frames, (unsigned)v->rate);
 }
-void DC2CALL Snd_SetVolume(u32 h, s32 vol)
+static void locked_Snd_SetVolume(u32 h, s32 vol)
 {
     if (h >= NBUF || !g_buf[h].used) return;
     g_buf[h].vol = clamp_cb(cb_of(vol, 3000.0f), -10000, 0); gains(&g_buf[h]);
     SLOG("snd %u volume %d (%d)\n", (unsigned)h, (int)vol, (int)g_buf[h].vol);
 }
-void DC2CALL Snd_SetPan(u32 h, u32 pan)
+static void locked_Snd_SetPan(u32 h, u32 pan)
 {
     if (h >= NBUF || !g_buf[h].used) return;
     g_buf[h].pan = clamp_cb((s32)((float)(s32)pan * 0.015625f * 10000.0f - 10000.0f), -10000, 10000); gains(&g_buf[h]);
 }
-u32 DC2CALL Snd_IsPlaying(u32 h) { return h < NBUF && g_buf[h].used && g_buf[h].playing; }
-void DC2CALL Snd_Stop(u32 h) { if (h < NBUF) g_buf[h].playing = 0; }
-void DC2CALL Snd_Free(u32 h) { if (h < NBUF) voice_free(&g_buf[h]); }
-void DC2CALL Snd_Pause(u32 h) { if (h < NBUF && g_buf[h].playing) { g_buf[h].playing = 0; g_buf[h].paused = 1; } }
-void DC2CALL Snd_Resume(u32 h) { if (h < NBUF && g_buf[h].paused) { g_buf[h].paused = 0; g_buf[h].playing = 1; } }
+static u32 locked_Snd_IsPlaying(u32 h) { return h < NBUF && g_buf[h].used && g_buf[h].playing; }
+static void locked_Snd_Stop(u32 h) { if (h < NBUF) g_buf[h].playing = 0; }
+static void locked_Snd_Free(u32 h) { if (h < NBUF) voice_free(&g_buf[h]); }
+static void locked_Snd_Pause(u32 h) { if (h < NBUF && g_buf[h].playing) { g_buf[h].playing = 0; g_buf[h].paused = 1; } }
+static void locked_Snd_Resume(u32 h) { if (h < NBUF && g_buf[h].paused) { g_buf[h].paused = 0; g_buf[h].playing = 1; } }
 
 /* ---- streams ---- */
 
-u32 DC2CALL Strm_Open(gptr mp3, u32 size, u32 loop)
+static u32 locked_Strm_Open(gptr mp3, u32 size, u32 loop)
 {
     u32 h = 0;
     while (h < NSTRM && g_strm[h].used) h++;
@@ -270,7 +281,7 @@ u32 DC2CALL Strm_Open(gptr mp3, u32 size, u32 loop)
    game's file id, looked up in data\BGM\INDEX.TXT ("MS_0001 3 1A2B3C4D"),
    played from data\BGM\1A2B3C4D.WAV (IMA ADPCM). 0xFFFFFFFF: not there. */
 static char *g_bgm_index;
-u32 Strm_OpenFile(const char *file, u32 rec, u32 loop)
+static u32 locked_Strm_OpenFile(const char *file, u32 rec, u32 loop)
 {
     char path[512], want[64], line[96];
     if (!g_bgm_index) {
@@ -312,17 +323,17 @@ u32 Strm_OpenFile(const char *file, u32 rec, u32 loop)
     return h;
 }
 
-void DC2CALL Strm_Play(u32 h) { SLOG("strm %u play\n", (unsigned)h); if (h < NSTRM && g_strm[h].used) { g_strm[h].playing = 1; g_strm[h].paused = 0; } }
-void DC2CALL Strm_Stop(u32 h) { if (h < NSTRM) g_strm[h].playing = 0; }
-void DC2CALL Strm_SetVolume(u32 h, s32 vol)
+static void locked_Strm_Play(u32 h) { SLOG("strm %u play\n", (unsigned)h); if (h < NSTRM && g_strm[h].used) { g_strm[h].playing = 1; g_strm[h].paused = 0; } }
+static void locked_Strm_Stop(u32 h) { if (h < NSTRM) g_strm[h].playing = 0; }
+static void locked_Strm_SetVolume(u32 h, s32 vol)
 {
     if (h >= NSTRM || !g_strm[h].used) return;
     g_strm[h].vol = clamp_cb(cb_of(vol, 10000.0f), -10000, 0); gains(&g_strm[h]);
     SLOG("strm %u volume %d (%d)\n", (unsigned)h, (int)vol, (int)g_strm[h].vol);
 }
-void DC2CALL Strm_Close(u32 h) { if (h < NSTRM) voice_free(&g_strm[h]); }
-void DC2CALL Strm_Pause(u32 h) { if (h < NSTRM && g_strm[h].playing) { g_strm[h].playing = 0; g_strm[h].paused = 1; } }
-void DC2CALL Strm_Resume(u32 h) { if (h < NSTRM && g_strm[h].paused) { g_strm[h].paused = 0; g_strm[h].playing = 1; } }
+static void locked_Strm_Close(u32 h) { if (h < NSTRM) voice_free(&g_strm[h]); }
+static void locked_Strm_Pause(u32 h) { if (h < NSTRM && g_strm[h].playing) { g_strm[h].playing = 0; g_strm[h].paused = 1; } }
+static void locked_Strm_Resume(u32 h) { if (h < NSTRM && g_strm[h].paused) { g_strm[h].paused = 0; g_strm[h].playing = 1; } }
 
 /* ---- the mix ---- */
 
@@ -349,7 +360,7 @@ static void mix_voice(Voice *v, float *acc, u32 frames)
     }
 }
 
-void PcAudio_Mix(s16 *lr, u32 frames)
+static void locked_PcAudio_Mix(s16 *lr, u32 frames)
 {
     static float acc[2 * 8192];
     while (frames) {
@@ -366,7 +377,7 @@ void PcAudio_Mix(s16 *lr, u32 frames)
     }
 }
 
-void PcAudio_SetSource(u32 (*add)(float *lr, u32 frames)) { g_source = add; }
+static void locked_PcAudio_SetSource(u32 (*add)(float *lr, u32 frames)) { g_source = add; }
 u32 PcAudio_Rate(void) { return g_rate; }
 void PcAudio_Init(u32 rate, void (*sink)(const s16 *lr, u32 frames)) { g_rate = rate ? rate : 44100; g_sink = sink; }
 
@@ -380,4 +391,27 @@ void PcAudio_Frame(u32 sixtieths)
     PcAudio_Mix(out, n);
     if (g_sink) g_sink(out, n);
 }
+
+/* ---- the calls under the lock ---- */
+void PcAudio_Lock(int on) { if (on) ALOCK(); else AUNLOCK(); }
+u32 Snd_OpenFileVoice(const char *game_path) { ALOCK(); u32 r = locked_Snd_OpenFileVoice(game_path); AUNLOCK(); return r; }
+u32 DC2CALL Snd_CreateBuffer(gptr w, u32 voice) { ALOCK(); u32 r = locked_Snd_CreateBuffer(w, voice); AUNLOCK(); return r; }
+void DC2CALL Snd_Play(u32 h, u32 freq, u32 loop) { ALOCK(); locked_Snd_Play(h, freq, loop); AUNLOCK(); }
+void DC2CALL Snd_SetVolume(u32 h, s32 vol) { ALOCK(); locked_Snd_SetVolume(h, vol); AUNLOCK(); }
+void DC2CALL Snd_SetPan(u32 h, u32 pan) { ALOCK(); locked_Snd_SetPan(h, pan); AUNLOCK(); }
+u32 DC2CALL Snd_IsPlaying(u32 h) { ALOCK(); u32 r = locked_Snd_IsPlaying(h); AUNLOCK(); return r; }
+void DC2CALL Snd_Stop(u32 h) { ALOCK(); locked_Snd_Stop(h); AUNLOCK(); }
+void DC2CALL Snd_Free(u32 h) { ALOCK(); locked_Snd_Free(h); AUNLOCK(); }
+void DC2CALL Snd_Pause(u32 h) { ALOCK(); locked_Snd_Pause(h); AUNLOCK(); }
+void DC2CALL Snd_Resume(u32 h) { ALOCK(); locked_Snd_Resume(h); AUNLOCK(); }
+u32 DC2CALL Strm_Open(gptr mp3, u32 size, u32 loop) { ALOCK(); u32 r = locked_Strm_Open(mp3, size, loop); AUNLOCK(); return r; }
+u32 Strm_OpenFile(const char *file, u32 rec, u32 loop) { ALOCK(); u32 r = locked_Strm_OpenFile(file, rec, loop); AUNLOCK(); return r; }
+void DC2CALL Strm_Play(u32 h) { ALOCK(); locked_Strm_Play(h); AUNLOCK(); }
+void DC2CALL Strm_Stop(u32 h) { ALOCK(); locked_Strm_Stop(h); AUNLOCK(); }
+void DC2CALL Strm_SetVolume(u32 h, s32 vol) { ALOCK(); locked_Strm_SetVolume(h, vol); AUNLOCK(); }
+void DC2CALL Strm_Close(u32 h) { ALOCK(); locked_Strm_Close(h); AUNLOCK(); }
+void DC2CALL Strm_Pause(u32 h) { ALOCK(); locked_Strm_Pause(h); AUNLOCK(); }
+void DC2CALL Strm_Resume(u32 h) { ALOCK(); locked_Strm_Resume(h); AUNLOCK(); }
+void PcAudio_Mix(s16 *lr, u32 frames) { ALOCK(); locked_PcAudio_Mix(lr, frames); AUNLOCK(); }
+void PcAudio_SetSource(u32 (*add)(float *lr, u32 frames)) { ALOCK(); locked_PcAudio_SetSource(add); AUNLOCK(); }
 #endif
