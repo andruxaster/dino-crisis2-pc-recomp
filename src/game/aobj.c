@@ -1076,6 +1076,122 @@ void DC2CALL WeaponObj_Type(gptr o)                                 /* 0x4488C0 
     Orig_Call1(U32(0x72160C + (U8(G() + 0x10B4) & 0xF) * 4), o);
 }
 
+/* ---- weapon 1's object (0x72160C [1]): an effect slot of the K2 kind, its
+ * kind +0x7A picking a record of 0x7220C8 {u8 flags, u8 tpage, u8 clut, -,
+ * u32 animation}; steps 0x722100 (0 set up, 1 fly, 2 K2_Unlink) ---- */
+
+/* step 0: kind 2 only lit; else turned upright, its animation, sprite page and
+   CLUT; kind 3 thrown with a random push (bounces: Fly), kind 4 a burst of
+   three (two copies made behind it) */
+void DC2CALL WeaponObj1_Init(gptr o)                                 /* 0x44E570 */
+{
+    u8 kind = U8(o + 0x7A);
+    gptr v = Tmp_Push(8);
+    U16(v) = 0; U16(v + 2) = 0; U16(v + 4) = 0; U16(v + 6) = 0;
+    U8(o + 0x54)++;
+    if (kind == 2) {
+        K2_Light(o, 0);
+        U8(o + 0x50) &= 0xFD;
+        Tmp_Pop(8);
+        return;
+    }
+    RotMatrix(v, o + 0x20);
+    Tmp_Pop(8);
+    K2_SetAnim(o, U32(0x7220CC + U8(o + 0x7A) * 8));
+    u32 k = U8(o + 0x7A);
+    U16(o + 0x6A) = (u16)(U8(0x7220C9 + k * 8) << 5 | 0xA);
+    U16(o + 0x68) = (u16)(U8(0x7220CA + k * 8) + 0x7E08);
+    U32(o + 0x50) |= 2;
+    U8(o + 0x67) |= U8(0x7220C8 + k * 8);
+    if (k == 4) {
+        U8(o + 0x84) |= 1;
+        U8(o + 0x46) = 0;
+        U16(o + 0x4C) = 0x400; U16(o + 0x4A) = 0x400;
+        gptr a = K2_AllocBack();
+        if (!a) { K2_Unlink(o); return; }
+        memcpy(MEM(a), MEM(o), 0xAC);
+        U16(o + 0x4A) = 0;
+        K2_SyncParent(a);
+        gptr b = K2_AllocBack();
+        if (!b) { K2_Unlink(o); return; }
+        memcpy(MEM(b), MEM(o), 0xAC);
+        K2_SyncParent(b);
+        U16(o + 0x42) += 0x40;
+        U16(o + 0x48) = 0x400;
+        K2_SetAnim(o, U32(0x7220F4));
+    } else if (k == 3) {
+        U8(o + 0x85) = 0x10;
+        U8(o + 0x46) = 1;
+        U16(o + 0x7C) = (u16)((Rand8() >> 4) + 0xC);
+        U16(o + 0x7E) = (u16)((Rand8() >> 3) - 0x2E);
+        U8(o + 0x7B) = 4;
+        U16(o + 0x80) = (u16)((Rand8() >> 3) + 0x48);
+        U16(o + 0x9A) = 0xA;
+        U16(o + 0x9E) = 0x32;
+    }
+}
+
+/* step 1: moved by its speed (+0x7C/+0x7E/+0x80, the last position kept at
+   +0x74); kinds 0/1 until the animation ends, 2 gone, 3 bounces off the floor
+   (losing speed, a sound) and the walls until its time is out, 4.. gone */
+void DC2CALL WeaponObj1_Fly(gptr o)                                  /* 0x44E740 */
+{
+    gptr pos = o + 0x40, last = o + 0x74;
+    u32 old = U32(pos);
+    U16(o + 0x42) += U16(o + 0x7E);
+    U16(o + 0x40) += U16(o + 0x7C);
+    U32(last) = old;
+    u16 z = U16(o + 0x44);
+    U16(o + 0x78) = z;
+    U16(o + 0x44) = (u16)(U16(o + 0x80) + z);
+    switch (U8(o + 0x7A)) {
+    case 0: case 1:
+        if (K2_AnimStep(o)) U8(o + 0x54) = 2;
+        return;
+    case 2:
+        U8(G() + 0xF) = 0;
+        K2_Unlink(o);
+        return;
+    case 3: {
+        s32 y = S16(o + 0x42);
+        U16(o + 0x4C) += 0xFE00;
+        U16(o + 0x5A) = (u16)(y / -1000);
+        u16 r = (u16)Floor_Cross(pos, last, pos, 0x10);
+        if (r == 0xFFFE) { U8(o + 0x54) = 2; return; }
+        if (!r) {                                       /* on the floor: back, slower, upward */
+            U16(o + 0x42) = U16(o + 0x76);
+            U16(o + 0x44) = U16(o + 0x78);
+            U16(pos) = U16(last);
+            s32 v = -(S16(o + 0x7E) * 3) / 5;
+            U16(o + 0x7E) = (u16)v;
+            if ((s32)(s16)v + S16(o + 0x9A) > -1) { U16(o + 0x9A) = 0; U16(o + 0x7E) = 0; }
+            Se_Play(U32(G() + 0x940), 0x13);
+        }
+        if (Eff_WallHit(o)) {                           /* a wall: back, turned round */
+            U16(pos) = U16(last);
+            U16(o + 0x44) = U16(o + 0x78);
+            U16(o + 0x80) = (u16)-U16(o + 0x80);
+            U16(o + 0x7C) = (u16)-U16(o + 0x7C);
+            Se_Play(U32(G() + 0x940), 0x13);
+        }
+        K2_AnimStep(o);
+        if (--S16(o + 0x9E) <= 0 && !--S16(o + 0x6C)) K2_Unlink(o);
+        return;
+    }
+    case 4: case 5: case 6:
+        K2_Unlink(o);
+        return;
+    }
+}
+
+void DC2CALL WeaponObj1(gptr o)                                      /* 0x44E530 */
+{
+    Orig_Call1(U32(0x7215E4 + U8(o + 0x7B) * 4), o);
+    Orig_Call1(U32(0x722100 + U8(o + 0x54) * 4), o);
+    K2_SyncParent(o);
+    if (!--U8(o + 0x46)) K2_Detach(o);
+}
+
 void DC2CALL SubWeaponObj_Type(gptr o)                              /* 0x4488E0 */
 {
     Orig_Call1(U32(0x721640 + (U16(G() + 0x10B4) >> 8) * 4), o);

@@ -266,13 +266,13 @@ alone and the harness ignores them.
 Game functions reached only through the game's handler tables, which the
 standalone builds still skip (`Orig_Call1` finds no C version and prints
 `not rewritten yet: handler 0x...`, once each). Seen on the Dreamcast in the
-first rooms (101-102); the PC runs of the test routes did not reach them.
+first rooms (101-102) or found next to them in the same tables; the PC runs
+of the test routes did not reach them.
 
 | address | reached through | what |
 |---|---|---|
-| 0x478870 | `Lights_Run` (0x737A50 [0], by a light's +0xC bit 1) | a marked light's run, kind 0 |
-| 0x478A30 | `Lights_Run` (0x737A50 [1]) | a marked light's run, kind 1 |
-| 0x44E530 | the weapon object type (`aobj.c`, 0x72160C [1], by the weapon in hand G+0x10B4 & 0xF) | the object of weapon 1 |
+| 0x44E3B0, 0x44E910, 0x44ED20, 0x44EF10, 0x44F120, 0x44F410, 0x44F800, 0x44FCF0, 0x44FEC0, 0x450380, 0x450580, 0x450760 | the weapon object type (`aobj.c`, 0x72160C [0, 2..12], by the weapon in hand G+0x10B4 & 0xF) | the objects of the other weapons (weapon 1's, 0x44E530, is done) |
+| 0x44D9E0, 0x44DB30, 0x44DDC0, 0x44DFA0, 0x44E080, 0x44E1D0, 0x44E2C0 | the sub-weapon object type (`aobj.c`, 0x721640, by G+0x10B4 >> 8) | the sub-weapons' objects |
 
 Each goes into `src/hook/hooks.c` and the harness like the others once it is
 rewritten.
