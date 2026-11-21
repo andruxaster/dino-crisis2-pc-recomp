@@ -27,6 +27,7 @@
 #define siglongjmp longjmp
 #elif defined(__linux__)
 #include <unistd.h>
+#include <sys/mman.h>
 #endif
 #include "dc2/game.h"
 #include "dc2/pcinput.h"
@@ -38,6 +39,7 @@
 #include "dc2/pcdraw.h"
 #include "dc2/render.h"
 #include "dc2/data.h"
+#include "port.h"
 #ifdef DC2_GL
 #include <SDL2/SDL.h>
 #include "render_gl.h"
@@ -128,6 +130,17 @@ static void parent_of(char *p)
 /* the memory image: zero, the tables of src/data at their addresses */
 static int load_image(void)
 {
+#ifdef __linux__
+    if (getenv("DC2_GUARD_TEXT")) {
+        /* debug: the original's code (0x400000..IMAGE_DATA) made inaccessible,
+           to show that standalone code never touches it (the Dreamcast build
+           leaves it out of the image) */
+        size_t n = (IMAGE_SIZE + TMP_SIZE + HEAP_SIZE + 0xFFF) & ~(size_t)0xFFF;
+        g_membase = mmap(NULL, n, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_ANONYMOUS, -1, 0);
+        if (g_membase == MAP_FAILED) return 0;
+        mprotect(g_membase, IMAGE_DATA - IMAGE_BASE, PROT_NONE);
+    } else
+#endif
     g_membase = calloc(1, IMAGE_SIZE + TMP_SIZE + HEAP_SIZE);
     if (!g_membase) return 0;
     Data_Init();
@@ -193,67 +206,6 @@ static void wav_header(void)
 }
 static void wav_sink(const s16 *lr, u32 frames) { fwrite(lr, 4, frames, g_wav); g_wav_frames += frames; }
 
-/* the game part of one frame of WinMain's loop (graphics and timing left out) */
-static void game_frame(void)
-{
-    gptr g = G();
-    U32(g + 4)++;
-    U32(0x87F94C) = 0x87DCC0 + U32(0x87DE0C) * 0x90;
-    U32(0x87DC98) = U32(0x87DE0C) ? 0x500000 : 0x550000;
-    PcGpu_ClearOTagR(U32(0x87F94C) + 0x70, 8);
-    PcGpu_ClearOTagR(0x87BC00 + (U32(0x87DE0C) << 12), 0x400);
-    PcGpu_ClearOTagR(0x87DDE0 + U32(0x87DE0C) * 12, 3);
-    PcGpu_ClearOTagR(0x87F960 + (U32(0x87DE0C) << 4), 4);
-    Snd_Tick();
-    if (!Flag_Check(2, 0x17)) File_Tick();
-    if (!Flag_Check(2, 0x22)) {
-        u32 d = U32(0x87DE00) ? U32(0x87DE00) : 1;
-        U32(G() + 0x1098) += d;
-        if (U32(G() + 0x1098) > 0x14996C4) U32(G() + 0x1098) = 0x14996C4;
-    }
-    if (!U8(0x74D74B)) Input_Frame(); else U8(0x74D74B)--;
-    if (Flag_Check(2, 5)) { printf("reset requested (not handled yet)\n"); return; }
-    if (!U8(0x74D749)) {
-        Task_RunAll();
-        Fade_Tick();
-        Msg_Flush();
-    }
-}
-
-/* the start of a run (0x470980, also after a reset): the geometry screen,
-   the game state cleared, the two display/drawing buffers (0,256 and 0,0) */
-static void game_reset(void)
-{
-    SetGeomOffset(160, 120);
-    SetGeomScreen(320);
-    memset(MEM(G()), 0, 0x540 * 4);
-    memcpy(MEM(G() + 0x14EC), MEM(0x723CCC), 16);   /* the options' defaults: stereo, music and sound volume 15 */
-    PcGpu_SetDefDrawEnv(0x87DCD4, 0, 0, 320, 240);
-    PcGpu_SetDefDispEnv(0x87DCC0, 0, 256, 320, 240);
-    PcGpu_SetDefDrawEnv(0x87DD64, 0, 256, 320, 240);
-    PcGpu_SetDefDispEnv(0x87DD50, 0, 0, 320, 240);
-    U32(0x87DE00) = 2;
-    U8(0x87DD7C) = 1; U8(0x87DCEC) = 1;
-    Light_SetFar(0);
-    PcDraw_SetFogEnable(0);
-    PcIn_FixedKeys(0);
-}
-
-/* the graphics part of the main loop (0x47053E): the last frame shown, this
-   one's background and order table drawn, the buffers swapped */
-static void draw_frame(void)
-{
-    PcDraw_PutDispEnv(U32(0x87F94C));
-    PcDraw_PutDrawEnv(U32(0x87F94C) + 0x14);
-    if (Flag_Check(3, 0) && !U8(0x74D749)) {
-        gptr g = G();
-        PcDraw_Background(U32(g + 8), U8(g + 0xC26));
-        if (U8(g + 0xB73)) { U8(g + 0xB73) = 0; U8(g + 0xC26) = 0; }
-    }
-    PcDraw_DrawOTag(U32(0x87F94C) + 0x8C);
-    U32(0x87DE0C) ^= 1;
-}
-
 int main(int argc, char **argv)
 {
     setvbuf(stdout, NULL, _IOLBF, 0);
@@ -305,7 +257,7 @@ int main(int argc, char **argv)
     PcDraw_InitStandalone(rend, 640, 480);
 
     U32(A_G_PTR) = A_G_STATIC;
-    game_reset();
+    Port_GameReset();
     Task_InitStackBase();
     Fade_Set(1, 1, 1);
     Snd_ReleaseAll();
@@ -338,9 +290,9 @@ int main(int argc, char **argv)
         if (quit) break;
 #endif
         g_pad_raw[0] = (u16)held;                   /* read by Input_Frame (0x478BF0) */
-        game_frame();
+        Port_GameFrame();
         PcAudio_Frame(U32(0x87DE00));                  /* the frame's sound */
-        draw_frame();
+        Port_DrawFrame();
 #ifdef DC2_GL
         u32 want = 1000 * (U32(0x87DE00) ? U32(0x87DE00) : 1) / 60, dt = SDL_GetTicks() - t0;
         if (!getenv("DC2_FAST") && dt < want) SDL_Delay(want - dt);
@@ -403,5 +355,6 @@ int main(int argc, char **argv)
         if (!tasks) { printf("frame %4d: no task left\n", f); break; }
     }
     if (g_wav) { wav_header(); fclose(g_wav); }
+    if (getenv("DC2_HEAPSTAT")) printf("heap peak %u KB of %u KB, surfaces peak %u KB\n", Pc_HeapPeak() >> 10, HEAP_SIZE >> 10, PcSoft_SurfacePeak() >> 10);
     return 0;
 }

@@ -63,6 +63,48 @@ static void ctx_end(u32 slot)
     if (g_fib[slot] == GetCurrentFiber()) { g_dead[g_ndead++] = g_fib[slot]; g_fib[slot] = 0; }
     SwitchToFiber(g_sched);
 }
+#elif defined(__DREAMCAST__)
+/* KOS: no ucontext; src/port/dc/ctx_sh4.S swaps the callee-saved registers.
+   Each switch brackets the swap with dc2_ctx_enter / dc2_ctx_leave_irq so that
+   KOS's stack check sees the stack being run (interrupts off in between). */
+#include "../port/dc/ctx_sh4.h"
+#undef TASK_STACK
+#define TASK_STACK 0x10000
+static Dc2Ctx g_sched, g_ctx[4], g_gone;
+static u8 *g_stack[4][2];         /* two stacks per slot: Task_Chain starts on the other one */
+static int g_which[4];
+static u32 g_irq;
+static void dc_start(int slot) { dc2_ctx_leave_irq(g_irq); task_entry(slot); }
+static void dc_start0(void) { dc_start(0); }
+static void dc_start1(void) { dc_start(1); }
+static void dc_start2(void) { dc_start(2); }
+static void dc_start3(void) { dc_start(3); }
+static void (*const g_dc_start[4])(void) = {dc_start0, dc_start1, dc_start2, dc_start3};
+static void ctx_make(u32 slot)
+{
+    int w = g_which[slot] ^= 1;
+    if (!g_stack[slot][w]) g_stack[slot][w] = malloc(TASK_STACK);
+    dc2_ctx_init(&g_ctx[slot], g_stack[slot][w] + TASK_STACK, g_dc_start[slot]);
+}
+static void ctx_run(u32 slot)
+{
+    g_irq = dc2_ctx_enter(g_stack[slot][g_which[slot]], TASK_STACK);
+    dc2_ctx_swap(&g_sched, &g_ctx[slot]);
+    dc2_ctx_leave_irq(g_irq);
+}
+static void ctx_leave(u32 slot)
+{
+    g_irq = dc2_ctx_enter(0, 0);
+    dc2_ctx_swap(&g_ctx[slot], &g_sched);
+    dc2_ctx_leave_irq(g_irq);
+}
+static void ctx_end(u32 slot)
+{
+    (void)slot;
+    g_irq = dc2_ctx_enter(0, 0);
+    dc2_ctx_swap(&g_gone, &g_sched);
+    for (;;) ;                      /* (never resumed) */
+}
 #else
 #include <ucontext.h>
 static ucontext_t g_sched, g_ctx[4];

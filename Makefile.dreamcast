@@ -1,0 +1,85 @@
+# Makefile.dreamcast - the Dreamcast build (KallistiOS). See docs/dreamcast.md.
+#
+#   source /opt/toolchains/dc/kos/environ.sh        (KOS 2.2+, kos-chain "stable")
+#   make -f Makefile.dreamcast                       # -> build/dc/dinocrisis2.elf
+#   make -f Makefile.dreamcast DC2_DC_ROOT=/pc/srv/dc2 run DC_IP=192.168.1.50
+#   make -f Makefile.dreamcast cdi DATA=/srv/dc2     # CD-R image (mkdcdisc)
+#
+# The game code is the same as the PC builds' (src/game, src/pc, src/data,
+# the hook table); only the entry, the renderer and the task switch are
+# Dreamcast-specific (src/port/dc).
+
+ifeq ($(KOS_BASE),)
+$(error KOS_BASE is not set - source $$KOS_BASE/environ.sh first)
+endif
+
+.DEFAULT_GOAL := all
+
+BUILD  := build/dc
+TARGET := $(BUILD)/dinocrisis2.elf
+
+# the folder that holds Data/ (the disc's root, or /pc/<dir> under dcload)
+DC2_DC_ROOT    ?= /cd
+DC2_DC_AUDIO   ?= 1
+DC2_DC_MOVIES  ?= 0
+DC2_DC_VERBOSE ?= 1
+# the game heap (the PC build's 32 MB holds the music; without it ~2 MB is used)
+DC2_DC_HEAP    ?= 0x300000
+
+GAME_SRCS := $(wildcard src/game/*.c) $(wildcard src/pc/*.c) $(wildcard src/data/*.c) src/hook/hooks.c src/port/frame.c
+DC_SRCS   := src/port/dc/main.c src/port/dc/render_pvr.c
+DC_ASM    := src/port/dc/ctx_sh4.S
+
+OBJS := $(patsubst %.c,$(BUILD)/%.o,$(GAME_SRCS) $(DC_SRCS)) $(patsubst %.S,$(BUILD)/%.o,$(DC_ASM))
+
+DEFS := -DDC2_LOWMEM -DHEAP_SIZE=$(DC2_DC_HEAP)u -DDC2_DC_ROOT='"$(DC2_DC_ROOT)"' -DDC2_DC_AUDIO=$(DC2_DC_AUDIO) \
+        -DDC2_DC_MOVIES=$(DC2_DC_MOVIES) -DDC2_DC_VERBOSE=$(DC2_DC_VERBOSE)
+# -fno-strict-aliasing: game memory is read through U8/U16/U32 of any type;
+# the wider ones are packed (unaligned-safe) on the SH-4 (include/dc2/types.h)
+CFLAGS_DC := -std=gnu11 -O2 -fno-strict-aliasing -fwrapv -Wall -Wno-unused-parameter -Wno-unused-function -Iinclude $(DEFS)
+
+# rebuild everything when the switches change (make does not track -D values)
+STAMP := $(BUILD)/.defs
+ifneq ($(file < $(STAMP)),$(DEFS))
+$(shell mkdir -p $(BUILD))
+$(file > $(STAMP),$(DEFS))
+endif
+
+all: $(TARGET)
+
+$(BUILD)/%.o: %.c $(STAMP)
+	@mkdir -p $(dir $@)
+	kos-cc $(CFLAGS_DC) -c $< -o $@
+
+$(BUILD)/%.o: %.S
+	@mkdir -p $(dir $@)
+	kos-cc -c $< -o $@
+
+$(TARGET): $(OBJS)
+	kos-cc -o $@ $(OBJS) -lm
+	$(KOS_SIZE) $@
+
+# the largest static symbols
+bss-report: $(TARGET)
+	$(KOS_CC_BASE)/bin/$(KOS_CC_PREFIX)-nm -S --size-sort $(TARGET) | tail -30
+
+ifneq ($(DC_IP),)
+DC_LOADER := dc-tool-ip -t $(DC_IP) -x
+else ifneq ($(DC_SERIAL),)
+DC_LOADER := dc-tool-ser -t $(DC_SERIAL) -x
+else
+DC_LOADER := $(KOS_LOADER)
+endif
+
+run: $(TARGET)
+	$(DC_LOADER) $(TARGET)
+
+# a CD-R image for Flycast / a burnt disc: DATA = the folder holding Data/
+cdi: $(TARGET)
+	@[ -n "$(DATA)" ] || { echo "usage: make -f Makefile.dreamcast cdi DATA=<folder with Data/>"; exit 1; }
+	sh tools/dreamcast/make_cdi.sh $(TARGET) $(DATA) $(BUILD)/dinocrisis2.cdi
+
+clean:
+	rm -rf $(BUILD)
+
+.PHONY: all bss-report run cdi clean

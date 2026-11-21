@@ -54,4 +54,6 @@ void PcDraw_InitStandalone(const Renderer *r, u32 screen_w, u32 screen_h);
 /* pixels (bpp 2: 1555, 4: 8888 as B, G, R, A bytes) drawn into the back
    buffer over [x0,x1) x [y0,y1), stretched; id and version name the texture */
 void PcSoft_DrawImage(u32 id, u32 version, const void *pix, u32 w, u32 h, u32 bpp, s32 x0, s32 y0, s32 x1, s32 y1);
+/* the most bytes of surface pixels held at once so far */
+u32 PcSoft_SurfacePeak(void);
 #endif

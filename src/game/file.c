@@ -248,6 +248,38 @@ void DC2CALL File_Process(void)                                     /* 0x404290 
         U32(U32(A_FILE_REC) + 4) = U32(A_FILE_LEFT);
         U32(A_FILE_LEFT) = (U32(U32(A_FILE_REC) + 4) + 0x7FF) & ~0x7FFu;
     }
+#if defined(DC2_LOWMEM) && !defined(DC2_IN_PROCESS)
+    /* small-memory builds (the Dreamcast): a container is read record by
+       record rather than whole, and the music streams' data (type 4, the
+       MP3 of the room's music, several MB) stays on the disc: the stream
+       slot gets no handle, so the music calls do nothing */
+    if (fl & 1) {
+        while (U32(A_FILE_LEFT)) {
+            gptr rec = U32(A_FILE_REC);
+            u32 step = (U32(rec + 4) + 0x7FF) & ~0x7FFu;
+            if (step > U32(A_FILE_LEFT)) step = U32(A_FILE_LEFT);
+            if (U32(rec) == 4) {
+                Snd_FreeStream(U32(rec + 8));
+                U32(A_SND_STREAMS + 4 + U32(rec + 8) * 20) = 0;
+                U32(A_SND_STREAMS + U32(rec + 8) * 20) = 0xFFFFFFFF;
+                Pc_Seek(fd, (s32)step, 1);
+            } else {
+                gptr b = Crt_malloc(step ? step : 16);
+                if (!b) break;
+                Pc_Read(fd, b, step);
+                if (U32(rec) <= 7) { g_file_handlers[U32(rec)](rec, b); rec = U32(A_FILE_REC); }
+                Crt_free(b);
+                step = (U32(rec + 4) + 0x7FF) & ~0x7FFu;
+                if (step > U32(A_FILE_LEFT)) step = U32(A_FILE_LEFT);
+            }
+            U32(A_FILE_REC) = rec + 0x20;
+            U32(A_FILE_LEFT) -= step;
+        }
+        Pc_Close(fd);
+        U16(A_FILE_STATE) = 0;
+        return;
+    }
+#endif
     gptr buf = Crt_malloc(U32(A_FILE_LEFT)), p = buf;
     Pc_Read(fd, buf, U32(A_FILE_LEFT));
     Pc_Close(fd);

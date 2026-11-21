@@ -36,7 +36,7 @@ elseif(NOT MSVC)
 endif()
 
 # headless: the game's run as a trace
-add_executable(dc2 src/port/dc2.c)
+add_executable(dc2 src/port/dc2.c src/port/frame.c)
 target_link_libraries(dc2 PRIVATE dc2game)
 
 if(NOT MSVC)
@@ -54,7 +54,7 @@ if(NOT SDL2_FOUND)
 endif()
 find_package(OpenGL REQUIRED)
 if(TARGET SDL2::SDL2)
-  add_executable(dinocrisis2 src/port/dc2.c src/port/render_gl.c)
+  add_executable(dinocrisis2 src/port/dc2.c src/port/frame.c src/port/render_gl.c)
   target_compile_definitions(dinocrisis2 PRIVATE DC2_GL)
   target_link_libraries(dinocrisis2 PRIVATE dc2game OpenGL::GL)
   if(TARGET SDL2::SDL2main)

@@ -22,8 +22,6 @@
 #include "dc2/task.h"
 
 #define OPT 0x87FDC0u
-#define F32(a) (*(float *)MEM(a))
-#define D64(a) (*(double *)MEM(a))
 
 static s32 ftol(long double x) { return (s32)(int64_t)x; }
 

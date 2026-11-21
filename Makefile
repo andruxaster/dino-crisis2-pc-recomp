@@ -41,14 +41,14 @@ $(OUT)/libdc2game.a: $(GAME) $(DATASRC) $(HDRS) | $(OUT)
 	ar rcs $@ $(addprefix $(OUT)/,$(notdir $(GAME:.c=.o) $(DATASRC:.c=.o)))
 $(OUT)/smoke: src/port/smoke.c $(OUT)/libdc2game.a
 	$(CC) $(CFLAGS) -o $@ $^ -lm
-$(OUT)/dc2: src/port/dc2.c $(OUT)/libdc2game.a
+$(OUT)/dc2: src/port/dc2.c src/port/frame.c $(OUT)/libdc2game.a
 	$(CC) $(CFLAGS) -o $@ $^ -lm
 # the movies checked in numbers (tests/movie_test.c)
 $(OUT)/movie_test: tests/movie_test.c $(OUT)/libdc2game.a
 	$(CC) $(CFLAGS) -o $@ $^ -lm
 # the game in a window (SDL2, OpenGL)
 dc2gl: $(OUT)/dc2gl
-$(OUT)/dc2gl: src/port/dc2.c src/port/render_gl.c src/port/render_gl.h $(OUT)/libdc2game.a
+$(OUT)/dc2gl: src/port/dc2.c src/port/frame.c src/port/render_gl.c src/port/render_gl.h $(OUT)/libdc2game.a
 	$(CC) $(CFLAGS) -DDC2_GL -o $@ $(filter %.c %.a,$^) $$(sdl2-config --cflags --libs) -lGL -lm
 
 clean:

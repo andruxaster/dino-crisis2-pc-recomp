@@ -20,7 +20,6 @@
 #include "dc2/orig.h"
 #include "dc2/game.h"
 
-#define F32(a)      (*(float *)MEM(a))
 
 /* the port's globals */
 #define G_TPAGE     0x87BAF4u      /* draw mode: tpage (u16), dfe 0x87BAF6, dtd 0x87BAF7 */

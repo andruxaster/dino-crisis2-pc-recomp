@@ -41,7 +41,6 @@
 #define GTE_SINTAB  0x73C064u   /* s16[0x401], quarter wave, 4096 = 1.0 */
 #define GTE_IDENT   0x73C050u   /* identity MATRIX */
 
-#define F32(a) (*(float *)MEM(a))
 
 s32  DC2CALL rsin(s32 a);                                            /* 0x4C08E0 */
 s32  DC2CALL rcos(s32 a);                                            /* 0x4C0920 */
