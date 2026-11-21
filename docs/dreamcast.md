@@ -52,7 +52,7 @@ reads `/cd/Data/...`.
 | `DC2_DC_ROOT` | `/cd` | the folder that holds `Data/` (`/pc/<dir>` under dcload) |
 | `DC2_DC_AUDIO` | `1` | `0`: no sound at all |
 | `DC2_DC_MOVIES` | `1` | `0`: skip the movies |
-| `DC2_DC_VERBOSE` | `1` | every 300 frames: game mode, room, game heap and surface peaks, malloc in use, free VRAM |
+| `DC2_DC_VERBOSE` | `1` | every 300 frames: game mode, room, game heap and surface peaks, malloc in use, free VRAM; the speed (below) |
 | `DC2_DC_HEAP` | `0x300000` | the game heap (the PC build's 32 MB holds the music) |
 | `DC2_UNALIGNED` | `0` | `1`: every memory access byte-safe (slow; see below) |
 
@@ -107,6 +107,24 @@ And in the shared code, behind switches that the PC builds leave off:
 | Start | 0x800 | pause |
 | L + R + Start | 0x01 | map |
 | A+B+X+Y+Start | | back to the loader |
+
+## Speed and sound
+
+With `DC2_DC_VERBOSE=1` every 300 frames also print a line like
+
+    speed: 24.3 game frames/s (the game wants 30); game 31.2 ms (max 48), drawing 9.1 ms (max 15), waiting 0.0 ms; sound mixing 6% of the CPU
+
+the real rate of game frames against the game's own (0x87DE00 sixtieths a
+frame, mostly 30 a second), then the average and worst time of the game's
+work (`Port_GameFrame`: logic, models, the order table), of the drawing
+(`Port_DrawFrame`: the PC layer, the PVR's submission) and of the wait for
+the next frame (0 when it runs late), and the share of the CPU the sound
+mixer takes.
+
+The sound is mixed in the sound thread when the KOS stream asks for it
+(`stream_cb`, `src/port/dc/main.c`), under the mixer's lock
+(`src/pc/audio.c`), so it keeps its pace when a game frame runs long. (The
+PC builds mix each game frame's share after the frame, as before.)
 
 ## Saves (VMU)
 
