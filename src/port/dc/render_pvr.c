@@ -5,6 +5,8 @@
  *   depth on 1/w: D3D's z test (less-equal on z) becomes greater-equal on rhw;
  *   textures twiddled ARGB1555 (the PC layer's format already), re-uploaded on
  *   a new version, old VRAM freed only once the PVR is done with the scene;
+ *   when VRAM runs short the textures unused longest go first (none the PVR
+ *   may still draw from: the current and the last scene's);
  *   vertex fog: the specular's alpha (D3D: 255 no fog) as the offset colour's
  *   alpha (PVR: 255 all fog);
  *   flat shading: the first vertex's colour on all (the PVR takes the last);
@@ -25,11 +27,13 @@
 #define NTEX         1024
 #define NPENDING     256
 
-typedef struct { u32 id, version, w, h, pw, ph; float su, sv; pvr_ptr_t mem; } Tex;   /* pw x ph: the power-of-two size in VRAM */
+typedef struct { u32 id, version, w, h, pw, ph; float su, sv; pvr_ptr_t mem; u32 used; } Tex;   /* used: the scene it was last drawn in */   /* pw x ph: the power-of-two size in VRAM */
 static Tex g_tex[NTEX];
 static pvr_ptr_t g_pending[2][NPENDING];        /* freed once the scene that may use them is drawn */
 static int g_npending[2], g_cur;
 static int g_in_scene;
+static u32 g_scene = 2;                         /* scenes begun (from 2: "used < g_scene - 1" means not in the last two) */
+static u32 g_evicted;                           /* textures dropped for room (in the log) */
 static u32 g_bg;
 
 /* headers and vertices staged, sent 8 KB at a time */
@@ -52,11 +56,44 @@ static void scene_begin(void)
     g_cur ^= 1;                                  /* the scene before last is done now */
     for (int i = 0; i < g_npending[g_cur]; i++) pvr_mem_free(g_pending[g_cur][i]);
     g_npending[g_cur] = 0;
+    g_scene++;
     pvr_set_bg_color((g_bg >> 16 & 0xFF) / 255.0f, (g_bg >> 8 & 0xFF) / 255.0f, (g_bg & 0xFF) / 255.0f);
     pvr_scene_begin();
     pvr_list_begin(PVR_LIST_TR_POLY);
     g_in_scene = 1;
 }
+
+/* the texture unused longest, the PVR done with it, out of VRAM; 0: none */
+static int evict_one(void)
+{
+    Tex *old = 0;
+    for (int i = 0; i < NTEX; i++) {
+        Tex *e = &g_tex[i];
+        if (e->mem && e->used + 1 < g_scene && (!old || e->used < old->used)) old = e;
+    }
+    if (!old) return 0;
+    pvr_mem_free(old->mem);
+    old->mem = 0; old->id = 0;
+    g_evicted++;
+    return 1;
+}
+
+/* VRAM for a texture: room made first (some to spare, against the heap's
+   fragments), then textures dropped one by one while it does not fit */
+#define VRAM_SPARE (256 * 1024)
+static pvr_ptr_t vram_alloc(u32 n)
+{
+    while (pvr_mem_available() < n + VRAM_SPARE && evict_one()) {}
+    for (;;) {
+        if (pvr_mem_available() >= n) {
+            pvr_ptr_t m = pvr_mem_malloc(n);
+            if (m) return m;
+        }
+        if (!evict_one()) return 0;
+    }
+}
+
+u32 RenderPvr_Evicted(void) { return g_evicted; }
 
 static u32 pow2(u32 n) { u32 p = 8; while (p < n) p <<= 1; return p; }
 
@@ -73,7 +110,8 @@ static Tex *tex_get(const RTexture *t)
     if (e->id != t->id || !e->mem || e->version != t->version || e->w != t->w || e->h != t->h) {
         u32 pw = pow2(t->w), ph = pow2(t->h);
         defer_free(e->mem);
-        e->mem = pvr_mem_malloc(pw * ph * 2);
+        e->mem = 0;
+        e->mem = vram_alloc(pw * ph * 2);
         if (!e->mem) { e->id = 0; return 0; }
         e->id = t->id; e->version = t->version; e->w = t->w; e->h = t->h; e->pw = pw; e->ph = ph;
         e->su = (float)t->w / (float)pw; e->sv = (float)t->h / (float)ph;
@@ -95,6 +133,7 @@ static Tex *tex_get(const RTexture *t)
             free(tmp);
         }
     }
+    e->used = g_scene;
     return e;
 }
 
