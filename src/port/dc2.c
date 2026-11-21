@@ -216,6 +216,7 @@ int main(int argc, char **argv)
     if (argc > 1) { snprintf(root, sizeof root, "%s", argv[1]); parent_of(root); }
     else default_root(root, sizeof root);
     g_pc_root = root;
+    if (getenv("DC2_SAVEDIR")) g_pc_save_root = getenv("DC2_SAVEDIR");   /* the saves elsewhere (default: next to Data) */
 #ifdef DC2_GL
     int frames = argc > 2 ? atoi(argv[2]) : 0;
 #else

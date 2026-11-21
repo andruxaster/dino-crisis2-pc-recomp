@@ -61,6 +61,7 @@ reads `/cd/Data/...`.
 |---|---|
 | `src/port/dc/main.c` | entry: video, PVR, pad, sound stream, the main loop and its pacing |
 | `src/port/dc/render_pvr.c` | the renderer (`include/dc2/render.h`) on the PowerVR2 |
+| `src/port/dc/vmu_save.c` | saves on the VMU |
 | `src/port/dc/ctx_sh4.S`, `ctx_sh4.h` | the task system's context switch (KOS has no ucontext) |
 | `src/game/task.c` | the task backend for KOS (`__DREAMCAST__`) |
 | `src/port/frame.c` | the main loop's game work, shared with `dc2.c` |
@@ -98,6 +99,24 @@ And in the shared code, behind switches that the PC builds leave off:
 | L + R + Start | 0x01 | map |
 | A+B+X+Y+Start | | back to the loader |
 
+## Saves (VMU)
+
+The game writes `SAVE00.DAT`..`SAVE99.DAT` (1524 bytes) with plain file calls.
+On the Dreamcast they go to the RAM disk (`/ram`, `g_pc_save_root`), and
+`vmu_save.c` keeps the first VMU in step with it:
+
+- at start, every `DC2_SAVEnn` file on the VMU is unpacked into `/ram/SAVEnn.DAT`,
+  so the game's load screen lists them;
+- after each save the file is written to the VMU as `DC2_SAVEnn` with a VMS
+  header: "DINO CRISIS 2", the slot and play time, and the save's own icon
+  (the PS1 memory card icon the game puts in the file, doubled to 32x32).
+  A save takes 5 blocks. The header keeps the exact length, so the game reads
+  back its 1524 bytes.
+
+Without a VMU the saves last until the console is switched off. The other
+builds keep the saves next to `Data` (`dc2`: `DC2_SAVEDIR=<dir>` puts them
+elsewhere).
+
 ## Memory (16 MB)
 
 | | |
@@ -129,5 +148,4 @@ MPEG files' last picture).
 ## Not done yet
 
 - the renderer's alpha test (punch-through list), read-back (frame copies see black);
-- saves on the VMU (the game writes `SAVExx.DAT` with plain file calls);
 - the memory cut above, and speed work after profiling on the console.

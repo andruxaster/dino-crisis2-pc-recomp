@@ -118,6 +118,9 @@ void DC2CALL Task_Sleep(u32 n);
 
 #ifndef DC2_IN_PROCESS
 extern const char *g_pc_root;     /* folder that holds "data" (default ".") */
+extern const char *g_pc_save_root; /* folder of the saves (SAVExx.DAT; NULL: g_pc_root) */
+/* called when a file the game made (Pc_Creat) is closed: its host path and game name */
+extern void (*g_pc_save_written)(const char *host, const char *name);
 #ifndef HEAP_SIZE
 #define HEAP_SIZE 0x2000000u      /* after the image and the TMP area; music streams are ~8 MB (DC2_LOWMEM: ~2 MB used) */
 #endif
