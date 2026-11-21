@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include "pvr_tile.h"
+#include "pvr_twiddle.h"
 
 static int fails;
 #define FAIL(...) do { if (fails++ < 20) printf(__VA_ARGS__); } while (0)
@@ -107,6 +108,28 @@ int main(void)
         if (fabs(sum - whole) > 1e-3 * whole + 0.05) FAIL("cut %d: pieces' area %f, the triangle's %f\n", it, sum, whole);
     }
     printf("cut: %d triangles into %d pieces\n", tris, cut);
+    /* the twiddled order against KallistiOS's formula (pvr_txr_load_ex, 16 bpp) */
+    {
+#define TWIDTAB(x) ( (x&1)|((x&2)<<1)|((x&4)<<2)|((x&8)<<3)|((x&16)<<4)| \
+                     ((x&32)<<5)|((x&64)<<6)|((x&128)<<7)|((x&256)<<8)|((x&512)<<9) )
+#define TWIDOUT(x, y) ( TWIDTAB((y)) | (TWIDTAB((x)) << 1) )
+        static unsigned short src[1024 * 1024], ours[1024 * 1024], kos[1024 * 1024];
+        int sizes = 0;
+        for (unsigned w = 8; w <= 1024; w <<= 1)
+            for (unsigned h = 8; h <= 1024; h <<= 1) {
+                if (w * h > 1024 * 512) continue;
+                unsigned pitch = w + (w & 16);                     /* (a pitch wider than the texture too) */
+                for (unsigned i = 0; i < pitch * h; i++) src[i] = (unsigned short)(i * 2654435761u >> 7);
+                unsigned min = w < h ? w : h, mask = min - 1;
+                for (unsigned y = 0; y < h; y++)
+                    for (unsigned x = 0; x < w; x++)
+                        kos[TWIDOUT(x & mask, y & mask) + (x / min + y / min) * min * min] = src[y * pitch + x];
+                pvr_twiddle16(src, pitch, w, h, ours);
+                if (memcmp(ours, kos, w * h * 2)) FAIL("twiddle %u x %u (pitch %u) differs from KallistiOS's\n", w, h, pitch);
+                sizes++;
+            }
+        printf("twiddle: %d sizes as KallistiOS's\n", sizes);
+    }
     printf(fails ? "%d FAILED\n" : "ok\n", fails);
     return fails != 0;
 }

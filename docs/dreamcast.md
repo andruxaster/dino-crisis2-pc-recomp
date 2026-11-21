@@ -141,7 +141,28 @@ new picture only at a blank. (Paced by a timer they began out of step and
 waited for one blank more: ~37 ms a frame with the work under 33.) The
 display's rate is measured at the start (`display: 60 Hz` in the log). A
 frame over 100 ms prints `slow frame N: game X ms, drawing Y ms` (a few a
-report), to find stalls.
+report), to find stalls, with how much of it went on the disc, the JPEG
+backgrounds and the texture uploads (`include/dc2/stall.h`,
+`DC2_STALL_TIMES`).
+
+A camera switch is the usual stall: the game reads the camera's record
+from the room's DBS file, decodes its 320x240 JPEG background, and the
+picture goes to the PVR as a new texture. Each step is made cheaper:
+
+* the records of the room's cameras are kept in RAM once read (1.1 MB at
+  most, the least recently used dropped first, all of them on a room
+  change; `DC2_CAM_CACHE`, `src/game/camera.c`), so a switch back to a
+  camera already seen does not wait for the drive;
+* the JPEG decoder (`src/pc/jpeg.c`) reads the scan through a 32-bit buffer
+  with an 8-bit Huffman lookahead, skips the IDCT's all-zero rows and clamps
+  by a table: about twice as fast on the host, the same pixels
+  (`make jpeg-test`: every picture of the DBS files, also damaged, against
+  hashes written by the decoder before);
+* textures are put in the PVR's twiddled order in RAM by two table lookups
+  a pixel (`src/port/dc/pvr_twiddle.h`, checked against KallistiOS's formula
+  by `make pvr-tile-test`) and copied to VRAM by store queues
+  (`pvr_txr_load`), in place of `pvr_txr_load_ex`, which works the address
+  out bit by bit and writes VRAM 16 bits at a time.
 
 The sound banks' sounds (`Snd_CreateBuffer`) are played by the AICA's own
 channels (`src/port/dc/aica_sfx.c`, `DC2_AICA`): uploaded to sound RAM once

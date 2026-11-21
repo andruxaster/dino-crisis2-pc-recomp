@@ -3,6 +3,7 @@
 #include "dc2/game.h"
 #include "dc2/gte.h"
 #include "dc2/gpu.h"
+#include "dc2/stall.h"
 #include "dc2/pcdraw.h"
 
 #ifdef DC2_IN_PROCESS
@@ -151,7 +152,13 @@ size_t Host_Read(void *p, size_t n, void *file)
     return r;
 }
 
-s32 DC2CALL Pc_Read(s32 fd, gptr buf, u32 n) { return (s32)Host_Read(MEM(buf), n, g_files[fd]); }
+s32 DC2CALL Pc_Read(s32 fd, gptr buf, u32 n)
+{
+    STALL_BEGIN();
+    s32 r = (s32)Host_Read(MEM(buf), n, g_files[fd]);
+    STALL_END(STALL_DISC);
+    return r;
+}
 u32 DC2CALL Pc_Size(s32 fd)
 {
     long cur = ftell(g_files[fd]); fseek(g_files[fd], 0, SEEK_END);
