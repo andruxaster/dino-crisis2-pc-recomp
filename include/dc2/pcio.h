@@ -129,5 +129,11 @@ extern void (*g_pc_save_written)(const char *host, const char *name);
 #define HEAP_SIZE 0x2000000u      /* after the image and the TMP area; music streams are ~8 MB (DC2_LOWMEM: ~2 MB used) */
 #endif
 u32 Pc_HeapPeak(void);            /* the most of the heap used so far (bytes) */
+/* fread that tries again from the same place after a failed read (the
+   Dreamcast's disc can fail a request: KallistiOS "cdrom_stream_request:
+   Previous DMA request is in progress"); n read, or less only at the end of
+   the file or after the tries. Takes a FILE * (void * here: no stdio.h) */
+size_t Host_Read(void *p, size_t n, void *file);
+u32 Host_ReadFailures(void);      /* the reads that needed another try (the log) */
 #endif
 #endif
