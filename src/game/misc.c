@@ -660,6 +660,18 @@ void DC2CALL Box_Close(void)                                        /* 0x4713C0 
     U8(BOX) = 0;
 }
 
+/* the box's last mode in its second table (0x723F70 [20]): closed, its
+   result (BOX+0x14) kept in G+0xB14, flag 2:0xC set when BOX+0x18 bit 0 asks */
+void DC2CALL Box_CloseResult(void)                                  /* 0x4713F0 */
+{
+    Msg_ClearBox();
+    gptr g = G();
+    U8(BOX) = 0;
+    U32(g + 0xB14) = U32(BOX + 0x14);
+    Flag_Set(2, 0x1F, 0);
+    if (U8(BOX + 0x18) & 1) Flag_Set(2, 0xC, 1);
+}
+
 /* the message layer's own draw mode and drawing of its ordering table */
 void DC2CALL Msg_Flush(void)                                        /* 0x471AC0 */
 {

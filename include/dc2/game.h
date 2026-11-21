@@ -842,6 +842,7 @@ void DC2CALL Box_Release(void);                                         /* 0x471
 void DC2CALL Box_YesNo(void);                                           /* 0x4710F0 */
 void DC2CALL Box_Choose(void);                                          /* 0x4712B0 */
 void DC2CALL Box_Close(void);                                           /* 0x4713C0 */
+void DC2CALL Box_CloseResult(void);                                     /* 0x4713F0 */
 void DC2CALL Se_Info(u32 id, gptr r);                                   /* 0x48C220 */
 void DC2CALL Se_Calc(gptr o, u32 vol, gptr pan, gptr pvol, u32 range);  /* 0x48C2D0 */
 u32 DC2CALL Se_Remap(gptr o, u32 id);                                   /* 0x48C3B0 */

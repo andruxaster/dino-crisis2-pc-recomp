@@ -5058,7 +5058,7 @@ static void test_helpers(void)
         {0x473130, Movie_Start, "Movie_Start", 1}, {0x4731F0, Movie_Tick, "Movie_Tick", 0},
         {0x470D30, MsgSlot_Step, "MsgSlot_Step", 1}, {0x470D50, Box_Type, "Box_Type", 0}, {0x470F40, Box_Wait, "Box_Wait", 0},
         {0x470F70, Box_Prompt, "Box_Prompt", 0}, {0x4710D0, Box_Release, "Box_Release", 0}, {0x4710F0, Box_YesNo, "Box_YesNo", 0},
-        {0x4712B0, Box_Choose, "Box_Choose", 0}, {0x4713C0, Box_Close, "Box_Close", 0},
+        {0x4712B0, Box_Choose, "Box_Choose", 0}, {0x4713C0, Box_Close, "Box_Close", 0}, {0x4713F0, Box_CloseResult, "Box_CloseResult", 0},
         {0x48C220, Se_Info, "Se_Info", 2}, {0x48C2D0, Se_Calc, "Se_Calc", 5}, {0x48C3B0, Se_Remap, "Se_Remap", 2, 0xFFFFFFFF},
         {0x48C4F0, Se_Start, "Se_Start", 6}, {0x48C0B0, Se_Play, "Se_Play", 2}, {0x48C640, Se_PlayFlat, "Se_PlayFlat", 3},
         {0x48C600, Se_StopGroup, "Se_StopGroup", 1}, {0x48CE60, Strm_Halt, "Strm_Halt", 1}, {0x494BA0, Text_Draw, "Text_Draw", 7, 0xFFFFFFFF},
