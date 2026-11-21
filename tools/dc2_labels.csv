@@ -2989,3 +2989,4 @@ address,kind,name,category,confidence,notes
 0x4C533C,func,Soft_SpansFlat,pc-draw,high,"flat spans 0x4C533C..0x4C57CE (table 0x74242C); rewritten: src/pc/soft.c"
 0x4C57CF,func,Soft_SpansGouraud,pc-draw,high,"gouraud spans 0x4C57CF..0x4C6051 (table 0x7424A8); rewritten: src/pc/soft.c"
 0x4C6052,func,Soft_GlyphCopy,pc-draw,high,"28x28 glyph copies 0x4C6052..0x4C61BF (table 0x742394); rewritten: src/pc/soft.c"
+0x4713F0,func,Box_CloseResult,message,high,"box mode 0x723F70[20]: closed, BOX+0x14 to G+0xB14, flag 2:0xC by BOX+0x18 bit 0; src/game/misc.c"

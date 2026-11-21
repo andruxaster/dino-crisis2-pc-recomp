@@ -1465,6 +1465,7 @@ const Hook g_hooks[] = {
     {0x4710F0, (void *)Box_YesNo,         "Box_YesNo"},
     {0x4712B0, (void *)Box_Choose,        "Box_Choose"},
     {0x4713C0, (void *)Box_Close,         "Box_Close"},
+    {0x4713F0, (void *)Box_CloseResult,   "Box_CloseResult"},
     {0x48C220, (void *)Se_Info,           "Se_Info"},
     {0x48C2D0, (void *)Se_Calc,           "Se_Calc"},
     {0x48C3B0, (void *)Se_Remap,          "Se_Remap"},
