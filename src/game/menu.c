@@ -12,7 +12,6 @@
 #include "dc2/gte.h"
 #include "dc2/task.h"
 
-#define D64(a) (*(double *)MEM(a))
 #define M_MODES   0x739C28u     /* modes; screens from entry 4 */
 #define M_SCREENS 0x739C38u
 

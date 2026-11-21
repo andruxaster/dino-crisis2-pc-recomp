@@ -16,6 +16,8 @@
 #include <stdint.h>
 #include <dc/pvr.h>
 #include <string.h>
+#include <stdlib.h>
+#include <malloc.h>
 #include "dc2/render.h"
 #include "render_pvr.h"
 
@@ -23,7 +25,7 @@
 #define NTEX         1024
 #define NPENDING     256
 
-typedef struct { u32 id, version, w, h; pvr_ptr_t mem; } Tex;
+typedef struct { u32 id, version, w, h, pw, ph; float su, sv; pvr_ptr_t mem; } Tex;   /* pw x ph: the power-of-two size in VRAM */
 static Tex g_tex[NTEX];
 static pvr_ptr_t g_pending[2][NPENDING];        /* freed once the scene that may use them is drawn */
 static int g_npending[2], g_cur;
@@ -56,20 +58,41 @@ static void scene_begin(void)
     g_in_scene = 1;
 }
 
+static u32 pow2(u32 n) { u32 p = 8; while (p < n) p <<= 1; return p; }
+
+/* 32-bit B, G, R, A to ARGB1555 (alpha from 128 up opaque) */
+static u16 to1555(const u8 *p) { return (u16)((p[3] >= 128 ? 0x8000 : 0) | (p[2] >> 3) << 10 | (p[1] >> 3) << 5 | p[0] >> 3); }
+
+/* a texture in VRAM, uploaded again on a new version: padded to powers of
+   two (the twiddled formats need them; uv scaled by su, sv), 32-bit pixels
+   made 1555, through a temporary of the padded size */
 static Tex *tex_get(const RTexture *t)
 {
-    if (!t || t->bpp != 2 || t->w < 8 || t->h < 8 || t->w > 1024 || t->h > 1024) return 0;
+    if (!t || (t->bpp != 2 && t->bpp != 4) || !t->w || !t->h || t->w > 1024 || t->h > 1024) return 0;
     Tex *e = &g_tex[t->id % NTEX];
     if (e->id != t->id || !e->mem || e->version != t->version || e->w != t->w || e->h != t->h) {
+        u32 pw = pow2(t->w), ph = pow2(t->h);
         defer_free(e->mem);
-        e->mem = pvr_mem_malloc(t->w * t->h * 2);
+        e->mem = pvr_mem_malloc(pw * ph * 2);
         if (!e->mem) { e->id = 0; return 0; }
-        e->id = t->id; e->version = t->version; e->w = t->w; e->h = t->h;
-        if (t->pitch == t->w * 2) pvr_txr_load_ex((void *)t->pixels, e->mem, t->w, t->h, PVR_TXRLOAD_16BPP);
-        else {
-            static u16 tmp[1024 * 1024];
-            for (u32 y = 0; y < t->h; y++) memcpy(tmp + y * t->w, (const u8 *)t->pixels + y * t->pitch, t->w * 2);
-            pvr_txr_load_ex(tmp, e->mem, t->w, t->h, PVR_TXRLOAD_16BPP);
+        e->id = t->id; e->version = t->version; e->w = t->w; e->h = t->h; e->pw = pw; e->ph = ph;
+        e->su = (float)t->w / (float)pw; e->sv = (float)t->h / (float)ph;
+        if (t->bpp == 2 && pw == t->w && ph == t->h && t->pitch == t->w * 2) {
+            pvr_txr_load_ex((void *)t->pixels, e->mem, pw, ph, PVR_TXRLOAD_16BPP);
+        } else {
+            u16 *tmp = memalign(32, pw * ph * 2);
+            if (!tmp) { pvr_mem_free(e->mem); e->mem = 0; e->id = 0; return 0; }
+            memset(tmp, 0, pw * ph * 2);
+            for (u32 y = 0; y < t->h; y++) {
+                const u8 *src = (const u8 *)t->pixels + y * t->pitch;
+                u16 *row = tmp + y * pw;
+                if (t->bpp == 2) memcpy(row, src, t->w * 2);
+                else for (u32 x = 0; x < t->w; x++) row[x] = to1555(src + 4 * x);
+                for (u32 x = t->w; x < pw; x++) row[x] = row[t->w - 1];     /* edges repeated (filtering) */
+            }
+            for (u32 y = t->h; y < ph; y++) memcpy(tmp + y * pw, tmp + (t->h - 1) * pw, pw * 2);
+            pvr_txr_load_ex(tmp, e->mem, pw, ph, PVR_TXRLOAD_16BPP);
+            free(tmp);
         }
     }
     return e;
@@ -105,7 +128,7 @@ static void header(const RState *s, Tex *t)
 {
     pvr_poly_cxt_t c;
     if (t) {
-        pvr_poly_cxt_txr(&c, PVR_LIST_TR_POLY, PVR_TXRFMT_ARGB1555 | PVR_TXRFMT_TWIDDLED, (int)t->w, (int)t->h, t->mem,
+        pvr_poly_cxt_txr(&c, PVR_LIST_TR_POLY, PVR_TXRFMT_ARGB1555 | PVR_TXRFMT_TWIDDLED, (int)t->pw, (int)t->ph, t->mem,
                          s->filter ? PVR_FILTER_BILINEAR : PVR_FILTER_NONE);
         c.txr.env = PVR_TXRENV_MODULATEALPHA;
         c.txr.uv_clamp = PVR_UVCLAMP_UV;
@@ -124,13 +147,14 @@ static void header(const RState *s, Tex *t)
 
 static u32 g_fog_rgb = 0xFFFFFFFF;
 static int g_double;
+static float g_su = 1.0f, g_sv = 1.0f;    /* the drawn texture's uv scale */
 
 static void vertex(const RVertex *v, u32 argb, int eol)
 {
     pvr_vertex_t *p = ta_alloc();
     p->flags = eol ? PVR_CMD_VERTEX_EOL : PVR_CMD_VERTEX;
     p->x = v->x; p->y = v->y; p->z = v->rhw > 0 ? v->rhw : 0.0001f;
-    p->u = v->u; p->v = v->v;
+    p->u = v->u * g_su; p->v = v->v * g_sv;
     if (g_double) {
         u32 r = (argb >> 16 & 0xFF) * 2, g = (argb >> 8 & 0xFF) * 2, b = (argb & 0xFF) * 2;
         argb = (argb & 0xFF000000) | (r > 255 ? 255 : r) << 16 | (g > 255 ? 255 : g) << 8 | (b > 255 ? 255 : b);
@@ -160,6 +184,7 @@ static void pvr_draw(int prim, const RVertex *v, int n, const RState *s, const R
         pvr_fog_table_color(1.0f, (g_fog_rgb >> 16 & 0xFF) / 255.0f, (g_fog_rgb >> 8 & 0xFF) / 255.0f, (g_fog_rgb & 0xFF) / 255.0f);
     }
     g_double = s->modulate2x && tx;
+    g_su = tx ? tx->su : 1.0f; g_sv = tx ? tx->sv : 1.0f;
     int fl = s->flat;
     switch (prim) {
     case 5:                                       /* strip */

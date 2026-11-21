@@ -5,6 +5,7 @@
  * initialisation (0x4BBA30) leaves them. */
 #ifndef DC2_IN_PROCESS
 #include <stdlib.h>
+#include <stdio.h>
 #include <string.h>
 #include "dc2/types.h"
 #include "dc2/gpudev.h"
@@ -99,6 +100,8 @@ static u32 set_material(u32 m, const void *d)
     return 0;
 }
 
+static u32 g_surf_bytes, g_surf_peak;     /* the surfaces' pixels now and at most */
+u32 PcSoft_SurfacePeak(void) { return g_surf_peak; }
 static u32 create_surface(void *desc, u32 *out)
 {
     u8 *d = desc;
@@ -109,6 +112,16 @@ static u32 create_surface(void *desc, u32 *out)
     u32 bits = *(u32 *)(d + SD_PIXFMT + 0xC);
     o->bpp = bits > 16 ? 4 : 2;
     o->pix = calloc((size_t)o->w * o->h, o->bpp);
+    g_surf_bytes += o->w * o->h * o->bpp;
+    if (g_surf_bytes > g_surf_peak) {
+        g_surf_peak = g_surf_bytes;
+        if (getenv("DC2_SURFLOG")) {             /* the live surfaces at a new peak */
+            fprintf(stderr, "surfaces %u KB:", g_surf_bytes >> 10);
+            for (u32 i = 1; i < sizeof g_obj / sizeof g_obj[0]; i++)
+                if (g_obj[i].kind == K_SURF && g_obj[i].pix) fprintf(stderr, " %ux%ux%u", g_obj[i].w, g_obj[i].h, g_obj[i].bpp);
+            fprintf(stderr, "\n");
+        }
+    }
     *out = h;
     return 0;
 }
@@ -126,6 +139,7 @@ static u32 release(u32 h)
     Obj *o = obj(h);
     if (!o) return 0;
     if (o->kind == K_SURF && g_r && g_r->texture_freed) g_r->texture_freed(h);
+    if (o->kind == K_SURF && o->pix) g_surf_bytes -= o->w * o->h * o->bpp;
     free(o->pix); free(o->verts);
     memset(o, 0, sizeof *o);
     return 0;

@@ -73,7 +73,8 @@ void DC2CALL Fog_Enable(u32 on)                 { ORIG(0x4B4F50, void (DC2CALL *
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#ifndef _WIN32
+#if !defined(_WIN32) && !defined(__DREAMCAST__)
+#define DC2_MATCH_CASE 1          /* names matched without case by reading the folders */
 #include <strings.h>
 #include <dirent.h>
 #endif
@@ -96,7 +97,7 @@ static int resolve(const char *game_path, char *out, size_t n)
         comp[k] = 0;
         while (*s == '\\' || *s == '/') s++;
         const char *found = comp;
-#ifndef _WIN32
+#ifdef DC2_MATCH_CASE
         DIR *d = opendir(out);
         struct dirent *e;
         if (d) {
@@ -105,7 +106,7 @@ static int resolve(const char *game_path, char *out, size_t n)
 #endif
         size_t l = strlen(out);
         snprintf(out + l, n - l, "/%s", found);
-#ifndef _WIN32
+#ifdef DC2_MATCH_CASE
         if (d) closedir(d);
 #endif
     }
@@ -148,6 +149,8 @@ s32 DC2CALL Pc_Write(s32 fd, gptr buf, u32 n) { return g_files[fd] ? (s32)fwrite
 /* first-fit heap in the emulated image: blocks of {u32 size | used bit, data} */
 #define HEAP_BASE (IMAGE_BASE + IMAGE_SIZE + TMP_SIZE)
 static int g_heap_init;
+static u32 g_heap_peak;           /* highest end of a block given out, from HEAP_BASE */
+u32 Pc_HeapPeak(void) { return g_heap_peak; }
 gptr DC2CALL Crt_malloc(u32 n)
 {
     if (!g_heap_init) { U32(HEAP_BASE) = HEAP_SIZE - 4; g_heap_init = 1; }
@@ -161,12 +164,20 @@ gptr DC2CALL Crt_malloc(u32 n)
         if (sz < n) continue;
         if (sz >= n + 32) { U32(b + 4 + n) = sz - n - 4; sz = n; }
         U32(b) = sz | 1;
+        if (b + 4 + sz - HEAP_BASE > g_heap_peak) g_heap_peak = b + 4 + sz - HEAP_BASE;
+        if (n >= 0x10000 && getenv("DC2_HEAPLOG"))
+            fprintf(stderr, "heap: %u KB at +%u KB (file %u)\n", n >> 10, (b - HEAP_BASE) >> 10, U16(0x87FFE8));
         return b + 4;
     }
     fprintf(stderr, "Crt_malloc: out of heap (%u bytes)\n", n);
     return 0;
 }
-void DC2CALL Crt_free(gptr p) { if (p) U32(p - 4) &= ~1u; }
+void DC2CALL Crt_free(gptr p)
+{
+    if (!p) return;
+    if ((U32(p - 4) & ~1u) >= 0x10000 && getenv("DC2_HEAPLOG")) fprintf(stderr, "heap: free %u KB at +%u KB\n", U32(p - 4) >> 10, (p - 4 - HEAP_BASE) >> 10);
+    U32(p - 4) &= ~1u;
+}
 void DC2CALL Crt_sprintf3(gptr b, gptr f, u32 x, u32 y, u32 z)
 {
     sprintf((char *)MEM(b), (const char *)MEM(f), (int)x, (int)y, (int)z);

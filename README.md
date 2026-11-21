@@ -30,8 +30,8 @@ One source tree, three builds:
 | `build/dc2` (Linux; `dc2.exe` on Windows) | the game started like WinMain: task system, root task, per-frame work; headless, prints a trace; needs only the game's `Data` (the tables of the exe are in `src/data`) | boots: CORE.DAT, warning and Capcom screens, save scan, title (menu, opening movie / attract demo in turn); buttons can be given on the command line; New Game runs the opening and the game task into room ST101 (file loads, room set-up, room script start); the attract demo and New Game play into the rooms (the trace is the same on Linux and on Windows, `dc2.exe`) |
 | `build/smoke` (Linux, mingw-w64) | the C game code without the exe, on an emulated memory image | rooms loaded and set up by the game's own code (File_Process, Room_SetPointers, Script_Init), script VM, animation: all 89 room scripts run without a fault (600 frames: 61 run all of it, the others end their threads earlier; 13 load their cutscene, SCxx.DAT through script opcode 4D / Door_Load). Each room prints the files its scripts load; a fault prints the faulting game address and the live threads (pc, opcode). The cutscenes themselves are checked with `dc2`: SC01 (room 101) and SC02 (room 102) play to the end and give the player back |
 
-The Dreamcast (KallistiOS) build will reuse the standalone path once the
-whole game logic is in C.
+The Dreamcast (KallistiOS) build, `make -f Makefile.dreamcast`, reuses the
+standalone path; see [docs/dreamcast.md](docs/dreamcast.md) (first build, not run yet).
 
 ## Rules of the code
 
