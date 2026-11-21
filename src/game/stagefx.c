@@ -620,7 +620,7 @@ static void cl_vert(gptr p, gptr q)
 {
     s32 d = (s32)(0x400u << ((U8(G() + 0xB4B) + 1) & 31));
     U32(p) = U32(q); U32(p + 4) = U32(q + 4);
-    F32(p + 8) = (float)((long double)F32(q + 8) / (long double)d);
+    F32(p + 8) = (float)((xreal)F32(q + 8) / (xreal)d);
     U16(p + 0xC) = U16(q + 0xC);
 }
 
@@ -1171,16 +1171,16 @@ void DC2CALL Flame_Draw(gptr e)                                      /* 0x41C350
         U16(v + 4) = 0;
         gte_ldv0(v); gte_rtps(); gte_stsxy(b);
         float x0 = F32(a), y0 = F32(a + 4);
-        u32 dx = (u32)(s32)(int64_t)((long double)x0 - F32(b));
-        u32 dy = (u32)(s32)(int64_t)((long double)y0 - F32(b + 4));
+        u32 dx = (u32)(s32)(int64_t)((xreal)x0 - F32(b));
+        u32 dy = (u32)(s32)(int64_t)((xreal)y0 - F32(b + 4));
         gptr p = U32(0x87DC98);
-        F32(p + 0x28) = (float)((long double)x0 - (long double)dx);
+        F32(p + 0x28) = (float)((xreal)x0 - (xreal)dx);
         U32(p + 8) = U32(p + 0x28);
-        F32(p + 0x38) = (float)((long double)dx + (long double)x0);
+        F32(p + 0x38) = (float)((xreal)dx + (xreal)x0);
         U32(p + 0x18) = U32(p + 0x38);
-        F32(p + 0x1C) = (float)((long double)y0 - (long double)dy);
+        F32(p + 0x1C) = (float)((xreal)y0 - (xreal)dy);
         U32(p + 0xC) = U32(p + 0x1C);
-        F32(p + 0x3C) = (float)((long double)dy + (long double)y0);
+        F32(p + 0x3C) = (float)((xreal)dy + (xreal)y0);
         U32(p + 0x2C) = U32(p + 0x3C);
         PC_stsz_g4_flat(p);
         u8 u = U8(f), w = U8(f + 1);

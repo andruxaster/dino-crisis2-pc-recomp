@@ -33,6 +33,7 @@
 #include "render_pvr.h"
 #include "ctx_sh4.h"
 #include "vmu_save.h"
+#include "unaligned.h"
 
 #ifndef DC2_DC_ROOT
 #define DC2_DC_ROOT "/cd"
@@ -184,6 +185,7 @@ int main(int argc, char **argv)
 {
     (void)argc; (void)argv;
     printf("Dino Crisis 2 (recompilation) for the Dreamcast, data in %s\n", DC2_DC_ROOT);
+    DcUnaligned_Init();                            /* the x86 data's rare unaligned accesses */
     if (!DC2_DC_MOVIES) setenv("DC2_NOMOVIES", "1", 1);
     vid_set_mode(DM_640x480, PM_RGB565);
     const Renderer *rend = RenderPvr_Open();
@@ -225,6 +227,7 @@ int main(int argc, char **argv)
                    (unsigned)f, (unsigned)U16(G() + 0x664), (unsigned)U8(G() + 0x1091), (unsigned)U8(G() + 0x1090),
                    (unsigned)(Pc_HeapPeak() >> 10), (unsigned)(HEAP_SIZE >> 10), (unsigned)(PcSoft_SurfacePeak() >> 10),
                    (unsigned)(mi.uordblks >> 10), (unsigned)(pvr_mem_available() >> 10));
+            DcUnaligned_Report();
         }
 #endif
         u32 tasks = 0;

@@ -415,7 +415,7 @@ u32 DC2CALL Area_SoundArea(u32 area, u32 room)                      /* 0x491B10 
 u32 DC2CALL Text_Left(gptr t)                                       /* 0x494DE0 */
 {
     float m = F32(0x7033B4);
-    long double x = m, y = F32(0x7033B4);
+    xreal x = m, y = F32(0x7033B4);
     for (;; t += 2) {
         u16 w = U16(t);
         u32 c = w >> 12;
@@ -428,7 +428,7 @@ u32 DC2CALL Text_Left(gptr t)                                       /* 0x494DE0 
         y += F32(0x723D4C + (w & 0xFFF) * 4);
     }
     if (x < y) m = (float)y;
-    return (u32)(s32)((long double)F32(0x704620) - (long double)m * F32(0x704624));
+    return (u32)(s32)((xreal)F32(0x704620) - (xreal)m * F32(0x704624));
 }
 
 /* ---- message slots (0x74D980, 32 of 0x10) and the message box (0x87FF80) ------ */
@@ -896,7 +896,7 @@ void DC2CALL Strm_Halt(u32 n)                                       /* 0x48CE60 
    where the characters also sit closer); 1 when it reached the end (0xF) */
 u32 DC2CALL Text_Draw(gptr s, u32 x, u32 y, u32 n, u32 col, u32 z, u32 mode) /* 0x494BA0 */
 {
-    long double X = (s32)(x & 0xFFFF);
+    xreal X = (s32)(x & 0xFFFF);
     u32 c24 = (col & 0xFFFFFF) | 0x6C000000;
     for (;;) {
         u16 cnt = (u16)n;
@@ -924,7 +924,7 @@ u32 DC2CALL Text_Draw(gptr s, u32 x, u32 y, u32 n, u32 col, u32 z, u32 mode) /* 
         gptr ot = 0x87BC00 + 4 * ((U32(0x87DE0C) << 10) + (z & 0xFFFF));
         U32(p) = U32(ot) | 0x2000000; U32(ot) = p & 0xFFFFFF;
         U32(0x87DC98) += 0x38;
-        if ((u16)mode == 2) X += (long double)F32(0x723D4C + idx * 4) - (long double)F32(0x703498);
+        if ((u16)mode == 2) X += (xreal)F32(0x723D4C + idx * 4) - (xreal)F32(0x703498);
         else X += F32(0x723D4C + idx * 4);
         if ((u16)c == 4) {
             X = (s32)(x & 0xFFFF);
@@ -1000,8 +1000,8 @@ u32 DC2CALL Light_Try(gptr p, gptr l, u32 slot)                     /* 0x46BC20 
     RotMatrixYXZ(ang, m);
     U32(v) = 0; U16(v + 4) = U16(l + 0xE); U16(v + 6) = U16(ang + 6);
     ApplyMatrixSV(m, v, v);
-    long double k = (long double)s / (long double)r;
-    s16 x = (s16)(s32)((long double)S16(v) * k), y = (s16)(s32)((long double)S16(v + 2) * k), z = (s16)(s32)((long double)S16(v + 4) * k);
+    xreal k = (xreal)s / (xreal)r;
+    s16 x = (s16)(s32)((xreal)S16(v) * k), y = (s16)(s32)((xreal)S16(v + 2) * k), z = (s16)(s32)((xreal)S16(v + 4) * k);
     Tmp_Pop(0x30);
     U16(p + slot * 8 + 0x78) = (u16)z;
     U16(p + slot * 8 + 0x74) = (u16)x; U16(p + slot * 8 + 0x76) = (u16)y;

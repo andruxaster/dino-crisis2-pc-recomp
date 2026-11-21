@@ -8,7 +8,11 @@
 #define M(m, i, j) S16((m) + 2 * ((i) * 3 + (j)))
 
 /* MSVC _ftol (0x4DD89C): truncate toward zero to 64 bits, low 32 bits returned */
-static s32 ftol(long double x) { return (s32)(int64_t)x; }
+#if defined(__SH4__) || defined(__sh__)
+static s32 ftol(xreal x) { return (s32)x; }          /* (the SH-4's ftrc; via int64_t it would be a library call) */
+#else
+static s32 ftol(xreal x) { return (s32)(int64_t)x; }
+#endif
 
 /* ---- trigonometry, roots ------------------------------------------------- */
 s32 DC2CALL rsin(s32 a)                                              /* 0x4C08E0 */
@@ -24,11 +28,11 @@ s32 DC2CALL rcos(s32 a) { return rsin(a + 0x400); }                  /* 0x4C0920
 s32 DC2CALL ratan2(float y, float x)                                 /* 0x4C0940 */
 {
     /* fpatan, * 2048.0, * 0.3184713375796178 (1/3.14) */
-    return ftol(atan2l((long double)y, (long double)x) * 2048.0 * 0.3184713375796178);
+    return ftol(XATAN2((xreal)y, (xreal)x) * 2048.0 * 0.3184713375796178);
 }
 
-s32 DC2CALL SquareRoot0(s32 x) { return ftol(sqrtl((long double)x)); }               /* 0x4C0960 */
-s32 DC2CALL SquareRoot12(s32 x) { return ftol(sqrtl((long double)x * 0.000244140625)); } /* 0x4C0970 */
+s32 DC2CALL SquareRoot0(s32 x) { return ftol(XSQRT((xreal)x)); }               /* 0x4C0960 */
+s32 DC2CALL SquareRoot12(s32 x) { return ftol(XSQRT((xreal)x * XR(0.000244140625))); } /* 0x4C0970 */
 
 /* ---- geometry state ------------------------------------------------------ */
 void DC2CALL InitGeom(void)                                          /* 0x4C0990 */
@@ -210,7 +214,7 @@ s32 DC2CALL Gte_DepthCue(s32 sz)                                     /* 0x4C1310
     s32 nearz = S32(GTE_DQNEAR), farz = S32(GTE_DQFAR);
     if (sz < nearz) return 0;
     if (sz > farz) return 0x1000;
-    return ftol((long double)(s32)(sz - nearz) / (long double)(s32)(farz - nearz) * (long double)4096.0f);
+    return ftol((xreal)(s32)(sz - nearz) / (xreal)(s32)(farz - nearz) * (xreal)4096.0f);
 }
 
 /* MAC1..3 -> screen x, y (floats) and z */
@@ -220,19 +224,19 @@ void DC2CALL Gte_Project(gptr sx, gptr sy, gptr sz)                  /* 0x4C1350
     s32 h = S32(GTE_H), h2 = S32(GTE_ZNEAR);
     s32 hx = (s32)((u32)h * (u32)x), hy = (s32)((u32)y * (u32)h);
     if (z >= h2) {
-        F32(sx) = (float)((long double)hx / z + S32(GTE_OFX));
-        F32(sy) = (float)((long double)hy / z + S32(GTE_OFY));
+        F32(sx) = (float)((xreal)hx / z + S32(GTE_OFX));
+        F32(sy) = (float)((xreal)hy / z + S32(GTE_OFY));
         S32(sz) = z;
     } else if (z <= 0) {                     /* behind the camera: clamp to H/2 */
-        F32(sx) = (float)((long double)hx / h2 + S32(GTE_OFX));
-        F32(sy) = (float)((long double)hy / h2 + S32(GTE_OFY));
+        F32(sx) = (float)((xreal)hx / h2 + S32(GTE_OFX));
+        F32(sy) = (float)((xreal)hy / h2 + S32(GTE_OFY));
         S32(sz) = 0;
         U32(GTE_FLAG) |= 0x80000000u;
     } else {                                 /* 0 < z < H/2 */
-        long double k = (long double)z / h2;
-        float ty = (float)((long double)y * k);
-        F32(sx) = (float)((long double)x * k * h / z + S32(GTE_OFX));
-        F32(sy) = (float)((long double)h * ty / z + S32(GTE_OFY));
+        xreal k = (xreal)z / h2;
+        float ty = (float)((xreal)y * k);
+        F32(sx) = (float)((xreal)x * k * h / z + S32(GTE_OFX));
+        F32(sy) = (float)((xreal)h * ty / z + S32(GTE_OFY));
         S32(sz) = z;
     }
 }
@@ -304,12 +308,12 @@ s32 DC2CALL RotTransPers4(gptr v0, gptr v1, gptr v2, gptr v3, gptr sxy0, gptr sx
 static void normal1(gptr in, gptr out)
 {
     float x = (float)S16(in), y = (float)S16(in + 2);
-    long double z = S16(in + 4);
-    long double len = sqrtl(z * z + (long double)y * y + (long double)x * x);
-    if (len == 0.0L) len = 1.0L;
-    S16(out) = (s16)ftol((long double)x * 4096.0 / len);
-    S16(out + 2) = (s16)ftol((long double)y * 4096.0 / len);
-    S16(out + 4) = (s16)ftol(z * 4096.0 / len);
+    xreal z = S16(in + 4);
+    xreal len = XSQRT(z * z + (xreal)y * y + (xreal)x * x);
+    if (len == XR(0.0)) len = XR(1.0);
+    S16(out) = (s16)ftol((xreal)x * XR(4096.0) / len);
+    S16(out + 2) = (s16)ftol((xreal)y * XR(4096.0) / len);
+    S16(out + 4) = (s16)ftol(z * XR(4096.0) / len);
 }
 
 void DC2CALL VectorNormalS(gptr in, gptr out)                        /* 0x4C1790: two SVECTORs */
@@ -363,7 +367,7 @@ void DC2CALL SetTransMatrix(gptr m)                                  /* 0x4C1B60
     U32(GTE_TR) = U32(m + 0x14); U32(GTE_TR + 4) = U32(m + 0x18); U32(GTE_TR + 8) = U32(m + 0x1C);
 }
 
-void DC2CALL SetDepthScale(float f) { F32(GTE_ZSCALE) = (float)((long double)f + f); } /* 0x4C1B90 */
+void DC2CALL SetDepthScale(float f) { F32(GTE_ZSCALE) = (float)((xreal)f + f); } /* 0x4C1B90 */
 
 void DC2CALL gte_ldclmv(gptr m)                                      /* 0x4C1BA0: column -> IR */
 {
@@ -407,10 +411,10 @@ void DC2CALL gte_ncct(void)                                          /* 0x4C1CE0
 
 void DC2CALL gte_nclip(void)                                         /* 0x4C1D20 */
 {
-    long double a = ((long double)F32(GTE_SXY + 20) - F32(GTE_SXY + 4)) *
-                    ((long double)F32(GTE_SXY + 8) - F32(GTE_SXY));
-    long double b = ((long double)F32(GTE_SXY + 12) - F32(GTE_SXY + 4)) *
-                    ((long double)F32(GTE_SXY + 16) - F32(GTE_SXY));
+    xreal a = ((xreal)F32(GTE_SXY + 20) - F32(GTE_SXY + 4)) *
+                    ((xreal)F32(GTE_SXY + 8) - F32(GTE_SXY));
+    xreal b = ((xreal)F32(GTE_SXY + 12) - F32(GTE_SXY + 4)) *
+                    ((xreal)F32(GTE_SXY + 16) - F32(GTE_SXY));
     S32(GTE_MAC0) = ftol(a - b);
 }
 
@@ -489,7 +493,7 @@ void DC2CALL gte_stsz4(gptr p)                                       /* 0x4C22E0
 }
 
 /* z / ZSCALE as float into the depth fields of PC primitives */
-static float zf(u32 reg) { return (float)((long double)S32(reg) / F32(GTE_ZSCALE)); }
+static float zf(u32 reg) { return (float)((xreal)S32(reg) / F32(GTE_ZSCALE)); }
 
 void DC2CALL PC_stsz4_g4(gptr p)                                     /* 0x4C2310 */
 {
@@ -532,10 +536,10 @@ static void clip_xform(gptr v, s32 *x, s32 *y, s32 *z)
 
 static void clip_put(gptr o, s32 x, s32 y, s32 z, u8 u, u8 v)
 {
-    long double lz = (long double)z;
+    xreal lz = (xreal)z;
     F32(o + 8) = (float)lz;
-    F32(o) = (float)((long double)(s32)((u32)S32(GTE_H) * (u32)x) / lz + (long double)S32(GTE_OFX));
-    F32(o + 4) = (float)((long double)(s32)((u32)S32(GTE_H) * (u32)y) / lz + (long double)S32(GTE_OFY));
+    F32(o) = (float)((xreal)(s32)((u32)S32(GTE_H) * (u32)x) / lz + (xreal)S32(GTE_OFX));
+    F32(o + 4) = (float)((xreal)(s32)((u32)S32(GTE_H) * (u32)y) / lz + (xreal)S32(GTE_OFY));
     U8(o + 0xC) = u; U8(o + 0xD) = v;
 }
 
@@ -564,15 +568,15 @@ s32 DC2CALL PC_ClipProject(gptr v, gptr uv, gptr out, gptr nclip, s32 n) /* 0x4C
             clip_put(o, px, py, pz, pu, pv);
             cnt++; o += 0x10;
         } else if (pbehind + cbehind == 1) {        /* crossing: the cut point (after the previous one when it is in front) */
-            long double t = (long double)(s32)(pz - near) / (long double)(s32)(pz - cz);
-            float X = (float)((long double)px - (long double)(s32)(px - cx) * t);
-            float Y = (float)((long double)py - (long double)(s32)(py - cy) * t);
-            float U = (float)((long double)pu - (long double)((s32)pu - cu) * t);
-            long double V = (long double)pv - (long double)((s32)pv - cv) * t;
+            xreal t = (xreal)(s32)(pz - near) / (xreal)(s32)(pz - cz);
+            float X = (float)((xreal)px - (xreal)(s32)(px - cx) * t);
+            float Y = (float)((xreal)py - (xreal)(s32)(py - cy) * t);
+            float U = (float)((xreal)pu - (xreal)((s32)pu - cu) * t);
+            xreal V = (xreal)pv - (xreal)((s32)pv - cv) * t;
             if (!pbehind) { clip_put(o, px, py, pz, pu, pv); cnt++; o += 0x10; }
-            F32(o + 8) = (float)(long double)near;
-            F32(o) = (float)((long double)X + X + (long double)S32(GTE_OFX));
-            F32(o + 4) = (float)((long double)Y + Y + (long double)S32(GTE_OFY));
+            F32(o + 8) = (float)(xreal)near;
+            F32(o) = (float)((xreal)X + X + (xreal)S32(GTE_OFX));
+            F32(o + 4) = (float)((xreal)Y + Y + (xreal)S32(GTE_OFY));
             U8(o + 0xC) = (u8)ftol(U);
             U8(o + 0xD) = (u8)ftol(V);
             cnt++; o += 0x10;
@@ -581,9 +585,9 @@ s32 DC2CALL PC_ClipProject(gptr v, gptr uv, gptr out, gptr nclip, s32 n) /* 0x4C
     }
     if (nclip && cnt >= 3) {
         gptr l = out + (u32)cnt * 0x10 - 0x10;
-        long double x0 = F32(out), y0 = F32(out + 4);
-        S32(nclip) = ftol(((long double)F32(l + 4) - y0) * ((long double)F32(out + 0x10) - x0)
-                          - ((long double)F32(out + 0x14) - y0) * ((long double)F32(l) - x0));
+        xreal x0 = F32(out), y0 = F32(out + 4);
+        S32(nclip) = ftol(((xreal)F32(l + 4) - y0) * ((xreal)F32(out + 0x10) - x0)
+                          - ((xreal)F32(out + 0x14) - y0) * ((xreal)F32(l) - x0));
     }
     return cnt;
 }

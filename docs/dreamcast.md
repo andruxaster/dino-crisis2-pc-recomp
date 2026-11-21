@@ -54,6 +54,7 @@ reads `/cd/Data/...`.
 | `DC2_DC_MOVIES` | `1` | `0`: skip the movies |
 | `DC2_DC_VERBOSE` | `1` | every 300 frames: game mode, room, game heap and surface peaks, malloc in use, free VRAM |
 | `DC2_DC_HEAP` | `0x300000` | the game heap (the PC build's 32 MB holds the music) |
+| `DC2_UNALIGNED` | `0` | `1`: every memory access byte-safe (slow; see below) |
 
 ## What is Dreamcast-specific
 
@@ -76,10 +77,18 @@ And in the shared code, behind switches that the PC builds leave off:
 - **`DC2_MOVIE_AVI`** (`src/pc/movie.c`, `movie_avi.c`): the movies as Cinepak
   AVI, decoded straight to ARGB1555 (checked against ffmpeg's decoder: the
   same frames, differences only in the last bit of 5).
-- **Unaligned access** (`include/dc2/types.h`): on the SH-4 every `U16/U32/
-  S16/S32/F32/D64` goes through a packed member, because the game's data was
-  laid out for the x86 and may be unaligned anywhere. Correct, but slower;
-  the hot spots can be given aligned fast paths later, by profile.
+- **Unaligned access.** The game's data was laid out for the x86, which reads
+  words at any address; the SH-4 faults. The game code keeps plain aligned
+  accesses (fast); the places known to be unaligned use `UU16/UU32`
+  (`include/dc2/types.h`; found with `-fsanitize=alignment` on Linux), and
+  `src/port/dc/unaligned.c` emulates any other one in the address-error
+  handler (counted; the verbose report lists their PCs, to resolve with
+  `sh-elf-addr2line -e build/dc/dinocrisis2.elf`). `DC2_UNALIGNED=1` makes every
+  access byte-safe instead (slow: a fallback if the handler misses a case).
+- **Single precision.** The game's float maths repeats the x87's extended
+  precision on the PC (`long double`, bit-identical in the harness); on the
+  SH-4 the same code computes in `float` (`xreal`, `types.h`), as do the
+  mixer's positions, and float-to-int conversions use the FPU directly.
 - **The image without the code**: the original's `.text` (0x400000..0x4E8000,
   ~930 KB) is not allocated; `g_membase` points before the buffer.
 - **Paths** (`src/game/pcio.c`): on KOS names are used as they are (no folder

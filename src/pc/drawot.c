@@ -1608,7 +1608,7 @@ void PcDraw_MasksCreate(u32 n, gptr pixels)                          /* 0x4BE3C0
 }
 
 /* (int * float, rounded to float as the x87 stores it) */
-static float mk_mul(s32 a, gptr k) { return (float)((long double)a * F32(k)); }
+static float mk_mul(s32 a, gptr k) { return (float)((xreal)a * F32(k)); }
 
 /* tile i at screen x, y (320x240) and depth z: its 6 vertices */
 void PcDraw_MasksSetQuad(u32 i, u32 x, u32 y, u32 z)                /* 0x4BE430 */
@@ -1645,7 +1645,7 @@ void PcDraw_MasksSetQuad(u32 i, u32 x, u32 y, u32 z)                /* 0x4BE430 
 void PcDraw_MasksShift(u32 d)                                        /* 0x4BE6A0 */
 {
     float f = mk_mul((s32)d, 0x8644B8);
-    for (s32 i = 0; i < S32(MK_N); i++) { gptr y = U32(MK_VERTS) + 0x20 * i + 4; F32(y) = (float)((long double)F32(y) - f); }
+    for (s32 i = 0; i < S32(MK_N); i++) { gptr y = U32(MK_VERTS) + 0x20 * i + 4; F32(y) = (float)((xreal)F32(y) - f); }
 }
 
 /* tiles by page, then nearest last (qsort comparator) */
@@ -1726,12 +1726,12 @@ static void masks_recreate(void)                                     /* 0x4BEB30
     masks_vb(U32(MK_N));
     for (s32 k = 0; k < S32(MK_N); k += 6) {
         gptr v = U32(MK_VERTS) + k * 0x20;
-        long double x = (long double)U32(v + 0x14);
-        float y = (float)(long double)U32(v + 0x34);
-        float X = (float)(F32(0x8644BC) * x), Y = (float)(F32(0x8644B8) * (long double)y);
+        xreal x = (xreal)U32(v + 0x14);
+        float y = (float)(xreal)U32(v + 0x34);
+        float X = (float)(F32(0x8644BC) * x), Y = (float)(F32(0x8644B8) * (xreal)y);
         F32(v + 0x80) = X; F32(v + 0x40) = X; F32(v) = X;
         F32(v + 0x64) = Y; F32(v + 0x24) = Y; F32(v + 4) = Y;
-        float X2 = (float)((x + F32(0x7031B0)) * F32(0x8644BC)), Y2 = (float)(((long double)y + F32(0x7031B0)) * F32(0x8644B8));
+        float X2 = (float)((x + F32(0x7031B0)) * F32(0x8644BC)), Y2 = (float)(((xreal)y + F32(0x7031B0)) * F32(0x8644B8));
         F32(v + 0xA0) = X2; F32(v + 0x60) = X2; F32(v + 0x20) = X2;
         F32(v + 0xA4) = Y2; F32(v + 0x84) = Y2; F32(v + 0x44) = Y2;
     }

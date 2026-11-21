@@ -33,7 +33,7 @@ static struct {
     u32 a_fmt, a_ch, a_rate, a_align, a_spb;
     u8 *aq; u32 aq_len, aq_pos, aq_cap;  /* compressed sound read ahead of the video */
     s16 *apcm; u32 apcm_n, apcm_cap;
-    double apos;
+    xreal apos;                          /* (float on the SH-4) */
     int ended;
 } A;
 
@@ -272,7 +272,7 @@ static int sound_block(void)
 u32 Avi_Sound(float *lr, u32 frames, u32 rate)
 {
     if (!A.f || !A.a_ch) return 0;
-    double step = (double)A.a_rate / rate;
+    xreal step = (xreal)A.a_rate / (xreal)rate;
     for (u32 i = 0; i < frames; i++) {
         while (A.apos >= A.apcm_n) {
             A.apos -= A.apcm_n; A.apcm_n = 0;

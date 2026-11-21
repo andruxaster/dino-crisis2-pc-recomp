@@ -315,7 +315,7 @@ void DC2CALL Model_Tris(gptr e, u32 n, u32 tp)                        /* 0x4A8C0
         if (culled(p, xo, 3)) continue;
         for (int k = 0; k < 3; k++) {
             s32 sc = (s32)(0x400u << ((z_shift() + 1) & 31));
-            F32(p + 0x10 + 0x14 * k) = (float)((long double)U32(SCR_SZ + 4 * i[k]) / (long double)sc);
+            F32(p + 0x10 + 0x14 * k) = (float)((xreal)U32(SCR_SZ + 4 * i[k]) / (xreal)sc);
         }
         if (zero_or_nan(F32(p + 0x10)) || zero_or_nan(F32(p + 0x24)) || zero_or_nan(F32(p + 0x38))) continue;
         U32(p + 4) = U32(SCR_RGB + 4 * i[0]); U32(p + 0x18) = U32(SCR_RGB + 4 * i[1]); U32(p + 0x2C) = U32(SCR_RGB + 4 * i[2]);
@@ -347,7 +347,7 @@ void DC2CALL Model_Quads(gptr e, u32 n, u32 tp)                       /* 0x4A8F4
         if (culled(p, xo, 4)) continue;
         for (int k = 0; k < 4; k++) {
             s32 sc = (s32)(0x400u << ((z_shift() + 1) & 31));
-            F32(p + 0x10 + 0x14 * k) = (float)((long double)U32(SCR_SZ + 4 * i[k]) / (long double)sc);
+            F32(p + 0x10 + 0x14 * k) = (float)((xreal)U32(SCR_SZ + 4 * i[k]) / (xreal)sc);
         }
         if (zero_or_nan(F32(p + 0x10)) || zero_or_nan(F32(p + 0x24)) || zero_or_nan(F32(p + 0x38)) || zero_or_nan(F32(p + 0x4C))) continue;
         for (int k = 0; k < 4; k++) U32(p + 4 + 0x14 * k) = U32(SCR_RGB + 4 * i[k]);
@@ -646,9 +646,9 @@ void DC2CALL Rope_Draw(void)                                          /* 0x445E1
 /* ---- the text layer --------------------------------------------------------------- */
 
 /* the glyph quad template (13 dwords copied to the primitive at +4) */
-static void glyph_quad(gptr T, long double x, float y)
+static void glyph_quad(gptr T, xreal x, float y)
 {
-    float x0 = (float)x, x1 = (float)(x + 14.0L), y1 = (float)((long double)y + 14.0L);
+    float x0 = (float)x, x1 = (float)(x + XR(14.0)), y1 = (float)((xreal)y + XR(14.0));
     F32(T + 4) = x0; F32(T + 8) = y;
     F32(T + 0x10) = x1; F32(T + 0x14) = y;
     F32(T + 0x1C) = x0; F32(T + 0x20) = y1;
@@ -671,7 +671,7 @@ void DC2CALL Text_DrawAll(void)                                       /* 0x47144
     int cursor = 0;
     for (gptr s = 0x74D980; s < 0x74DB80; s += 0x10) {
         if (!(U8(s) & 1)) continue;
-        long double x = (long double)S16(s + 0xC);
+        xreal x = (xreal)S16(s + 0xC);
         float y = (float)S16(s + 0xE);
         gptr t = U32(s + 4);
         if (U8(s + 1) == 4) {                           /* a primitive */
@@ -689,14 +689,14 @@ void DC2CALL Text_DrawAll(void)                                       /* 0x47144
                 U8(T) = (u8)col; U8(T + 1) = (u8)(col >> 8); U8(T + 2) = (u8)(col >> 16);
                 tp = c & 0xFFF; U16(T + 0x1A) = tp;
                 glyph_quad(T, x, y);
-                x += (long double)F32(0x723D4C + 4 * tp);
+                x += (xreal)F32(0x723D4C + 4 * tp);
             } else if (k == 1) U32(s + 8) = U32(0x723F5C + 4 * (c & 0xF));
-            else if (k == 4) { x = (long double)S16(s + 0xC); y = (float)((long double)y + 16.0L); }
+            else if (k == 4) { x = (xreal)S16(s + 0xC); y = (float)((xreal)y + XR(16.0)); }
             if (k == 0xF) break;
         }
     }
     u32 m = U32(0x87FF90);
-    long double x = (long double)(s32)((m & 0xFF) * 2);
+    xreal x = (xreal)(s32)((m & 0xFF) * 2);
     float y = (float)(s32)(((m >> 8) & 0xFF) * 2);
     for (u32 i = 0; i < 0x8C; i++) {
         u32 d = U32(0x74D750 + 4 * i);
@@ -714,9 +714,9 @@ void DC2CALL Text_DrawAll(void)                                       /* 0x47144
             U32(0x87DC98) += 0x1C;
             cursor = 1;
         }
-        if ((d & 0xFF000000) == 0x2000000) x += 12.0L;
-        else x += (long double)F32(0x723D4C + 4 * tp);
-        if (i == 0x45) { x = (long double)(s32)((U32(0x87FF90) & 0xFF) * 2); y = (float)((long double)y + 14.0L); }
+        if ((d & 0xFF000000) == 0x2000000) x += XR(12.0);
+        else x += (xreal)F32(0x723D4C + 4 * tp);
+        if (i == 0x45) { x = (xreal)(s32)((U32(0x87FF90) & 0xFF) * 2); y = (float)((xreal)y + XR(14.0)); }
     }
     Tmp_Pop(0x34);
     if (cursor) {

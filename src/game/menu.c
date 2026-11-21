@@ -1570,7 +1570,7 @@ void DC2CALL Text_Ascii(u32 x, u32 y, u32 col, gptr s)              /* 0x471B30 
 {
     if (Flag_Check(2, 0x17)) return;
     float x0 = (float)(s32)x;
-    long double cx = (s32)x;
+    xreal cx = (s32)x;
     for (u8 c; (c = U8(s)) != 0; s++) {
         if (c == '\n') { y += 8; cx = x0; continue; }
         if (c == ' ') { cx += F32(0x703458); continue; }
@@ -1586,7 +1586,7 @@ void DC2CALL Text_Ascii(u32 x, u32 y, u32 col, gptr s)              /* 0x471B30 
         U32(p) = U32(l) | 0x04000000;
         U32(l) = p & 0xFFFFFF;
         U32(0x87DC98) = p + 0x1C;
-        cx += (long double)F32(0x7373F4 + k * 4) - D64(0x703460);
+        cx += (xreal)F32(0x7373F4 + k * 4) - D64(0x703460);
     }
 }
 
@@ -2275,7 +2275,7 @@ u32 DC2CALL Memo_Type(gptr t, u32 x, u32 y, u32 page, u32 count, u32 color, u32 
         }
         gptr q = U32(0x87DC98);
         u32 yy = y & 0xFFFF;
-        float x1 = (float)((long double)xc + F32(0x703454));
+        float x1 = (float)((xreal)xc + F32(0x703454));
         float fy0 = (float)(s32)yy, fy1 = (float)(s32)(yy + 0xE);
         U32(q + 4) = cur;
         F32(q + 8) = xc; F32(q + 0xC) = fy0;
@@ -2289,7 +2289,7 @@ u32 DC2CALL Memo_Type(gptr t, u32 x, u32 y, u32 page, u32 count, u32 color, u32 
         U16(q + 0x1E) = (u16)g;
         U16(q + 0x12) = 0x7DCC;
         ot_link(q, 2, z);
-        xc = (float)((long double)xc + F32(0x723D4C + g * 4));
+        xc = (float)((xreal)xc + F32(0x723D4C + g * 4));
         U32(0x87DC98) = q + 0x38;
         if (hi == 4) { xc = (float)(s32)x16; y += 0xF; }
     }
@@ -2720,7 +2720,7 @@ void DC2CALL Map_ZoomDraw(gptr m)                                   /* 0x49C150 
 void DC2CALL Text_AsciiZ(gptr s, u32 x, u32 y, u32 color, u32 z)     /* 0x471C90 */
 {
     float x0 = (float)(s32)x;
-    long double cx = (s32)x;
+    xreal cx = (s32)x;
     for (u8 c; (c = U8(s)) != 0; s++) {
         if (c == '\n') { y += 8; cx = x0; continue; }
         if (c == ' ') { cx += F32(0x703468); continue; }
@@ -2736,7 +2736,7 @@ void DC2CALL Text_AsciiZ(gptr s, u32 x, u32 y, u32 color, u32 z)     /* 0x471C90
         U32(p) = U32(ot) | 0x04000000;
         U32(ot) = p & 0xFFFFFF;
         U32(0x87DC98) = p + 0x1C;
-        cx += (long double)F32(0x7373F4 + k * 4) - D64(0x703460);
+        cx += (xreal)F32(0x7373F4 + k * 4) - D64(0x703460);
     }
     Gpu_SetDrawMode(U32(0x87DC98), 1, 0, 0x28, 0);
     Gpu_AddPrim(0x87BC00 + 4 * ((U32(0x87DE0C) << 10) + z), U32(0x87DC98));

@@ -23,7 +23,11 @@
 
 #define OPT 0x87FDC0u
 
-static s32 ftol(long double x) { return (s32)(int64_t)x; }
+#if defined(__SH4__) || defined(__sh__)
+static s32 ftol(xreal x) { return (s32)x; }
+#else
+static s32 ftol(xreal x) { return (s32)(int64_t)x; }
+#endif
 
 /* a drawing mode packet into the menu's order table */
 static void opt_mode(u32 tpage)
@@ -60,24 +64,24 @@ static void display_load(void)
 /* the width of glyph text (ended by 0xFxxx) */
 s32 DC2CALL Opt_TextWidth(gptr s)                                    /* 0x475AC0 */
 {
-    long double w = F32(0x7033B4);
+    xreal w = F32(0x7033B4);
     for (u16 c; ((c = U16(s)) & 0xF000) != 0xF000; s += 2)
-        w += (long double)F32(0x723D4C + 4 * (c & 0xFFF)) - F32(0x703498);
+        w += (xreal)F32(0x723D4C + 4 * (c & 0xFFF)) - F32(0x703498);
     return ftol(w);
 }
 
 /* the width of ASCII text: its widest line */
 s32 DC2CALL Text_Width(gptr s)                                       /* 0x471E10 */
 {
-    long double cur = F32(0x7033B4);
+    xreal cur = F32(0x7033B4);
     float mx = 0.0f;
     for (u8 c; (c = U8(s)) != 0; s++) {
-        if (c == '\n') { if ((long double)mx < cur) mx = (float)cur; cur = F32(0x7033B4); }
+        if (c == '\n') { if ((xreal)mx < cur) mx = (float)cur; cur = F32(0x7033B4); }
         else if (c == ' ') cur += F32(0x703468);
-        else cur += (long double)F32(0x737370 + 4 * c) - D64(0x703460);
+        else cur += (xreal)F32(0x737370 + 4 * c) - D64(0x703460);
     }
     if (mx == F32(0x7033B4)) return ftol(cur);
-    if ((long double)mx < cur) mx = (float)cur;
+    if ((xreal)mx < cur) mx = (float)cur;
     return ftol(mx);
 }
 
