@@ -150,7 +150,7 @@ static void cinepak(const u8 *p, u32 n)
 static int read_chunk(u8 tag[4], u32 *size)
 {
     u8 h[8];
-    if ((u32)ftell(A.f) + 8 > A.movi_end || fread(h, 1, 8, A.f) != 8) return 0;
+    if ((u32)ftell(A.f) + 8 > A.movi_end || Host_Read(h, 8, A.f) != 8) return 0;
     memcpy(tag, h, 4); *size = rd32(h + 4);
     return 1;
 }
@@ -171,7 +171,7 @@ static int next_chunk(void)
             else if (A.vq_pos > 0x8000) { memmove(A.vq, A.vq + A.vq_pos, A.vq_len - A.vq_pos); A.vq_len -= A.vq_pos; A.vq_pos = 0; }
             if (A.vq_len + 4 + size > A.vq_cap) { A.vq_cap = (A.vq_len + 4 + size) * 3 / 2; A.vq = realloc(A.vq, A.vq_cap); }
             memcpy(A.vq + A.vq_len, &size, 4);
-            if (fread(A.vq + A.vq_len + 4, 1, size, A.f) != size) return 0;
+            if (Host_Read(A.vq + A.vq_len + 4, size, A.f) != size) return 0;
             A.vq_len += 4 + size;
             if (pad) fseek(A.f, 1, SEEK_CUR);
             return 1;
@@ -179,7 +179,7 @@ static int next_chunk(void)
         if (tag[2] == 'w' && tag[3] == 'b' && A.a_ch) {
             if (A.aq_pos > 0x8000) { memmove(A.aq, A.aq + A.aq_pos, A.aq_len - A.aq_pos); A.aq_len -= A.aq_pos; A.aq_pos = 0; }
             if (A.aq_len + size > A.aq_cap) { A.aq_cap = (A.aq_len + size) * 2; A.aq = realloc(A.aq, A.aq_cap); }
-            if (fread(A.aq + A.aq_len, 1, size, A.f) != size) return 0;
+            if (Host_Read(A.aq + A.aq_len, size, A.f) != size) return 0;
             A.aq_len += size;
             if (pad) fseek(A.f, 1, SEEK_CUR);
             return 2;
@@ -201,20 +201,20 @@ int Avi_Open(const char *path)
     if (!(A.f = fopen(path, "rb"))) return 0;
     setvbuf(A.f, NULL, _IOFBF, 0x8000);         /* fewer, larger reads from the disc */
     u8 h[12];
-    if (fread(h, 1, 12, A.f) != 12 || memcmp(h, "RIFF", 4) || memcmp(h + 8, "AVI ", 4)) { Avi_Close(); return 0; }
+    if (Host_Read(h, 12, A.f) != 12 || memcmp(h, "RIFF", 4) || memcmp(h + 8, "AVI ", 4)) { Avi_Close(); return 0; }
     u32 file_end = 8 + rd32(h + 4), kind = 0, vfourcc = 0;
     while ((u32)ftell(A.f) + 8 <= file_end) {
         u8 c[8];
-        if (fread(c, 1, 8, A.f) != 8) break;
+        if (Host_Read(c, 8, A.f) != 8) break;
         u32 size = rd32(c + 4);
         if (!memcmp(c, "LIST", 4)) {
             u8 t[4];
-            if (fread(t, 1, 4, A.f) != 4) break;
+            if (Host_Read(t, 4, A.f) != 4) break;
             if (!memcmp(t, "movi", 4)) { A.movi_end = (u32)ftell(A.f) - 4 + size; break; }
             continue;                                   /* hdrl, strl: go inside */
         }
         u8 *b = malloc(size ? size : 1);
-        if (fread(b, 1, size, A.f) != size) { free(b); break; }
+        if (Host_Read(b, size, A.f) != size) { free(b); break; }
         if (size & 1) fseek(A.f, 1, SEEK_CUR);
         if (!memcmp(c, "avih", 4) && size >= 40) { A.us_per_frame = rd32(b); A.total = rd32(b + 16); }
         else if (!memcmp(c, "strh", 4) && size >= 8) { kind = rd32(b); if (kind == 0x73646976) vfourcc = rd32(b + 4); }  /* 'vids' */

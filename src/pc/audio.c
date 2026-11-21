@@ -129,7 +129,11 @@ static int file_next_block(Voice *v)
     }
     u32 blk = v->fmt == 1 ? v->spb * v->align : v->align;
     u32 n = v->data_len - v->data_read < blk ? v->data_len - v->data_read : blk;
-    if (fread(v->blk, 1, n, v->f) != n) return 0;
+    if (Host_Read(v->blk, n, v->f) != n) {      /* (the next try from this block's start, not mid-block) */
+        clearerr(v->f);
+        fseek(v->f, (long)(v->data_off + v->data_read), SEEK_SET);
+        return 0;
+    }
     v->data_read += n;
     if (v->fmt == 1) {                          /* PCM: 16-bit little-endian or 8-bit unsigned */
         u32 k = n / v->align * v->ch;
@@ -146,13 +150,13 @@ static int file_voice(Voice *v, FILE *f, u32 loop, int pcm_ok)
 {
     u8 hd[12];
     u32 ch = 0, rate = 0, align = 0, fmt = 0, bits = 0, data_off = 0, data_len = 0;
-    if (fread(hd, 1, 12, f) == 12 && !memcmp(hd, "RIFF", 4) && !memcmp(hd + 8, "WAVE", 4)) {
+    if (Host_Read(hd, 12, f) == 12 && !memcmp(hd, "RIFF", 4) && !memcmp(hd + 8, "WAVE", 4)) {
         u8 c[8];
-        while (fread(c, 1, 8, f) == 8) {
+        while (Host_Read(c, 8, f) == 8) {
             u32 n = (u32)(c[4] | c[5] << 8 | c[6] << 16 | (u32)c[7] << 24);
             if (!memcmp(c, "fmt ", 4)) {
                 u8 fm[16];
-                if (n < 16 || fread(fm, 1, 16, f) != 16) break;
+                if (n < 16 || Host_Read(fm, 16, f) != 16) break;
                 fmt = (u32)(fm[0] | fm[1] << 8); ch = (u32)(fm[2] | fm[3] << 8);
                 rate = (u32)(fm[4] | fm[5] << 8 | fm[6] << 16 | (u32)fm[7] << 24); align = (u32)(fm[12] | fm[13] << 8);
                 bits = (u32)(fm[14] | fm[15] << 8);
@@ -301,7 +305,7 @@ static u32 locked_Strm_OpenFile(const char *file, u32 rec, u32 loop)
         if (!ix) { g_bgm_index = calloc(1, 1); SLOG("no %s: the music stays silent\n", path); return 0xFFFFFFFF; }
         fseek(ix, 0, SEEK_END); long n = ftell(ix); fseek(ix, 0, SEEK_SET);
         g_bgm_index = calloc(1, (size_t)n + 1);
-        if (fread(g_bgm_index, 1, (size_t)n, ix) != (size_t)n) g_bgm_index[0] = 0;
+        if (Host_Read(g_bgm_index, (size_t)n, ix) != (size_t)n) g_bgm_index[0] = 0;
         fclose(ix);
     }
     size_t k = 0;

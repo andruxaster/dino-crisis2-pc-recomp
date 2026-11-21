@@ -133,7 +133,25 @@ s32 DC2CALL Pc_Open(gptr path, u32 a, u32 b)
     if (!(g_files[fd] = fopen(host, "rb"))) return -1;
     return fd;
 }
-s32 DC2CALL Pc_Read(s32 fd, gptr buf, u32 n) { return (s32)fread(MEM(buf), 1, n, g_files[fd]); }
+/* a read, again from the same place when it fails (see pcio.h) */
+static u32 g_read_retries;
+u32 Host_ReadFailures(void) { return g_read_retries; }
+size_t Host_Read(void *p, size_t n, void *file)
+{
+    FILE *f = file;
+    long at = ftell(f);
+    size_t r = fread(p, 1, n, f);
+    for (int tries = 0; r != n && !feof(f) && tries < 4; tries++) {
+        g_read_retries++;
+        clearerr(f);
+        if (at < 0 || fseek(f, at, SEEK_SET)) break;
+        r = fread(p, 1, n, f);
+    }
+    if (r != n && ferror(f)) fprintf(stderr, "disc: a read of %u bytes failed\n", (unsigned)n);
+    return r;
+}
+
+s32 DC2CALL Pc_Read(s32 fd, gptr buf, u32 n) { return (s32)Host_Read(MEM(buf), n, g_files[fd]); }
 u32 DC2CALL Pc_Size(s32 fd)
 {
     long cur = ftell(g_files[fd]); fseek(g_files[fd], 0, SEEK_END);
