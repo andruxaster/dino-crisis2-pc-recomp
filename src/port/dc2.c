@@ -356,6 +356,6 @@ int main(int argc, char **argv)
         if (!tasks) { printf("frame %4d: no task left\n", f); break; }
     }
     if (g_wav) { wav_header(); fclose(g_wav); }
-    if (getenv("DC2_HEAPSTAT")) printf("heap peak %u KB of %u KB, surfaces peak %u KB\n", Pc_HeapPeak() >> 10, HEAP_SIZE >> 10, PcSoft_SurfacePeak() >> 10);
+    if (getenv("DC2_HEAPSTAT")) printf("heap peak %u KB of %u KB, surfaces peak %u KB, sound voices now %u KB\n", Pc_HeapPeak() >> 10, HEAP_SIZE >> 10, PcSoft_SurfacePeak() >> 10, PcAudio_Bytes() >> 10);
     return 0;
 }

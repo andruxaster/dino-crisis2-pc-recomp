@@ -53,6 +53,7 @@ typedef struct {
     u32 freq;           /* playing rate (0: its own) */
     xreal_pos pos;         /* in frames */
     u8 used, playing, loop, paused;
+    u8 borrowed;        /* pcm points into game memory (a sound bank), not owned */
     float gl, gr;       /* volume and pan */
     s32 vol, pan;       /* hundredths of a dB */
 } Voice;
@@ -74,7 +75,7 @@ static s32 clamp_cb(s32 v, s32 lo, s32 hi) { return v < lo ? lo : v > hi ? hi : 
 /* v / 127 * range - range, as the PC layer's float to int (towards 0) */
 static s32 cb_of(s32 v, float range) { return (s32)((float)v * 0.007874016f * range - range); }
 
-static void voice_free(Voice *v) { if (v->f) fclose(v->f); free(v->blk); free(v->pcm); memset(v, 0, sizeof *v); }
+static void voice_free(Voice *v) { if (v->f) fclose(v->f); free(v->blk); if (!v->borrowed) free(v->pcm); memset(v, 0, sizeof *v); }
 
 /* ---- IMA ADPCM (WAV format 0x11): blocks of {s16 sample, u8 index, 0} per
    channel, then groups of 4 bytes per channel, 8 samples each, low nibble
@@ -208,9 +209,18 @@ static u32 locked_Snd_CreateBuffer(gptr w, u32 voice)
         if (!memcmp(MEM(c), "data", 4)) { size = U32(c + 4); data = c + 8; break; }
     if (!ch) ch = 1;
     u32 bytes = bits == 8 ? 1 : 2, n = size / (bytes * ch);
-    v->pcm = malloc((size_t)(n ? n : 1) * ch * sizeof(s16));
-    for (u32 i = 0; i < n * ch; i++)
-        v->pcm[i] = bytes == 1 ? (s16)((U8(data + i) - 0x80) << 8) : S16(data + 2 * i);
+#if defined(DC2_LOWMEM)
+    /* small-memory builds: 16-bit sounds play from the bank in game memory
+       (freed after its buffers, Snd_FreeBank) rather than from a copy */
+    if (bytes == 2 && !(data & 1) && n) {
+        v->pcm = (s16 *)MEM(data); v->borrowed = 1;
+    } else
+#endif
+    {
+        v->pcm = malloc((size_t)(n ? n : 1) * ch * sizeof(s16));
+        for (u32 i = 0; i < n * ch; i++)
+            v->pcm[i] = bytes == 1 ? (s16)((U8(data + i) - 0x80) << 8) : S16(data + 2 * i);
+    }
     v->frames = n; v->ch = ch; v->rate = rate ? rate : 22050;
     v->used = 1; v->vol = 0; v->pan = 0; gains(v);
     return h;
@@ -390,6 +400,15 @@ void PcAudio_Frame(u32 sixtieths)
     if (n > 8192) n = 8192;
     PcAudio_Mix(out, n);
     if (g_sink) g_sink(out, n);
+}
+
+/* the memory the voices hold (their PCM copies and file blocks), bytes */
+u32 PcAudio_Bytes(void)
+{
+    u32 n = 0;
+    for (u32 h = 0; h < NBUF; h++) if (g_buf[h].used && !g_buf[h].borrowed) n += (g_buf[h].f ? g_buf[h].spb : g_buf[h].frames) * g_buf[h].ch * 2;
+    for (u32 h = 0; h < NSTRM; h++) if (g_strm[h].used) n += (g_strm[h].f ? g_strm[h].spb : g_strm[h].frames) * g_strm[h].ch * 2;
+    return n;
 }
 
 /* ---- the calls under the lock ---- */
