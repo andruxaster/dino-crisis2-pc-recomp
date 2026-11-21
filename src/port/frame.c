@@ -3,6 +3,7 @@
  * window, the run's start, and the graphics part of the loop. */
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 #include "dc2/game.h"
 #include "dc2/pcinput.h"
 #include "dc2/orig.h"
@@ -61,8 +62,30 @@ void Port_GameReset(void)
 
 /* the graphics part of the main loop (0x47053E): the last frame shown, this
    one's background and order table drawn, the buffers swapped */
+/* Rooms' textures: the small-memory builds (the Dreamcast) keep only the
+   current room's, as the PS1 did: at a room change the PC layer's texture
+   cache is dropped (its pages are made again from VRAM as they are drawn).
+   Elsewhere only with DC2_DROPTEX set (a test). */
+static void room_textures(void)
+{
+    static int on = -1;
+    static u32 room = 0xFFFFFFFF;
+#ifdef DC2_LOWMEM
+    on = 1;
+#else
+    if (on < 0) on = getenv("DC2_DROPTEX") != 0;
+#endif
+    if (!on) return;
+    u32 r = U16(G() + 0x1090);
+    if (r != room) {
+        if (room != 0xFFFFFFFF) PcDraw_DropTextures();
+        room = r;
+    }
+}
+
 void Port_DrawFrame(void)
 {
+    room_textures();
     PcDraw_PutDispEnv(U32(0x87F94C));
     PcDraw_PutDrawEnv(U32(0x87F94C) + 0x14);
     if (Flag_Check(3, 0) && !U8(0x74D749)) {

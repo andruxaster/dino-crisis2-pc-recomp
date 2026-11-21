@@ -726,6 +726,20 @@ void PcDraw_InvalidateRect(gptr rect, u32 mark)                      /* 0x4B4790
         }
 }
 
+/* port-only (the small-memory builds, at each room change): every cached
+   texture dropped, as the PS1 kept only what is in VRAM; each is made again
+   from VRAM the next time it is drawn, so only the room's own stay */
+void PcDraw_DropTextures(void)
+{
+    for (u32 page = 0; page < 32; page++)
+        for (u32 i = 0; i < 32; i++) {
+            gptr e = texc(page, i);
+            if (U8(e)) slot_release(e);
+            memset(MEM(e), 0, 0x18);
+        }
+    Dev_SetTexture(0, 0);
+}
+
 /* the rect at r (clipped to VRAM, in the packet) copied to x, y; then the textures there */
 static void vram_copy(gptr r, s32 x, s32 y)                          /* 0x4B4A60 */
 {
