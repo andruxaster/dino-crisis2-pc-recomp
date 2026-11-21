@@ -51,6 +51,7 @@ static struct {
     double pcm_pos;
     int avi;                            /* a Cinepak AVI (movie_avi.c) */
     u32 avi_frame;                      /* frames shown */
+    unsigned long long avi_us;          /* the clock's last reading (0: stopped) */
 } M;
 
 #ifdef DC2_MOVIE_AVI
@@ -189,21 +190,28 @@ static u32 movie_open(gptr name, u32 x, u32 y)
 }
 
 void DC2CALL Movie_Ctl1(void) { if (M.vid || M.avi) M.running = 1; } /* 0x4BF650 */
-void DC2CALL Movie_Ctl0(void) { M.running = 0; }                    /* 0x4BF670 */
+void DC2CALL Movie_Ctl0(void) { M.running = 0; M.avi_us = 0; }     /* 0x4BF670 */
 
 #ifdef DC2_MOVIE_AVI
+/* The clock here is real time, not the game's frames: the Dreamcast's frames
+   can run late, and the sound plays on in real time regardless. Frames behind
+   are caught up a few a call (Cinepak frames build on the one before, so each
+   is decoded; only the last is drawn). */
+#define AVI_CATCH_UP 4
 static u32 poll_avi(void)
 {
     if (M.running) {
+        unsigned long long now = Port_TimeUs();
+        if (M.avi_us) M.clock += (double)(now - M.avi_us) / 1e6;
+        M.avi_us = now;
         double ft = Avi_FrameTime();
-        while ((double)M.avi_frame * ft <= M.clock + 1e-6) {
+        for (int n = 0; n < AVI_CATCH_UP && (double)M.avi_frame * ft <= M.clock + 1e-6; n++) {
             if (!Avi_NextFrame()) { Movie_Close(); return 1; }
             M.avi_frame++; M.version++;
             if (M.avi_frame == Avi_Frames()) break;
         }
         /* the last frame drawn: ended now, as the MPEG player does */
         if (Avi_Frames() && M.avi_frame >= Avi_Frames()) { Movie_Close(); return 1; }
-        M.clock += (double)(U32(0x87DE00) ? U32(0x87DE00) : 1) / 60.0;
     }
     if (M.version) {
         float sx = F32(0x8644BC), sy = F32(0x8644B8);

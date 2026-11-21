@@ -28,7 +28,7 @@ static struct {
     u32 w, h, us_per_frame, total;      /* total: frames (avih), 0 unknown */
     Books book[MAXSTRIPS];
     u16 *pix;                            /* w x h, the last frame decoded */
-    u8 *chunk; u32 chunk_cap;
+    u8 *vq; u32 vq_len, vq_pos, vq_cap;  /* video chunks read ahead for the sound: {u32 size, data}... */
     /* sound */
     u32 a_fmt, a_ch, a_rate, a_align, a_spb;
     u8 *aq; u32 aq_len, aq_pos, aq_cap;  /* compressed sound read ahead of the video */
@@ -155,8 +155,11 @@ static int read_chunk(u8 tag[4], u32 *size)
     return 1;
 }
 
-/* the next chunk of 'movi': video (1) into A.chunk, sound queued (2), 0 at the end */
-static int next_chunk(u32 *n)
+/* the next chunk of 'movi' queued: video (1) in A.vq, sound (2) in A.aq; 0 at
+   the end. The file is read once, in order (no seeking back: on the disc a
+   chunk read twice costs as much as reading it). */
+#define VQ_MAX 0x40000u                  /* video read ahead at most, waiting for sound */
+static int next_chunk(void)
 {
     for (;;) {
         u8 tag[4]; u32 size;
@@ -164,10 +167,13 @@ static int next_chunk(u32 *n)
         if (!memcmp(tag, "LIST", 4)) { fseek(A.f, 4, SEEK_CUR); continue; }    /* ('rec ' lists: their chunks follow) */
         u32 pad = size & 1;
         if (tag[2] == 'd' && (tag[3] == 'c' || tag[3] == 'b')) {
-            if (size > A.chunk_cap) { A.chunk_cap = size; A.chunk = realloc(A.chunk, size); }
-            if (fread(A.chunk, 1, size, A.f) != size) return 0;
+            if (A.vq_pos == A.vq_len) A.vq_pos = A.vq_len = 0;
+            else if (A.vq_pos > 0x8000) { memmove(A.vq, A.vq + A.vq_pos, A.vq_len - A.vq_pos); A.vq_len -= A.vq_pos; A.vq_pos = 0; }
+            if (A.vq_len + 4 + size > A.vq_cap) { A.vq_cap = (A.vq_len + 4 + size) * 3 / 2; A.vq = realloc(A.vq, A.vq_cap); }
+            memcpy(A.vq + A.vq_len, &size, 4);
+            if (fread(A.vq + A.vq_len + 4, 1, size, A.f) != size) return 0;
+            A.vq_len += 4 + size;
             if (pad) fseek(A.f, 1, SEEK_CUR);
-            *n = size;
             return 1;
         }
         if (tag[2] == 'w' && tag[3] == 'b' && A.a_ch) {
@@ -185,7 +191,7 @@ static int next_chunk(u32 *n)
 void Avi_Close(void)
 {
     if (A.f) fclose(A.f);
-    free(A.pix); free(A.chunk); free(A.aq); free(A.apcm);
+    free(A.pix); free(A.vq); free(A.aq); free(A.apcm);
     memset(&A, 0, sizeof A);
 }
 
@@ -193,6 +199,7 @@ int Avi_Open(const char *path)
 {
     Avi_Close();
     if (!(A.f = fopen(path, "rb"))) return 0;
+    setvbuf(A.f, NULL, _IOFBF, 0x8000);         /* fewer, larger reads from the disc */
     u8 h[12];
     if (fread(h, 1, 12, A.f) != 12 || memcmp(h, "RIFF", 4) || memcmp(h + 8, "AVI ", 4)) { Avi_Close(); return 0; }
     u32 file_end = 8 + rd32(h + 4), kind = 0, vfourcc = 0;
@@ -238,26 +245,23 @@ const u16 *Avi_Pixels(void) { return A.pix; }
 int Avi_NextFrame(void)
 {
     if (!A.f || A.ended) return 0;
-    for (;;) {
-        u32 n = 0;
-        int k = next_chunk(&n);
-        if (!k) { A.ended = 1; return 0; }
-        if (k == 1) { cinepak(A.chunk, n); return 1; }
-    }
+    while (A.vq_len == A.vq_pos)
+        if (!next_chunk()) { A.ended = 1; return 0; }
+    u32 n;
+    memcpy(&n, A.vq + A.vq_pos, 4);
+    cinepak(A.vq + A.vq_pos + 4, n);
+    A.vq_pos += 4 + n;
+    return 1;
 }
 
 /* the next sound block decoded into A.apcm; 0 when there is none */
 static int sound_block(void)
 {
     u32 need = A.a_fmt == 0x11 ? A.a_align : 4096 * A.a_ch;
-    while (A.aq_len - A.aq_pos < need) {
-        u32 n;
-        int k = next_chunk(&n);
-        if (!k) { if (A.aq_len == A.aq_pos) return 0; break; }
-        if (k == 1) {                           /* a video chunk on the way: kept for Avi_NextFrame (sound read ahead) */
-            fseek(A.f, -(long)(n + 8 + (n & 1)), SEEK_CUR);
-            if (A.aq_len - A.aq_pos) break;
-            return 0;
+    while (A.aq_len - A.aq_pos < need) {         /* (video on the way queued for Avi_NextFrame) */
+        if (A.vq_len - A.vq_pos > VQ_MAX || !next_chunk()) {
+            if (A.aq_len == A.aq_pos) return 0;
+            break;
         }
     }
     u32 n = A.aq_len - A.aq_pos < need ? A.aq_len - A.aq_pos : need;
