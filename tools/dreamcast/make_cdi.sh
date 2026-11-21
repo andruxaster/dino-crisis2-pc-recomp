@@ -17,6 +17,11 @@ if ! find "$ROOT" -mindepth 1 -maxdepth 1 -type d -iname data | grep -q .; then
     ls -1 "$ROOT" | sed 's/^/    /'
     exit 1
 fi
+[ -f "$(find "$ROOT" -maxdepth 3 -ipath '*data/bgm/index.txt' | head -1)" ] || \
+    echo "WARNING: no Data/BGM/INDEX.TXT - the music will be silent (run dc2_music.py)."
+if find "$ROOT" -maxdepth 2 -ipath '*movie/*.dat' | grep -q . && ! find "$ROOT" -maxdepth 2 -ipath '*movie/*.avi' | grep -q .; then
+    echo "WARNING: MOVIE/ has no .AVI - the Dreamcast skips the movies (run dc2_movies.sh)."
+fi
 kb=$(du -sk "$ROOT" | cut -f1)
 if [ "$kb" -gt $((680 * 1024)) ]; then
     echo "WARNING: $ROOT is $((kb / 1024)) MB - more than an 80-minute CD-R holds (emulators may still load it)."

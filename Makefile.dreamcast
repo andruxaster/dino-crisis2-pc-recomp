@@ -21,7 +21,7 @@ TARGET := $(BUILD)/dinocrisis2.elf
 # the folder that holds Data/ (the disc's root, or /pc/<dir> under dcload)
 DC2_DC_ROOT    ?= /cd
 DC2_DC_AUDIO   ?= 1
-DC2_DC_MOVIES  ?= 0
+DC2_DC_MOVIES  ?= 1
 DC2_DC_VERBOSE ?= 1
 # the game heap (the PC build's 32 MB holds the music; without it ~2 MB is used)
 DC2_DC_HEAP    ?= 0x300000
@@ -32,7 +32,7 @@ DC_ASM    := src/port/dc/ctx_sh4.S
 
 OBJS := $(patsubst %.c,$(BUILD)/%.o,$(GAME_SRCS) $(DC_SRCS)) $(patsubst %.S,$(BUILD)/%.o,$(DC_ASM))
 
-DEFS := -DDC2_LOWMEM -DHEAP_SIZE=$(DC2_DC_HEAP)u -DDC2_DC_ROOT='"$(DC2_DC_ROOT)"' -DDC2_DC_AUDIO=$(DC2_DC_AUDIO) \
+DEFS := -DDC2_LOWMEM -DDC2_MOVIE_AVI -DHEAP_SIZE=$(DC2_DC_HEAP)u -DDC2_DC_ROOT='"$(DC2_DC_ROOT)"' -DDC2_DC_AUDIO=$(DC2_DC_AUDIO) \
         -DDC2_DC_MOVIES=$(DC2_DC_MOVIES) -DDC2_DC_VERBOSE=$(DC2_DC_VERBOSE)
 # -fno-strict-aliasing: game memory is read through U8/U16/U32 of any type;
 # the wider ones are packed (unaligned-safe) on the SH-4 (include/dc2/types.h)

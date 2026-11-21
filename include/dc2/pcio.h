@@ -38,6 +38,13 @@ void DC2CALL Snd_Resume(u32 h);                         /* 0x4BFB40: on from the
 void DC2CALL Strm_Pause(u32 h);                         /* 0x4BFFD0 */
 void DC2CALL Strm_Resume(u32 h);                        /* 0x4C0010 */
 u32  DC2CALL Strm_Open(gptr mp3, u32 size, u32 loop);  /* 0x4BFC10: handle or -1 */
+#ifndef DC2_IN_PROCESS
+/* standalone: record rec (header index) of file ("MS_0001.DAT") played from
+   data\BGM\ (tools/dreamcast/dc2_music.py): handle or -1 */
+u32  Strm_OpenFile(const char *file, u32 rec, u32 loop);
+/* an IMA ADPCM block (WAV format 0x11) of n bytes into up to spb frames of ch channels */
+u32  PcAudio_ImaBlock(const u8 *b, u32 n, u32 ch, s16 *out, u32 spb);
+#endif
 
 #ifndef DC2_IN_PROCESS
 /* the mixer's output: stereo s16 at rate; PcAudio_Frame mixes the samples of

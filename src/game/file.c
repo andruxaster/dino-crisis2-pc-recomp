@@ -251,18 +251,24 @@ void DC2CALL File_Process(void)                                     /* 0x404290 
 #if defined(DC2_LOWMEM) && !defined(DC2_IN_PROCESS)
     /* small-memory builds (the Dreamcast): a container is read record by
        record rather than whole, and the music streams' data (type 4, the
-       MP3 of the room's music, several MB) stays on the disc: the stream
-       slot gets no handle, so the music calls do nothing */
+       MP3 of the room's music, several MB) is not read: the stream plays
+       from data\BGM\ instead (IMA ADPCM made by tools/dreamcast/dc2_music.py,
+       read from the disc as it plays; none there: no handle, no music) */
     if (fl & 1) {
-        while (U32(A_FILE_LEFT)) {
+        /* (a header-only MS_*.DAT has no data left: its stream records still open) */
+        while (U32(A_FILE_LEFT) || (U32(U32(A_FILE_REC)) == 4 && U32(A_FILE_REC) < FILE_HDR + 0x800)) {
             gptr rec = U32(A_FILE_REC);
             u32 step = (U32(rec + 4) + 0x7FF) & ~0x7FFu;
-            if (step > U32(A_FILE_LEFT)) step = U32(A_FILE_LEFT);
-            if (U32(rec) == 4) {
+            if (step > U32(A_FILE_LEFT) && U32(rec) != 4) step = U32(A_FILE_LEFT);
+            if (U32(rec) == 4) {                   /* played from data\BGM (dc2_music.py) */
                 Snd_FreeStream(U32(rec + 8));
-                U32(A_SND_STREAMS + 4 + U32(rec + 8) * 20) = 0;
-                U32(A_SND_STREAMS + U32(rec + 8) * 20) = 0xFFFFFFFF;
-                Pc_Seek(fd, (s32)step, 1);
+                u32 h = Strm_OpenFile((const char *)MEM(U32(A_FILE_NAMES + U16(A_FILE_ID) * 4)), (rec - FILE_HDR) / 0x20, U32(rec + 0xC));
+                U32(A_SND_STREAMS + U32(rec + 8) * 20) = h;
+                /* the slot's data: Strm_Start plays only a slot that has some,
+                   Snd_FreeStream frees it; a small stand-in when the stream opened */
+                U32(A_SND_STREAMS + 4 + U32(rec + 8) * 20) = h != 0xFFFFFFFF ? Crt_malloc(16) : 0;
+                if (step <= U32(A_FILE_LEFT)) Pc_Seek(fd, (s32)step, 1);
+                else step = U32(A_FILE_LEFT);       /* (MS_*.DAT cut down to their header) */
             } else {
                 gptr b = Crt_malloc(step ? step : 16);
                 if (!b) break;
