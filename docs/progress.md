@@ -70,16 +70,36 @@ The authoritative list is `src/hook/hooks.c`. By area:
 
 ## Not rewritten yet
 
-Game functions reached only through the game's handler tables, which the
-standalone builds still skip (`Orig_Call1` finds no C version and prints
-`not rewritten yet: handler 0x...`, once each). Seen on the Dreamcast in the
-first rooms (101-102) or found next to them in the same tables; the PC runs
-of the test routes did not reach them.
+`tools/dc2_unrewritten.py` lists them: it finds the function entries in
+`Dino2.exe` itself (the targets of direct calls in the game code, code
+addresses in the tables of .rdata/.data, code addresses pushed as task
+starts) and leaves out those in `src/hook/hooks.c`. Every function called
+directly is rewritten; what is left is reached only through the game's
+tables. The tool groups them by table and marks the tables the C code
+dispatches through `Orig_Call*`: those entries are reached in play, and the
+standalone builds then print `not rewritten yet: handler 0x...` (once each)
+or stop the task (`task 0: 0x... not rewritten yet`).
+
+At the time of writing (1868 entries found, 1792 rewritten):
 
 | address | reached through | what |
 |---|---|---|
 | 0x44E3B0, 0x44E910, 0x44ED20, 0x44EF10, 0x44F120, 0x44F410, 0x44F800, 0x44FCF0, 0x44FEC0, 0x450380, 0x450580, 0x450760 | the weapon object type (`aobj.c`, 0x72160C [0, 2..12], by the weapon in hand G+0x10B4 & 0xF) | the objects of the other weapons (weapon 1's, 0x44E530, is done) |
+| their steps: tables 0x7220B8 .. 0x722498 (two each) | the objects above (+0x54) | rewritten with them |
 | 0x44D9E0, 0x44DB30, 0x44DDC0, 0x44DFA0, 0x44E080, 0x44E1D0, 0x44E2C0 | the sub-weapon object type (`aobj.c`, 0x721640, by G+0x10B4 >> 8) | the sub-weapons' objects |
+| their steps: tables 0x721F80 .. 0x722090 | the objects above | rewritten with them |
+| 0x4132A0, 0x4132F0 | a light's script step (`aobj.c`, 0x71E1B4 by l+3) | two of the steps |
+
+Listed by the tool but not to rewrite as such: the `obj_set` / `obj_get`
+kinds (0x738B20, 0x738B44: rewritten as static functions of their C
+dispatchers), 0x404280 (a case of a switch's jump table). Still to look at:
+0x41C9E0, 0x41CA00, 0x41CA30 (a table after the flame's sound ids,
+0x71F004) and 0x448010, 0x448060 (a step table at 0x7215D8, next to the
+costume shop's).
+
+Besides the tool: the standalone builds report what they reach at run time
+(the messages above; `DC2_TRACE=1` with `dc2`), and `build/smoke` runs every
+room's scripts.
 
 Each goes into `src/hook/hooks.c` and the harness like the others once it is
 rewritten.
