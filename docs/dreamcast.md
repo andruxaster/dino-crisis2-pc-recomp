@@ -149,10 +149,11 @@ A camera switch is the usual stall: the game reads the camera's record
 from the room's DBS file, decodes its 320x240 JPEG background, and the
 picture goes to the PVR as a new texture. Each step is made cheaper:
 
-* the records of the room's cameras are kept in RAM once read (1.1 MB at
-  most, the least recently used dropped first, all of them on a room
-  change; `DC2_CAM_CACHE`, `src/game/camera.c`), so a switch back to a
-  camera already seen does not wait for the drive;
+* the records of the room's cameras are kept in RAM once read, with their
+  decoded backgrounds (1.25 MB at most, the least recently used dropped
+  first, all of them on a room change; `DC2_CAM_CACHE`,
+  `src/game/camera.c`), so a switch back to a camera already seen waits
+  neither for the drive nor for the JPEG;
 * the JPEG decoder (`src/pc/jpeg.c`) reads the scan through a 32-bit buffer
   with an 8-bit Huffman lookahead, skips the IDCT's all-zero rows and clamps
   by a table: about twice as fast on the host, the same pixels
@@ -179,6 +180,18 @@ The sound is mixed in the sound thread when the KOS stream asks for it
 (`stream_cb`, `src/port/dc/main.c`), under the mixer's lock
 (`src/pc/audio.c`), so it keeps its pace when a game frame runs long. (The
 PC builds mix each game frame's share after the frame, as before.)
+
+### The profiler
+
+The verbose build also samples the SH-4 a thousand times a second
+(`src/port/dc/prof.c`, on TMU1): the interrupted PC and its caller, in
+32-byte pieces of the code, over all frames and over the slow ones
+apart. Every 1800 frames the log gets three `prof` lines of addresses;
+
+    tools/dreamcast/dc2_prof.py log.txt build/dc/dinocrisis2.elf
+
+names the functions (by `sh-elf-nm` of the same build) with their share of
+the time.
 
 ## Saves (VMU)
 
