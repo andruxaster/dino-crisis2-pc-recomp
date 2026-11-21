@@ -163,6 +163,14 @@ Surfaces get their pixels only when first used (an untouched 640x480 primary
 costs nothing). That is still near the limit. The next cut is the surfaces: once a texture page is in
 VRAM its main-RAM copy is only needed for partial updates.
 
+VRAM (8 MB, ~5 MB left for textures): the PC layer's texture cache is dropped
+at each room change (`PcDraw_DropTextures`: only the room's own pages come
+back, from the emulated PS1 VRAM); textures unused in the last two scenes are
+dropped when VRAM runs short; a texture whose power-of-two padding would waste
+more than an eighth of a side is kept in pieces (`src/port/dc/pvr_tile.h`:
+640 x 480 as 512 x 512 + 128 x 512, 640 KB instead of 1 MB), its triangles
+cut to each piece in texture space (`make pvr-tile-test` checks the cut).
+
 ## Checked on Linux
 
 `dc2` built with `DC2_LOWMEM DC2_UNALIGNED HEAP_SIZE=0x300000` and run with

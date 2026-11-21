@@ -23,12 +23,21 @@
 #include <malloc.h>
 #include "dc2/render.h"
 #include "render_pvr.h"
+#include "pvr_tile.h"
 
 #define VERTEX_BUF   (512 * 1024)
 #define NTEX         1024
 #define NPENDING     256
 
-typedef struct { u32 id, version, w, h, pw, ph; float su, sv; pvr_ptr_t mem; u32 used; } Tex;   /* used: the scene it was last drawn in */   /* pw x ph: the power-of-two size in VRAM */
+/* a texture in VRAM: nx x ny pieces (pvr_tile.h), piece (i, j) at texels
+   xo[i], yo[j] of pw[i] x ph[j] (powers of two) in mem[j * nx + i]; used: the
+   scene it was last drawn in */
+typedef struct {
+    u32 id, version, w, h, used;
+    u8 nx, ny;
+    u16 xo[TILE_MAX + 1], yo[TILE_MAX + 1], pw[TILE_MAX], ph[TILE_MAX];
+    pvr_ptr_t mem[TILE_MAX * TILE_MAX];
+} Tex;
 static Tex g_tex[NTEX];
 static pvr_ptr_t g_pending[2][NPENDING];        /* freed once the scene that may use them is drawn */
 static int g_npending[2], g_cur;
@@ -51,6 +60,14 @@ static void defer_free(pvr_ptr_t m)
     g_pending[g_cur][g_npending[g_cur]++] = m;
 }
 
+/* all of a texture's pieces given back (after the scenes that may draw them) */
+static void tex_release(Tex *e)
+{
+    for (int i = 0; i < e->nx * e->ny; i++) { defer_free(e->mem[i]); e->mem[i] = 0; }
+    e->nx = e->ny = 0;
+    e->id = 0;
+}
+
 static void scene_begin(void)
 {
     if (g_in_scene) return;
@@ -71,11 +88,11 @@ static int evict_one(void)
     Tex *old = 0;
     for (int i = 0; i < NTEX; i++) {
         Tex *e = &g_tex[i];
-        if (e->mem && e->used + 1 < g_scene && (!old || e->used < old->used)) old = e;
+        if (e->nx && e->used + 1 < g_scene && (!old || e->used < old->used)) old = e;
     }
     if (!old) return 0;
-    pvr_mem_free(old->mem);
-    old->mem = 0; old->id = 0;
+    for (int i = 0; i < old->nx * old->ny; i++) { pvr_mem_free(old->mem[i]); old->mem[i] = 0; }
+    old->nx = old->ny = 0; old->id = 0;
     g_evicted++;
     return 1;
 }
@@ -109,38 +126,51 @@ static u32 pow2(u32 n) { u32 p = 8; while (p < n) p <<= 1; return p; }
 /* 32-bit B, G, R, A to ARGB1555 (alpha from 128 up opaque) */
 static u16 to1555(const u8 *p) { return (u16)((p[3] >= 128 ? 0x8000 : 0) | (p[2] >> 3) << 10 | (p[1] >> 3) << 5 | p[0] >> 3); }
 
-/* a texture in VRAM, uploaded again on a new version: padded to powers of
-   two (the twiddled formats need them; uv scaled by su, sv), 32-bit pixels
-   made 1555, through a temporary of the padded size */
+/* texels x0.. x0+tw, y0.. y0+th of t into a pw x ph piece at mem (32-bit
+   pixels made 1555; the padding repeats the last row and column, for the
+   filtering), through a temporary unless the texels fit as they are */
+static int tex_upload(const RTexture *t, pvr_ptr_t mem, u32 x0, u32 y0, u32 tw, u32 th, u32 pw, u32 ph)
+{
+    if (t->bpp == 2 && x0 == 0 && y0 == 0 && pw == t->w && ph == t->h && t->pitch == t->w * 2) {
+        pvr_txr_load_ex((void *)t->pixels, mem, pw, ph, PVR_TXRLOAD_16BPP);
+        return 1;
+    }
+    u16 *tmp = memalign(32, pw * ph * 2);
+    if (!tmp) return 0;
+    for (u32 y = 0; y < th; y++) {
+        const u8 *src = (const u8 *)t->pixels + (y0 + y) * t->pitch + x0 * t->bpp;
+        u16 *row = tmp + y * pw;
+        if (t->bpp == 2) memcpy(row, src, tw * 2);
+        else for (u32 x = 0; x < tw; x++) row[x] = to1555(src + 4 * x);
+        for (u32 x = tw; x < pw; x++) row[x] = row[tw - 1];
+    }
+    for (u32 y = th; y < ph; y++) memcpy(tmp + y * pw, tmp + (th - 1) * pw, pw * 2);
+    pvr_txr_load_ex(tmp, mem, pw, ph, PVR_TXRLOAD_16BPP);
+    free(tmp);
+    return 1;
+}
+
+/* a texture in VRAM, uploaded again on a new version: in pieces of powers of
+   two (the twiddled formats need them), a large one in several (pvr_tile.h) */
 static Tex *tex_get(const RTexture *t)
 {
     if (!t || (t->bpp != 2 && t->bpp != 4) || !t->w || !t->h || t->w > 1024 || t->h > 1024) return 0;
     Tex *e = &g_tex[t->id % NTEX];
-    if (e->id != t->id || !e->mem || e->version != t->version || e->w != t->w || e->h != t->h) {
-        u32 pw = pow2(t->w), ph = pow2(t->h);
-        defer_free(e->mem);
-        e->mem = 0;
-        e->mem = vram_alloc(pw * ph * 2);
-        if (!e->mem) { e->id = 0; return 0; }
-        e->id = t->id; e->version = t->version; e->w = t->w; e->h = t->h; e->pw = pw; e->ph = ph;
-        e->su = (float)t->w / (float)pw; e->sv = (float)t->h / (float)ph;
-        if (t->bpp == 2 && pw == t->w && ph == t->h && t->pitch == t->w * 2) {
-            pvr_txr_load_ex((void *)t->pixels, e->mem, pw, ph, PVR_TXRLOAD_16BPP);
-        } else {
-            u16 *tmp = memalign(32, pw * ph * 2);
-            if (!tmp) { pvr_mem_free(e->mem); e->mem = 0; e->id = 0; return 0; }
-            memset(tmp, 0, pw * ph * 2);
-            for (u32 y = 0; y < t->h; y++) {
-                const u8 *src = (const u8 *)t->pixels + y * t->pitch;
-                u16 *row = tmp + y * pw;
-                if (t->bpp == 2) memcpy(row, src, t->w * 2);
-                else for (u32 x = 0; x < t->w; x++) row[x] = to1555(src + 4 * x);
-                for (u32 x = t->w; x < pw; x++) row[x] = row[t->w - 1];     /* edges repeated (filtering) */
+    if (e->id != t->id || !e->nx || e->version != t->version || e->w != t->w || e->h != t->h) {
+        tex_release(e);
+        e->used = g_scene;                      /* (not taken for room by its own pieces' vram_alloc) */
+        e->nx = (u8)tile_split(t->w, e->xo, e->pw);
+        e->ny = (u8)tile_split(t->h, e->yo, e->ph);
+        for (int j = 0; j < e->ny; j++)
+            for (int i = 0; i < e->nx; i++) {
+                pvr_ptr_t m = vram_alloc((u32)e->pw[i] * e->ph[j] * 2);
+                e->mem[j * e->nx + i] = m;
+                if (!m || !tex_upload(t, m, e->xo[i], e->yo[j], e->xo[i + 1] - e->xo[i], e->yo[j + 1] - e->yo[j], e->pw[i], e->ph[j])) {
+                    tex_release(e);         /* (those made: freed after the scenes, as any) */
+                    return 0;
+                }
             }
-            for (u32 y = t->h; y < ph; y++) memcpy(tmp + y * pw, tmp + (t->h - 1) * pw, pw * 2);
-            pvr_txr_load_ex(tmp, e->mem, pw, ph, PVR_TXRLOAD_16BPP);
-            free(tmp);
-        }
+        e->id = t->id; e->version = t->version; e->w = t->w; e->h = t->h;
     }
     e->used = g_scene;
     return e;
@@ -172,11 +202,13 @@ static int depth_cmp(u8 f)
     return f <= 8 ? k[f] : PVR_DEPTHCMP_ALWAYS;
 }
 
-static void header(const RState *s, Tex *t)
+/* the polygon header: piece k of texture t (or no texture) */
+static void header(const RState *s, const Tex *t, int k)
 {
     pvr_poly_cxt_t c;
     if (t) {
-        pvr_poly_cxt_txr(&c, PVR_LIST_TR_POLY, PVR_TXRFMT_ARGB1555 | PVR_TXRFMT_TWIDDLED, (int)t->pw, (int)t->ph, t->mem,
+        int i = k % t->nx, j = k / t->nx;
+        pvr_poly_cxt_txr(&c, PVR_LIST_TR_POLY, PVR_TXRFMT_ARGB1555 | PVR_TXRFMT_TWIDDLED, t->pw[i], t->ph[j], t->mem[k],
                          s->filter ? PVR_FILTER_BILINEAR : PVR_FILTER_NONE);
         c.txr.env = PVR_TXRENV_MODULATEALPHA;
         c.txr.uv_clamp = PVR_UVCLAMP_UV;
@@ -221,19 +253,77 @@ static void line(const RVertex *a, const RVertex *b, int flat)
     vertex(&q[0], a->diffuse, 0); vertex(&q[1], a->diffuse, 0); vertex(&q[2], cb, 0); vertex(&q[3], cb, 1);
 }
 
+static TileV tilev(const RVertex *v, u32 argb)
+{
+    TileV o;
+    float w = v->rhw > 0 ? v->rhw : 0.0001f;
+    o.x = v->x; o.y = v->y; o.w = w; o.uw = v->u * w; o.vw = v->v * w;
+    for (int i = 0; i < 4; i++) o.c[i] = (float)(argb >> (24 - 8 * i) & 0xFF);
+    o.fog = (float)(v->specular >> 24);
+    return o;
+}
+
+static u32 chan(float f) { return f <= 0 ? 0 : f >= 255 ? 255 : (u32)(f + 0.5f); }
+
+/* triangles over a texture in pieces: each cut to every piece (in texture
+   space, perspective-correct) and drawn with that piece's header; the
+   pieces' uv made the piece's own */
+static void draw_tiled(int prim, const RVertex *v, int n, const RState *s, const Tex *tx, int fl)
+{
+    int ntri = prim == 4 ? n / 3 : n - 2;
+    if (ntri <= 0) return;
+    for (int k = 0; k < tx->nx * tx->ny; k++) {
+        int i = k % tx->nx, j = k / tx->nx, hdr = 0;
+        /* the piece in the texture's 0..1, its outer sides open (uv clamped there) */
+        float u0 = i ? (float)tx->xo[i] / tx->w : -1e30f, u1 = i + 1 < tx->nx ? (float)tx->xo[i + 1] / tx->w : 1e30f;
+        float v0 = j ? (float)tx->yo[j] / tx->h : -1e30f, v1 = j + 1 < tx->ny ? (float)tx->yo[j + 1] / tx->h : 1e30f;
+        float su = (float)tx->w / tx->pw[i], sv = (float)tx->h / tx->ph[j];
+        float ou = (float)tx->xo[i] / tx->pw[i], ov = (float)tx->yo[j] / tx->ph[j];
+        for (int t = 0; t < ntri; t++) {
+            int a, b, c;
+            u32 flat;
+            if (prim == 4) { a = 3 * t; b = a + 1; c = a + 2; flat = v[a].diffuse; }
+            else if (prim == 5) { a = t; b = t + 1; c = t + 2; flat = v[0].diffuse; }
+            else { a = 0; b = t + 1; c = t + 2; flat = v[0].diffuse; }
+            TileV tri[3] = {tilev(&v[a], fl ? flat : v[a].diffuse), tilev(&v[b], fl ? flat : v[b].diffuse), tilev(&v[c], fl ? flat : v[c].diffuse)};
+            TileV out[8], tmp[8];
+            int m = tile_clip(tri, u0, u1, v0, v1, out, tmp);
+            if (!m) continue;
+            if (!hdr) { header(s, tx, k); hdr = 1; }
+            for (int q = 1; q + 1 < m; q++) {
+                const TileV *p3[3] = {&out[0], &out[q], &out[q + 1]};
+                for (int r = 0; r < 3; r++) {
+                    const TileV *p = p3[r];
+                    RVertex rv;
+                    rv.x = p->x; rv.y = p->y; rv.rhw = p->w;
+                    rv.u = p->uw / p->w * su - ou; rv.v = p->vw / p->w * sv - ov;
+                    rv.specular = chan(p->fog) << 24;
+                    u32 argb = chan(p->c[0]) << 24 | chan(p->c[1]) << 16 | chan(p->c[2]) << 8 | chan(p->c[3]);
+                    vertex(&rv, argb, r == 2);
+                }
+            }
+        }
+    }
+}
+
 static void pvr_draw(int prim, const RVertex *v, int n, const RState *s, const RTexture *t)
 {
     if (n <= 0) return;
     scene_begin();
     Tex *tx = tex_get(t);
-    header(s, tx);
     if (s->fog && s->fog_color != g_fog_rgb) {
         g_fog_rgb = s->fog_color;
         pvr_fog_table_color(1.0f, (g_fog_rgb >> 16 & 0xFF) / 255.0f, (g_fog_rgb >> 8 & 0xFF) / 255.0f, (g_fog_rgb & 0xFF) / 255.0f);
     }
     g_double = s->modulate2x && tx;
-    g_su = tx ? tx->su : 1.0f; g_sv = tx ? tx->sv : 1.0f;
     int fl = s->flat;
+    if (tx && tx->nx * tx->ny > 1 && prim >= 4) {       /* (lines and points over pieces: the first piece's) */
+        g_su = g_sv = 1.0f;
+        draw_tiled(prim, v, n, s, tx, fl);
+        return;
+    }
+    header(s, tx, 0);
+    g_su = tx ? (float)tx->w / tx->pw[0] : 1.0f; g_sv = tx ? (float)tx->h / tx->ph[0] : 1.0f;
     switch (prim) {
     case 5:                                       /* strip */
         for (int i = 0; i < n; i++) vertex(&v[i], fl ? v[0].diffuse : v[i].diffuse, i == n - 1);
@@ -280,7 +370,7 @@ static void pvr_read_back(u16 *dst, u32 w, u32 h, u32 pitch)
 static void pvr_texture_freed(u32 id)
 {
     Tex *e = &g_tex[id % NTEX];
-    if (e->id == id && e->mem) { defer_free(e->mem); e->mem = 0; e->id = 0; }
+    if (e->id == id && e->nx) tex_release(e);
 }
 
 static const Renderer k_pvr = {pvr_begin_frame, pvr_clear, pvr_draw, pvr_present, pvr_read_back, pvr_texture_freed};
