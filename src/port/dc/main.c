@@ -142,19 +142,29 @@ static void audio_open(void)
 }
 #endif
 
-/* ---- pacing: the game's frame lasts 0x87DE00 sixtieths of a second -------------------- */
+/* ---- pacing: the game's frame lasts 0x87DE00 sixtieths of a second --------------------
+ * Deadlines in a series (next = the last deadline + the frame's length), so
+ * small delays even out. A late frame does not wait at all; one more than a
+ * frame late starts the series again from now (no catching up). Long waits
+ * sleep with a 12 ms margin (thd_sleep wakes late on the console), the rest is
+ * spun out with thd_pass. */
 static uint64_t g_next_us;
 static u32 pace(void)                              /* the time waited (us) */
 {
-    uint64_t w0 = timer_us_gettime64();
     u32 n = U32(0x87DE00) ? U32(0x87DE00) : 1;
-    uint64_t now = timer_us_gettime64();
-    if (!g_next_us || now > g_next_us + 8000) g_next_us = now;   /* (late: start again from now) */
-    g_next_us += (uint64_t)n * 16667;
-    while ((now = timer_us_gettime64()) < g_next_us) {
-        if (g_next_us - now > 4000) thd_sleep(2); else thd_pass();
+    uint64_t period = (uint64_t)n * 16667, w0 = timer_us_gettime64();
+    if (!g_next_us) g_next_us = w0;
+    g_next_us += period;
+    if (w0 >= g_next_us) {
+        if (w0 - g_next_us > period) g_next_us = w0;
+        return 0;
     }
-    return (u32)(timer_us_gettime64() - w0);
+    uint64_t now;
+    while ((now = timer_us_gettime64()) < g_next_us) {
+        uint64_t left = g_next_us - now;
+        if (left > 14000) thd_sleep((int)((left - 12000) / 1000)); else thd_pass();
+    }
+    return (u32)(now - w0);
 }
 
 /* the frames' times, reported every 300 frames: real rate against the

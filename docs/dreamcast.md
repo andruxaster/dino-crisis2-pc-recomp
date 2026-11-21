@@ -152,9 +152,11 @@ elsewhere).
 | game image without the code + scratch | 3.7 MB |
 | game heap | 3 MB (peak seen: 2.1 MB) |
 | PC layer surfaces (texture pages 256x256, back buffer, pictures) | 4.4-6.4 MB |
-| sound buffers (PCM copies of the banks), task stacks | ~1 MB |
+| sound: 16-bit banks play from the game heap (no copy), file blocks | ~0.1 MB |
+| task stacks | up to 0.5 MB |
 
-That is at the limit. The next cut is the surfaces: once a texture page is in
+Surfaces get their pixels only when first used (an untouched 640x480 primary
+costs nothing). That is still near the limit. The next cut is the surfaces: once a texture page is in
 VRAM its main-RAM copy is only needed for partial updates.
 
 ## Checked on Linux

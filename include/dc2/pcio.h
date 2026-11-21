@@ -49,6 +49,7 @@ u32  Snd_OpenFileVoice(const char *game_path);
 /* the mixer's lock (the Dreamcast mixes in its sound thread): held by code
    that shares data with a mixer source, such as the movie player */
 void PcAudio_Lock(int on);
+u32  PcAudio_Bytes(void);        /* the memory the mixer's voices hold */
 u32  PcAudio_ImaBlock(const u8 *b, u32 n, u32 ch, s16 *out, u32 spb);
 #endif
 
