@@ -46,6 +46,11 @@ $(OUT)/dc2: src/port/dc2.c src/port/frame.c $(OUT)/libdc2game.a
 # the movies checked in numbers (tests/movie_test.c)
 $(OUT)/movie_test: tests/movie_test.c $(OUT)/libdc2game.a
 	$(CC) $(CFLAGS) -o $@ $^ -lm
+# the Dreamcast's large textures in pieces, checked on the host (tests/pvr_tile_test.c)
+$(OUT)/pvr_tile_test: tests/pvr_tile_test.c src/port/dc/pvr_tile.h
+	$(CC) -O1 -Wall -Isrc/port/dc -o $@ $< -lm
+pvr-tile-test: $(OUT)/pvr_tile_test
+	$(OUT)/pvr_tile_test
 # the game in a window (SDL2, OpenGL)
 dc2gl: $(OUT)/dc2gl
 $(OUT)/dc2gl: src/port/dc2.c src/port/frame.c src/port/render_gl.c src/port/render_gl.h $(OUT)/libdc2game.a
@@ -53,4 +58,4 @@ $(OUT)/dc2gl: src/port/dc2.c src/port/frame.c src/port/render_gl.c src/port/rend
 
 clean:
 	rm -rf $(OUT)
-.PHONY: all check linux dc2gl clean
+.PHONY: all check linux dc2gl clean pvr-tile-test
