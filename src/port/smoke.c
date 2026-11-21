@@ -5,9 +5,13 @@
  * Script_Init and runs Script_Run frame by frame until an opcode that is
  * not reimplemented yet stops the threads.
  * Functions that are not rewritten yet are reported once and skipped.
- *   usage: smoke DATA_DIR [ROOM|all] [FRAMES] */
+ *   usage: smoke DATA_DIR [ROOM|all] [FRAMES]
+ * Each run prints the files the room's scripts load (cutscenes SCxx.DAT come through script opcode 4D,
+ * Door_Load); a fault prints the faulting game address and every live
+ * script thread (pc, opcode). Builds on Linux and with mingw-w64. */
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <dirent.h>
 #include <strings.h>
 #include <libgen.h>
@@ -17,6 +21,22 @@
 #include "dc2/orig.h"
 #include "dc2/pcio.h"
 #include "dc2/data.h"
+#include "dc2/addr.h"
+
+#ifdef _WIN32
+/* mingw: no sigsetjmp/sigaction; the handler is re-armed before each room */
+#define SMOKE_JMP          jmp_buf
+#define SMOKE_SETJMP(b)    setjmp(b)
+#define SMOKE_LONGJMP(b)   longjmp(b, 1)
+#else
+#define SMOKE_JMP          sigjmp_buf
+#define SMOKE_SETJMP(b)    sigsetjmp(b, 1)
+#define SMOKE_LONGJMP(b)   siglongjmp(b, 1)
+#endif
+
+#define A_FILE_ID     0x87FFE8u   /* u16 last file requested (src/game/file.c) */
+#define A_FILE_COUNT  0x87DC9Cu   /* u32 requests so far */
+#define A_FILE_NAMES  0x71B230u   /* char *[676] */
 
 u8 *g_membase;
 
@@ -31,11 +51,80 @@ static int load_image(void)
 /* Game code reads data that loaders not rewritten yet would have put in
    memory (models, animations of cutscene files, ...). A fault there ends
    the room's run with a report instead of ending the program. */
-static sigjmp_buf g_fault_jmp;
+static SMOKE_JMP g_fault_jmp;
 static volatile int g_fault_sig;
-static void on_fault(int sig) { g_fault_sig = sig; siglongjmp(g_fault_jmp, 1); }
+static void *volatile g_fault_host;           /* host address of the fault (POSIX only) */
+#ifdef _WIN32
+static void on_fault(int sig) { g_fault_sig = sig; g_fault_host = NULL; SMOKE_LONGJMP(g_fault_jmp); }
+static void arm_faults(void) { signal(SIGSEGV, on_fault); signal(SIGFPE, on_fault); }
+#else
+static void on_fault_info(int sig, siginfo_t *si, void *uc)
+{
+    (void)uc;
+    g_fault_sig = sig;
+    g_fault_host = si ? si->si_addr : NULL;
+    SMOKE_LONGJMP(g_fault_jmp);
+}
+static void arm_faults(void)
+{
+    struct sigaction sa;
+    memset(&sa, 0, sizeof sa);
+    sa.sa_sigaction = on_fault_info;
+    sa.sa_flags = SA_SIGINFO | SA_NODEFER;
+    sigemptyset(&sa.sa_mask);
+    sigaction(SIGSEGV, &sa, NULL);
+    sigaction(SIGFPE, &sa, NULL);
+    sigaction(SIGBUS, &sa, NULL);
+}
+#endif
+static void disarm_faults(void)
+{
+    signal(SIGSEGV, SIG_DFL);
+    signal(SIGFPE, SIG_DFL);
+#ifndef _WIN32
+    signal(SIGBUS, SIG_DFL);
+#endif
+}
 
-/* stand-in for the object type handlers (not rewritten yet): they build the
+static const char *file_name(u32 id)
+{
+    if (id >= 676) return "?";
+    gptr nm = U32(A_FILE_NAMES + 4 * id);
+    return nm ? (const char *)MEM(nm) : "?";
+}
+
+/* the files requested since the room file: polled after each frame (loads
+   inside a frame finish there, Task_Sleep runs the loader outside a task) */
+static u32 g_files_seen;
+static char g_files_log[1024];
+static void note_files(int frame)
+{
+    u32 n = U32(A_FILE_COUNT);
+    if (n == g_files_seen) return;
+    size_t l = strlen(g_files_log);
+    if (l < sizeof g_files_log - 48)
+        snprintf(g_files_log + l, sizeof g_files_log - l, "%s%s@%d%s",
+                 l ? " " : "", file_name(U16(A_FILE_ID)), frame,
+                 n - g_files_seen > 1 ? "(+more)" : "");
+    g_files_seen = n;
+}
+
+static void dump_threads(void)
+{
+    gptr th = U32(A_SCR_THREADS);
+    for (int t = 0; t < SCR_NTHREADS; t++) {
+        gptr p = th + t * SCR_THREAD_SIZE;
+        u8 st = U8(p + T_STATE);
+        if (!st) continue;
+        gptr pc = U32(p + T_PC);
+        int ok = pc >= IMAGE_BASE && pc < IMAGE_BASE + IMAGE_SIZE;
+        printf("    thread %d: state %02X pc %08X op %s", t, st, pc, ok ? "" : "?");
+        if (ok) printf("%02X", U8(pc));
+        printf(" sel %02X/%02X\n", U8(p + T_SEL0), U8(p + T_SEL1));
+    }
+}
+
+/* stand-in for the object type handlers (rewritten, but run by the frame loop): they build the
    object's model parts and set its animation table; give each object a
    chain of 32 empty parts and a one-frame animation so that the code which
    walks them has something to work on */
@@ -81,17 +170,32 @@ static int run_room(const char *data, const char *room, int frames)
 
     static int f, maxalive, alive;
     f = maxalive = alive = 0;
-    if (sigsetjmp(g_fault_jmp, 1)) {
-        printf("%s: stopped at frame %d by %s (data of a loader not rewritten yet)\n",
-               room, f, g_fault_sig == SIGFPE ? "SIGFPE" : "SIGSEGV");
+    g_files_seen = U32(A_FILE_COUNT);
+    g_files_log[0] = 0;
+    if (SMOKE_SETJMP(g_fault_jmp)) {
+        disarm_faults();
+        const char *sig = g_fault_sig == SIGFPE ? "SIGFPE" : g_fault_sig == SIGSEGV ? "SIGSEGV" : "SIGBUS";
+        printf("%s: stopped at frame %d by %s", room, f, sig);
+        if (g_fault_host) {
+            uintptr_t h = (uintptr_t)g_fault_host, b = (uintptr_t)g_membase;
+            if (h >= b && h < b + IMAGE_SIZE + TMP_SIZE + HEAP_SIZE)
+                printf(" at game address %08X", (u32)(h - b) + IMAGE_BASE);
+            else if (h < 0x10000)
+                printf(" at %p (null pointer)", g_fault_host);
+            else
+                printf(" at host %p (outside the image)", g_fault_host);
+        }
+        printf("\n    files: %s\n", g_files_log[0] ? g_files_log : "none");
+        dump_threads();
         return 2;
     }
-    signal(SIGSEGV, on_fault);
-    signal(SIGFPE, on_fault);
+    arm_faults();
     /* room set-up as the game does it after a room load */
     Room_SetPointers(0x5E0000);                /* sections, object arrays after the block */
     CamZones_Init();
-    /* stand-ins for what the object type handlers would build */
+    /* stand-ins for what the object type handlers would build: the C handlers
+       (Hook_Find) expect the parts and animations that the game's frame loop
+       (Game_Frame, run by dc2) sets up, which smoke does not run */
     for (int i = 0; i < 256; i++) U32(ANIM_TAB + 4 * i) = ANIM_STUB;
     U32(ANIM_STUB) = 1;
     for (u32 a = ANIM_STUB + 0x14; a < ANIM_STUB + 0x1000; a += 2) U16(a) = 1;
@@ -99,18 +203,20 @@ static int run_room(const char *data, const char *room, int frames)
     U32(0x87DCA0) = TYPE_TABLE;               /* object type handlers: stand-in */
     g_orig_call1 = type_handler;
     Script_Init();                             /* thread 0 on routine 0, first frame */
+    note_files(0);
 
     for (f = 0; f < frames; f++) {
         Script_Run();
+        note_files(f + 1);
         alive = 0;
         for (int t = 0; t < SCR_NTHREADS; t++)
             if (U8(U32(A_SCR_THREADS) + t * SCR_THREAD_SIZE + T_STATE)) alive++;
         if (alive > maxalive) maxalive = alive;
         if (!alive) break;
     }
-    signal(SIGSEGV, SIG_DFL);
-    signal(SIGFPE, SIG_DFL);
+    disarm_faults();
     printf("%s: %d frames, up to %d threads, %d running at the end\n", room, f, maxalive, alive);
+    if (g_files_log[0]) printf("    files: %s\n", g_files_log);
     return 0;
 }
 
@@ -130,7 +236,12 @@ int main(int argc, char **argv)
     char *names[256]; int n = 0; struct dirent *e;
     while ((e = readdir(dir)) && n < 256) {
         size_t l = strlen(e->d_name);
-        if (l == 9 && !strncmp(e->d_name, "ST", 2) && !strcmp(e->d_name + 5, ".DAT")) names[n++] = strndup(e->d_name, 5);
+        if (l == 9 && !strncmp(e->d_name, "ST", 2) && !strcmp(e->d_name + 5, ".DAT")) {
+            char *s = malloc(6);                /* (no strndup in the Windows CRT) */
+            if (!s) break;
+            memcpy(s, e->d_name, 5); s[5] = 0;
+            names[n++] = s;
+        }
     }
     closedir(dir);
     qsort(names, n, sizeof *names, cmp);
@@ -139,6 +250,6 @@ int main(int argc, char **argv)
         int r = run_room(argv[1], names[i], frames);
         if (r == 2) stopped++; else bad |= r;
     }
-    printf("%d rooms, %d stopped on missing data\n", n, stopped);
+    printf("%d rooms, %d stopped by a fault\n", n, stopped);
     return bad;
 }

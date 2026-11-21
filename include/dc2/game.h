@@ -2372,6 +2372,10 @@ void DC2CALL Opt_Display(gptr o);                 /* 0x4776D0 */
 void DC2CALL Opt_Quit(gptr o);                    /* 0x477CF0 */
 void DC2CALL Opt_Leave(gptr o);                   /* 0x478090 */
 void DC2CALL Opt_ToGame(void);                    /* 0x478E20 */
+void DC2CALL Pause_Task(void);                    /* 0x478F40 */
+void DC2CALL Pause_Back(void);                    /* 0x479240 */
+void DC2CALL Pause_Frames(gptr f, u32 x, u32 y, u32 tpage, u32 tp, u32 color); /* 0x479500 */
+void DC2CALL Pause_Sprite(gptr r, u32 u, u32 v, u32 tp, u32 color, u32 semi);  /* 0x4795E0 */
 void DC2CALL Option_Task(void);                   /* 0x475720 */
 
 /* The save slots screen (savefile.c) */

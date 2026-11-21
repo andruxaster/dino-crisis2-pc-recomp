@@ -13903,6 +13903,8 @@ static gptr opt_state(void)
 
 static u32 __cdecl opt_task_orig(void) { g_task_sleeps = g_task_n; if (!__builtin_setjmp(g_task_jb)) ((void (__cdecl *)(void))0x475720)(); g_task_sleeps = 0; return 0; }
 static u32 __cdecl opt_task_new(void) { g_task_sleeps = g_task_n; if (!__builtin_setjmp(g_task_jb)) Option_Task(); g_task_sleeps = 0; return 0; }
+static u32 __cdecl pause_task_orig(void) { g_task_sleeps = g_task_n; if (!__builtin_setjmp(g_task_jb)) ((void (__cdecl *)(void))0x478F40)(); g_task_sleeps = 0; return 0; }
+static u32 __cdecl pause_task_new(void) { g_task_sleeps = g_task_n; if (!__builtin_setjmp(g_task_jb)) Pause_Task(); g_task_sleeps = 0; return 0; }
 
 static void test_options(void)
 {
@@ -13941,6 +13943,8 @@ static void test_options(void)
             a[1] = rnd() % 2 ? opt_key() : rnd();
             check(0x4BF210, PcIn_BindKey, "PcIn_BindKey", 2, a, 0);
             check(0x4BF250, PcIn_DefaultKeys, "PcIn_DefaultKeys", 0, a, 0);
+            for (u32 q = 0; q < 0x28; q += 4) U32(0x8660FC + q) = rnd();
+            check(0x4BF2E0, PcIn_DefaultButtons, "PcIn_DefaultButtons", 0, a, 0);
             a[0] = (u32)A2_PICK(0x20, 0x40, 0x10, 2, 1, 0, (s32)rnd()); a[1] = rnd();
             sprintf(g_what, "bit %X", a[0]);
             check(0x4BF2A0, PcIn_BindButton, "PcIn_BindButton", 2, a, 0);
@@ -14073,6 +14077,45 @@ static void test_options(void)
         g_task_n = 1 + rnd() % 3;
         sprintf(g_what, "frames %d mode %u item %u pad %X", g_task_n, U8(o), U8(o + 1), U32(0x87DC00));
         check((u32)(uintptr_t)opt_task_orig, opt_task_new, "Option_Task", 0, NULL, 0);
+        /* the pause screen: its primitives, the backdrop and the task */
+        {
+            gptr v = 0x6CFC00;
+            for (u32 q = 0; q < 0x100; q += 2) U16(v + q) = (u16)(rnd() % 2 ? rnd() % 0x200 - 0x40 : rnd());
+            u32 b[6] = {v, rnd(), rnd(), rnd(), rnd(), (u32)A2_PICK(0, 1, 0x10000, (s32)rnd())};
+            if (rnd() % 2) b[1] = rnd() % 0x100;
+            if (rnd() % 2) b[2] = rnd() % 0x100;
+            if (rnd() % 2) b[4] = rnd() & 0xFFFFFF;
+            sprintf(g_what, "%X %X %X %X %X %X", b[0], b[1], b[2], b[3], b[4], b[5]);
+            check(0x4795E0, Pause_Sprite, "Pause_Sprite", 6, b, 0);
+            for (u32 q = 0; q < 32; q++) { U8(v + 8 * q + 6) = (u8)rnd(); U8(v + 8 * q + 7) = (u8)rnd(); if (rnd() % 4 == 0) U8(v + 8 * q + 2) = 0; }
+            U8(v + 6) = (u8)A2_PICK(0, 1, 2, 3, 5, (s32)(rnd() % 32));
+            u32 c[6] = {v, (u32)A2_PICK(0x6A, 0x78, 0x8A, (s32)(rnd() % 0x140), (s32)rnd()),
+                        (u32)A2_PICK(0x50, 0x6C, 0x7A, 0x70, (s32)(rnd() % 0xF0), (s32)rnd()),
+                        (u32)A2_PICK(9, 0, 0x1F, (s32)rnd()), (u32)A2_PICK(0x7DCB, (s32)rnd()),
+                        (u32)A2_PICK(0x1537D1, 0xC0C0, 0x303030, (s32)(rnd() | 0x80000000), (s32)rnd())};
+            sprintf(g_what, "n %u %X %X %X %X %X", U8(v + 6), c[1], c[2], c[3], c[4], c[5]);
+            check(0x479500, Pause_Frames, "Pause_Frames", 6, c, 0);
+            U16(0x737A58) = (u16)A2_PICK(0, 1, 2, -1, 0x7FFF, (s32)rnd());
+            U16(0x737A5A) = (u16)rnd();               /* (read as the high half of a dword) */
+            sprintf(g_what, "slide %X", U16(0x737A58));
+            check(0x479240, Pause_Back, "Pause_Back", 0, NULL, 0);
+
+            game_state(); fake_room_block(); frame_state(); draw_safe();
+            gptr g = G();
+            U16(g + 0x1090) = (u16)A2_PICK(0x80A, 1, 0x101, 0x700, (s32)(rnd() % 10 << 8 | rnd() % 5));
+            U8(g + 0x14F0) = (u8)A2_PICK(0, 1, -1, (s32)rnd());
+            U8(0x74E379) = (u8)rnd(); U8(0x74E37B) = (u8)rnd(); U16(0x737A58) = (u16)rnd();
+            U32(0x87DC00) = (u32)A2_PICK(0, 0x1000, 0x4000, 0x5000, 0x40, 0x800, 0x840, 0x20, 0x60, 0x1020, (s32)(rnd() & rnd()));
+            U32(0x87DC08) = rnd(); U32(0x87DC94) = rnd();
+            U32(LOG_BASE) = 0;
+            for (gptr q = 0x74D980; q < 0x74DB80; q += 0x10) if (U8(q + 1) != 4) U8(q) &= ~1;   /* (as Opt_ToGame's test) */
+            for (u32 q = 0; q < 0x8C; q++) U8(0x74D750 + 4 * q + 3) = 0;
+            g_task_n = 1 + rnd() % 5;
+            sprintf(g_what, "frames %d room %X pad %X", g_task_n, U16(g + 0x1090), U32(0x87DC00));
+            g_ign_campad = 1; g_ign_objpads = 1; g_ign_draw = 1;
+            check((u32)(uintptr_t)pause_task_orig, pause_task_new, "Pause_Task", 0, NULL, 0);
+            g_ign_campad = 0; g_ign_objpads = 0; g_ign_draw = 0;
+        }
     }
     stubs_install(0);
     memcpy(MEM(0x737920), keep924, sizeof keep924);
