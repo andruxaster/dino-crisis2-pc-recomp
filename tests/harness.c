@@ -3585,14 +3585,39 @@ static void test_k2(void)
 }
 
 /* ---- weapon 1's object (0x44E530): its set-up and flight ------------------------ */
+/* ---- the weapons' and sub-weapons' objects (0x72160C, 0x721640): set-ups,
+ * runs and handlers. nk: the kinds the object's record table holds (its
+ * entries up to the steps table); par: 1 the step reads the parent (never
+ * none), 0 it may be none ---- */
 static void test_weapon1(void)
 {
-    static const struct { u32 addr; void *fn; const char *name; } k[] = {
-        {0x44E570, WeaponObj1_Init, "WeaponObj1_Init"}, {0x44E740, WeaponObj1_Fly, "WeaponObj1_Fly"}, {0x44E530, WeaponObj1, "WeaponObj1"}};
+    static const struct { u32 addr; void *fn; const char *name; u8 step, nk, par; } k[] = {
+        /* step: 0 set-up, 1 run, 2 the handler (a random step) */
+        {0x44E570, WeaponObj1_Init, "WeaponObj1_Init", 0, 5, 0}, {0x44E740, WeaponObj1_Fly, "WeaponObj1_Fly", 1, 8, 0}, {0x44E530, WeaponObj1, "WeaponObj1", 2, 5, 0},
+        {0x44DA20, SubWObj2_Init, "SubWObj2_Init", 0, 4, 1}, {0x44DAD0, SubWObj_Fly, "SubWObj_Fly", 1, 4, 1}, {0x44D9E0, SubWObj2, "SubWObj2", 2, 4, 1},
+        {0x44DB60, SubWObj3_Init, "SubWObj3_Init", 0, 4, 1}, {0x44DD60, SubWObj3_Run, "SubWObj3_Run", 1, 4, 1}, {0x44DB30, SubWObj3, "SubWObj3", 2, 4, 1},
+        {0x44DE10, SubWObj4_Init, "SubWObj4_Init", 0, 4, 1}, {0x44DF10, SubWObj4_Fly, "SubWObj4_Fly", 1, 6, 1}, {0x44DDC0, SubWObj4, "SubWObj4", 2, 4, 1},
+        {0x44DFE0, SubWObj5_Init, "SubWObj5_Init", 0, 2, 1}, {0x44DFA0, SubWObj5, "SubWObj5", 2, 2, 1},
+        {0x44E0D0, SubWObj6_Init, "SubWObj6_Init", 0, 4, 1}, {0x44E080, SubWObj6, "SubWObj6", 2, 4, 1},
+        {0x44E210, SubWObj8_Init, "SubWObj8_Init", 0, 4, 1}, {0x44E1D0, SubWObj8, "SubWObj8", 2, 4, 1},
+        {0x44E300, SubWObj9_Init, "SubWObj9_Init", 0, 2, 1}, {0x44E2C0, SubWObj9, "SubWObj9", 2, 2, 1},
+        {0x44E3F0, WObj0_Init, "WObj0_Init", 0, 3, 1}, {0x44E4C0, WObj0_Fly, "WObj0_Fly", 1, 5, 1}, {0x44E3B0, WObj0, "WObj0", 2, 3, 1},
+        {0x44E950, WObj2_Init, "WObj2_Init", 0, 7, 1}, {0x44EB30, WObj2_Fly, "WObj2_Fly", 1, 9, 1}, {0x44E910, WObj2, "WObj2", 2, 7, 1},
+        {0x44ED70, WObj3_Init, "WObj3_Init", 0, 6, 0}, {0x44EE70, WObj3_Fly, "WObj3_Fly", 1, 8, 1}, {0x44ED20, WObj3, "WObj3", 2, 6, 1},
+        {0x44EF50, WObj4_Init, "WObj4_Init", 0, 10, 1}, {0x44F030, WObj4_Fly, "WObj4_Fly", 1, 12, 1}, {0x44EF10, WObj4, "WObj4", 2, 10, 1},
+        {0x44F140, WObj5_Init, "WObj5_Init", 0, 6, 1}, {0x44F200, WObj5_Fly, "WObj5_Fly", 1, 8, 1}, {0x44F120, WObj5, "WObj5", 2, 6, 1},
+        {0x44F450, WObj6_Init, "WObj6_Init", 0, 8, 1}, {0x44F620, WObj6_Fly, "WObj6_Fly", 1, 10, 1}, {0x44F410, WObj6, "WObj6", 2, 8, 1},
+        {0x44F840, WObj7_Init, "WObj7_Init", 0, 10, 1}, {0x44FAF0, WObj7_Fly, "WObj7_Fly", 1, 13, 1}, {0x44F800, WObj7, "WObj7", 2, 10, 1},
+        {0x44FD30, WObj8_Init, "WObj8_Init", 0, 9, 0}, {0x44FE00, WObj8_Fly, "WObj8_Fly", 1, 10, 1}, {0x44FCF0, WObj8, "WObj8", 2, 9, 1},
+        {0x44FF00, WObj9_Init, "WObj9_Init", 0, 9, 1}, {0x450180, WObj9_Fly, "WObj9_Fly", 1, 10, 1}, {0x44FEC0, WObj9, "WObj9", 2, 9, 1},
+        {0x4503C0, WObj10_Init, "WObj10_Init", 0, 4, 1}, {0x450520, WObj10_Run, "WObj10_Run", 1, 5, 1}, {0x450380, WObj10, "WObj10", 2, 4, 1},
+        {0x4505C0, WObj11_Init, "WObj11_Init", 0, 5, 1}, {0x4506C0, WObj11_Fly, "WObj11_Fly", 1, 6, 1}, {0x450580, WObj11, "WObj11", 2, 5, 1},
+        {0x4507B0, WObj12_Init, "WObj12_Init", 0, 7, 1}, {0x450900, WObj12_Fly, "WObj12_Fly", 1, 8, 1}, {0x450760, WObj12, "WObj12", 2, 7, 1},
+    };
     g_ign_objpads = 1;
     stubs_install(1);
     for (int i = 0; i < iters; i++) {
-        for (unsigned j = 0; j < 3; j++) {
+        for (unsigned j = 0; j < sizeof k / sizeof k[0]; j++) {
             game_state(); objects_setup(); world_setup();
             for (u32 q = 0; q < 16; q++) U8(O_OBJ + q * 0x260 + 0xFD) &= 1;
             U32(0x87F940) = 16;
@@ -3600,31 +3625,91 @@ static void test_weapon1(void)
             for (u32 a = 0x20; a < 0xAC; a += 4) U32(kk + a) = rnd() % 3 ? rnd() % 0x10000 : rnd();
             U8(kk + 0x50) = (u8)(1 | (rnd() & 6));
             U8(kk + 0x7B) = rnd() % 10; U8(kk + 0x55) = rnd() % 3;
-            U8(kk + 0x54) = j == 0 ? 0 : j == 1 ? 1 : rnd() % 3;
-            U8(kk + 0x7A) = (u8)(U8(kk + 0x54) == 0 ? rnd() % 5 : rnd() % 8);   /* the set-up's kinds 0..4; flight 0..6 and past the switch */
+            U8(kk + 0x54) = k[j].step == 2 ? rnd() % 3 : k[j].step;
+            /* a set-up's kinds within its table (and kind 2, the light); a run's also past its switch */
+            U8(kk + 0x7A) = (u8)(rnd() % (U8(kk + 0x54) == 0 ? k[j].nk : k[j].nk + 2));
+            if (rnd() % 4 == 0 && k[j].nk > 3) U8(kk + 0x7A) = (u8)(rnd() % 4);
             U8(kk + 0x46) = rnd() % 3; U8(kk + 0x87) = (u8)((kk - O_K2) / 0xAC); U8(kk + 0x86) = 0xFF;
             U32(kk + 0x8C) = 0;
-            u32 pr = rnd() % 3;
-            U32(kk + 0x60) = pr == 0 ? 0 : pr == 1 ? O_OBJ + 0x260 * (rnd() % 16) : O_K2 + 0xAC * (rnd() % 14);
+            u32 pr = k[j].par ? 1 + rnd() % 2 : rnd() % 3;
+            gptr par = pr == 0 ? 0 : pr == 1 ? O_OBJ + 0x260 * (rnd() % 16) : O_K2 + 0xAC * (rnd() % 14);
+            if (par == kk) par = O_OBJ;
+            U32(kk + 0x60) = par;
+            if (par) { U8(par + 0x50) = (u8)(rnd() % 3 ? rnd() & 0xFF : 0); if (rnd() % 4 == 0) U32(par + 0x50) = 0; }   /* the parent alive or not */
             gptr an = 0x6CF900;
             for (u32 a = 0; a < 0x80; a += 4) U32(an + a) = rnd();
             for (u32 q = 0; q < 16; q++) { U8(an + 8 * q + 4) = (u8)((rnd() % 4 == 0 ? 0x20 * (rnd() % 8) : 0) | (rnd() % 16)); U8(an + 8 * q + 5) = rnd() % 3; }
             U32(kk + 0x90) = an; U32(kk + 0x94) = an + 8 * (rnd() % 8); U16(kk + 0x82) = rnd() % 3;
-            U16(kk + 0x98) = rnd() % 4 ? rnd() % 4 : (u16)rnd();
-            /* the bounce's edges: its time (+0x9E, +0x6C) about out, a floor bounce about to stop */
+            U16(kk + 0x98) = (u16)(rnd() % 4 ? rnd() % 4 : (u16)rnd());
+            /* the edges: times about out, a floor bounce about to stop, the hit's
+               toggle, its reach, the room with the lower floor (0x402) */
             U16(kk + 0x9E) = (u16)(rnd() % 2 ? rnd() % 3 : rnd());
             U16(kk + 0x6C) = (u16)(rnd() % 2 ? rnd() % 3 : rnd());
             U16(kk + 0x9A) = (u16)(rnd() % 2 ? rnd() % 0x20 : rnd());
+            U16(kk + 0xA0) = (u16)(rnd() % 2 ? rnd() % 3 : rnd());
+            U16(kk + 0xA2) = (u16)(rnd() % 2 ? 0x13 + rnd() % 3 : rnd() % 0x20);
             S16(kk + 0x7E) = (s16)(rnd() % 2 ? (s32)(rnd() % 0x60) - 0x30 : (s32)(u16)rnd());
             if (rnd() % 3 == 0) S16(kk + 0x42) = (s16)(-(s32)(rnd() % 3) - S16(kk + 0x7E));   /* about at the floor */
+            if (rnd() % 4 == 0) { U16(G() + 0x1090) = 0x402; S16(kk + 0x42) = (s16)(-9990 - (s32)(rnd() % 40) - S16(kk + 0x7E)); }
+            if (rnd() % 4 == 0) U8(kk + 0x64) = (u8)(8 * (rnd() % 3) + (rnd() % 2) * 2);   /* a fade about out */
             for (u32 q = 14; q < 20; q++) U8(O_K2 + 0xAC * q + 0x50) = rnd() % 4 ? 0 : 1;   /* the copies' slots from the back, sometimes none */
             U32(G() + 0xA70) = rnd() % 4 ? 0 : rnd() % 14;
             U8(G() + 0xF) = (u8)rnd();
             U8(G() + 0x852) = rnd() % 4 ? (u8)(rnd() % 20) : 0xFF;
+            U8(G() + 0x927) = (u8)(rnd() % 2);
+            Flag_Set(2, 6, rnd() % 2);
+            U8(0x74B170) = (u8)(rnd() % 6);
+            gptr pl = U32(G() + 0x940);                 /* the player's state (weapon 7's set-up) */
+            U8(pl + 0x55) = (u8)(rnd() % 2 ? 5 + rnd() % 2 : rnd() % 8);
+            U8(pl + 0x56) = (u8)(rnd() % 2 ? 5 + rnd() % 2 : rnd() % 8);
             u32 a[1] = {kk};
             U32(LOG_BASE) = 0;
-            sprintf(g_what, "slot %X step %u kind %u motion %u", kk, U8(kk + 0x54), U8(kk + 0x7A), U8(kk + 0x7B));
+            sprintf(g_what, "slot %X step %u kind %u motion %u parent %X", kk, U8(kk + 0x54), U8(kk + 0x7A), U8(kk + 0x7B), par);
             check(k[j].addr, k[j].fn, k[j].name, 1, a, 0);
+        }
+    }
+    stubs_install(0);
+    g_ign_objpads = 0;
+}
+
+/* ---- an emitter's script steps (0x4132A0, 0x4132F0): records made as
+ * slots by their frame; the end looped or the emitter off ---- */
+static void test_emit(void)
+{
+    g_ign_objpads = 1;
+    stubs_install(1);
+    for (int i = 0; i < iters; i++) {
+        for (int j = 0; j < 2; j++) {
+            game_state(); objects_setup(); world_setup();
+            U32(0x87F940) = 16;
+            gptr l = 0x6DE200, rec = 0x6DE400;
+            u32 n = 1 + rnd() % 8;
+            for (u32 q = 0; q < n * 0x28; q += 4) U32(rec + q) = rnd();
+            u8 fr = 0;
+            for (u32 q = 0; q < n; q++) {                /* frames rising, some records sharing one */
+                fr = (u8)(fr + (rnd() % 3 == 0 ? 0 : 1 + rnd() % 3));
+                U8(rec + q * 0x28 + 0xF) = fr;
+                U8(rec + q * 0x28 + 0x1F) = (u8)(rnd() % 4);
+                if (U32(rec + q * 0x28) == 0xFFFFFFFF) U32(rec + q * 0x28) = 0;
+            }
+            U32(rec + n * 0x28) = 0xFFFFFFFF;
+            U8(rec + n * 0x28 + 0xF) = (u8)(rnd() % 2 ? 0 : 0xFF);   /* (the end's frame: reached at once or not) */
+            for (u32 q = 0; q < 0x20; q += 4) U32(l + q) = rnd();
+            U8(l + 0x10) = (u8)(rnd() % n); U8(l + 0x11) = (u8)(rnd() % 2 ? U8(l + 0x10) + rnd() % 3 : rnd() % 4);
+            U32(l + 0xC) = j == 0 ? rec : rec + 0x28 * (rnd() % (n + 1));
+            U8(l + 0x12) = (u8)(rnd() % 2 ? fr - rnd() % 3 : rnd() % 8);
+            U8(l + 0x13) = (u8)(U8(l + 0x10) + rnd() % 3);
+            U8(l + 3) = (u8)(rnd() % 2);
+            U32(l + 0x14) = O_OBJ + 0x260 * (rnd() % 16);
+            U32(l + 0x18) = rnd() % 16;
+            U32(l + 0x1C) = rnd() % 2 ? 0 : rnd();
+            S32(U32(l + 0x14) + 0x6C) = (s32)(rnd() % 2 ? rnd() % 0x2000 : rnd());
+            for (u32 q = 14; q < 20; q++) U8(O_K2 + 0xAC * q + 0x50) = rnd() % 4 ? 0 : 1;   /* slots from the back, sometimes none */
+            u32 a[1] = {l};
+            U32(LOG_BASE) = 0;
+            sprintf(g_what, "records %u from %u..%u frame %d at %X flags %X", n, U8(l + 0x10), U8(l + 0x11), S8(l + 0x12), U32(l + 0xC), U32(l + 0x18));
+            if (j == 0) check(0x4132A0, Emit_Start, "Emit_Start", 1, a, 0);
+            else check(0x4132F0, Emit_Run, "Emit_Run", 1, a, 0);
         }
     }
     stubs_install(0);
@@ -17218,7 +17303,7 @@ __declspec(dllexport) void harness_main(int argc, char **argv)
         {"data tables", test_data}, {"flags", test_flags}, {"geometry", test_geom}, {"script values", test_script_values},
         {"script opcodes", test_script_ops}, {"script objects", test_objects},
         {"script run", test_script_run}, {"script ops 2", test_ops2}, {"gte", test_gte}, {"animation", test_anim}, {"objects 2", test_object}, {"collision", test_collision}, {"player", test_player}, {"player states", test_player2}, {"zones", test_zones}, {"loading", test_room}, {"title", test_title}, {"game task", test_game}, {"doors", test_doors}, {"frame", test_frame}, {"enemy sets", test_enemyset}, {"enemies", test_enemies}, {"raptor", test_raptor}, {"oviraptor", test_ovi}, {"allosaurus", test_allo}, {"pteranodon", test_ptera}, {"area pteranodon", test_ptera2}, {"tyrannosaurus", test_trex}, {"plesiosaurus", test_plesio}, {"water plesiosaurs", test_pw}, {"roamer", test_roam}, {"giganotosaurus", test_gig},
-    {"inostrancevia", test_ino}, {"triceratops", test_tri}, {"mosasaurus", test_mosa}, {"compsognathus", test_compso}, {"duel inostrancevia", test_kof_ino}, {"duel triceratops", test_kof_tri}, {"duel raptor", test_kof_rap}, {"duel oviraptor", test_kof_ovi}, {"duel allosaurus", test_kof_allo}, {"duel tyrannosaurus", test_kof_rex}, {"duel compsognathus", test_kof_comp}, {"duel human", test_kof_human}, {"extra human 20", test_xh20}, {"extra human 21", test_xh21}, {"extra human 22", test_xh22}, {"extra human 24", test_xh24}, {"extra human 25", test_xh25}, {"extra human 26", test_xh26}, {"vehicle gun", test_vgun}, {"area falling piece", test_ao_drop}, {"area flying shell", test_ao_shell}, {"area moving piece", test_ao_mover}, {"area bird", test_ao_bird}, {"area rock", test_ao_rock}, {"area insect", test_ao_bug}, {"area poison plant", test_ao_plant}, {"area burner", test_ao_burner}, {"area 9 objects", test_aobj9}, {"weapon objects", test_ao_weapons}, {"area 4/8 objects", test_aobj2}, {"area effects", test_k2_area}, {"sound slots", test_snd_slots}, {"menus", test_menu}, {"title 2", test_title2}, {"result", test_result}, {"extra crisis", test_extra}, {"models", test_model}, {"ending 3d", test_ending3d}, {"ending", test_ending}, {"options", test_options}, {"save slots", test_savefile}, {"save room", test_shop}, {"aot kinds", test_aot_kinds}, {"object effects", test_obj_effects}, {"effect slots", test_k2}, {"weapon 1 object", test_weapon1}, {"light kinds", test_light_kinds}, {"effect drops", test_k2_drops}, {"effect emitters", test_eff_slots}, {"effect slots 3", test_k2_more}, {"camera effect", test_camfx}, {"turret", test_turret}, {"water", test_water}, {"blasts", test_blast}, {"ride", test_ride}, {"meter", test_meter}, {"multi camera", test_multicam}, {"duel arena", test_duel}, {"waves", test_waves}, {"versus", test_versus}, {"vehicle", test_vehicle}, {"effect burst", test_fxburst}, {"flamethrower", test_flame}, {"effect pieces", test_fxpieces}, {"screen tint", test_tint}, {"area effects 2", test_fxmisc}, {"area effects 3", test_fxmisc2}, {"helpers", test_helpers}, {"draw", test_draw}, {"pc gpu", test_pcgpu}, {"pc draw", test_pcdraw}, {"pc draw soft", test_pcsoft}, {"pc masks", test_pcmasks}, {"pc frame", test_pcframe},
+    {"inostrancevia", test_ino}, {"triceratops", test_tri}, {"mosasaurus", test_mosa}, {"compsognathus", test_compso}, {"duel inostrancevia", test_kof_ino}, {"duel triceratops", test_kof_tri}, {"duel raptor", test_kof_rap}, {"duel oviraptor", test_kof_ovi}, {"duel allosaurus", test_kof_allo}, {"duel tyrannosaurus", test_kof_rex}, {"duel compsognathus", test_kof_comp}, {"duel human", test_kof_human}, {"extra human 20", test_xh20}, {"extra human 21", test_xh21}, {"extra human 22", test_xh22}, {"extra human 24", test_xh24}, {"extra human 25", test_xh25}, {"extra human 26", test_xh26}, {"vehicle gun", test_vgun}, {"area falling piece", test_ao_drop}, {"area flying shell", test_ao_shell}, {"area moving piece", test_ao_mover}, {"area bird", test_ao_bird}, {"area rock", test_ao_rock}, {"area insect", test_ao_bug}, {"area poison plant", test_ao_plant}, {"area burner", test_ao_burner}, {"area 9 objects", test_aobj9}, {"weapon objects", test_ao_weapons}, {"area 4/8 objects", test_aobj2}, {"area effects", test_k2_area}, {"sound slots", test_snd_slots}, {"menus", test_menu}, {"title 2", test_title2}, {"result", test_result}, {"extra crisis", test_extra}, {"models", test_model}, {"ending 3d", test_ending3d}, {"ending", test_ending}, {"options", test_options}, {"save slots", test_savefile}, {"save room", test_shop}, {"aot kinds", test_aot_kinds}, {"object effects", test_obj_effects}, {"effect slots", test_k2}, {"weapon objects", test_weapon1}, {"light kinds", test_light_kinds}, {"emitter script", test_emit}, {"effect drops", test_k2_drops}, {"effect emitters", test_eff_slots}, {"effect slots 3", test_k2_more}, {"camera effect", test_camfx}, {"turret", test_turret}, {"water", test_water}, {"blasts", test_blast}, {"ride", test_ride}, {"meter", test_meter}, {"multi camera", test_multicam}, {"duel arena", test_duel}, {"waves", test_waves}, {"versus", test_versus}, {"vehicle", test_vehicle}, {"effect burst", test_fxburst}, {"flamethrower", test_flame}, {"effect pieces", test_fxpieces}, {"screen tint", test_tint}, {"area effects 2", test_fxmisc}, {"area effects 3", test_fxmisc2}, {"helpers", test_helpers}, {"draw", test_draw}, {"pc gpu", test_pcgpu}, {"pc draw", test_pcdraw}, {"pc draw soft", test_pcsoft}, {"pc masks", test_pcmasks}, {"pc frame", test_pcframe},
     };
     for (unsigned i = 0; i < sizeof T / sizeof T[0]; i++) {
         int f0 = g_fail, t0 = g_tests;
