@@ -28,6 +28,10 @@ PC builds (which keep using the originals):
   Dreamcast build plays only the `.AVI` (`src/pc/movie_avi.c`) and skips a
   movie that has none. ffmpeg's Cinepak encoder is slow (here ~10 s a second
   of movie); the 12 movies come to ~320 MB.
+  A movie keeps real time (the console's timer), not the game's frames: when
+  a frame runs late the next ones are decoded to catch up (up to 4 a frame),
+  so the picture stays with the sound. The file is read once, in order; video
+  chunks the sound reads past wait in a queue.
 
 `SPEECH/` stays as it is (PCM waves): the Dreamcast build plays each line
 from the disc as it goes (`Snd_OpenFileVoice`, `src/pc/audio.c`) instead of

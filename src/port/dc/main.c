@@ -142,6 +142,9 @@ static void audio_open(void)
 }
 #endif
 
+/* the movies' clock (movie.c, DC2_MOVIE_AVI) */
+unsigned long long Port_TimeUs(void) { return timer_us_gettime64(); }
+
 /* ---- pacing: the game's frame lasts 0x87DE00 sixtieths of a second --------------------
  * Deadlines in a series (next = the last deadline + the frame's length), so
  * small delays even out. A late frame does not wait at all; one more than a

@@ -11,5 +11,6 @@ double Avi_FrameTime(void);              /* seconds a frame */
 u32 Avi_Frames(void);                    /* frames in the movie (0: not given) */
 int Avi_NextFrame(void);                 /* the next frame decoded into Avi_Pixels(); 0 at the end */
 const u16 *Avi_Pixels(void);             /* ARGB1555, width x height */
+unsigned long long Port_TimeUs(void);    /* the platform's clock in microseconds (port/dc/main.c) */
 u32 Avi_Sound(float *lr, u32 frames, u32 rate);   /* the soundtrack added in; frames given (fewer at the end) */
 #endif
