@@ -31,6 +31,7 @@
 #include "dc2/data.h"
 #include "../port.h"
 #include "render_pvr.h"
+#include "aica_sfx.h"
 #include "ctx_sh4.h"
 #include "vmu_save.h"
 #include "unaligned.h"
@@ -131,6 +132,7 @@ static void *audio_thread(void *arg)
 static void audio_open(void)
 {
     if (snd_stream_init() < 0) return;
+    Aica_Init();                                   /* (the banks' sounds on the AICA's channels) */
     g_strm = snd_stream_alloc(stream_cb, SND_STREAM_BUFFER_MAX / 4);
     if (g_strm == SND_STREAM_INVALID) return;
     PcAudio_Init(SND_RATE, NULL);                  /* (no sink: mixed when the stream asks) */
@@ -185,7 +187,8 @@ static void timing_report(void)
                (unsigned)(g_tm.draw / g_tm.n / 1000), (unsigned)(g_tm.draw / g_tm.n / 100 % 10), (unsigned)(g_tm.draw_max / 1000),
                (unsigned)(g_tm.wait / g_tm.n / 1000), (unsigned)(g_tm.wait / g_tm.n / 100 % 10));
 #if DC2_DC_AUDIO
-        printf("; sound mixing %u%% of the CPU", (unsigned)(g_mix_us / (span / 100 ? span / 100 : 1)));
+        printf("; sound mixing %u%% of the CPU; %u sounds on the AICA, %u KB of its RAM free", (unsigned)(g_mix_us / (span / 100 ? span / 100 : 1)),
+               (unsigned)Aica_Count(), (unsigned)(Aica_Free() >> 10));
         g_mix_us = 0; g_mix_calls = 0;
 #endif
         printf("\n");

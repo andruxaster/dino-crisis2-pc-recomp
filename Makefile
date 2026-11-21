@@ -56,6 +56,12 @@ $(OUT)/mix_test: tests/mix_test.c src/pc/mix_tap.h
 	$(CC) -O1 -Wall -Isrc/pc -o $@ $< -lm
 mix-test: $(OUT)/mix_test
 	$(OUT)/mix_test
+# the Dreamcast's banks on the AICA's channels, checked on the host (tests/aica_test.c)
+KOS_BASE ?= /opt/toolchains/dc/kos
+$(OUT)/aica_test: tests/aica_test.c src/port/dc/aica_sfx.c src/port/dc/aica_sfx.h
+	$(CC) -O1 -Wall -Wno-unused-function -Itests/aica_fake -Isrc/port/dc -Iinclude -I$(KOS_BASE)/kernel/arch/dreamcast/include -o $@ tests/aica_test.c src/port/dc/aica_sfx.c -lm
+aica-test: $(OUT)/aica_test
+	$(OUT)/aica_test
 # the game in a window (SDL2, OpenGL)
 dc2gl: $(OUT)/dc2gl
 $(OUT)/dc2gl: src/port/dc2.c src/port/frame.c src/port/render_gl.c src/port/render_gl.h $(OUT)/libdc2game.a
@@ -63,4 +69,4 @@ $(OUT)/dc2gl: src/port/dc2.c src/port/frame.c src/port/render_gl.c src/port/rend
 
 clean:
 	rm -rf $(OUT)
-.PHONY: all check linux dc2gl clean pvr-tile-test mix-test
+.PHONY: all check linux dc2gl clean pvr-tile-test mix-test aica-test

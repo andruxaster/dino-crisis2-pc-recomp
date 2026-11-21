@@ -65,6 +65,7 @@ reads `/cd/Data/...`.
 | File | |
 |---|---|
 | `src/port/dc/main.c` | entry: video, PVR, pad, sound stream, the main loop and its pacing |
+| `src/port/dc/aica_sfx.c` | the sound banks' sounds on the AICA's channels (`DC2_AICA`) |
 | `src/port/dc/render_pvr.c` | the renderer (`include/dc2/render.h`) on the PowerVR2 |
 | `src/port/dc/vmu_save.c` | saves on the VMU |
 | `src/port/dc/ctx_sh4.S`, `ctx_sh4.h` | the task system's context switch (KOS has no ucontext) |
@@ -124,6 +125,17 @@ work (`Port_GameFrame`: logic, models, the order table), of the drawing
 (`Port_DrawFrame`: the PC layer, the PVR's submission) and of the wait for
 the next frame (0 when it runs late), and the share of the CPU the sound
 mixer takes.
+
+The sound banks' sounds (`Snd_CreateBuffer`) are played by the AICA's own
+channels (`src/port/dc/aica_sfx.c`, `DC2_AICA`): uploaded to sound RAM once
+(stereo split into two channels, 8-bit made signed), then started, turned
+(volume, pan in the AICA's 3 dB steps) and stopped by commands; the chip
+resamples them itself. A sound's end is known by time (frames / rate); a
+paused one-shot resumes from where it was, a paused loop from its start.
+Sounds over 65534 frames (a channel's limit) and those that find no sound
+RAM stay in the SH-4's mixer, as the music and the voices do. The log line
+also counts the sounds on the AICA and its RAM left. `make aica-test`
+checks the module on the host against stand-ins for KallistiOS.
 
 The sound is mixed in the sound thread when the KOS stream asks for it
 (`stream_cb`, `src/port/dc/main.c`), under the mixer's lock

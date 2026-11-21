@@ -35,6 +35,9 @@ static mutex_t g_amx = RECURSIVE_MUTEX_INITIALIZER;
 #define ALOCK()   ((void)0)
 #define AUNLOCK() ((void)0)
 #endif
+#if defined(DC2_AICA)
+#include "../port/dc/aica_sfx.h"
+#endif
 #define MINIMP3_IMPLEMENTATION
 #include "../../third_party/minimp3/minimp3.h"
 #include <stdio.h>
@@ -57,6 +60,9 @@ typedef struct {
     u8 borrowed;        /* pcm points into game memory (a sound bank), not owned */
     float gl, gr;       /* volume and pan */
     s32 vol, pan;       /* hundredths of a dB */
+#if defined(DC2_AICA)
+    AicaSnd *hw;        /* played by the AICA's channels (a bank's sound), not mixed here */
+#endif
 } Voice;
 
 static Voice g_buf[NBUF], g_strm[NSTRM];
@@ -76,7 +82,16 @@ static s32 clamp_cb(s32 v, s32 lo, s32 hi) { return v < lo ? lo : v > hi ? hi : 
 /* v / 127 * range - range, as the PC layer's float to int (towards 0) */
 static s32 cb_of(s32 v, float range) { return (s32)((float)v * 0.007874016f * range - range); }
 
-static void voice_free(Voice *v) { if (v->f) fclose(v->f); free(v->blk); if (!v->borrowed) free(v->pcm); memset(v, 0, sizeof *v); }
+static void voice_free(Voice *v)
+{
+#if defined(DC2_AICA)
+    Aica_Unload(v->hw);
+#endif
+    if (v->f) fclose(v->f);
+    free(v->blk);
+    if (!v->borrowed) free(v->pcm);
+    memset(v, 0, sizeof *v);
+}
 
 /* ---- IMA ADPCM (WAV format 0x11): blocks of {s16 sample, u8 index, 0} per
    channel, then groups of 4 bytes per channel, 8 samples each, low nibble
@@ -214,6 +229,15 @@ static u32 locked_Snd_CreateBuffer(gptr w, u32 voice)
         if (!memcmp(MEM(c), "data", 4)) { size = U32(c + 4); data = c + 8; break; }
     if (!ch) ch = 1;
     u32 bytes = bits == 8 ? 1 : 2, n = size / (bytes * ch);
+#if defined(DC2_AICA)
+    /* the Dreamcast: into sound RAM, played by the AICA (none of it here) */
+    if (n && (v->hw = Aica_Load(MEM(data), n, ch, bytes * 8, rate))) {
+        v->pcm = NULL; v->borrowed = 1;
+        v->frames = n; v->ch = ch; v->rate = rate ? rate : 22050;
+        v->used = 1; v->vol = 0; v->pan = 0; gains(v);
+        return h;
+    }
+#endif
 #if defined(DC2_LOWMEM)
     /* small-memory builds: 16-bit sounds play from the bank in game memory
        (freed after its buffers, Snd_FreeBank) rather than from a copy */
@@ -236,6 +260,9 @@ static void locked_Snd_Play(u32 h, u32 freq, u32 loop)
     if (h >= NBUF || !g_buf[h].used) return;
     Voice *v = &g_buf[h];
     if (freq) v->freq = freq;
+#if defined(DC2_AICA)
+    if (v->hw) { v->loop = loop != 0; Aica_Play(v->hw, v->freq, loop, v->gl, v->gr); SLOG("snd %u play on the AICA freq %u loop %u\n", (unsigned)h, (unsigned)freq, (unsigned)loop); return; }
+#endif
     v->pos = 0; v->playing = 1; v->paused = 0; v->loop = loop != 0;
     if (v->f) { fseek(v->f, (long)v->data_off, SEEK_SET); v->data_read = 0; v->frames = 0; }
     SLOG("snd %u play freq %u loop %u (%u frames at %u)\n", (unsigned)h, (unsigned)freq, (unsigned)loop, (unsigned)v->frames, (unsigned)v->rate);
@@ -244,18 +271,45 @@ static void locked_Snd_SetVolume(u32 h, s32 vol)
 {
     if (h >= NBUF || !g_buf[h].used) return;
     g_buf[h].vol = clamp_cb(cb_of(vol, 3000.0f), -10000, 0); gains(&g_buf[h]);
+#if defined(DC2_AICA)
+    if (g_buf[h].hw) Aica_Gains(g_buf[h].hw, g_buf[h].gl, g_buf[h].gr);
+#endif
     SLOG("snd %u volume %d (%d)\n", (unsigned)h, (int)vol, (int)g_buf[h].vol);
 }
 static void locked_Snd_SetPan(u32 h, u32 pan)
 {
     if (h >= NBUF || !g_buf[h].used) return;
     g_buf[h].pan = clamp_cb((s32)((float)(s32)pan * 0.015625f * 10000.0f - 10000.0f), -10000, 10000); gains(&g_buf[h]);
+#if defined(DC2_AICA)
+    if (g_buf[h].hw) Aica_Gains(g_buf[h].hw, g_buf[h].gl, g_buf[h].gr);
+#endif
 }
-static u32 locked_Snd_IsPlaying(u32 h) { return h < NBUF && g_buf[h].used && g_buf[h].playing; }
-static void locked_Snd_Stop(u32 h) { if (h < NBUF) g_buf[h].playing = 0; }
+#if defined(DC2_AICA)
+#define HW(h) (h < NBUF && g_buf[h].hw)
+#else
+#define HW(h) 0
+#define Aica_IsPlaying(s) 0
+#define Aica_Stop(s) ((void)0)
+#define Aica_Pause(s) ((void)0)
+#define Aica_Resume(s) ((void)0)
+#endif
+static u32 locked_Snd_IsPlaying(u32 h)
+{
+    if (HW(h)) return (u32)Aica_IsPlaying(g_buf[h].hw);
+    return h < NBUF && g_buf[h].used && g_buf[h].playing;
+}
+static void locked_Snd_Stop(u32 h) { if (HW(h)) Aica_Stop(g_buf[h].hw); else if (h < NBUF) g_buf[h].playing = 0; }
 static void locked_Snd_Free(u32 h) { if (h < NBUF) voice_free(&g_buf[h]); }
-static void locked_Snd_Pause(u32 h) { if (h < NBUF && g_buf[h].playing) { g_buf[h].playing = 0; g_buf[h].paused = 1; } }
-static void locked_Snd_Resume(u32 h) { if (h < NBUF && g_buf[h].paused) { g_buf[h].paused = 0; g_buf[h].playing = 1; } }
+static void locked_Snd_Pause(u32 h)
+{
+    if (HW(h)) { Aica_Pause(g_buf[h].hw); return; }
+    if (h < NBUF && g_buf[h].playing) { g_buf[h].playing = 0; g_buf[h].paused = 1; }
+}
+static void locked_Snd_Resume(u32 h)
+{
+    if (HW(h)) { Aica_Resume(g_buf[h].hw); return; }
+    if (h < NBUF && g_buf[h].paused) { g_buf[h].paused = 0; g_buf[h].playing = 1; }
+}
 
 /* ---- streams ---- */
 
