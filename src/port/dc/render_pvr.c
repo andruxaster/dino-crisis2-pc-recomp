@@ -17,6 +17,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <dc/pvr.h>
+#include <kos/dbglog.h>
 #include <string.h>
 #include <stdlib.h>
 #include <malloc.h>
@@ -34,6 +35,7 @@ static int g_npending[2], g_cur;
 static int g_in_scene;
 static u32 g_scene = 2;                         /* scenes begun (from 2: "used < g_scene - 1" means not in the last two) */
 static u32 g_evicted;                           /* textures dropped for room (in the log) */
+static u32 g_frag;                              /* allocations that failed with enough free (fragments), then retried */
 static u32 g_bg;
 
 /* headers and vertices staged, sent 8 KB at a time */
@@ -86,14 +88,21 @@ static pvr_ptr_t vram_alloc(u32 n)
     while (pvr_mem_available() < n + VRAM_SPARE && evict_one()) {}
     for (;;) {
         if (pvr_mem_available() >= n) {
+            /* a failure here is expected (the free VRAM in pieces) and
+               handled below: KOS's "out of PVR memory" message kept quiet */
+            int lvl = dbglog_level;
+            dbglog_set_level(DBG_CRITICAL);
             pvr_ptr_t m = pvr_mem_malloc(n);
+            dbglog_set_level(lvl);
             if (m) return m;
+            g_frag++;
         }
         if (!evict_one()) return 0;
     }
 }
 
 u32 RenderPvr_Evicted(void) { return g_evicted; }
+u32 RenderPvr_Fragmented(void) { return g_frag; }
 
 static u32 pow2(u32 n) { u32 p = 8; while (p < n) p <<= 1; return p; }
 
