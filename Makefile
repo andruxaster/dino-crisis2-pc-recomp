@@ -51,6 +51,11 @@ $(OUT)/pvr_tile_test: tests/pvr_tile_test.c src/port/dc/pvr_tile.h
 	$(CC) -O1 -Wall -Isrc/port/dc -o $@ $< -lm
 pvr-tile-test: $(OUT)/pvr_tile_test
 	$(OUT)/pvr_tile_test
+# the mix's resampling (DC2_MIX_SMOOTH), checked on the host (tests/mix_test.c)
+$(OUT)/mix_test: tests/mix_test.c src/pc/mix_tap.h
+	$(CC) -O1 -Wall -Isrc/pc -o $@ $< -lm
+mix-test: $(OUT)/mix_test
+	$(OUT)/mix_test
 # the game in a window (SDL2, OpenGL)
 dc2gl: $(OUT)/dc2gl
 $(OUT)/dc2gl: src/port/dc2.c src/port/frame.c src/port/render_gl.c src/port/render_gl.h $(OUT)/libdc2game.a
@@ -58,4 +63,4 @@ $(OUT)/dc2gl: src/port/dc2.c src/port/frame.c src/port/render_gl.c src/port/rend
 
 clean:
 	rm -rf $(OUT)
-.PHONY: all check linux dc2gl clean pvr-tile-test
+.PHONY: all check linux dc2gl clean pvr-tile-test mix-test

@@ -15,6 +15,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
+#include "mix_tap.h"
 #include "dc2/types.h"
 #include "dc2/pcio.h"
 /* the mixer's positions: double on the PC, float on the SH-4 (its doubles are slow) */
@@ -361,10 +362,17 @@ static void mix_voice(Voice *v, float *acc, u32 frames)
             if (!v->loop) { v->playing = 0; return; }
             v->pos -= v->frames;
         }
-        u32 k = (u32)v->pos;
         float l, r;
+#ifdef DC2_MIX_SMOOTH
+        /* the frames around the position weighed (mix_tap.h): no metallic
+           ring from frames repeated or dropped; a file stream's block holds
+           its last frame (the next block not read yet) */
+        mix_tap(v->pcm, v->ch, v->frames, v->loop && !v->f, (double)v->pos, (float)step, &l, &r);
+#else
+        u32 k = (u32)v->pos;
         if (v->ch == 2) { l = v->pcm[2 * k]; r = v->pcm[2 * k + 1]; }
         else l = r = v->pcm[k];
+#endif
         acc[2 * i] += l * v->gl; acc[2 * i + 1] += r * v->gr;
         v->pos += step;
     }
