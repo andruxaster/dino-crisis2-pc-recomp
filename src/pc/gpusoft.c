@@ -116,9 +116,9 @@ static u32 create_surface(void *desc, u32 *out)
     if (g_surf_bytes > g_surf_peak) {
         g_surf_peak = g_surf_bytes;
         if (getenv("DC2_SURFLOG")) {             /* the live surfaces at a new peak */
-            fprintf(stderr, "surfaces %u KB:", g_surf_bytes >> 10);
+            fprintf(stderr, "surfaces %u KB:", (unsigned)(g_surf_bytes >> 10));
             for (u32 i = 1; i < sizeof g_obj / sizeof g_obj[0]; i++)
-                if (g_obj[i].kind == K_SURF && g_obj[i].pix) fprintf(stderr, " %ux%ux%u", g_obj[i].w, g_obj[i].h, g_obj[i].bpp);
+                if (g_obj[i].kind == K_SURF && g_obj[i].pix) fprintf(stderr, " %ux%ux%u", (unsigned)g_obj[i].w, (unsigned)g_obj[i].h, (unsigned)g_obj[i].bpp);
             fprintf(stderr, "\n");
         }
     }

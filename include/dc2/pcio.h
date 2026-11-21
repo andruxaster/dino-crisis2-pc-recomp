@@ -42,6 +42,9 @@ u32  DC2CALL Strm_Open(gptr mp3, u32 size, u32 loop);  /* 0x4BFC10: handle or -1
 /* standalone: record rec (header index) of file ("MS_0001.DAT") played from
    data\BGM\ (tools/dreamcast/dc2_music.py): handle or -1 */
 u32  Strm_OpenFile(const char *file, u32 rec, u32 loop);
+/* small-memory builds: the voice (a wave file, game path) played from the
+   file as the voice buffer, handle 0; -1 when it is not there */
+u32  Snd_OpenFileVoice(const char *game_path);
 /* an IMA ADPCM block (WAV format 0x11) of n bytes into up to spb frames of ch channels */
 u32  PcAudio_ImaBlock(const u8 *b, u32 n, u32 ch, s16 *out, u32 spb);
 #endif

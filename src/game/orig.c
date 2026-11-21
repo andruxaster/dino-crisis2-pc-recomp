@@ -44,7 +44,7 @@ void DC2CALL Orig_Call1(gptr fn, u32 a)
     if (f) { f(a); return; }
     static char buf[64][24]; static gptr seen[64]; static int n;
     for (int i = 0; i < n; i++) if (seen[i] == fn) { missing(buf[i]); return; }
-    if (n < 64) { seen[n] = fn; snprintf(buf[n], sizeof buf[n], "handler 0x%06X", fn); missing(buf[n++]); }
+    if (n < 64) { seen[n] = fn; snprintf(buf[n], sizeof buf[n], "handler 0x%06X", (unsigned)fn); missing(buf[n++]); }
 }
 
 /* standalone: the image buffer has TMP_SIZE spare bytes after IMAGE_SIZE */
