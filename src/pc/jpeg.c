@@ -396,8 +396,7 @@ static int jpeg_run(Jpeg *j, gptr dst)
         for (int x = 0; x < j->width; x++) {
             int Y = yr[x], cb = r1[x], cr = r2[x];
             int r = CLAMP(Y + crr[cr]), g = CLAMP(Y + ((cbg[cb] + crg[cr]) >> 16)) & 0xF8, b = CLAMP(Y + cbb[cb]) & 0xF8;
-            unsigned v = ((b << 5 | g) << 2) | r >> 3;                       /* blue high (the PC's texture order) */
-            o[2 * x] = (u8)v; o[2 * x + 1] = (u8)(v >> 8);                  /* (little-endian, as U16) */
+            ((u16 *)o)[x] = (u16)(((b << 5 | g) << 2) | r >> 3);            /* blue high (the PC's texture order); o 2-aligned */
         }
     }
     free(r0);
