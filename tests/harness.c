@@ -14324,6 +14324,7 @@ static gptr sv_state(void)
     U16(0x87EEB0) = (u16)A2_PICK(0x101, 0x100, (s32)rnd());
     U32(g + 0x940) = O_OBJ;
     U8(g + 0x1090) = (u8)(rnd() % 4);                   /* (a room with a name: a save writes it into the slot's summary) */
+    U8(g + 0x1091) = (u8)(rnd() % 10);                  /* (and its area, as the summaries above: Room_Name reads the areas' table) */
     U32(0x87DC08) = rnd(); U32(0x87DC94) = rnd();
     U32(g + 0x76C) = rnd(); U32(g + 0x770) = rnd();
     U8(g + 0x108D) = (u8)A2_PICK(0, 1, 0); U8(g + 0xB48) = (u8)A2_PICK(0, 1, 2);
