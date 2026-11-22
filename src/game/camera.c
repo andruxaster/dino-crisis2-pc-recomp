@@ -71,6 +71,23 @@ static struct { char name[0x28]; u32 sec, size, used; void *data, *pic; } g_cc[C
 static u32 g_cc_bytes, g_cc_clock;
 static int g_cc_last = -1;                          /* the entry of the record just read */
 
+/* RAM to spare: the cache keeps only what leaves CAM_CACHE_SPARE free for
+   the rest (the menus' surfaces, the textures' uploads) */
+#ifdef _arch_dreamcast
+#include <malloc.h>
+#include <unistd.h>
+#define CAM_CACHE_SPARE 0x200000u
+static int cc_room(u32 n)
+{
+    struct mallinfo mi = mallinfo();
+    uintptr_t top = (uintptr_t)sbrk(0), end = 0x8D000000u - 0x10000u;   /* (16 MB of RAM; the main stack's 64 KB at the top) */
+    u32 free_bytes = (u32)(top < end ? end - top : 0) + (u32)mi.fordblks;
+    return free_bytes > n + CAM_CACHE_SPARE;
+}
+#else
+static int cc_room(u32 n) { (void)n; return 1; }
+#endif
+
 static void cc_drop(int i)
 {
     free(g_cc[i].data); g_cc_bytes -= g_cc[i].size; g_cc[i].data = NULL;
@@ -90,7 +107,7 @@ static int cam_cache_picture(void *dst)
 static void cam_cache_keep_picture(const void *src)
 {
     int i = g_cc_last;
-    if (i < 0 || g_cc[i].pic || g_cc_bytes + CAM_PIC_BYTES > CAM_CACHE_BYTES) return;
+    if (i < 0 || g_cc[i].pic || g_cc_bytes + CAM_PIC_BYTES > CAM_CACHE_BYTES || !cc_room(CAM_PIC_BYTES)) return;
     if (!(g_cc[i].pic = malloc(CAM_PIC_BYTES))) return;
     memcpy(g_cc[i].pic, src, CAM_PIC_BYTES);
     g_cc_bytes += CAM_PIC_BYTES;
@@ -126,7 +143,7 @@ static gptr cam_cache_read(gptr gname, u32 sec, u32 size)
         cc_drop(o);
         if (free_i < 0) free_i = o;
     }
-    void *copy = free_i >= 0 ? malloc(size) : NULL;
+    void *copy = free_i >= 0 && cc_room(size) ? malloc(size) : NULL;
     if (copy) {                                     /* (no RAM to spare: just not kept) */
         memcpy(copy, MEM(p), size);
         strncpy(g_cc[free_i].name, name, sizeof g_cc[free_i].name - 1);

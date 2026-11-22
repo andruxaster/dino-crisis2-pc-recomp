@@ -139,29 +139,35 @@ static int tex_upload(const RTexture *t, pvr_ptr_t mem, u32 x0, u32 y0, u32 tw, 
     STALL_END(STALL_TEX);
     return r;
 }
+/* the piece's pixels a tile at a time (pvr_twiddle_tiles): no buffer of the
+   texture's size, only 2 KB tiles, each sent by store queues */
+typedef struct { const RTexture *t; pvr_ptr_t mem; u32 x0, y0, tw, th; } Upload;
+
+static void up_fetch(void *c, unsigned x, unsigned y, unsigned n, unsigned short *out)
+{
+    const Upload *u = c;
+    if (y >= u->th) y = u->th - 1;                  /* (past the picture: its last row and column repeated) */
+    const u8 *src = (const u8 *)u->t->pixels + (u->y0 + y) * u->t->pitch + u->x0 * u->t->bpp;
+    unsigned in = x < u->tw ? (u->tw - x < n ? u->tw - x : n) : 0;
+    if (u->t->bpp == 2) memcpy(out, src + x * 2, in * 2);
+    else for (unsigned i = 0; i < in; i++) out[i] = to1555(src + 4 * (x + i));
+    if (in < n) {
+        u16 last = u->t->bpp == 2 ? ((const u16 *)src)[u->tw - 1] : to1555(src + 4 * (u->tw - 1));
+        for (unsigned i = in; i < n; i++) out[i] = last;
+    }
+}
+
+static void up_emit(void *c, unsigned at, const unsigned short *tile, unsigned n)
+{
+    const Upload *u = c;
+    if (n * 2 >= 32) pvr_txr_load((void *)tile, (u8 *)u->mem + at * 2, n * 2);
+    else memcpy((u8 *)u->mem + at * 2, tile, n * 2);   /* (an 8 x 8 texture's 128 bytes go by store queues too; smaller: none) */
+}
+
 static int tex_upload1(const RTexture *t, pvr_ptr_t mem, u32 x0, u32 y0, u32 tw, u32 th, u32 pw, u32 ph)
 {
-    u16 *tw16 = memalign(32, pw * ph * 2);
-    if (!tw16) return 0;
-    if (t->bpp == 2 && x0 == 0 && y0 == 0 && pw == t->w && ph == t->h && !(t->pitch & 1)) {
-        pvr_twiddle16(t->pixels, t->pitch / 2, pw, ph, tw16);    /* (as it is: twiddled straight from the surface) */
-        pvr_txr_load(tw16, mem, pw * ph * 2);
-        free(tw16);
-        return 1;
-    }
-    u16 *tmp = memalign(32, pw * ph * 2);
-    if (!tmp) { free(tw16); return 0; }
-    for (u32 y = 0; y < th; y++) {
-        const u8 *src = (const u8 *)t->pixels + (y0 + y) * t->pitch + x0 * t->bpp;
-        u16 *row = tmp + y * pw;
-        if (t->bpp == 2) memcpy(row, src, tw * 2);
-        else for (u32 x = 0; x < tw; x++) row[x] = to1555(src + 4 * x);
-        for (u32 x = tw; x < pw; x++) row[x] = row[tw - 1];
-    }
-    for (u32 y = th; y < ph; y++) memcpy(tmp + y * pw, tmp + (th - 1) * pw, pw * 2);
-    pvr_twiddle16(tmp, pw, pw, ph, tw16);
-    pvr_txr_load(tw16, mem, pw * ph * 2);
-    free(tmp); free(tw16);
+    Upload u = {t, mem, x0, y0, tw, th};
+    pvr_twiddle_tiles(pw, ph, up_fetch, up_emit, &u);
     return 1;
 }
 

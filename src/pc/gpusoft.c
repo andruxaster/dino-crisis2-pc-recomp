@@ -190,7 +190,11 @@ static u32 blt(u32 dst, const void *dr, u32 src, const void *sr, u32 flags, cons
         u32 c = fx ? *(const u32 *)((const u8 *)fx + 0x50) : 0;
         if (d->back) { if (g_r && g_r->clear) g_r->clear(1, 0, c); return 0; }
         if (!pix_of(d)) return 1;
-        for (u32 y = r[1]; y < r[3] && y < d->h; y++) for (u32 x = r[0]; x < r[2] && x < d->w; x++) pix_put(d, x, y, c);
+        for (u32 y = r[1]; y < r[3] && y < d->h; y++) {
+            u32 x1 = r[2] < d->w ? r[2] : d->w;
+            if (d->bpp == 2) { u16 *p = (u16 *)d->pix + y * d->w; for (u32 x = r[0]; x < x1; x++) p[x] = (u16)c; }
+            else { u32 *p = (u32 *)d->pix + y * d->w; for (u32 x = r[0]; x < x1; x++) p[x] = c; }
+        }
         d->version++;
         return 0;
     }
@@ -204,6 +208,34 @@ static u32 blt(u32 dst, const void *dr, u32 src, const void *sr, u32 flags, cons
     u32 dw = r[2] - r[0], dh = r[3] - r[1], sw = q[2] - q[0], sh = q[3] - q[1];
     if (!dw || !dh) return 0;
     if (!pix_of(d)) return 1;
+    if (s != d && dw == sw && dh == sh && s->bpp == d->bpp && r[0] + dw <= d->w && r[1] + dh <= d->h && q[0] + sw <= s->w && q[1] + sh <= s->h
+        && r[0] + dw >= r[0] && q[0] + sw >= q[0]) {   /* (the usual one: unscaled, inside both; rows as they are) */
+        u32 bpp = d->bpp;
+        for (u32 y = 0; y < dh; y++)
+            memmove(d->pix + ((r[1] + y) * d->w + r[0]) * bpp, s->pix + ((q[1] + y) * s->w + q[0]) * bpp, dw * bpp);
+        d->version++;
+        return 0;
+    }
+    if (s != d && s->bpp == d->bpp && dw <= 2048) {    /* scaled, same format: the columns worked out once */
+        static u32 xs[2048];
+        u32 x0 = 0, x1 = 0;                         /* the columns [x0, x1) inside both */
+        for (u32 x = 0; x < dw; x++) {
+            u32 sx = q[0] + x * sw / dw;
+            xs[x] = sx;
+            if (r[0] + x < d->w && sx < s->w) { if (x1 == x0) x0 = x; x1 = x + 1; }
+        }
+        for (u32 y = 0; y < dh; y++) {
+            u32 sy = q[1] + y * sh / dh;
+            if (r[1] + y >= d->h || sy >= s->h) continue;
+            for (u32 x = x0; x < x1; x++) {
+                if (r[0] + x >= d->w || xs[x] >= s->w) continue;
+                if (d->bpp == 2) ((u16 *)d->pix)[(r[1] + y) * d->w + r[0] + x] = ((const u16 *)s->pix)[sy * s->w + xs[x]];
+                else ((u32 *)d->pix)[(r[1] + y) * d->w + r[0] + x] = ((const u32 *)s->pix)[sy * s->w + xs[x]];
+            }
+        }
+        d->version++;
+        return 0;
+    }
     for (u32 y = 0; y < dh; y++) {
         u32 sy = q[1] + y * sh / dh;
         if (r[1] + y >= d->h || sy >= s->h) continue;

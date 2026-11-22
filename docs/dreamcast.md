@@ -159,11 +159,19 @@ picture goes to the PVR as a new texture. Each step is made cheaper:
   by a table: about twice as fast on the host, the same pixels
   (`make jpeg-test`: every picture of the DBS files, also damaged, against
   hashes written by the decoder before);
-* textures are put in the PVR's twiddled order in RAM by two table lookups
-  a pixel (`src/port/dc/pvr_twiddle.h`, checked against KallistiOS's formula
-  by `make pvr-tile-test`) and copied to VRAM by store queues
-  (`pvr_txr_load`), in place of `pvr_txr_load_ex`, which works the address
-  out bit by bit and writes VRAM 16 bits at a time.
+* textures are put in the PVR's twiddled order 32 x 32 pixels at a time
+  (an aligned tile is one run of the twiddled order) by table lookups, and
+  each 2 KB tile goes to VRAM by store queues (`pvr_txr_load`); no buffer
+  the size of the texture is needed (`src/port/dc/pvr_twiddle.h`, checked
+  against KallistiOS's formula by `make pvr-tile-test`). This replaces
+  `pvr_txr_load_ex`, which works the address out bit by bit and writes VRAM
+  16 bits at a time;
+* the PC layer's surface copies (`blt`, `src/pc/gpusoft.c`), which the
+  profiler found taking half of a camera switch, copy whole rows when
+  unscaled and work the columns out once when scaled.
+
+The camera cache keeps only what leaves 2 MB of RAM free (`cc_room`), so it
+gives way to the menus' surfaces.
 
 The sound banks' sounds (`Snd_CreateBuffer`) are played by the AICA's own
 channels (`src/port/dc/aica_sfx.c`, `DC2_AICA`): uploaded to sound RAM once
