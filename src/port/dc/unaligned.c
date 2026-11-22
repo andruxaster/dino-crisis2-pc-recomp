@@ -8,9 +8,12 @@
  * addressing mode GCC emits), does the access byte by byte and goes on with
  * the next instruction. Correct, but slow, so each place is counted and the
  * first ones are reported (DcUnaligned_Report: PCs to resolve with
- * sh-elf-addr2line -e dinocrisis2.elf). An instruction it cannot handle
- * (one in a branch's delay slot, or an unaligned instruction fetch) goes
- * to the handler that was there before (KOS's crash report). */
+ * sh-elf-addr2line -e dinocrisis2.elf). An access in a delayed branch's
+ * slot (GCC puts the last store of a function in rts's) faults with the PC
+ * at the branch: the slot's access is done and the branch taken here
+ * (rts, bra, bsr, braf, bsrf, jmp, jsr, bt/s, bf/s). An instruction it
+ * cannot handle (or an unaligned instruction fetch) goes to the handler
+ * that was there before (KOS's crash report). */
 #include <kos.h>
 #include <stdio.h>
 #include <arch/irq.h>
@@ -40,10 +43,9 @@ static void st(u32 a, u32 v, int size)
 /* the visible single-precision register n (FPSCR.FR selects the bank) */
 static u32 *fr(irq_context_t *c, int n) { return (c->fpscr & 0x200000) ? &c->frbank[n] : &c->fr[n]; }
 
-/* emulate the instruction at c->pc; 1 when done */
-static int emulate(irq_context_t *c)
+/* emulate the data move op; 1 when done */
+static int emulate(irq_context_t *c, u16 op)
 {
-    u16 op = *(const u16 *)c->pc;
     u32 *r = c->r;
     int n = (op >> 8) & 15, m = (op >> 4) & 15, d4 = op & 15;
     switch (op >> 12) {
@@ -102,11 +104,44 @@ static int emulate(irq_context_t *c)
     return 0;
 }
 
+/* the delayed branch at pc: 1 (and where it goes, and whether it links)
+   when it is one; its target as the branch sees it, before its slot runs */
+static int delayed_branch(irq_context_t *c, u16 op, u32 pc, u32 *to, int *link)
+{
+    u32 *r = c->r;
+    int n = (op >> 8) & 15;
+    s32 d12 = (s32)((op & 0xFFF) ^ 0x800) - 0x800, d8 = (s32)(s8)(op & 0xFF);
+    *link = 0;
+    if (op == 0x000B) { *to = c->pr; return 1; }                                /* rts */
+    if ((op & 0xF000) == 0xA000) { *to = pc + 4 + d12 * 2; return 1; }          /* bra */
+    if ((op & 0xF000) == 0xB000) { *to = pc + 4 + d12 * 2; *link = 1; return 1; } /* bsr */
+    if ((op & 0xF0FF) == 0x0023) { *to = pc + 4 + r[n]; return 1; }             /* braf Rn */
+    if ((op & 0xF0FF) == 0x0003) { *to = pc + 4 + r[n]; *link = 1; return 1; }  /* bsrf Rn */
+    if ((op & 0xF0FF) == 0x402B) { *to = r[n]; return 1; }                      /* jmp @Rn */
+    if ((op & 0xF0FF) == 0x400B) { *to = r[n]; *link = 1; return 1; }           /* jsr @Rn */
+    if ((op & 0xFF00) == 0x8D00) { *to = (c->sr & 1) ? pc + 4 + d8 * 2 : pc + 4; return 1; }   /* bt/s */
+    if ((op & 0xFF00) == 0x8F00) { *to = (c->sr & 1) ? pc + 4 : pc + 4 + d8 * 2; return 1; }   /* bf/s */
+    return 0;
+}
+
 static void on_address_error(irq_t code, irq_context_t *c, void *data)
 {
     (void)data;
     u32 tea = TEA;
-    if (tea != c->pc && !(c->pc & 1) && emulate(c)) {
+    u32 to; int link;
+    if (tea != c->pc && !(c->pc & 1) && delayed_branch(c, *(const u16 *)c->pc, c->pc, &to, &link)
+        && emulate(c, *(const u16 *)(c->pc + 2))) {                    /* (the slot's access; then the branch) */
+        u32 pc = c->pc;
+        if (link) c->pr = pc + 4;
+        c->pc = to;
+        g_count++;
+        for (int i = 0; i < NSITES; i++) {
+            if (g_site_pc[i] == pc) { g_site_n[i]++; break; }
+            if (!g_site_pc[i]) { g_site_pc[i] = pc; g_site_n[i] = 1; break; }
+        }
+        return;
+    }
+    if (tea != c->pc && !(c->pc & 1) && emulate(c, *(const u16 *)c->pc)) {
         u32 pc = c->pc;
         c->pc += 2;
         g_count++;

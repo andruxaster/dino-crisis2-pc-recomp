@@ -123,7 +123,12 @@ And in the shared code, behind switches that the PC builds leave off:
 - **The image without the code**: the original's `.text` (0x400000..0x4E8000,
   ~930 KB) is not allocated; `g_membase` points before the buffer.
 - **Paths** (`src/game/pcio.c`): on KOS names are used as they are (no folder
-  scan per component, ISO9660 is case-insensitive).
+  scan per component, ISO9660 is case-insensitive). An access in a delayed branch's slot (GCC often puts a
+  function's last store in `rts`'s slot) is emulated too, with the branch.
+  Emulators (Flycast) do not raise these errors, so the console finds what
+  they miss; a Linux build with `-fsanitize=alignment` lists the unaligned
+  accesses on the host (`make linux OUT=build/ubsan CFLAGS="... -fsanitize=alignment"`;
+  its reports of `u8 *` loads are the host's 64-bit pointers, not the game's).
 
 ## The pad
 

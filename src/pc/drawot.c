@@ -752,7 +752,7 @@ static void vram_copy(gptr r, s32 x, s32 y)                          /* 0x4B4A60
     gptr s = VRAM_BASE + ((u32)U16(r + 2) << 11) + 2 * (u32)U16(r), d = VRAM_BASE + ((u32)y << 11) + 2 * (u32)x;
     u32 n = U16(r + 4) >> 1, skip = (0x400 - (u32)U16(r + 4)) * 2;
     for (u32 h = U16(r + 6); h; h = (h - 1) & 0xFFFF) {
-        for (u32 k = 0; k < n; k++, s += 4, d += 4) U32(d) = U32(s);
+        for (u32 k = 0; k < n; k++, s += 4, d += 4) UU32(d) = UU32(s);   /* (x odd: 2-aligned) */
         s += skip; d += skip;
     }
     S16(r) = (s16)x; S16(r + 2) = (s16)y;
@@ -805,7 +805,7 @@ static void tex_size(u32 w, u32 h, gptr ow, gptr oh)
 {
     u32 a, b;
     tex_fit(w, h, &a, &b);
-    U32(ow) = a; U32(oh) = b;
+    UU32(ow) = a; UU32(oh) = b;                     /* (oh 2-aligned in some callers) */
 }
 
 static const float k_1_320 = 0.003125f, k_65536 = 65536.0f;
