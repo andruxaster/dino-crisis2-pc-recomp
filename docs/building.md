@@ -45,7 +45,16 @@ program.
 
 `dc2gl ROOT/Data [FRAMES] [presses]` takes the pad from the
 keyboard as well (arrows, Z confirm, X back, C action, Enter start; Escape
-quits). `DC2_STATS=1` prints each frame in numbers (draws, vertices, texture
+quits) and from game controllers through SDL's GameController (DualSense and
+DualShock 4 over USB or Bluetooth by SDL's HIDAPI drivers, SDL 2.0.14 or
+later; Xbox and others SDL has a mapping for), plugged in at any time. The
+buttons by position, as on the Dreamcast: south (Cross, A) confirm, east
+(Circle, B) back, west (Square, X) 0x10, north (Triangle, Y) 0x100, L1/R1
+0x04/0x08, L2/R2 0x02/0x01, Options/Start start, Create/Back or the touchpad
+the map; d-pad or left stick. A pad SDL has no mapping for is named on
+stderr (`not a game controller SDL knows`). Steam Input, when Steam is
+running, may take a DualSense over; turn it off for the game in Steam if the
+pad does nothing. `DC2_STATS=1` prints each frame in numbers (draws, vertices, texture
 uploads, mean colour, share of lit pixels), `DC2_DRAWLOG=F` (and
 `DC2_DRAWLOG_N`) every draw of frames F.., `DC2_FAST=1` runs without frame
 pacing, `DC2_SCALE=n` enlarges the window. It plays the sound effects, the voice
