@@ -77,6 +77,23 @@ void dc2_ctx_leave_irq(uint32_t irq) { irq_restore(irq); }
  * 0x73BEB8): 0x1000 up, 0x4000 down, 0x8000 left, 0x2000 right; 0x20 action /
  * confirm, 0x40 cancel, 0x800 start (pause), 0x100 the status screen, 0x01 the
  * map, 0x10, 0x04, 0x08, 0x02 the PC's V, G, Shift, D. */
+/* A GD-ROM (a .gdi in GDEMU or an emulator): KallistiOS's ISO 9660 driver
+   reads the table of contents of the low-density area only, finds track 1
+   (a small note at sector 0) and mounts that as /cd. On a GD-ROM the game
+   is track 3 in the high-density area (from sector 45000), so the driver's
+   call (linked through -Wl,--wrap=cdrom_read_toc) asks for that area's
+   table instead. A CD-R (.cdi) is left as it is. */
+int __real_cdrom_read_toc(cd_toc_t *toc, bool high_density);
+int __wrap_cdrom_read_toc(cd_toc_t *toc, bool high_density)
+{
+    int status, type;
+    if (!high_density && cdrom_get_status(&status, &type) == ERR_OK && type == CD_GDROM) {
+        int r = __real_cdrom_read_toc(toc, true);
+        if (r == ERR_OK) return r;
+    }
+    return __real_cdrom_read_toc(toc, high_density);
+}
+
 static u16 read_pad(int *quit)
 {
     maple_device_t *dev = maple_enum_type(0, MAPLE_FUNC_CONTROLLER);

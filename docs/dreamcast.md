@@ -71,6 +71,10 @@ KallistiOS's `makeip` (`make -C $KOS_BASE/utils/makeip`, needs
 45000 with the boot sectors (IP.BIN, "GD-ROM1/1") in front and
 `1ST_READ.BIN` unscrambled; the script checks the result. The high-density
 area holds ~980 MB, so unlike a CD-R nothing has to be left out.
+KallistiOS's ISO 9660 driver reads only the low-density area's table of
+contents and would mount track 1; the build links its `cdrom_read_toc`
+through a wrapper (`-Wl,--wrap=cdrom_read_toc`, `src/port/dc/main.c`) that
+asks for the high-density area's on a GD-ROM, so `/cd` is track 3.
 
 | Switch | Default | |
 |---|---|---|

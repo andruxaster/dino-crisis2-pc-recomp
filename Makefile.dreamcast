@@ -57,8 +57,9 @@ $(BUILD)/%.o: %.S
 	@mkdir -p $(dir $@)
 	kos-cc -c $< -o $@
 
+# (--wrap: a GD-ROM's file system is found in its high-density area, src/port/dc/main.c)
 $(TARGET): $(OBJS)
-	kos-cc -o $@ $(OBJS) -lm
+	kos-cc -o $@ $(OBJS) -Wl,--wrap=cdrom_read_toc -lm
 	$(KOS_SIZE) $@
 
 # the largest static symbols
