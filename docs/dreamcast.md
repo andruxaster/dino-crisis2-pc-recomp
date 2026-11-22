@@ -201,7 +201,10 @@ picture goes to the PVR as a new texture. Each step is made cheaper:
   unscaled and work the columns out once when scaled.
 
 The camera cache keeps only what leaves 2 MB of RAM free (`cc_room`), so it
-gives way to the menus' surfaces.
+gives way to the menus' surfaces: it is trimmed every frame back to that,
+and emptied at once when a surface does not fit (`g_low_memory`,
+`src/pc/gpusoft.c`). A failed `malloc`/`calloc`/`memalign`/`realloc` is
+logged with its size and caller (the first eight; the link wraps them).
 
 The sound banks' sounds (`Snd_CreateBuffer`) are played by the AICA's own
 channels (`src/port/dc/aica_sfx.c`, `DC2_AICA`): uploaded to sound RAM once

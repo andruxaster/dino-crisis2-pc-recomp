@@ -165,7 +165,7 @@ static void noise_ahead(gptr o)
     U16(v) = 0; U16(v + 2) = 0; U16(v + 4) = 0x4B0;
     ApplyMatrixSV(m, v, v);
     U16(v) += U16(o + 0x40); U16(v + 4) += U16(o + 0x44); U16(v + 2) += U16(o + 0x42);
-    u32 x = U32(v), y = U32(v + 2), z = U32(v + 4);
+    u32 x = U32(v), y = UU32(v + 2), z = U32(v + 4);           /* (y: a dword at +2, as the original reads it) */
     Tmp_Pop(0x28);
     Noise_Make(x, y, z);
 }

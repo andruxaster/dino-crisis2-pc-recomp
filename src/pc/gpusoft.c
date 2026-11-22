@@ -23,6 +23,9 @@ typedef struct {
 
 #define NOBJ 2048
 static Obj g_obj[NOBJ];
+/* the port's way to give RAM back when a surface does not fit (the
+   Dreamcast drops its camera cache); 1 when it did */
+int (*g_low_memory)(void);
 static u32 g_surf_bytes, g_surf_peak;     /* the surfaces' pixels now and at most */
 static const Renderer *g_r;
 static u32 g_rs[0x100], g_tss[2][0x20], g_tex, g_bg_rgb;
@@ -59,6 +62,7 @@ static u8 *pix_of(Obj *o)
 {
     if (o->pix || !o->w || !o->h) return o->pix;
     o->pix = calloc((size_t)o->w * o->h, o->bpp);
+    if (!o->pix && g_low_memory && g_low_memory()) o->pix = calloc((size_t)o->w * o->h, o->bpp);   /* (RAM given back: once more) */
     if (!o->pix) return NULL;
     g_surf_bytes += o->w * o->h * o->bpp;
     if (g_surf_bytes > g_surf_peak) {
