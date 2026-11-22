@@ -469,7 +469,7 @@ void DC2CALL gte_strgb3_gt3(gptr p)                                  /* 0x4C2130
 {
     U32(p + 4) = U32(GTE_RGB0); U32(p + 0x18) = U32(GTE_RGB1); U32(p + 0x2C) = U32(GTE_RGB2);
 }
-void DC2CALL gte_stsv(gptr p) { U32(p) = U32(GTE_IR1); U32(p + 4) = U32(GTE_IR1 + 4); }     /* 0x4C2170 */
+void DC2CALL gte_stsv(gptr p) { UU32(p) = U32(GTE_IR1); UU32(p + 4) = U32(GTE_IR1 + 4); }   /* 0x4C2170 (p: an SVECTOR, 2-aligned) */
 void DC2CALL gte_stsxy(gptr p) { U32(p) = U32(GTE_SXY + 16); U32(p + 4) = U32(GTE_SXY + 20); } /* 0x4C2190 */
 void DC2CALL gte_stsxy3c(gptr p) { memcpy(MEM(p), MEM(GTE_SXY), 24); }                   /* 0x4C21B0 */
 
