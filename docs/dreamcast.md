@@ -234,6 +234,13 @@ apart. Every 1800 frames the log gets three `prof` lines of addresses;
 names the functions (by `sh-elf-nm` of the same build) with their share of
 the time.
 
+A watchdog thread (`Prof_Watchdog`, above the game's priority) prints
+`HANG? frame N has not ended for 3 s`, the game's state and `prof stall` /
+`prof stall-callers` lines (where the CPU was in the last half second;
+the same script names them) when the frame counter stops, and again every
+10 s while it lasts. No such line in a log that stopped means the CPU was
+not taking interrupts (or the console reset).
+
 ## Saves (VMU)
 
 The game writes `SAVE00.DAT`..`SAVE99.DAT` (1524 bytes) with plain file calls.

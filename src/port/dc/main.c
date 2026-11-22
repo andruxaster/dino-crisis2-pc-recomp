@@ -122,6 +122,15 @@ void *__wrap_calloc(size_t a, size_t b) { void *p = __real_calloc(a, b); if (!p 
 void *__wrap_memalign(size_t al, size_t n) { void *p = __real_memalign(al, n); if (!p && n) alloc_failed("memalign", n, __builtin_return_address(0)); return p; }
 void *__wrap_realloc(void *q, size_t n) { void *p = __real_realloc(q, n); if (!p && n) alloc_failed("realloc", n, __builtin_return_address(0)); return p; }
 
+/* the frame counter and the game's state, for the watchdog (prof.c) */
+static volatile unsigned g_frame_now;
+static void wd_state(void)
+{
+    printf("  game mode %u room %X%02X; game heap peak %u KB; disc reads tried again %u; %u sounds on the AICA\n",
+           (unsigned)U16(G() + 0x664), (unsigned)U8(G() + 0x1091), (unsigned)U8(G() + 0x1090), (unsigned)(Pc_HeapPeak() >> 10),
+           (unsigned)Host_ReadFailures(), (unsigned)Aica_Count());
+}
+
 static u16 read_pad(int *quit)
 {
     maple_device_t *dev = maple_enum_type(0, MAPLE_FUNC_CONTROLLER);
@@ -318,9 +327,10 @@ int main(int argc, char **argv)
     pace_init();
 #if DC2_DC_VERBOSE
     Prof_Init();
+    Prof_Watchdog(&g_frame_now, wd_state);
 #endif
     int quit = 0;
-    for (u32 f = 0; !quit; f++) {
+    for (u32 f = 0; !quit; f++, g_frame_now = f) {
         g_pad_raw[0] = read_pad(&quit);
         CamCache_Trim();                           /* (the cache keeps 2 MB free for the rest) */
         memset(g_stall_us, 0, sizeof g_stall_us);
