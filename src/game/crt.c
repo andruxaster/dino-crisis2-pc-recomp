@@ -6,8 +6,10 @@
 
 /* comparator: a game function given by its original address (looked up
    once a sort, not once a comparison: g_cmp_fn) */
+#ifndef DC2_IN_PROCESS
 static s32 (DC2CALL *g_cmp_fn)(gptr, gptr);
 static gptr g_cmp_addr;
+#endif
 static s32 call_cmp(gptr fn, gptr a, gptr b)
 {
 #ifdef DC2_IN_PROCESS
