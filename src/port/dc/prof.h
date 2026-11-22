@@ -4,5 +4,6 @@
 #define DC2_DC_PROF_H
 void Prof_Init(void);                /* TMU1 at 1 kHz */
 void Prof_FrameEnd(int slow);        /* the frame's samples to the slow histograms too, if it ran slow */
-void Prof_Report(void);              /* the hottest places, as addresses (tools/dreamcast/dc2_prof.py names them) */
+void Prof_Report(void);
+void Prof_Watchdog(volatile unsigned *frame, void (*state)(void));   /* a thread: a frame that does not end in 3 s is reported */              /* the hottest places, as addresses (tools/dreamcast/dc2_prof.py names them) */
 #endif

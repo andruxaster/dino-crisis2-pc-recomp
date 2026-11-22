@@ -14,6 +14,7 @@
 #include <arch/timer.h>
 #include <arch/irq.h>
 #include <kos/irq.h>
+#include <kos/thread.h>
 #include "prof.h"
 
 #define PROF_HZ 1000
@@ -26,6 +27,8 @@ static uint32_t *g_all, *g_slow, *g_slow_pr;
 static uint32_t g_lo, g_n, g_samples_all, g_samples_slow, g_samples_out;
 static volatile uint32_t g_frame_pc[FRAME_MAX], g_frame_pr[FRAME_MAX];
 static volatile uint32_t g_frame_n;
+#define RECENT 512                                   /* the last samples, whatever the frame (the watchdog's) */
+static volatile uint32_t g_recent_pc[RECENT], g_recent_pr[RECENT], g_recent_i;
 
 static inline int bucket(uint32_t a) { return a >= g_lo && ((a - g_lo) >> BUCKET_SHIFT) < g_n ? (int)((a - g_lo) >> BUCKET_SHIFT) : -1; }
 
@@ -42,6 +45,8 @@ static void tick(irq_t code, irq_context_t *cx, void *data)
     g_samples_all++;
     uint32_t n = g_frame_n;
     if (n < FRAME_MAX) { g_frame_pc[n] = pc; g_frame_pr[n] = pr; g_frame_n = n + 1; }
+    uint32_t k = g_recent_i++ & (RECENT - 1);
+    g_recent_pc[k] = pc; g_recent_pr[k] = pr;
 }
 
 void Prof_Init(void)
@@ -88,6 +93,61 @@ static void top(const char *what, const uint32_t *h, uint32_t total, int k)
     printf("prof %s %u:", what, (unsigned)total);
     for (int i = 0; i < n; i++) printf(" %X:%u", (unsigned)(g_lo + (idx[i] << BUCKET_SHIFT)), (unsigned)h[idx[i]]);
     printf("\n");
+}
+
+/* ---- the watchdog: the game's frame counter not moving for 3 s (a hang)
+ * is reported with where the CPU has been in the last half second, PCs and
+ * their callers as "prof stall" lines (dc2_prof.py names them), and the
+ * game's state; again every 10 s while it lasts. */
+static volatile unsigned *g_wd_frame;
+static void (*g_wd_state)(void);
+
+static void top_of(const char *what, volatile uint32_t *a)
+{
+    static uint32_t pc[RECENT], n[RECENT];
+    int k = 0;
+    for (int i = 0; i < RECENT; i++) {
+        uint32_t v = a[i] & ~31u;
+        int j = 0;
+        while (j < k && pc[j] != v) j++;
+        if (j == k) { pc[k] = v; n[k] = 0; k++; }
+        n[j]++;
+    }
+    printf("prof %s %u:", what, (unsigned)RECENT);
+    for (int t = 0; t < 16 && t < k; t++) {
+        int b = t;
+        for (int j = t + 1; j < k; j++) if (n[j] > n[b]) b = j;
+        uint32_t x = pc[b], y = n[b]; pc[b] = pc[t]; n[b] = n[t]; pc[t] = x; n[t] = y;
+        printf(" %X:%u", (unsigned)pc[t], (unsigned)n[t]);
+    }
+    printf("\n");
+}
+
+static void *watchdog(void *arg)
+{
+    (void)arg;
+    unsigned last = *g_wd_frame, still = 0;
+    for (;;) {
+        thd_sleep(1000);
+        unsigned f = *g_wd_frame;
+        if (f != last) { last = f; still = 0; continue; }
+        still++;
+        if (still == 3 || (still > 3 && still % 10 == 3)) {
+            printf("HANG? frame %u has not ended for %u s\n", f, still);
+            if (g_wd_state) g_wd_state();
+            if (g_all) { top_of("stall", g_recent_pc); top_of("stall-callers", g_recent_pr); }
+        }
+    }
+    return NULL;
+}
+
+void Prof_Watchdog(volatile unsigned *frame, void (*state)(void))
+{
+    g_wd_frame = frame; g_wd_state = state;
+    kthread_attr_t a = {0};
+    a.prio = PRIO_DEFAULT - 1 > 0 ? PRIO_DEFAULT - 1 : PRIO_DEFAULT;   /* (above the game: it runs while the game spins) */
+    a.label = "watchdog";
+    thd_create_ex(&a, watchdog, NULL);
 }
 
 void Prof_Report(void)

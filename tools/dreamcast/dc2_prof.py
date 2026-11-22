@@ -37,7 +37,7 @@ def main():
         last[m.group(1)] = (int(m.group(2)), [(int(a, 16), int(c)) for a, c in re.findall(r"([0-9A-F]+):(\d+)", m.group(3))])
     if not last:
         print("no profiler report in the log (it comes every 1800 frames)"); return 1
-    for what in ("all", "slow", "slow-callers"):
+    for what in ("all", "slow", "slow-callers", "stall", "stall-callers"):
         if what not in last:
             continue
         total, buckets = last[what]
@@ -47,7 +47,7 @@ def main():
             n = names[i] if i >= 0 else "?"
             fn[n] += c; where[n].append("%X" % a)
         print("%s: %d samples (%.1f s)%s" % (what, total, total / 1000.0,
-              "; who called the code that was running" if what == "slow-callers" else ""))
+              "; who called the code that was running" if what.endswith("-callers") else ""))
         for n, c in sorted(fn.items(), key=lambda x: -x[1]):
             print("  %5.1f%%  %-40s %s" % (100.0 * c / max(total, 1), n, " ".join(where[n][:6])))
         print()
