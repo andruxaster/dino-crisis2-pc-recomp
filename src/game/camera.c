@@ -113,6 +113,24 @@ static void cam_cache_keep_picture(const void *src)
     g_cc_bytes += CAM_PIC_BYTES;
 }
 
+/* RAM running short (the menus' surfaces grow after the cache took its
+   share): the least recently used records out until CAM_CACHE_SPARE is
+   free again, or all of them; 1 when something was dropped */
+int CamCache_Trim(void)
+{
+    int dropped = 0;
+    while (!cc_room(0)) {
+        int o = -1;
+        for (int i = 0; i < CAM_CACHE_N; i++) if (g_cc[i].data && (o < 0 || g_cc[i].used < g_cc[o].used)) o = i;
+        if (o < 0) break;
+        cc_drop(o);
+        dropped = 1;
+    }
+    return dropped;
+}
+
+int CamCache_Clear(void) { int had = 0; for (int i = 0; i < CAM_CACHE_N; i++) if (g_cc[i].data) { cc_drop(i); had = 1; } return had; }
+
 static gptr cam_cache_read(gptr gname, u32 sec, u32 size)
 {
     const char *name = (const char *)MEM(gname);

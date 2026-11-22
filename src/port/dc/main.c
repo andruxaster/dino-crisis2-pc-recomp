@@ -94,6 +94,34 @@ int __wrap_cdrom_read_toc(cd_toc_t *toc, bool high_density)
     return __real_cdrom_read_toc(toc, high_density);
 }
 
+/* ---- RAM ----------------------------------------------------------------------------------
+ * 16 MB in all, and the menus' surfaces come and go: the camera cache
+ * (src/game/camera.c) gives way when the free RAM falls under 2 MB, and at
+ * once when a surface does not fit. A failed allocation is reported (its
+ * size and who asked; through -Wl,--wrap=malloc,...) the first few times. */
+int CamCache_Trim(void);
+int CamCache_Clear(void);
+extern int (*g_low_memory)(void);
+static int low_memory(void) { int had = CamCache_Trim(); return CamCache_Clear() | had; }
+
+static volatile u32 g_alloc_fails;
+static void alloc_failed(const char *what, size_t n, void *caller)
+{
+    static int busy;
+    if (busy || g_alloc_fails++ >= 8) return;
+    busy = 1;
+    printf("%s(%u) failed, called from %08X\n", what, (unsigned)n, (unsigned)(uintptr_t)caller);
+    busy = 0;
+}
+void *__real_malloc(size_t n);
+void *__real_calloc(size_t a, size_t b);
+void *__real_memalign(size_t al, size_t n);
+void *__real_realloc(void *p, size_t n);
+void *__wrap_malloc(size_t n) { void *p = __real_malloc(n); if (!p && n) alloc_failed("malloc", n, __builtin_return_address(0)); return p; }
+void *__wrap_calloc(size_t a, size_t b) { void *p = __real_calloc(a, b); if (!p && a && b) alloc_failed("calloc", a * b, __builtin_return_address(0)); return p; }
+void *__wrap_memalign(size_t al, size_t n) { void *p = __real_memalign(al, n); if (!p && n) alloc_failed("memalign", n, __builtin_return_address(0)); return p; }
+void *__wrap_realloc(void *q, size_t n) { void *p = __real_realloc(q, n); if (!p && n) alloc_failed("realloc", n, __builtin_return_address(0)); return p; }
+
 static u16 read_pad(int *quit)
 {
     maple_device_t *dev = maple_enum_type(0, MAPLE_FUNC_CONTROLLER);
@@ -286,6 +314,7 @@ int main(int argc, char **argv)
     Snd_ReleaseAll();
     Task_Start(0, U8(0x87DE08) ? 0x471EC0 : 0x46D710);
 
+    g_low_memory = low_memory;
     pace_init();
 #if DC2_DC_VERBOSE
     Prof_Init();
@@ -293,6 +322,7 @@ int main(int argc, char **argv)
     int quit = 0;
     for (u32 f = 0; !quit; f++) {
         g_pad_raw[0] = read_pad(&quit);
+        CamCache_Trim();                           /* (the cache keeps 2 MB free for the rest) */
         memset(g_stall_us, 0, sizeof g_stall_us);
         uint64_t t0 = timer_us_gettime64();
         Port_GameFrame();
