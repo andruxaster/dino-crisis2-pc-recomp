@@ -3704,6 +3704,11 @@ static void test_emit(void)
             U32(l + 0x18) = rnd() % 16;
             U32(l + 0x1C) = rnd() % 2 ? 0 : rnd();
             S32(U32(l + 0x14) + 0x6C) = (s32)(rnd() % 2 ? rnd() % 0x2000 : rnd());
+            {   /* its parts: a chain of 4 (the records' part numbers are 0..3; Obj_Part follows +0x54) */
+                gptr ob = U32(l + 0x14);
+                U32(ob + 0x64) = PART_POOL + 0xCC * 34;
+                for (u32 q = 0; q < 4; q++) U32(PART_POOL + 0xCC * (34 + q) + 0x54) = q < 3 ? PART_POOL + 0xCC * (35 + q) : 0;
+            }
             for (u32 q = 14; q < 20; q++) U8(O_K2 + 0xAC * q + 0x50) = rnd() % 4 ? 0 : 1;   /* slots from the back, sometimes none */
             u32 a[1] = {l};
             U32(LOG_BASE) = 0;
