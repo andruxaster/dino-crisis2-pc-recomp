@@ -33,10 +33,12 @@
 
 /* a texture in VRAM: nx x ny pieces (pvr_tile.h), piece (i, j) at texels
    xo[i], yo[j] of pw[i] x ph[j] (powers of two) in mem[j * nx + i]; used: the
-   scene it was last drawn in */
+   scene it was last drawn in; linear: stored in rows, not twiddled (one
+   that has changed once, as the camera backgrounds do, likely changes
+   again: rows are a plain copy, twiddling costs a pass over every pixel) */
 typedef struct {
     u32 id, version, w, h, used;
-    u8 nx, ny;
+    u8 nx, ny, linear;
     u16 xo[TILE_MAX + 1], yo[TILE_MAX + 1], pw[TILE_MAX], ph[TILE_MAX];
     pvr_ptr_t mem[TILE_MAX * TILE_MAX];
 } Tex;
@@ -132,10 +134,11 @@ static u16 to1555(const u8 *p) { return (u16)((p[3] >= 128 ? 0x8000 : 0) | (p[2]
    pixels made 1555; the padding repeats the last row and column, for the
    filtering), through a temporary unless the texels fit as they are */
 static int tex_upload1(const RTexture *t, pvr_ptr_t mem, u32 x0, u32 y0, u32 tw, u32 th, u32 pw, u32 ph);
-static int tex_upload(const RTexture *t, pvr_ptr_t mem, u32 x0, u32 y0, u32 tw, u32 th, u32 pw, u32 ph)
+static int tex_upload_rows(const RTexture *t, pvr_ptr_t mem, u32 x0, u32 y0, u32 tw, u32 th, u32 pw, u32 ph);
+static int tex_upload(const RTexture *t, pvr_ptr_t mem, u32 x0, u32 y0, u32 tw, u32 th, u32 pw, u32 ph, int linear)
 {
     STALL_BEGIN();
-    int r = tex_upload1(t, mem, x0, y0, tw, th, pw, ph);
+    int r = linear ? tex_upload_rows(t, mem, x0, y0, tw, th, pw, ph) : tex_upload1(t, mem, x0, y0, tw, th, pw, ph);
     STALL_END(STALL_TEX);
     return r;
 }
@@ -171,6 +174,18 @@ static int tex_upload1(const RTexture *t, pvr_ptr_t mem, u32 x0, u32 y0, u32 tw,
     return 1;
 }
 
+/* the same in rows (a non-twiddled texture: pw a power of two, no stride) */
+static int tex_upload_rows(const RTexture *t, pvr_ptr_t mem, u32 x0, u32 y0, u32 tw, u32 th, u32 pw, u32 ph)
+{
+    static u16 row[1024] __attribute__((aligned(32)));
+    Upload u = {t, mem, x0, y0, tw, th};
+    for (u32 y = 0; y < ph; y++) {
+        up_fetch(&u, 0, y, pw, row);
+        up_emit(&u, y * pw, row, pw);
+    }
+    return 1;
+}
+
 /* a texture in VRAM, uploaded again on a new version: in pieces of powers of
    two (the twiddled formats need them), a large one in several (pvr_tile.h) */
 static Tex *tex_get(const RTexture *t)
@@ -178,7 +193,9 @@ static Tex *tex_get(const RTexture *t)
     if (!t || (t->bpp != 2 && t->bpp != 4) || !t->w || !t->h || t->w > 1024 || t->h > 1024) return 0;
     Tex *e = &g_tex[t->id % NTEX];
     if (e->id != t->id || !e->nx || e->version != t->version || e->w != t->w || e->h != t->h) {
+        int linear = e->id == t->id && e->nx && e->w == t->w && e->h == t->h;   /* (a new version of the same one) */
         tex_release(e);
+        e->linear = (u8)linear;
         e->used = g_scene;                      /* (not taken for room by its own pieces' vram_alloc) */
         e->nx = (u8)tile_split(t->w, e->xo, e->pw);
         e->ny = (u8)tile_split(t->h, e->yo, e->ph);
@@ -186,7 +203,7 @@ static Tex *tex_get(const RTexture *t)
             for (int i = 0; i < e->nx; i++) {
                 pvr_ptr_t m = vram_alloc((u32)e->pw[i] * e->ph[j] * 2);
                 e->mem[j * e->nx + i] = m;
-                if (!m || !tex_upload(t, m, e->xo[i], e->yo[j], e->xo[i + 1] - e->xo[i], e->yo[j + 1] - e->yo[j], e->pw[i], e->ph[j])) {
+                if (!m || !tex_upload(t, m, e->xo[i], e->yo[j], e->xo[i + 1] - e->xo[i], e->yo[j + 1] - e->yo[j], e->pw[i], e->ph[j], e->linear)) {
                     tex_release(e);         /* (those made: freed after the scenes, as any) */
                     return 0;
                 }
@@ -229,7 +246,8 @@ static void header(const RState *s, const Tex *t, int k)
     pvr_poly_cxt_t c;
     if (t) {
         int i = k % t->nx, j = k / t->nx;
-        pvr_poly_cxt_txr(&c, PVR_LIST_TR_POLY, PVR_TXRFMT_ARGB1555 | PVR_TXRFMT_TWIDDLED, t->pw[i], t->ph[j], t->mem[k],
+        pvr_poly_cxt_txr(&c, PVR_LIST_TR_POLY, PVR_TXRFMT_ARGB1555 | (t->linear ? PVR_TXRFMT_NONTWIDDLED : PVR_TXRFMT_TWIDDLED),
+                         t->pw[i], t->ph[j], t->mem[k],
                          s->filter ? PVR_FILTER_BILINEAR : PVR_FILTER_NONE);
         c.txr.env = PVR_TXRENV_MODULATEALPHA;
         c.txr.uv_clamp = PVR_UVCLAMP_UV;

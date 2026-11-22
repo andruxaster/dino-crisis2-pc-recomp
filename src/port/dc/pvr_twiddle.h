@@ -53,15 +53,18 @@ static inline void pvr_twiddle_tiles(unsigned w, unsigned h, pvr_fetch_fn fetch,
     static unsigned short rows[32 * 32], tile[32 * 32] __attribute__((aligned(32)));
     unsigned min = w < h ? w : h, t = min < 32 ? min : 32, k = 0, sq = min * min;
     while ((1u << k) < t) k++;
-    unsigned loc[32];
-    for (unsigned i = 0; i < t; i++) loc[i] = pvr_twid_spread(i);
+    unsigned loc[32], loc2[32];
+    for (unsigned i = 0; i < t; i++) { loc[i] = pvr_twid_spread(i); loc2[i] = loc[i] << 1; }
     for (unsigned s0 = 0; s0 < (w > h ? w : h) / min; s0++)          /* the squares along the longer side */
         for (unsigned ty = 0; ty < min / t; ty++)
             for (unsigned tx = 0; tx < min / t; tx++) {
                 unsigned x0 = tx * t + (w > h ? s0 * min : 0), y0 = ty * t + (w > h ? 0 : s0 * min);
                 for (unsigned y = 0; y < t; y++) fetch(ctx, x0, y0 + y, t, rows + y * t);
-                for (unsigned y = 0; y < t; y++)
-                    for (unsigned x = 0; x < t; x++) tile[loc[y] | loc[x] << 1] = rows[y * t + x];
+                for (unsigned y = 0; y < t; y++) {
+                    unsigned short *o = tile + loc[y];
+                    const unsigned short *r = rows + y * t;
+                    for (unsigned x = 0; x < t; x += 2) { o[loc2[x]] = r[x]; o[loc2[x + 1]] = r[x + 1]; }
+                }
                 unsigned at = s0 * sq + ((pvr_twid_spread(ty) | pvr_twid_spread(tx) << 1) << (2 * k));
                 emit(ctx, at, tile, t * t);
             }

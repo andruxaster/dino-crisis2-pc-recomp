@@ -1400,12 +1400,15 @@ static void bg_upload(gptr img)                                      /* 0x4BE120
     memset(desc, 0, sizeof desc); *(u32 *)desc = SD_SIZE; *(u32 *)(desc + SD_PIXFMT) = 0x20;
     if (Surf_Lock(U32(0x75CEA4), 0, desc, 1)) return;
     u8 *d = *(u8 **)(desc + SD_SURFACE);
-    for (u32 n = 0; n < 320 * 240; n++, img += 2) {
-        u32 p = U16(img);
-        u32 c = ((p & 0x3E0) << 14 >> U32(0x87BBC8) & U32(0x87BBD4)) | ((p & 0x1F) << 19 >> U32(0x87BBC4) & U32(0x87BBD0))
-              | ((p & 0x7C00) << 9 >> U32(0x87BBCC) & U32(0x87BBD8)) | U32(0x87BBDC);
-        if (U8(0x87BBC3) == 2) *(u16 *)d = (u16)c; else *(u32 *)d = c;
-        d += U8(0x87BBC3);
+    /* (the format's shifts and masks read once: the surface is the host's memory, not the game's) */
+    const u32 sg = U32(0x87BBC8), mg = U32(0x87BBD4), sr = U32(0x87BBC4), mr = U32(0x87BBD0), sb = U32(0x87BBCC), mb = U32(0x87BBD8),
+              a = U32(0x87BBDC), bpp = U8(0x87BBC3);
+    const u8 *ip = MEM(img);
+    for (u32 n = 0; n < 320 * 240; n++, ip += 2) {
+        u32 p = (u32)ip[0] | (u32)ip[1] << 8;
+        u32 c = ((p & 0x3E0) << 14 >> sg & mg) | ((p & 0x1F) << 19 >> sr & mr) | ((p & 0x7C00) << 9 >> sb & mb) | a;
+        if (bpp == 2) *(u16 *)d = (u16)c; else *(u32 *)d = c;
+        d += bpp;
     }
     Surf_Unlock(U32(0x75CEA4), 0);
     if (U8(0x75DEF0) & 1) return;
@@ -1687,16 +1690,19 @@ static void masks_pack(void)                                         /* 0x4BE770
     for (s32 q = 0; q < S32(MK_N) / 6; q++) {
         u32 bpp = U8(0x87BB43);
         u8 *d = base + (pbase + row) * pitch + bpp * col;
+        const u32 sg = U32(0x87BB48), mg = U32(0x87BB54), sr = U32(0x87BB44), mr = U32(0x87BB50), sb = U32(0x87BB4C), mb = U32(0x87BB58),
+                  ma = U32(0x87BB5C);                   /* (read once: the surface is the host's memory) */
+        const u8 *sp = MEM(src);
         for (int r = 0; r < 18; r++, d += pitch) {
             u8 *o = d;
             for (int c = 0; c < 18; c++) {
-                u32 p = U16(src); src += 2;
-                u32 v = ((p & 0x3E0) << 14 >> U32(0x87BB48) & U32(0x87BB54)) | ((p & 0x1F) << 19 >> U32(0x87BB44) & U32(0x87BB50))
-                      | ((p & 0x7C00) << 9 >> U32(0x87BB4C) & U32(0x87BB58)) | (p & 0x8000 ? U32(0x87BB5C) : 0);
-                if (U8(0x87BB43) == 2) *(u16 *)o = (u16)v; else *(u32 *)o = v;
-                o += U8(0x87BB43);
+                u32 p = (u32)sp[0] | (u32)sp[1] << 8; sp += 2;
+                u32 v = ((p & 0x3E0) << 14 >> sg & mg) | ((p & 0x1F) << 19 >> sr & mr) | ((p & 0x7C00) << 9 >> sb & mb) | (p & 0x8000 ? ma : 0);
+                if (bpp == 2) *(u16 *)o = (u16)v; else *(u32 *)o = v;
+                o += bpp;
             }
         }
+        src += 18 * 18 * 2;
         if ((col += 18) == 0xFC) {
             col = 0;
             if ((row += 18) == 0xFC) { row = 0; page++; pbase += 0x100; }
