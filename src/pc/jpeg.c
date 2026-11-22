@@ -389,14 +389,15 @@ static int jpeg_run(Jpeg *j, gptr dst)
     unsigned char *r0 = malloc((size_t)j->width * 3 + 16), *r1 = r0 + j->width + 8, *r2 = r1 + j->width + 4;   /* (h2v2 writes 2*dw) */
     if (!r0) return 0;
     for (int y = 0; y < j->height; y++) {
-        gptr o = dst + (u32)(y * j->width * 2);
-        memcpy(r0, crow(&j->c[0], y), (size_t)j->width);
+        u8 *o = MEM(dst + (u32)(y * j->width * 2));
+        const unsigned char *yr = crow(&j->c[0], y);
         upsample_row(&j->c[1], y, r1);
         upsample_row(&j->c[2], y, r2);
         for (int x = 0; x < j->width; x++) {
-            int Y = r0[x], cb = r1[x], cr = r2[x];
+            int Y = yr[x], cb = r1[x], cr = r2[x];
             int r = CLAMP(Y + crr[cr]), g = CLAMP(Y + ((cbg[cb] + crg[cr]) >> 16)) & 0xF8, b = CLAMP(Y + cbb[cb]) & 0xF8;
-            U16(o + 2 * x) = (u16)(((b << 5 | g) << 2) | r >> 3);           /* blue high (the PC's texture order) */
+            unsigned v = ((b << 5 | g) << 2) | r >> 3;                       /* blue high (the PC's texture order) */
+            o[2 * x] = (u8)v; o[2 * x + 1] = (u8)(v >> 8);                  /* (little-endian, as U16) */
         }
     }
     free(r0);

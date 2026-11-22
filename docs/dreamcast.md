@@ -166,6 +166,13 @@ picture goes to the PVR as a new texture. Each step is made cheaper:
   against KallistiOS's formula by `make pvr-tile-test`). This replaces
   `pvr_txr_load_ex`, which works the address out bit by bit and writes VRAM
   16 bits at a time;
+* a texture that has changed once (the camera backgrounds, the masks) is
+  kept from then on in rows, not twiddled (`linear` in
+  `src/port/dc/render_pvr.c`, `PVR_TXRFMT_NONTWIDDLED`): its uploads are a
+  plain copy of rows;
+* the background's and the masks' conversion to the surfaces' format
+  (`bg_upload`, `masks_pack`, `src/pc/drawot.c`) read the format's shifts
+  and masks once, not for every pixel;
 * the PC layer's surface copies (`blt`, `src/pc/gpusoft.c`), which the
   profiler found taking half of a camera switch, copy whole rows when
   unscaled and work the columns out once when scaled.
