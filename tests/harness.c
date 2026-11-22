@@ -11820,6 +11820,7 @@ static void test_ao_plant(void)
         S8(o + 0x207) = (s8)(rnd() % 2 ? rnd() % 3 : rnd());
         S8(o + 0x208) = (s8)(rnd() % 2 ? 5 + rnd() % 4 : rnd());
         { gptr q = U32(o + 0x64); if (rnd() % 3 == 0) U8(q + 0x8C) = 0; }
+        snd_setup();                            /* (its sounds: Se_Play reads the banks; an earlier group can leave one empty) */
         sprintf(g_what, "plant %X hit step %u kill %X", o, U8(o + 0x56), U8(o + 0x170));
         check(0x428DC0, Plant_Hit, "Plant_Hit", 1, a, 0);
     }

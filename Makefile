@@ -33,7 +33,7 @@ WINEPREFIX ?= $(HOME)/.wine-dc2re
 export WINEPREFIX
 check: $(OUT)/harness_stub.exe
 	@test -d $(WINEPREFIX) || WINEARCH=win32 wineboot -i >/dev/null 2>&1
-	WINEDEBUG=-all wine $(OUT)/harness_stub.exe "$$(winepath -w $(DINO2))" "$$(winepath -w $(DATA))"
+	WINEDEBUG=-all wine $(OUT)/harness_stub.exe "$$(winepath -w $(DINO2))" "$$(winepath -w $(DATA))" $(if $(T),-t "$(T)")
 
 linux: $(OUT)/libdc2game.a $(OUT)/smoke $(OUT)/dc2
 $(OUT)/libdc2game.a: $(GAME) $(DATASRC) $(HDRS) | $(OUT)

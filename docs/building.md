@@ -1,7 +1,8 @@
 # Building and running
 
     make            # needs i686-w64-mingw32-gcc
-    make check      # harness under wine (DINO2=.../Dino2.exe DATA=.../Data)
+    make check      # harness under wine (DINO2=.../Dino2.exe DATA=.../Data;
+                    # T="pc gpu,pc draw,data" runs only those groups, comma-separated)
     make linux      # native static library + build/smoke + build/dc2
     make dc2gl      # build/dc2gl: dc2 in a window (SDL2 + OpenGL)
 
