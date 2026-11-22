@@ -171,11 +171,14 @@ static void gl_texture_freed(u32 id)
 
 static const Renderer k_gl = {gl_begin_frame, gl_clear, gl_draw, gl_present, gl_read_back, gl_texture_freed};
 
+static void pads_open(void);
+
 /* windowed at w x h times scale, or fullscreen on the desktop's mode with the
    picture kept 4:3 (black bars) */
 const Renderer *RenderGl_Open(int w, int h, int scale, int fullscreen)
 {
     if (SDL_Init(SDL_INIT_VIDEO) != 0) { fprintf(stderr, "SDL: %s\n", SDL_GetError()); return 0; }
+    pads_open();
     SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
     SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
     if (scale < 1) scale = 1;
@@ -205,13 +208,93 @@ const Renderer *RenderGl_Open(int w, int h, int scale, int fullscreen)
 
 RenderGlStats *RenderGl_Stats(void) { return &g_stats; }
 
-/* the pad from the keyboard: arrows, Z (confirm, 0x820), X (back, 0x40), C (action, 0x20), Enter (start 0x8) */
+/* ---- game controllers (SDL's GameController: DualSense, DualShock 4, Xbox,
+ * Switch Pro and others SDL knows; DualSense and DualShock 4 by HIDAPI, over
+ * USB or Bluetooth). Buttons as the Dreamcast port's pad (port/dc/main.c),
+ * by position: south (Cross, A) confirm 0x20, east (Circle, B) back 0x40,
+ * west (Square, X) 0x10, north (Triangle, Y) 0x100, L1/R1 0x04/0x08,
+ * L2/R2 0x02/0x01, Options/Start 0x800, Create/Back the map (0x01). The
+ * d-pad or the left stick move. All connected pads count. */
+#define NPADS 4
+static SDL_GameController *g_pads[NPADS];
+
+static void pad_add(int index)
+{
+    if (!SDL_IsGameController(index)) {
+        fprintf(stderr, "pad %d: \"%s\" is not a game controller SDL knows (no mapping)\n", index, SDL_JoystickNameForIndex(index));
+        return;
+    }
+    for (int i = 0; i < NPADS; i++)
+        if (!g_pads[i]) {
+            g_pads[i] = SDL_GameControllerOpen(index);
+            if (g_pads[i]) fprintf(stderr, "pad: %s\n", SDL_GameControllerName(g_pads[i]));
+            else fprintf(stderr, "pad %d: %s\n", index, SDL_GetError());
+            return;
+        }
+}
+
+static void pad_remove(SDL_JoystickID id)
+{
+    for (int i = 0; i < NPADS; i++)
+        if (g_pads[i] && SDL_JoystickInstanceID(SDL_GameControllerGetJoystick(g_pads[i])) == id) {
+            SDL_GameControllerClose(g_pads[i]);
+            g_pads[i] = NULL;
+        }
+}
+
+static void pads_open(void)
+{
+#if SDL_VERSION_ATLEAST(2, 0, 14)
+    SDL_SetHint(SDL_HINT_JOYSTICK_HIDAPI_PS5, "1");         /* (DualSense: SDL 2.0.14 on) */
+#endif
+    SDL_SetHint(SDL_HINT_JOYSTICK_HIDAPI_PS4, "1");
+    SDL_SetHint(SDL_HINT_JOYSTICK_ALLOW_BACKGROUND_EVENTS, "1");
+    if (SDL_InitSubSystem(SDL_INIT_GAMECONTROLLER) != 0) { fprintf(stderr, "SDL pads: %s\n", SDL_GetError()); return; }
+    /* (connected ones come as SDL_CONTROLLERDEVICEADDED events too, at the first poll) */
+}
+
+static u16 pads_read(void)
+{
+    u16 p = 0;
+    for (int i = 0; i < NPADS; i++) {
+        SDL_GameController *c = g_pads[i];
+        if (!c) continue;
+#define B(b) SDL_GameControllerGetButton(c, SDL_CONTROLLER_BUTTON_##b)
+        int lx = SDL_GameControllerGetAxis(c, SDL_CONTROLLER_AXIS_LEFTX), ly = SDL_GameControllerGetAxis(c, SDL_CONTROLLER_AXIS_LEFTY);
+        if (B(DPAD_UP) || ly < -16000) p |= 0x1000;
+        if (B(DPAD_DOWN) || ly > 16000) p |= 0x4000;
+        if (B(DPAD_LEFT) || lx < -16000) p |= 0x8000;
+        if (B(DPAD_RIGHT) || lx > 16000) p |= 0x2000;
+        if (B(A)) p |= 0x20;
+        if (B(B)) p |= 0x40;
+        if (B(X)) p |= 0x10;
+        if (B(Y)) p |= 0x100;
+        if (B(LEFTSHOULDER)) p |= 0x04;
+        if (B(RIGHTSHOULDER)) p |= 0x08;
+        if (SDL_GameControllerGetAxis(c, SDL_CONTROLLER_AXIS_TRIGGERLEFT) > 16000) p |= 0x02;
+        if (SDL_GameControllerGetAxis(c, SDL_CONTROLLER_AXIS_TRIGGERRIGHT) > 16000) p |= 0x01;
+        if (B(START)) p |= 0x800;
+        if (B(BACK)) p |= 0x01;
+#if SDL_VERSION_ATLEAST(2, 0, 14)
+        if (B(TOUCHPAD)) p |= 0x01;
+#endif
+#undef B
+    }
+    return p;
+}
+
+/* the pad from the keyboard: arrows, Z (confirm, 0x820), X (back, 0x40), C (action, 0x20), Enter (start 0x8);
+   and from the game controllers (above) */
 u16 RenderGl_Pad(int *quit)
 {
     SDL_Event e;
-    while (SDL_PollEvent(&e)) if (e.type == SDL_QUIT) *quit = 1;
+    while (SDL_PollEvent(&e)) {
+        if (e.type == SDL_QUIT) *quit = 1;
+        else if (e.type == SDL_CONTROLLERDEVICEADDED) pad_add(e.cdevice.which);
+        else if (e.type == SDL_CONTROLLERDEVICEREMOVED) pad_remove(e.cdevice.which);
+    }
     const Uint8 *k = SDL_GetKeyboardState(0);
-    u16 p = 0;
+    u16 p = pads_read();
     if (k[SDL_SCANCODE_UP]) p |= 0x1000;
     if (k[SDL_SCANCODE_DOWN]) p |= 0x4000;
     if (k[SDL_SCANCODE_LEFT]) p |= 0x8000;

@@ -36,6 +36,10 @@ Dreamcast: `make -f Makefile.dreamcast` with a KallistiOS toolchain, then a
 disc image from your data, see [docs/dreamcast.md](docs/dreamcast.md).
 
 Keyboard: arrows, Z confirm, X back, C action, Enter start, Escape quits.
+Game controllers (DualSense, DualShock 4, Xbox and others SDL knows, USB or
+Bluetooth): d-pad or left stick, Cross/A confirm, Circle/B back, Options/Start
+start, Create/Back (or the touchpad) the map; see
+[docs/building.md](docs/building.md).
 
 ## Documentation
 
