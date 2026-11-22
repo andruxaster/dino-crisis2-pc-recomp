@@ -7,6 +7,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <math.h>
+#include <string.h>
+#include <stdint.h>
 #include "pvr_tile.h"
 #include "pvr_twiddle.h"
 
@@ -35,6 +37,15 @@ static int tri_uv(const TileV *t, double x, double y, double *u, double *v)
     *u = (l0 * t[0].uw + l1 * t[1].uw + l2 * t[2].uw) / w;
     *v = (l0 * t[0].vw + l1 * t[1].vw + l2 * t[2].vw) / w;
     return 1;
+}
+
+static const unsigned short *g_tsrc; static unsigned g_tpitch, g_tbad; static unsigned short *g_tdst;
+static void t_fetch(void *c, unsigned x, unsigned y, unsigned n, unsigned short *out) { (void)c; memcpy(out, g_tsrc + y * g_tpitch + x, n * 2); }
+static void t_emit(void *c, unsigned at, const unsigned short *t, unsigned n)
+{
+    (void)c;
+    if (at % n || ((uintptr_t)t & 31)) g_tbad = 1;                 /* (store queues: aligned) */
+    memcpy(g_tdst + at, t, n * 2);
 }
 
 int main(void)
@@ -129,6 +140,24 @@ int main(void)
                 sizes++;
             }
         printf("twiddle: %d sizes as KallistiOS's\n", sizes);
+        /* a tile at a time */
+        sizes = 0;
+        for (unsigned w = 8; w <= 1024; w <<= 1)
+            for (unsigned h = 8; h <= 1024; h <<= 1) {
+                if (w * h > 1024 * 512) continue;
+                unsigned pitch = w + 8;
+                for (unsigned i = 0; i < pitch * h; i++) src[i] = (unsigned short)(i * 2246822519u >> 9);
+                unsigned min = w < h ? w : h, mask = min - 1;
+                for (unsigned y = 0; y < h; y++)
+                    for (unsigned x = 0; x < w; x++)
+                        kos[TWIDOUT(x & mask, y & mask) + (x / min + y / min) * min * min] = src[y * pitch + x];
+                memset(ours, 0xAB, w * h * 2);
+                g_tsrc = src; g_tpitch = pitch; g_tdst = ours; g_tbad = 0;
+                pvr_twiddle_tiles(w, h, t_fetch, t_emit, NULL);
+                if (g_tbad || memcmp(ours, kos, w * h * 2)) FAIL("tiled twiddle %u x %u differs from KallistiOS's\n", w, h);
+                sizes++;
+            }
+        printf("twiddle by tiles: %d sizes as KallistiOS's\n", sizes);
     }
     printf(fails ? "%d FAILED\n" : "ok\n", fails);
     return fails != 0;
