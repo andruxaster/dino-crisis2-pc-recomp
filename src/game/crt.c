@@ -4,21 +4,25 @@
 #include "dc2/orig.h"
 #include "dc2/task.h"
 
-/* comparator: a game function given by its original address */
+/* comparator: a game function given by its original address (looked up
+   once a sort, not once a comparison: g_cmp_fn) */
+static s32 (DC2CALL *g_cmp_fn)(gptr, gptr);
+static gptr g_cmp_addr;
 static s32 call_cmp(gptr fn, gptr a, gptr b)
 {
 #ifdef DC2_IN_PROCESS
     return ((s32 (DC2CALL *)(gptr, gptr))(uintptr_t)fn)(a, b);
 #else
-    s32 (DC2CALL *f)(gptr, gptr) = (s32 (DC2CALL *)(gptr, gptr))Hook_Find(fn);
-    return f ? f(a, b) : 0;
+    if (fn != g_cmp_addr) { g_cmp_fn = (s32 (DC2CALL *)(gptr, gptr))Hook_Find(fn); g_cmp_addr = fn; }
+    return g_cmp_fn ? g_cmp_fn(a, b) : 0;
 #endif
 }
 
 static void swap_elems(gptr a, gptr b, u32 width)
 {
     if (a == b) return;
-    for (u32 i = 0; i < width; i++) { u8 t = U8(a + i); U8(a + i) = U8(b + i); U8(b + i) = t; }
+    u8 *p = MEM(a), *q = MEM(b);                       /* (host pointers: the bytes as U8 would swap them) */
+    for (u32 i = 0; i < width; i++) { u8 t = p[i]; p[i] = q[i]; q[i] = t; }
 }
 
 /* selection sort of lo..hi (both inclusive) */
