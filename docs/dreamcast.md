@@ -53,11 +53,22 @@ With all three, `Data` (~250 MB), `MOVIE` (~320 MB) and `SPEECH` (~10 MB,
     source /opt/toolchains/dc/kos/environ.sh
     make -f Makefile.dreamcast                         # build/dc/dinocrisis2.elf
     make -f Makefile.dreamcast cdi DATA=/srv/dc2       # CD-R image (needs mkdcdisc)
+    make -f Makefile.dreamcast gdi DATA=/srv/dc2       # GD-ROM image: build/dc/gdi/disc.gdi
     make -f Makefile.dreamcast DC2_DC_ROOT=/pc/srv/dc2 run DC_IP=192.168.1.50   # dcload
 
 `DATA` (or the dcload folder) holds the game's `Data/` folder; `MOVIE/` and
 `SPEECH/` may sit next to it. Its contents become the disc's root, so the game
 reads `/cd/Data/...`.
+
+The GD-ROM image (`tools/dreamcast/make_gdi.sh`) is for GDEMU and the other
+optical drive emulators, Flycast and Redream: `disc.gdi` with `track01.iso`,
+`track02.raw` and `track03.iso` (copy the four files to the GDEMU card's
+folder as they are). It needs `xorriso` (`apt install xorriso`) and
+KallistiOS's `makeip` (`make -C $KOS_BASE/utils/makeip`, needs
+`libpng-dev`). The game is track 3, an ISO 9660 volume written for sector
+45000 with the boot sectors (IP.BIN, "GD-ROM1/1") in front and
+`1ST_READ.BIN` unscrambled; the script checks the result. The high-density
+area holds ~980 MB, so unlike a CD-R nothing has to be left out.
 
 | Switch | Default | |
 |---|---|---|
@@ -80,6 +91,7 @@ reads `/cd/Data/...`.
 | `src/game/task.c` | the task backend for KOS (`__DREAMCAST__`) |
 | `src/port/frame.c` | the main loop's game work, shared with `dc2.c` |
 | `tools/dreamcast/make_cdi.sh` | the CDI image |
+| `tools/dreamcast/make_gdi.sh` | the GDI image |
 
 And in the shared code, behind switches that the PC builds leave off:
 
