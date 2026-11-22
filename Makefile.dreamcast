@@ -4,6 +4,7 @@
 #   make -f Makefile.dreamcast                       # -> build/dc/dinocrisis2.elf
 #   make -f Makefile.dreamcast DC2_DC_ROOT=/pc/srv/dc2 run DC_IP=192.168.1.50
 #   make -f Makefile.dreamcast cdi DATA=/srv/dc2     # CD-R image (mkdcdisc)
+#   make -f Makefile.dreamcast gdi DATA=/srv/dc2     # GD-ROM image (xorriso, makeip)
 #
 # The game code is the same as the PC builds' (src/game, src/pc, src/data,
 # the hook table); only the entry, the renderer and the task switch are
@@ -80,7 +81,12 @@ cdi: $(TARGET)
 	@[ -n "$(DATA)" ] || { echo "usage: make -f Makefile.dreamcast cdi DATA=<folder with Data/>"; exit 1; }
 	sh tools/dreamcast/make_cdi.sh $(TARGET) $(DATA) $(BUILD)/dinocrisis2.cdi
 
+# a GD-ROM image (GDEMU, Flycast, Redream): $(BUILD)/gdi/disc.gdi and its tracks
+gdi: $(TARGET)
+	@[ -n "$(DATA)" ] || { echo "usage: make -f Makefile.dreamcast gdi DATA=<folder with Data/>"; exit 1; }
+	sh tools/dreamcast/make_gdi.sh $(TARGET) $(DATA) $(BUILD)/gdi
+
 clean:
 	rm -rf $(BUILD)
 
-.PHONY: all bss-report run cdi clean
+.PHONY: all bss-report run cdi gdi clean
