@@ -5160,7 +5160,7 @@ static void test_helpers(void)
         {0x473130, Movie_Start, "Movie_Start", 1}, {0x4731F0, Movie_Tick, "Movie_Tick", 0},
         {0x470D30, MsgSlot_Step, "MsgSlot_Step", 1}, {0x470D50, Box_Type, "Box_Type", 0}, {0x470F40, Box_Wait, "Box_Wait", 0},
         {0x470F70, Box_Prompt, "Box_Prompt", 0}, {0x4710D0, Box_Release, "Box_Release", 0}, {0x4710F0, Box_YesNo, "Box_YesNo", 0},
-        {0x4712B0, Box_Choose, "Box_Choose", 0}, {0x4713C0, Box_Close, "Box_Close", 0}, {0x4713F0, Box_CloseResult, "Box_CloseResult", 0},
+        {0x4712B0, Box_Choose, "Box_Choose", 0}, {0x4713C0, Box_Close, "Box_Close", 0},
         {0x48C220, Se_Info, "Se_Info", 2}, {0x48C2D0, Se_Calc, "Se_Calc", 5}, {0x48C3B0, Se_Remap, "Se_Remap", 2, 0xFFFFFFFF},
         {0x48C4F0, Se_Start, "Se_Start", 6}, {0x48C0B0, Se_Play, "Se_Play", 2}, {0x48C640, Se_PlayFlat, "Se_PlayFlat", 3},
         {0x48C600, Se_StopGroup, "Se_StopGroup", 1}, {0x48CE60, Strm_Halt, "Strm_Halt", 1}, {0x494BA0, Text_Draw, "Text_Draw", 7, 0xFFFFFFFF},
@@ -5179,7 +5179,7 @@ static void test_helpers(void)
         {0x41F080, Panel_Sprite, "Panel_Sprite", 6}, {0x41F1C0, Panel_Digits, "Panel_Digits", 5}, {0x41F170, Panel_Bonus, "Panel_Bonus", 1},
         {0x41F390, Panel_Kills, "Panel_Kills", 1}, {0x41F3E0, Panel_Points, "Panel_Points", 1},
         {0x405E40, Timer_Draw, "Timer_Draw", 0}, {0x4065A0, Boss_Bar, "Boss_Bar", 2}, {0x406520, Boss_Gauge, "Boss_Gauge", 2},
-        {0x495E90, Menu_Open, "Menu_Open", 5}, {0x452450, Game_ModeStock, "Game_ModeStock", 0}};
+        {0x495E90, Menu_Open, "Menu_Open", 5}, {0x452450, Game_ModeStock, "Game_ModeStock", 0}, {0x4713F0, Box_CloseResult, "Box_CloseResult", 0}   /* (last: the cases below count the entries before it) */};
     g_ign_objpads = 1;
     stubs_install(1);
     for (int i = 0; i < iters; i++) {
@@ -5261,7 +5261,7 @@ static void test_helpers(void)
             case 39: a[0] = rnd() % 10; stub_at(0x4BF3A0)->ret = rnd() % 4 == 0; break;
             case 40: U32(0x74DB84) = rnd() % 3 ? rnd() % 10 : 0xFFFFFFFF; U32(0x74DB88) = rnd() % 3; break;
             case 41: a[0] = 0x74D980 + 0x10 * (rnd() % 32); U8(a[0] + 2) = rnd() % 4; break;
-            case 42: case 43: case 44: case 45: case 46: case 47: case 48: {
+            case 42: case 43: case 44: case 45: case 46: case 47: case 48: case 97: {   /* (97: Box_CloseResult) */
                      gptr t = HB;                       /* a text with every code */
                      u32 n = 2 + rnd() % 30;
                      for (u32 q = 0; q < n; q++) {
