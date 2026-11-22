@@ -56,9 +56,11 @@ With all three, `Data` (~250 MB), `MOVIE` (~320 MB) and `SPEECH` (~10 MB,
     make -f Makefile.dreamcast gdi DATA=/srv/dc2       # GD-ROM image: build/dc/gdi/disc.gdi
     make -f Makefile.dreamcast DC2_DC_ROOT=/pc/srv/dc2 run DC_IP=192.168.1.50   # dcload
 
-`DATA` (or the dcload folder) holds the game's `Data/` folder; `MOVIE/` and
-`SPEECH/` may sit next to it. Its contents become the disc's root, so the game
-reads `/cd/Data/...`.
+`DATA` is not the `Data/` folder itself but the folder that holds it, with
+`MOVIE/` and `SPEECH/` next to it, as in the game's own folder (the dcload
+folder alike). Everything in it becomes the disc's root, so the game reads
+`/cd/Data/...`, `/cd/MOVIE/...`, `/cd/SPEECH/...`; `.exe`, `.dll` and
+`SPEECH_ORIG/` (`dc2_speech.py`'s originals) are left out.
 
 The GD-ROM image (`tools/dreamcast/make_gdi.sh`) is for GDEMU and the other
 optical drive emulators, Flycast and Redream: `disc.gdi` with `track01.iso`,

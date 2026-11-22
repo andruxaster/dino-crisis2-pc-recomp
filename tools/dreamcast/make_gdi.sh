@@ -61,7 +61,7 @@ set -- -C 0,45000 -V DINO_CRISIS_2 -sysid "SEGA SEGAKATANA" -G "$TMP/IP.BIN" -l 
     -graft-points "/1ST_READ.BIN=$TMP/1ST_READ.BIN"
 for entry in "$ROOT"/*; do
     name=$(basename "$entry")
-    case "$name" in build|.git|gdi|*.cdi|*.gdi|*.iso|*.raw|*.elf|1ST_READ.BIN) continue ;; esac
+    case "$name" in build|.git|gdi|*.cdi|*.gdi|*.iso|*.raw|*.elf|1ST_READ.BIN|*.[eE][xX][eE]|*.[dD][lL][lL]|SPEECH_ORIG|[sS]peech_orig) echo "  (left out: $name)"; continue ;; esac
     set -- "$@" "/$name=$entry"
 done
 echo "$MKISO (track 3: $((kb / 1024)) MB)"
