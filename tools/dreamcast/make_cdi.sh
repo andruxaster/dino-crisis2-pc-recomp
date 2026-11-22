@@ -3,7 +3,8 @@
 #
 # A bootable CDI (Flycast, CD-R) made with mkdcdisc
 # (https://gitlab.com/simulant/mkdcdisc). <data-root> is a folder that holds
-# YOUR copy of the game's Data/ folder (MOVIE/ and SPEECH/ optional); its
+# YOUR copy of the game's Data/ folder (MOVIE/ and SPEECH/ optional, next
+# to Data/: the game's own folder will do); its
 # contents become the disc's root, so the game reads /cd/Data/... (the ELF
 # built with the default DC2_DC_ROOT=/cd).
 set -e
@@ -34,7 +35,7 @@ fi
 set -- -e "$ELF" -n "DINO CRISIS 2" -o "$OUT"
 for entry in "$ROOT"/*; do
     name=$(basename "$entry")
-    case "$name" in build|.git|*.cdi|*.elf) continue ;; esac
+    case "$name" in build|.git|*.cdi|*.elf|*.[eE][xX][eE]|*.[dD][lL][lL]|SPEECH_ORIG|[sS]peech_orig) echo "  (left out: $name)"; continue ;; esac
     if [ -d "$entry" ]; then set -- "$@" -d "$entry"
     elif [ -f "$entry" ]; then set -- "$@" -f "$entry"
     fi
