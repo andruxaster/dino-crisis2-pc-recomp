@@ -820,6 +820,7 @@ void DC2CALL Se_Start(u32 h, gptr o, gptr e, u32 pan, u32 vol, u32 id) /* 0x48C4
     U8(s + 0xA) = 0; U16(s + 0xC) = 0x7F; U8(s + 9) = (u8)id; U32(s) = h; U8(s + 8) = 1; U32(s + 4) = 0;
     s32 v = (s32)S8(G() + 0x14EE) * (s32)vol / 15;
     if (U8(G() + 0x14EC)) Snd_SetPan(h, pan);
+    else if (g_gog_fixes) Snd_SetPan(h, 0x40);      /* (GOG: mono centred, not the buffer's last pan) */
     Snd_SetVolume(h, v);
     Snd_Play(h, loop, U8(e + 1));
 }
@@ -830,10 +831,15 @@ static gptr se_entry(gptr r)
     return U32(0x87FBE0 + (s32)S8(r) * 8) + ((s32)S8(r + 1) * 16 + S8(r + 2)) * 8;
 }
 
-/* sound id at object o (0: no place): every buffer of the sound */
+int g_gog_fixes;
+
+/* sound id at object o (0: no place): every buffer of the sound. Sound 0x38
+   (the tyrannosaur's roar) is never played by the original; the GOG release
+   plays it but for the objects at 0x5F2C6C and 0x5ED1BC and without a place
+   ("Restored missing T-Rex roar sound") */
 void DC2CALL Se_Play(gptr o, u32 id)                                /* 0x48C0B0 */
 {
-    if (id == 0x38) return;
+    if (id == 0x38 && (!g_gog_fixes || o == 0x5F2C6C || o == 0x5ED1BC || (s32)o < 0x200000)) return;
     if (U8(G() + 0x927) && o) {
         u8 k = U8(o + 0x58);
         if (U8(0x87E747) == 2) { if (k & 1) id += 0x20; }

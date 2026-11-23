@@ -222,6 +222,11 @@ static void (DC2CALL *const g_file_handlers[8])(gptr, gptr) = {
 
 void DC2CALL File_Process(void)                                     /* 0x404290 */
 {
+    if (g_gog_fixes) {                              /* GOG: fog off for file 0x78; two values cleared for file 0xEC */
+        u8 f = U8(A_FILE_ID);
+        if (f == 0x78) { PcDraw_SetFogEnable(0); Light_SetFar(0); }
+        if (f == 0xEC) { U32(0x746CE6) = 0; U32(0x74B52E) = 0; }
+    }
     gptr name = U32(A_FILE_NAMES + U16(A_FILE_ID) * 4);
     if (!name) return;
     gptr path = Tmp_Push(0x40);

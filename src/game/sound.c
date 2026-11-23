@@ -13,7 +13,7 @@ void DC2CALL Snd_Tick(void)                                         /* 0x48C700 
 {
     for (u32 i = 0; i < 4; i++) {
         gptr s = A_STREAMS + i * 0x14;
-        if (!U8(s + 8) || !U8(s + 0x10)) continue;
+        if (!U8(s + 8) || (!U8(s + 0x10) && !g_gog_fixes)) continue;   /* (GOG: the volume set every frame, not only while fading: the music volume option at once) */
         if (S16(s + 0xA) > S16(s + 0xC)) {
             U16(s + 0xA) -= U8(s + 0x11);
             if (S16(s + 0xA) <= S16(s + 0xC)) {

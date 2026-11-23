@@ -28,6 +28,7 @@
 #elif defined(__linux__)
 #include <unistd.h>
 #include <sys/mman.h>
+#include <sys/stat.h>
 #endif
 #include "dc2/game.h"
 #include "dc2/pcinput.h"
@@ -73,7 +74,7 @@ static int strcasecmp_(const char *a, const char *b)
 }
 
 /* config.ini: [Display] Scale, FullScreen; [Assets] Path (keys without case) */
-static struct { int scale, fullscreen; char path[1024]; } g_cfg = {2, 0, ""};
+static struct { int scale, fullscreen, original; char path[1024]; } g_cfg = {2, 0, 0, ""};
 
 static void load_config(void)
 {
@@ -96,9 +97,29 @@ static void load_config(void)
         if (IS(sec, "Display") && IS(k, "Scale")) g_cfg.scale = atoi(v);
         else if (IS(sec, "Display") && IS(k, "FullScreen")) g_cfg.fullscreen = atoi(v);
         else if (IS(sec, "Assets") && IS(k, "Path")) snprintf(g_cfg.path, sizeof g_cfg.path, "%s", v);
+        else if (IS(sec, "Game") && IS(k, "Original")) g_cfg.original = atoi(v);
         #undef IS
     }
     fclose(f);
+}
+
+/* the save files in a "saves" folder beside Data (as the GOG release does),
+   made when missing; SAVExx.DAT left next to Data by earlier builds moved in */
+static void saves_folder(const char *root, const char *dir)
+{
+#ifdef _WIN32
+    CreateDirectoryA(dir, NULL);
+#else
+    mkdir(dir, 0755);
+#endif
+    for (int i = 0; i < 100; i++) {
+        char from[1200], to[1200];
+        snprintf(from, sizeof from, "%s/SAVE%02d.DAT", root, i);
+        snprintf(to, sizeof to, "%s/SAVE%02d.DAT", dir, i);
+        FILE *f = fopen(to, "rb");
+        if (f) { fclose(f); continue; }
+        if (rename(from, to) == 0) fprintf(stderr, "save SAVE%02d.DAT moved into %s\n", i, dir);
+    }
 }
 
 static int is_abs(const char *p) { return p[0] == '/' || p[0] == '\\' || (p[0] && p[1] == ':'); }
@@ -216,7 +237,10 @@ int main(int argc, char **argv)
     if (argc > 1) { snprintf(root, sizeof root, "%s", argv[1]); parent_of(root); }
     else default_root(root, sizeof root);
     g_pc_root = root;
-    if (getenv("DC2_SAVEDIR")) g_pc_save_root = getenv("DC2_SAVEDIR");   /* the saves elsewhere (default: next to Data) */
+    g_gog_fixes = !g_cfg.original && !getenv("DC2_ORIGINAL");   /* the GOG release's fixes (docs/gog_patches.md) unless asked not to */
+    static char saves[1100];
+    if (getenv("DC2_SAVEDIR")) g_pc_save_root = getenv("DC2_SAVEDIR");   /* the saves elsewhere */
+    else { snprintf(saves, sizeof saves, "%s/saves", root); saves_folder(root, saves); g_pc_save_root = saves; }
 #ifdef DC2_GL
     int frames = argc > 2 ? atoi(argv[2]) : 0;
 #else
