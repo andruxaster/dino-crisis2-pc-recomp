@@ -178,8 +178,8 @@ static u16 read_pad(int *quit)
     if ((b & CONT_DPAD_LEFT) || st->joyx < -64) p |= 0x8000;
     if ((b & CONT_DPAD_RIGHT) || st->joyx > 64) p |= 0x2000;
     if (b & CONT_A) p |= 0x20;
-    if (b & CONT_B) p |= 0x40;
-    if (b & CONT_X) p |= 0x10;
+    if (b & CONT_X) p |= 0x40;                    /* (X cancels, B is the PC's V: the user's choice) */
+    if (b & CONT_B) p |= 0x10;
     if (b & CONT_Y) p |= 0x100;
     if (st->ltrig > 128) p |= 0x04;
     if (st->rtrig > 128) p |= 0x08;
