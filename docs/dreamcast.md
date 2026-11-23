@@ -136,8 +136,8 @@ And in the shared code, behind switches that the PC builds leave off:
 |---|---|---|
 | D-pad, analog stick | 0x1000 / 0x4000 / 0x8000 / 0x2000 | up, down, left, right |
 | A | 0x20 | action / confirm |
-| B | 0x40 | cancel |
-| X | 0x10 | (PC: V) |
+| X | 0x40 | cancel |
+| B | 0x10 | (PC: V) |
 | Y | 0x100 | status screen |
 | L / R triggers | 0x04 / 0x08 | (PC: G / Shift) |
 | Start | 0x800 | pause |
