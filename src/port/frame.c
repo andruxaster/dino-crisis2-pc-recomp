@@ -158,7 +158,10 @@ void Port_StuckCheck(u32 frame, u16 pad)
 {
     static u32 last, same, pressed, told;
     u32 h = game_signature();
-    if (h != last || U16(G() + 0x664) != 3) { last = h; same = pressed = 0; told = 0; return; }
+    /* (in the options (task entry 0x475720) the pad changes nothing measured here) */
+    int options = 0;
+    for (int i = 0; i < 4; i++) if (U16(A_TASK_SLOTS + i * 0x20) && g_task_entry_now[i] == 0x475720) options = 1;
+    if (h != last || U16(G() + 0x664) != 3 || options) { last = h; same = pressed = 0; told = 0; return; }
     same++;
     if (pad) pressed++;
     if (same >= STUCK_FRAMES && pressed >= 30 && !told) {
