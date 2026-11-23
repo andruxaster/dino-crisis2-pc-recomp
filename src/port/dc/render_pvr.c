@@ -165,7 +165,6 @@ static void up_fetch(void *c, unsigned x, unsigned y, unsigned n, unsigned short
 static void up_emit(void *c, unsigned at, const unsigned short *tile, unsigned n)
 {
     const Upload *u = c;
-    CRUMB('U');
     if (n * 2 >= 32) pvr_txr_load((void *)tile, (u8 *)u->mem + at * 2, n * 2);
     else memcpy((u8 *)u->mem + at * 2, tile, n * 2);   /* (an 8 x 8 texture's 128 bytes go by store queues too; smaller: none) */
 }

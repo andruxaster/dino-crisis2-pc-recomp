@@ -153,10 +153,26 @@ static volatile unsigned g_frame_now;
 #if DC2_DC_CRUMBS
 /* the breadcrumbs (dc2/crumb.h): straight to the debug output, unbuffered,
    so the last ones are in the log however the machine stops. Each frame
-   starts a line "#frame": g game, 0-3 a task run, R/r disc read begun/done,
-   J a JPEG, M/m sound data into sound RAM, A/a a command to the AICA, d
-   drawing, B/E the PVR scene begun/ended, U a texture upload, w the wait */
-static void crumb(int c) { char s[2] = {(char)c, 0}; dbgio_write_str(s); }
+   starts a line "#frame": g game, 0-3 a task run, R/r disc read begun/done
+   (S/s: by another thread, the music's), J a JPEG, M/m sound data into
+   sound RAM, A/a a command to the AICA, d drawing, B/E the PVR scene
+   begun/ended, w the wait.
+   On the serial port (GDEMU's log) a crumb goes straight into the SCIF's
+   16-byte transmit FIFO and is dropped when that is full, never waited for:
+   waiting for the line changed the timing enough to hide a freeze. The FIFO
+   keeps sending on its own whatever the CPU does. */
+static kthread_t *g_main_thd;
+static int g_crumb_scif;
+static void crumb(int c)
+{
+    if (thd_get_current() != g_main_thd) { if (c == 'R') c = 'S'; else if (c == 'r') c = 's'; }
+    if (!g_crumb_scif) { char s[2] = {(char)c, 0}; dbgio_write_str(s); return; }
+    volatile u16 *fdr = (volatile u16 *)0xFFE8001C, *fsr = (volatile u16 *)0xFFE80010;
+    if (((*fdr >> 8) & 0x1F) >= 16) return;        /* (full: dropped) */
+    *(volatile u8 *)0xFFE8000C = (u8)c;
+    *fsr &= 0xFF9F;                                 /* (TDFE, TEND cleared, as KallistiOS does) */
+}
+static void crumb_str(const char *s) { while (*s) crumb(*s++); }
 #endif
 static void wd_state(void)
 {
@@ -371,9 +387,13 @@ int main(int argc, char **argv)
     int quit = 0;
     for (u32 f = 0; !quit; f++, g_frame_now = f) {
 #if DC2_DC_CRUMBS
-        if (f == 0) g_crumb = crumb;
+        if (f == 0) {
+            g_main_thd = thd_get_current();
+            g_crumb_scif = dbgio_dev_get() && !strcmp(dbgio_dev_get(), "scif");
+            g_crumb = crumb;
+        }
         fflush(stdout);
-        { char s[16]; snprintf(s, sizeof s, "\n#%u ", (unsigned)f); dbgio_write_str(s); }
+        { char s[16]; snprintf(s, sizeof s, "\n#%u ", (unsigned)f); crumb_str(s); }
 #endif
         g_pad_raw[0] = read_pad(&quit);
         CamCache_Trim();                           /* (the cache keeps 2 MB free for the rest) */
