@@ -1,4 +1,5 @@
 /* The game's sound buffers on the AICA's channels (see aica_sfx.h). */
+#include "dc2/crumb.h"
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
@@ -24,7 +25,9 @@ static u32 upload(const void *data, u32 bytes)
     u32 n = (bytes + 31) & ~31u;
     u32 at = snd_mem_malloc(n);
     if (!at) return 0;
+    CRUMB('M');
     spu_memload(at, (void *)data, n);
+    CRUMB('m');
     return at;
 }
 
@@ -77,6 +80,7 @@ static void chn_cmd(int chn, u32 cmd, u32 base, u32 type, u32 length, int loop, 
     a->freq = freq;
     a->vol = vol;
     a->pan = pan;
+    CRUMB('A');
     snd_sh4_to_aica(tmp, c->size);
 }
 
@@ -165,6 +169,7 @@ void Aica_Gains(AicaSnd *s, float gl, float gr)
             cm->cmd = AICA_CMD_CHAN; cm->timestamp = 0; cm->size = AICA_CMDSTR_CHANNEL_SIZE; cm->cmd_id = s->chn[c];
             a->cmd = AICA_CH_CMD_UPDATE | AICA_CH_UPDATE_SET_VOL | AICA_CH_UPDATE_SET_PAN;
             a->vol = s->vol[c]; a->pan = s->pan[c];
+            CRUMB('a');
             snd_sh4_to_aica(tmp, cm->size);
         }
 }

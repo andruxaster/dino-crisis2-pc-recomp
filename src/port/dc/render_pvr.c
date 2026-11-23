@@ -14,6 +14,7 @@
  * Not done: alpha test (no punch-through list: transparent texels still write
  * depth), MODULATE2X (the colour doubled instead), read-back (the frame copy
  * sees black). */
+#include "dc2/crumb.h"
 #include <stddef.h>
 #include <stdint.h>
 #include <dc/pvr.h>
@@ -81,6 +82,7 @@ static void scene_begin(void)
     g_npending[g_cur] = 0;
     g_scene++;
     pvr_set_bg_color((g_bg >> 16 & 0xFF) / 255.0f, (g_bg >> 8 & 0xFF) / 255.0f, (g_bg & 0xFF) / 255.0f);
+    CRUMB('B');
     pvr_scene_begin();
     pvr_list_begin(PVR_LIST_TR_POLY);
     g_in_scene = 1;
@@ -163,6 +165,7 @@ static void up_fetch(void *c, unsigned x, unsigned y, unsigned n, unsigned short
 static void up_emit(void *c, unsigned at, const unsigned short *tile, unsigned n)
 {
     const Upload *u = c;
+    CRUMB('U');
     if (n * 2 >= 32) pvr_txr_load((void *)tile, (u8 *)u->mem + at * 2, n * 2);
     else memcpy((u8 *)u->mem + at * 2, tile, n * 2);   /* (an 8 x 8 texture's 128 bytes go by store queues too; smaller: none) */
 }
@@ -397,6 +400,7 @@ static void pvr_present(void)
     scene_begin();                                /* (an empty frame still shows the background colour) */
     ta_flush();
     pvr_list_finish();
+    CRUMB('E');
     pvr_scene_finish();
     g_in_scene = 0;
 }

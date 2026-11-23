@@ -1,4 +1,5 @@
 /* See include/dc2/task.h. */
+#include "dc2/crumb.h"
 #include "dc2/task.h"
 #include "dc2/pcio.h"
 #include "../hook/hooks.h"
@@ -192,6 +193,7 @@ void DC2CALL Task_RunAll(void)
             U16(s) = 2;
         }
         g_running = (int)i;
+        CRUMB('0' + (int)i);
         ctx_run(i);
         g_running = -1;
     }

@@ -822,6 +822,7 @@ void DC2CALL Hidden_UpdateAll(void);                                    /* 0x48F
 /* the GOG release's fixes to the game (docs/gog_patches.md): 0 in the
    harness (the reference exe is checked as it is), set by the ports */
 extern int g_gog_fixes;
+#include "crumb.h"
 void DC2CALL Light_SetFar(u32 c);                                       /* 0x48FB50 */
 u32 DC2CALL Area_SoundArea(u32 area, u32 room);                         /* 0x491B10 */
 u32 DC2CALL Text_Left(gptr t);                                          /* 0x494DE0 */

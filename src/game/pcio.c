@@ -140,6 +140,7 @@ u32 Host_ReadFailures(void) { return g_read_retries; }
 size_t Host_Read(void *p, size_t n, void *file)
 {
     FILE *f = file;
+    CRUMB('R');
     long at = ftell(f);
     size_t r = fread(p, 1, n, f);
     for (int tries = 0; r != n && !feof(f) && tries < 4; tries++) {
@@ -149,6 +150,7 @@ size_t Host_Read(void *p, size_t n, void *file)
         r = fread(p, 1, n, f);
     }
     if (r != n && ferror(f)) fprintf(stderr, "disc: a read of %u bytes failed\n", (unsigned)n);
+    CRUMB('r');
     return r;
 }
 

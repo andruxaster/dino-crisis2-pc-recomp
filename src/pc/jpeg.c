@@ -6,6 +6,7 @@
  * Only what the game's files are (all 1169 pictures alike): baseline, 8-bit,
  * Y 2x2 + Cb 1x1 + Cr 1x1 in one interleaved scan, no restart markers;
  * anything else is left undecoded. */
+#include "dc2/crumb.h"
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
@@ -406,6 +407,7 @@ static int jpeg_run(Jpeg *j, gptr dst)
 /* decode the JPEG at src (size bytes) to dst; mode 2: 15-bit RGB (the only one the game uses) */
 void DC2CALL PcJpeg_Decode(gptr dst, gptr src, u32 size, u32 mode)  /* 0x4D2990 */
 {
+    CRUMB('J');
     if (mode != 2) return;
     Jpeg *j = calloc(1, sizeof *j);
     if (!j) return;

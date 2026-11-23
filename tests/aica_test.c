@@ -12,6 +12,7 @@
 #include "kos.h"
 #include "dc/sound/aica_comm.h"
 #include "aica_sfx.h"
+void (*g_crumb)(int c);                   /* (the breadcrumbs: none here) */
 static unsigned long long now; unsigned long long timer_us_gettime64(void) { return now; }
 static uint8_t ram[2 << 20]; static uint32_t top = 0x11000, freed;
 uint32_t snd_mem_malloc(size_t n) { if (top + n > sizeof ram) return 0; uint32_t a = top; top += n; return a; }

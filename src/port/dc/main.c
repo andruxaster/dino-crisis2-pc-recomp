@@ -15,6 +15,7 @@
 #ifndef DC2_REV
 #define DC2_REV "unknown revision"
 #endif
+#include <kos/dbgio.h>
 #include <kos.h>
 #include <dc/vblank.h>
 #include <stdio.h>
@@ -148,6 +149,15 @@ void *__wrap_realloc(void *q, size_t n) { void *p = __real_realloc(q, n); if (!p
 
 /* the frame counter and the game's state, for the watchdog (prof.c) */
 static volatile unsigned g_frame_now;
+
+#if DC2_DC_CRUMBS
+/* the breadcrumbs (dc2/crumb.h): straight to the debug output, unbuffered,
+   so the last ones are in the log however the machine stops. Each frame
+   starts a line "#frame": g game, 0-3 a task run, R/r disc read begun/done,
+   J a JPEG, M/m sound data into sound RAM, A/a a command to the AICA, d
+   drawing, B/E the PVR scene begun/ended, U a texture upload, w the wait */
+static void crumb(int c) { char s[2] = {(char)c, 0}; dbgio_write_str(s); }
+#endif
 static void wd_state(void)
 {
     printf("  game heap peak %u KB; disc reads tried again %u; %u sounds on the AICA\n",
@@ -356,11 +366,17 @@ int main(int argc, char **argv)
 #endif
     int quit = 0;
     for (u32 f = 0; !quit; f++, g_frame_now = f) {
+#if DC2_DC_CRUMBS
+        if (f == 0) g_crumb = crumb;
+        fflush(stdout);
+        { char s[16]; snprintf(s, sizeof s, "\n#%u ", (unsigned)f); dbgio_write_str(s); }
+#endif
         g_pad_raw[0] = read_pad(&quit);
         CamCache_Trim();                           /* (the cache keeps 2 MB free for the rest) */
         if (f % 30 == 0) keep_headroom(f);
         memset(g_stall_us, 0, sizeof g_stall_us);
         uint64_t t0 = timer_us_gettime64();
+        CRUMB('g');
         Port_GameFrame();
 #if DC2_DC_VERBOSE
         Port_StuckCheck(f, g_pad_raw[0]);
@@ -370,7 +386,9 @@ int main(int argc, char **argv)
         else lry = 0;
 #endif
         uint64_t t1 = timer_us_gettime64();
+        CRUMB('d');
         Port_DrawFrame();
+        CRUMB('w');
         uint64_t t2 = timer_us_gettime64();
         u32 w = pace();
         u32 tg = (u32)(t1 - t0), td = (u32)(t2 - t1);
