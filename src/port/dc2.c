@@ -41,7 +41,7 @@
 #include "dc2/data.h"
 #include "port.h"
 #ifdef DC2_GL
-#include <SDL2/SDL.h>
+#include <SDL.h>                     /* (SDL's own way: its include/SDL2 on the path, as every SDL2 package sets it) */
 #include "render_gl.h"
 #endif
 

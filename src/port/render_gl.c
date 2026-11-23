@@ -4,8 +4,8 @@
  *   flat shading: the first vertex's colour (D3D), via glProvokingVertex;
  *   vertex fog: the specular's alpha as the fog coordinate (1 - factor);
  *   textures: by surface id, uploaded again when their version changes. */
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_opengl.h>
+#include <SDL.h>                     /* (SDL's own way: its include/SDL2 on the path, as every SDL2 package sets it) */
+#include <SDL_opengl.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
