@@ -5,6 +5,7 @@
 #   make -f Makefile.dreamcast DC2_DC_ROOT=/pc/srv/dc2 run DC_IP=192.168.1.50
 #   make -f Makefile.dreamcast cdi DATA=/srv/dc2     # CD-R image (mkdcdisc)
 #   make -f Makefile.dreamcast gdi DATA=/srv/dc2     # GD-ROM image (xorriso, makeip)
+#   make -f Makefile.dreamcast clean; make -f Makefile.dreamcast DC2_DC_VERBOSE=0   # a release: no log, profiler, watchdog
 #
 # The game code is the same as the PC builds' (src/game, src/pc, src/data,
 # the hook table); only the entry, the renderer and the task switch are
@@ -33,7 +34,7 @@ DC_ASM    := src/port/dc/ctx_sh4.S
 
 OBJS := $(patsubst %.c,$(BUILD)/%.o,$(GAME_SRCS) $(DC_SRCS)) $(patsubst %.S,$(BUILD)/%.o,$(DC_ASM))
 
-DEFS := $(if $(filter 1,$(DC2_UNALIGNED)),-DDC2_UNALIGNED) -DDC2_LOWMEM -DDC2_STALL_TIMES -DDC2_CAM_CACHE -DDC2_MOVIE_AVI -DDC2_MIX_SMOOTH -DDC2_AICA -DHEAP_SIZE=$(DC2_DC_HEAP)u -DDC2_DC_ROOT='"$(DC2_DC_ROOT)"' -DDC2_DC_AUDIO=$(DC2_DC_AUDIO) \
+DEFS := $(if $(filter 1,$(DC2_UNALIGNED)),-DDC2_UNALIGNED) -DDC2_LOWMEM $(if $(filter 1,$(DC2_DC_VERBOSE)),-DDC2_STALL_TIMES) -DDC2_CAM_CACHE -DDC2_MOVIE_AVI -DDC2_MIX_SMOOTH -DDC2_AICA -DHEAP_SIZE=$(DC2_DC_HEAP)u -DDC2_DC_ROOT='"$(DC2_DC_ROOT)"' -DDC2_DC_AUDIO=$(DC2_DC_AUDIO) \
         -DDC2_DC_MOVIES=$(DC2_DC_MOVIES) -DDC2_DC_VERBOSE=$(DC2_DC_VERBOSE)
 # -fno-strict-aliasing: game memory is read through U8/U16/U32 of any type
 # (plain aligned accesses; the rare unaligned ones are emulated by
