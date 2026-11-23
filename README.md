@@ -1,4 +1,4 @@
-# dino-crisis2-recomp
+# dino-crisis2-pc-recomp
 
 A recompilation of **Dino Crisis 2** (PC, `Dino2.exe`, 2002) into C: the
 game's code rewritten function by function with the original's behaviour,
