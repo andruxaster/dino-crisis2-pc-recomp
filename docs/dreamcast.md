@@ -81,7 +81,7 @@ asks for the high-density area's on a GD-ROM, so `/cd` is track 3.
 | `DC2_DC_ROOT` | `/cd` | the folder that holds `Data/` (`/pc/<dir>` under dcload) |
 | `DC2_DC_AUDIO` | `1` | `0`: no sound at all |
 | `DC2_DC_MOVIES` | `1` | `0`: skip the movies |
-| `DC2_DC_VERBOSE` | `1` | every 300 frames: game mode, room, game heap and surface peaks, malloc in use, free VRAM; the speed (below) |
+| `DC2_DC_VERBOSE` | `1` | every 300 frames: game mode, room, game heap and surface peaks, malloc in use, free VRAM; the speed (below); the profiler, the watchdog and the stall timers. `0` for a release (`make -f Makefile.dreamcast clean` first: the flags are not tracked) |
 | `DC2_DC_HEAP` | `0x300000` | the game heap (the PC build's 32 MB holds the music) |
 | `DC2_UNALIGNED` | `0` | `1`: every memory access byte-safe (slow; see below) |
 
