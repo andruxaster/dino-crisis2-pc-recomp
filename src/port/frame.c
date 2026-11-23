@@ -97,3 +97,73 @@ void Port_DrawFrame(void)
     U32(0x87DE0C) ^= 1;
 }
 
+
+/* ---- the state reports ------------------------------------------------------------------
+ * The fields are the ones DC2_TRACE prints (dc2.c): the player object (0x260
+ * bytes each from G+0x940), the script threads (0x87FC20, 0xA4 each), the
+ * flag words, the enemy set, the task slots with their entries (original
+ * addresses, names in tools/dc2_labels.csv) and where they last slept (host
+ * code: the build's symbols name it). */
+extern gptr g_task_entry_now[4];
+extern void *g_task_sleep_at[4];
+
+void Port_DumpState(void)
+{
+    gptr g = G();
+    printf("  root mode %u step %u; game mode %u room %X%02X; fade %d level %u; frame flags %08X %08X %08X\n",
+           (unsigned)(U8(0x74D608)), (unsigned)(U8(0x74D60A)), (unsigned)(U16(g + 0x664)), (unsigned)(U8(g + 0x1091)), (unsigned)(U8(g + 0x1090)), (s8)U8(g + 0x814), (unsigned)(U32(g + 0x810) >> 16),
+           (unsigned)(U32(U32(0x723C40))), (unsigned)(U32(U32(0x723C48))), (unsigned)(U32(U32(0x723C50))));
+    for (int i = 0; i < 4; i++) {
+        gptr s = A_TASK_SLOTS + i * 0x20;
+        if (U16(s)) printf("  task %d state %u wait %u entry %06X slept at %p\n", (int)i, (unsigned)(U16(s)), (unsigned)(U16(s + 2)),
+                           (unsigned)g_task_entry_now[i], g_task_sleep_at[i]);
+    }
+    if (U16(g + 0x664) == 3 && U8(0x87F940)) {
+        gptr pl = U32(g + 0x940);
+        printf("  player %d,%d,%d yaw %03X state %X level %u health %d\n", (int)S16(pl + 0x40), (int)S16(pl + 0x42), (int)S16(pl + 0x44),
+               (unsigned)(U16(pl + 0x4A)), (unsigned)(U32(pl + 0x54)), (unsigned)(U16(pl + 0x5A)), (int)S16(pl + 0x108));
+        for (int t = 0; t < 10; t++) {
+            gptr th = U32(0x87FC20) + t * 0xA4;
+            if (U8(th + 0x9B)) printf("  script thread %d state %X at %X: op %02X\n", (int)t, (unsigned)(U8(th + 0x9B)), (unsigned)(U32(th)), (unsigned)(U8(U32(th))));
+        }
+        gptr set = U32(g + 0xA68), st = g + 0xA80;
+        if (set) printf("  enemy set n %u type %u alive %u/%u group %u timer %u max %u found %u\n", (unsigned)(U8(set)), (unsigned)(U8(set + 1)), (unsigned)(U8(st + 4)),
+                        (unsigned)(U8(set + 2)), (unsigned)(U8(st + 9)), (unsigned)(U16(st)), (unsigned)(U8(st + 5)), (unsigned)(U8(st + 0xC)));
+        for (u32 k = 1; k < U32(0x87F940) && k < 64; k++) {
+            gptr o = pl + k * 0x260;
+            if (U8(o + 0x50) & 1)
+                printf("  object %u type %u state %X at %d,%d,%d yaw %03X health %d\n", (unsigned)(k), (unsigned)(U8(o + 0x58)), (unsigned)(U32(o + 0x54)),
+                       (int)S16(o + 0x40), (int)S16(o + 0x42), (int)S16(o + 0x44), (unsigned)(U16(o + 0x4A)), (int)S16(o + 0x108));
+        }
+    }
+}
+
+/* a checksum of what moves while the game plays: the player, the script
+   threads, the fade, the tasks' states (not their timers) */
+static u32 game_signature(void)
+{
+    gptr g = G();
+    u32 h = U16(g + 0x664) * 31u + U8(g + 0x1090) + (U8(g + 0x1091) << 8) + U8(0x74D608) * 7u + U8(0x74D60A) * 13u;
+    h = h * 33u + U32(g + 0x810) + U8(g + 0x814);
+    for (int i = 0; i < 4; i++) h = h * 33u + U16(A_TASK_SLOTS + i * 0x20) + (u32)g_task_entry_now[i];
+    if (U16(g + 0x664) == 3 && U8(0x87F940)) {
+        gptr pl = U32(g + 0x940);
+        for (int k = 0x40; k < 0x60; k += 4) h = h * 33u + U32(pl + k);
+        for (int t = 0; t < 10; t++) { gptr th = U32(0x87FC20) + t * 0xA4; h = h * 33u + U32(th) + U8(th + 0x9B); }
+    }
+    return h;
+}
+
+void Port_StuckCheck(u32 frame, u16 pad)
+{
+    static u32 last, same, pressed, told;
+    u32 h = game_signature();
+    if (h != last || U16(G() + 0x664) != 3) { last = h; same = pressed = 0; told = 0; return; }
+    same++;
+    if (pad) pressed++;
+    if (same >= STUCK_FRAMES && pressed >= 30 && !told) {
+        told = 1;
+        printf("STUCK? frame %u: the game's state has not changed for %u frames, the pad pressed in %u of them\n", (unsigned)(frame), (unsigned)(same), (unsigned)(pressed));
+        Port_DumpState();
+    }
+}
