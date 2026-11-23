@@ -1192,7 +1192,7 @@ void DC2CALL Equip_Ring(gptr m, u32 main)                           /* 0x497AE0 
         SetRotMatrix(m1);
         SetTransMatrix(m1);
         s32 z = RotTransPers(sv, sxy, f + 0xC, f + 4);
-        U16(vec + 2) = (u16)((U32(vec + 2) + (u32)step) & 0xFFF);
+        U16(vec + 2) = (u16)((U16(vec + 2) + (u32)step) & 0xFFF);   /* (the original reads a dword at vec+2: the same low 12 bits, aligned) */
         u32 v = 0xA0 - (u32)z / 3;
         Equip_RingItem(m, (u32)(s32)F32(sxy), (u32)(s32)F32(sxy + 4), (s32)i == (s8)U8(m + 0x4C),
                        U8(list), v << 8 | v << 16 | v, (u32)z);
