@@ -17,7 +17,7 @@ saves go to a `saves` folder beside Data, as in the GOG release
 
 | Where | Patch | In the ports |
 |-------|-------|--------------|
-| 0x48C0B0 (Se_Play) | sound 0x38 (the tyrannosaur's roar) was never played; now played unless the source is 0x5F2C6C, 0x5ED1BC or (signed) below 0x200000 ("Restored missing T-Rex roar sound") | ported |
+| 0x48C0B0 (Se_Play) | sound 0x38 (the tyrannosaur's roar) was never played; now played when the source is the object at 0x5F2C6C or 0x5ED1BC or there is none (below 0x200000), still not from other objects (GOG code 0x4E70D0) ("Restored missing T-Rex roar sound") | ported |
 | 0x48C598 (Se_Start) | stereo option off: Snd_SetPan(h, 0x40) instead of keeping the last pan | ported |
 | 0x48C718 (Snd_Tick) | stream volume applied every frame, not only while fading | ported |
 | 0x404290 (File_Process) | file 0x78: fog off (PC_SetFogEnable(0), Light_SetFar(0)); file 0xEC: clears 0x746CE6 and 0x74B52E | ported |

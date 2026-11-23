@@ -836,11 +836,12 @@ void (*g_crumb)(int c);
 
 /* sound id at object o (0: no place): every buffer of the sound. Sound 0x38
    (the tyrannosaur's roar) is never played by the original; the GOG release
-   plays it but for the objects at 0x5F2C6C and 0x5ED1BC and without a place
-   ("Restored missing T-Rex roar sound") */
+   plays it from the objects at 0x5F2C6C and 0x5ED1BC and without a place
+   (o below 0x200000), and still not from any other object ("Restored
+   missing T-Rex roar sound"; its code at 0x4E70D0) */
 void DC2CALL Se_Play(gptr o, u32 id)                                /* 0x48C0B0 */
 {
-    if (id == 0x38 && (!g_gog_fixes || o == 0x5F2C6C || o == 0x5ED1BC || (s32)o < 0x200000)) return;
+    if (id == 0x38 && !(g_gog_fixes && (o == 0x5F2C6C || o == 0x5ED1BC || (s32)o < 0x200000))) return;
     if (U8(G() + 0x927) && o) {
         u8 k = U8(o + 0x58);
         if (U8(0x87E747) == 2) { if (k & 1) id += 0x20; }
