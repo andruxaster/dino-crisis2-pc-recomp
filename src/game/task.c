@@ -59,6 +59,11 @@ void DC2CALL Task_Chain(gptr fn)           { ORIG(0x4C29D6, void (DC2CALL *)(gpt
 #define TASK_STACK 0x40000
 static gptr g_entry[4];
 static int g_running = -1;        /* slot being run by Task_RunAll */
+/* what each slot runs and where it last slept (host code address), for the
+   ports' state reports */
+gptr g_task_entry_now[4];
+void *g_task_sleep_at[4];
+
 static void task_entry(int slot);
 
 #ifdef _WIN32
@@ -162,6 +167,7 @@ static void task_entry(int slot)
 static void make_task(u32 slot, gptr fn)
 {
     g_entry[slot] = fn;
+    g_task_entry_now[slot] = fn;
     ctx_make(slot);
 }
 
@@ -199,6 +205,7 @@ void DC2CALL Task_Sleep(u32 n)
         return;
     }
     u32 i = U32(A_TASK_CUR) / 0x20;
+    g_task_sleep_at[i] = __builtin_return_address(0);
     U16(A_TASK_SLOTS + i * 0x20) = 1;
     U16(A_TASK_SLOTS + i * 0x20 + 2) = (u16)n;
     ctx_leave(i);

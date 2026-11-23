@@ -8,7 +8,8 @@
  * confirm, 0x40 back, 0x1000 up, 0x4000 down) or over frames FROM..TO with
  * FROM-TO:MASK (0x1000 forward, 0x4000 back, 0x2000/0x8000 turn, 0x20 action).
  * DC2_TRACE=1 prints the player every 50 frames, the room's trigger areas, the
- * screen's fades and the background masks.
+ * screen's fades and the background masks; DC2_DUMP=N the state at frame N
+ * (Port_DumpState), and a game standing still with the pad pressed is reported.
  * Without DATA_DIR the game's Data folder is looked for under [Assets] Path of
  * config.ini (next to the executable; relative to its folder), else in the
  * executable's own folder; FRAMES 0 runs until the window is closed (the
@@ -316,6 +317,8 @@ int main(int argc, char **argv)
 #endif
         g_pad_raw[0] = (u16)held;                   /* read by Input_Frame (0x478BF0) */
         Port_GameFrame();
+        Port_StuckCheck((u32)f, (u16)held);
+        if (getenv("DC2_DUMP") && f == atoi(getenv("DC2_DUMP"))) { printf("state at frame %d:\n", f); Port_DumpState(); }
         PcAudio_Frame(U32(0x87DE00));                  /* the frame's sound */
         Port_DrawFrame();
 #ifdef DC2_GL
