@@ -324,6 +324,7 @@ int main(int argc, char **argv)
     Task_Start(0, U8(0x87DE08) ? 0x471EC0 : 0x46D710);
 
     g_low_memory = low_memory;
+    g_gog_fixes = 1;                                /* the GOG release's fixes to the game (docs/gog_patches.md) */
     pace_init();
 #if DC2_DC_VERBOSE
     Prof_Init();

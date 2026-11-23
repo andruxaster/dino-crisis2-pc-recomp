@@ -819,6 +819,9 @@ void DC2CALL Snd_FreeStream(u32 n);                                     /* 0x48C
 void DC2CALL Obj_UpdateHidden(gptr o);                                  /* 0x48F910 */
 void DC2CALL Eff_UpdateHidden(gptr e);                                  /* 0x48F980 */
 void DC2CALL Hidden_UpdateAll(void);                                    /* 0x48FA70 */
+/* the GOG release's fixes to the game (docs/gog_patches.md): 0 in the
+   harness (the reference exe is checked as it is), set by the ports */
+extern int g_gog_fixes;
 void DC2CALL Light_SetFar(u32 c);                                       /* 0x48FB50 */
 u32 DC2CALL Area_SoundArea(u32 area, u32 room);                         /* 0x491B10 */
 u32 DC2CALL Text_Left(gptr t);                                          /* 0x494DE0 */

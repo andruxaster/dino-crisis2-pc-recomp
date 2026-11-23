@@ -12,3 +12,10 @@ FullScreen=0
 ; from the CD). Relative paths start at the executable's folder. Empty: Data
 ; is next to the executable.
 Path=
+
+[Game]
+; 1 = the 2002 game as it was; 0 = with the GOG release's fixes (the
+; tyrannosaur's roar, Easy difficulty, mono sounds centred, the music volume
+; applied at once, fog left over cleared). Saves go to the "saves" folder
+; beside Data either way.
+Original=0

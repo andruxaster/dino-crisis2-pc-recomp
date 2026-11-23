@@ -9,6 +9,7 @@
 #include "dc2/orig.h"
 #include "dc2/pcio.h"
 #include "dc2/gte.h"
+#include "dc2/pcdraw.h"
 
 #define TITLE_T       0x759EF0u
 #define LBL_NORMAL    0x73B248u   /* label animations per entry: highlighted */
@@ -104,12 +105,12 @@ void DC2CALL Title_NewGame(gptr t)                                  /* 0x4A5EC0:
             Title_SetAnim(t, 0, U32(LBL_NORMAL));
             Title_SetAnim(t, 1, U32(LBL_IDLE + 4));
             Title_SetAnim(t, 2, U32(LBL_IDLE + 8));
-        } else if (btn & 0x5000) {                /* up / down: entries 1..2 */
-            s8 c = (s8)U8(t + 0x2A);
+        } else if (btn & 0x5000) {                /* up / down: entries 1..2 (GOG: 0..2, with Easy) */
+            s8 c = (s8)U8(t + 0x2A), lo = g_gog_fixes ? 0 : 1;
             Se_Play(0, 0);
             Title_SetAnim(t, (u32)(s32)c, U32(LBL_DIFF + c * 4));
-            if (btn & 0x1000) { c--; U8(t + 0x2A) = (u8)c; if (c < 1) U8(t + 0x2A) = 2; }
-            else { c++; U8(t + 0x2A) = (u8)c; if (c > 2) U8(t + 0x2A) = 1; }
+            if (btn & 0x1000) { c--; U8(t + 0x2A) = (u8)c; if (c < lo) U8(t + 0x2A) = 2; }
+            else { c++; U8(t + 0x2A) = (u8)c; if (c > 2) U8(t + 0x2A) = (u8)lo; }
             c = (s8)U8(t + 0x2A);
             Title_SetAnim(t, (u32)(s32)c, U32(LBL_DIFF_SEL + c * 4));
         } else if (btn & 0x820) {
@@ -169,6 +170,7 @@ void DC2CALL Title_Menu(gptr t)                                     /* 0x4A57B0 
         /* fall through */
     case 1:
         G16(0x770)++;
+        if (g_gog_fixes) { PcDraw_SetFogEnable(0); Light_SetFar(0); }   /* (GOG: no fog left over under the opening movie) */
         Flag_Set(3, 0, 0);
         Movie_Start(0);
         break;
@@ -222,7 +224,7 @@ void DC2CALL Title_Menu(gptr t)                                     /* 0x4A57B0 
     }
     if ((s16)G16(0x770) >= 4) {
         Title_AnimStep(t, 0); Title_AnimStep(t, 1); Title_AnimStep(t, 2);
-        if ((s16)G16(0x770) == 4) Title_Draw(0xA0, 0x88, 0x808080, U32(t + 8));
+        if ((s16)G16(0x770) == 4 || g_gog_fixes) Title_Draw(0xA0, 0x88, 0x808080, U32(t + 8));   /* (GOG: always) */
         Title_Draw(0xA0, 0x88, 0x808080, U32(t + 0x14));
         Title_Draw(0xA0, 0x88, 0x808080, U32(t + 0x20));
     }
