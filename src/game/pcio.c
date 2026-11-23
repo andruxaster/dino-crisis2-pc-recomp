@@ -243,7 +243,8 @@ void DC2CALL Crt_sprintf1(gptr b, gptr f, u32 a)
 u16 g_pad_raw[2];
 void DC2CALL Input_ReadPad(u32 p) { if (p < 2) U16(0x87DC42 + p * 0x24) = g_pad_raw[p]; }
 u32 DC2CALL Input_ReadKey(void) { return 0; }   /* (no keyboard to bind keys from) */
-void DC2CALL Display_Apply(void) {}              /* (the window keeps its mode) */
+void (*g_port_display_apply)(void);
+void DC2CALL Display_Apply(void) { if (g_port_display_apply) g_port_display_apply(); }   /* (the port's window; Port_DisplayInit) */
 void DC2CALL Movie_Clear(u32 m) { extern void PcDraw_Clear(u32); PcDraw_Clear(m); }
 /* the masks: src/pc/drawot.c (the marker: none while no masks are built) */
 void DC2CALL Masks_CreateVB(u32 n, gptr p) { PcDraw_MasksCreate(n, p); }
