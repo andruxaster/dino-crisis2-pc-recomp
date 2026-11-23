@@ -832,6 +832,7 @@ static gptr se_entry(gptr r)
 }
 
 int g_gog_fixes;
+void (*g_crumb)(int c);
 
 /* sound id at object o (0: no place): every buffer of the sound. Sound 0x38
    (the tyrannosaur's roar) is never played by the original; the GOG release

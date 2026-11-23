@@ -12,6 +12,7 @@
 #include <time.h>
 #include "dc2/types.h"
 #include "dc2/gpu.h"
+void (*g_crumb)(int c);                   /* (the breadcrumbs: none here) */
 
 u8 *g_membase;
 #define DST 0x6C1500u
