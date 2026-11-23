@@ -167,3 +167,26 @@ void Port_StuckCheck(u32 frame, u16 pad)
         Port_DumpState();
     }
 }
+
+void Port_DisplayInit(const char *name, int can_window, const u16 (*sizes)[2], int n, int cur, int fullscreen, void (*apply)(void))
+{
+    extern void (*g_port_display_apply)(void);
+    gptr d = 0x75DEFC;                                     /* device 0: +0 can run in a window, +0x14 its name */
+    memset(MEM(d), 0, 0x164);
+    U32(d) = can_window != 0;
+    snprintf((char *)MEM(d + 0x14), 0x40, "%s", name);
+    if (n > 0x40) n = 0x40;                                /* (0x204 bytes a list: a count, 8 bytes a mode) */
+    for (u32 win = 0; win < 2; win++) {
+        gptr l = 0x75BE70 + win * 4 * 0x204;
+        memset(MEM(l), 0, 0x204);
+        if (!win && !can_window) continue;
+        S32(l) = n;
+        for (int i = 0; i < n; i++) { U16(l + 4 + 8 * i) = sizes[i][0]; U16(l + 6 + 8 * i) = sizes[i][1]; U16(l + 8 + 8 * i) = 32; }
+    }
+    if (cur < 0 || cur >= n) cur = 0;
+    U32(0x74D738) = 1;                                     /* (one device: the page does not cycle them) */
+    U32(0x723CA0) = 0; U32(0x723CA4) = fullscreen || !can_window;
+    U32(0x723CB0) = sizes[cur][0]; U32(0x723CB4) = sizes[cur][1]; U32(0x723CB8) = 32;
+    U32(0x87FF9C) = U32(d); U32(0x87FFA0) = d + 0x14;
+    g_port_display_apply = apply;
+}
