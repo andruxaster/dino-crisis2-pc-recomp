@@ -318,6 +318,10 @@ int main(int argc, char **argv)
 
     U32(A_G_PTR) = A_G_STATIC;
     Port_GameReset();
+    {   /* the options' display page: the television's one mode */
+        static const u16 sizes[1][2] = {{640, 480}};
+        Port_DisplayInit("Dreamcast", 0, sizes, 1, 0, 1, NULL);
+    }
     Task_InitStackBase();
     Fade_Set(1, 1, 1);
     Snd_ReleaseAll();

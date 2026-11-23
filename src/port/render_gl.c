@@ -173,6 +173,32 @@ static const Renderer k_gl = {gl_begin_frame, gl_clear, gl_draw, gl_present, gl_
 
 static void pads_open(void);
 
+/* the picture's place in the drawable, kept 4:3 (black bars) */
+static void layout(void)
+{
+    int dw = g_w, dh = g_h, w = g_w, h = g_h;
+    SDL_GL_GetDrawableSize(g_win, &dw, &dh);
+    int vw = dw, vh = dh;
+    if (vw * h > vh * w) vw = vh * w / h; else vh = vw * h / w;
+    glViewport(0, 0, dw, dh);
+    glClearColor(0, 0, 0, 1); glClear(GL_COLOR_BUFFER_BIT);
+    g_vx = (dw - vw) / 2; g_vy = (dh - vh) / 2; g_vw = vw; g_vh = vh;
+    glViewport(g_vx, g_vy, vw, vh);
+}
+
+void RenderGl_SetMode(int w, int h, int fullscreen)
+{
+    if (!g_win) return;
+    if (fullscreen) SDL_SetWindowFullscreen(g_win, SDL_WINDOW_FULLSCREEN_DESKTOP);
+    else {
+        SDL_SetWindowFullscreen(g_win, 0);
+        SDL_SetWindowSize(g_win, w, h);
+        SDL_SetWindowPosition(g_win, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
+    }
+    SDL_ShowCursor(fullscreen ? SDL_DISABLE : SDL_ENABLE);
+    layout();
+}
+
 /* windowed at w x h times scale, or fullscreen on the desktop's mode with the
    picture kept 4:3 (black bars) */
 const Renderer *RenderGl_Open(int w, int h, int scale, int fullscreen)
@@ -189,13 +215,7 @@ const Renderer *RenderGl_Open(int w, int h, int scale, int fullscreen)
     if (!g_ctx) { fprintf(stderr, "SDL: %s\n", SDL_GetError()); return 0; }
     SDL_GL_SetSwapInterval(0);
     g_w = w; g_h = h;
-    int dw = w * scale, dh = h * scale;
-    SDL_GL_GetDrawableSize(g_win, &dw, &dh);
-    int vw = dw, vh = dh;
-    if (vw * h > vh * w) vw = vh * w / h; else vh = vw * h / w;
-    glClearColor(0, 0, 0, 1); glClear(GL_COLOR_BUFFER_BIT);
-    g_vx = (dw - vw) / 2; g_vy = (dh - vh) / 2; g_vw = vw; g_vh = vh;
-    glViewport(g_vx, g_vy, vw, vh);
+    layout();
     if (fullscreen) SDL_ShowCursor(SDL_DISABLE);
     glMatrixMode(GL_PROJECTION); glLoadIdentity();
     glMatrixMode(GL_MODELVIEW); glLoadIdentity();
@@ -290,6 +310,7 @@ u16 RenderGl_Pad(int *quit)
     SDL_Event e;
     while (SDL_PollEvent(&e)) {
         if (e.type == SDL_QUIT) *quit = 1;
+        else if (e.type == SDL_WINDOWEVENT && e.window.event == SDL_WINDOWEVENT_SIZE_CHANGED) layout();   /* (full screen entered or left) */
         else if (e.type == SDL_CONTROLLERDEVICEADDED) pad_add(e.cdevice.which);
         else if (e.type == SDL_CONTROLLERDEVICEREMOVED) pad_remove(e.cdevice.which);
     }

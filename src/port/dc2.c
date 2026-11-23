@@ -122,6 +122,14 @@ static void saves_folder(const char *root, const char *dir)
     }
 }
 
+/* a display change confirmed on the options' page */
+static void display_apply(void)
+{
+#ifdef DC2_GL
+    RenderGl_SetMode((int)U32(0x723CB0), (int)U32(0x723CB4), U32(0x723CA4) != 0);
+#endif
+}
+
 static int is_abs(const char *p) { return p[0] == '/' || p[0] == '\\' || (p[0] && p[1] == ':'); }
 
 /* the folder holding Data: [Assets] Path (from the executable's folder when
@@ -283,6 +291,11 @@ int main(int argc, char **argv)
 
     U32(A_G_PTR) = A_G_STATIC;
     Port_GameReset();
+    {   /* the options' display page: the window's sizes (640 x 480 times 1..4) and full screen */
+        static const u16 sizes[4][2] = {{640, 480}, {1280, 960}, {1920, 1440}, {2560, 1920}};
+        int sc = getenv("DC2_SCALE") ? atoi(getenv("DC2_SCALE")) : g_cfg.scale;
+        Port_DisplayInit("OpenGL", 1, sizes, 4, sc - 1, g_cfg.fullscreen, display_apply);
+    }
     Task_InitStackBase();
     Fade_Set(1, 1, 1);
     Snd_ReleaseAll();
