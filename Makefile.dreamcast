@@ -34,7 +34,7 @@ DC2_DC_HEAP    ?= 0x300000
 DC2_REV := $(shell git describe --always --dirty 2>/dev/null || echo unknown)
 
 GAME_SRCS := $(wildcard src/game/*.c) $(wildcard src/pc/*.c) $(wildcard src/data/*.c) src/hook/hooks.c src/port/frame.c
-DC_SRCS   := src/port/dc/main.c src/port/dc/render_pvr.c src/port/dc/vmu_save.c src/port/dc/unaligned.c src/port/dc/aica_sfx.c src/port/dc/aica_strm.c src/port/dc/prof.c
+DC_SRCS   := src/port/dc/main.c src/port/dc/render_pvr.c src/port/dc/vmu_save.c src/port/dc/unaligned.c src/port/dc/aica_sfx.c src/port/dc/aica_strm.c src/port/dc/bgvq.c src/port/dc/prof.c
 DC_ASM    := src/port/dc/ctx_sh4.S
 
 OBJS := $(patsubst %.c,$(BUILD)/%.o,$(GAME_SRCS) $(DC_SRCS)) $(patsubst %.S,$(BUILD)/%.o,$(DC_ASM))

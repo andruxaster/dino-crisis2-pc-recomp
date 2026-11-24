@@ -39,6 +39,7 @@
 #include "render_pvr.h"
 #include "aica_sfx.h"
 #include "aica_strm.h"
+#include "bgvq.h"
 #include "ctx_sh4.h"
 #include "vmu_save.h"
 #include "unaligned.h"
@@ -379,6 +380,7 @@ int main(int argc, char **argv)
     audio_open();
 #endif
     PcDraw_InitStandalone(rend, 640, 480);
+    BgVq_Init();                                   /* (the backgrounds made ahead, Data\BGVQ) */
 
     U32(A_G_PTR) = A_G_STATIC;
     Port_GameReset();
@@ -447,10 +449,11 @@ int main(int argc, char **argv)
         if (f % 300 == 0)
         {
             struct mallinfo mi = mallinfo();
-            printf("frame %u: game mode %u room %X%02X; game heap peak %u KB of %u; surfaces peak %u KB; malloc in use %u KB; pvr free %u KB, %u textures dropped (%u for fragments); disc reads tried again %u\n",
+            printf("frame %u: game mode %u room %X%02X; game heap peak %u KB of %u; surfaces peak %u KB; malloc in use %u KB; pvr free %u KB, %u textures dropped (%u for fragments); disc reads tried again %u; camera pictures made ahead %u, from the JPEG %u\n",
                    (unsigned)f, (unsigned)U16(G() + 0x664), (unsigned)U8(G() + 0x1091), (unsigned)U8(G() + 0x1090),
                    (unsigned)(Pc_HeapPeak() >> 10), (unsigned)(HEAP_SIZE >> 10), (unsigned)(PcSoft_SurfacePeak() >> 10),
-                   (unsigned)(mi.uordblks >> 10), (unsigned)(pvr_mem_available() >> 10), (unsigned)RenderPvr_Evicted(), (unsigned)RenderPvr_Fragmented(), (unsigned)Host_ReadFailures());
+                   (unsigned)(mi.uordblks >> 10), (unsigned)(pvr_mem_available() >> 10), (unsigned)RenderPvr_Evicted(), (unsigned)RenderPvr_Fragmented(), (unsigned)Host_ReadFailures(),
+                   (unsigned)BgVq_Loaded(), (unsigned)BgVq_Missing());
             DcUnaligned_Report();
             timing_report();
             if (f % 1800 == 0 && f) Prof_Report();

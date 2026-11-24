@@ -16,6 +16,7 @@ PC builds (which keep using the originals):
     tools/dreamcast/dc2_music.py  /srv/dc2/Data --strip        # music: MP3 -> Data/BGM/*.WAV (IMA ADPCM)
     tools/dreamcast/dc2_movies.sh /srv/dc2/MOVIE --remove-dat  # movies: MPEG-1 -> MOVIE/*.AVI (Cinepak)
     tools/dreamcast/dc2_speech.py /srv/dc2/SPEECH              # voices: PCM -> IMA ADPCM 22050 Hz, in place
+    make build/dc2_bgvq && build/dc2_bgvq /srv/dc2/Data /tmp/bg 4 && cp -r /tmp/bg/BGVQ /srv/dc2/Data/   # backgrounds (optional)
 
 - **Music.** Each area's `MS_*.DAT` holds its music as MP3 streams that the PC
   game loads whole (8 MB and more). `dc2_music.py` writes each distinct stream
@@ -24,6 +25,20 @@ PC builds (which keep using the originals):
   the `MS_*.DAT` down to their 2 KB header (the originals go to `MS_ORIG/`
   next to `Data`). The game plays the WAV from the disc as it goes, one
   ADPCM block in memory (`Strm_OpenFile`, `src/pc/audio.c`).
+- **Backgrounds (optional).** `dc2_bgvq` (a C tool built for your PC, `make
+  build/dc2_bgvq`; the last argument the threads) decodes every camera
+  picture of the room DBS files with the game's own JPEG decoder and writes
+  it as two 256 x 256 VQ textures of the PVR, one file per room:
+  `OUT/BGVQ/<room>.VQ`, ~41 MB in all, about 7 minutes on two cores. It reads
+  each file back as the console will and stops if a picture comes back wrong
+  (it reports the quality: ~31 dB PSNR against the JPEG, the worst ~27 dB).
+  Copy the `BGVQ` folder into the disc's `Data` folder, CDI or GDI alike.
+  The console then takes a camera's picture from there instead of decoding
+  its JPEG (`src/port/dc/bgvq.c`): no ~80 ms JPEG and no ~25 ms texture
+  upload at a camera switch, 36 KB of VRAM for the background instead of
+  256 KB. A camera missing from the files falls back to its JPEG; without
+  the folder nothing changes. The log's frame line counts both (`camera
+  pictures made ahead N, from the JPEG M`).
 - **Movies.** `dc2_movies.sh` makes `NAME.AVI` (Cinepak video, same size and
   frame rate, IMA ADPCM sound at 22050 Hz) next to each `NAME.DAT`; the
   Dreamcast build plays only the `.AVI` (`src/pc/movie_avi.c`) and skips a
@@ -202,6 +217,11 @@ picture goes to the PVR as a new texture. Each step is made cheaper:
 * the background's and the masks' conversion to the surfaces' format
   (`bg_upload`, `masks_pack`, `src/pc/drawot.c`) read the format's shifts
   and masks once, not for every pixel;
+* with the backgrounds made ahead (`Data/BGVQ`, *Preparing the data*) a
+  switch reads 36 KB of VQ textures instead of decoding the JPEG: they go
+  to VRAM as they are and stand in for the background surface's texture
+  (`RenderPvr_BgVqUse`) while the picture in the game's memory, made from
+  them for whatever reads it, is unchanged (`bg_upload`'s own check);
 * the PC layer's surface copies (`blt`, `src/pc/gpusoft.c`), which the
   profiler found taking half of a camera switch, copy whole rows when
   unscaled and work the columns out once when scaled.

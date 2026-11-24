@@ -36,4 +36,8 @@ void Raster_Gouraud(void *dst, gptr prm);                          /* 0x4C4149 *
 void Raster_Glyph(void *dst, const void *glyph, gptr prm);         /* 0x4C42F3 */
 void PcSoft_Init(void);                                            /* 0x4C3C81: spans for the pixel format */
 extern int g_soft_mmx;                                             /* -1: ask the CPU (tests set 0 / 1) */
+/* a port's own background (the Dreamcast's VQ pictures, src/port/dc/bgvq.c):
+   asked first by the background upload (0x4BE120); 1 when the port draws
+   the picture at img itself and the surface is left as it is */
+extern int (*g_pc_bg_hook)(gptr img);
 #endif

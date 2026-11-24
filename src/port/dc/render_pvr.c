@@ -27,6 +27,7 @@
 #include "render_pvr.h"
 #include "pvr_tile.h"
 #include "pvr_twiddle.h"
+#include "bgvq_format.h"
 #include "dc2/stall.h"
 
 #define VERTEX_BUF   (512 * 1024)
@@ -40,7 +41,7 @@
    again: rows are a plain copy, twiddling costs a pass over every pixel) */
 typedef struct {
     u32 id, version, w, h, used;
-    u8 nx, ny, linear;
+    u8 nx, ny, linear, vq;                      /* vq: the pieces are VQ RGB565 (the backgrounds made ahead, bgvq.c) */
     u16 xo[TILE_MAX + 1], yo[TILE_MAX + 1], pw[TILE_MAX], ph[TILE_MAX];
     pvr_ptr_t mem[TILE_MAX * TILE_MAX];
 } Tex;
@@ -259,7 +260,8 @@ static void header(const RState *s, const Tex *t, int k)
     pvr_poly_cxt_t c;
     if (t) {
         int i = k % t->nx, j = k / t->nx;
-        pvr_poly_cxt_txr(&c, PVR_LIST_TR_POLY, PVR_TXRFMT_ARGB1555 | (t->linear ? PVR_TXRFMT_NONTWIDDLED : PVR_TXRFMT_TWIDDLED),
+        pvr_poly_cxt_txr(&c, PVR_LIST_TR_POLY, t->vq ? PVR_TXRFMT_RGB565 | PVR_TXRFMT_VQ_ENABLE | PVR_TXRFMT_TWIDDLED
+                                                     : PVR_TXRFMT_ARGB1555 | (t->linear ? PVR_TXRFMT_NONTWIDDLED : PVR_TXRFMT_TWIDDLED),
                          t->pw[i], t->ph[j], t->mem[k],
                          s->filter ? PVR_FILTER_BILINEAR : PVR_FILTER_NONE);
         c.txr.env = PVR_TXRENV_MODULATEALPHA;
@@ -358,11 +360,36 @@ static void draw_tiled(int prim, const RVertex *v, int n, const RState *s, const
     }
 }
 
+/* the camera background made ahead (bgvq.c): two 256 x 256 VQ pieces in
+   VRAM standing in for the texture of the PC layer's background surface
+   (id) while its picture is the one they hold */
+static Tex g_bgvq;
+static u32 g_bgvq_id;
+
+int RenderPvr_BgVqUpload(const void *blob)
+{
+    for (int k = 0; k < 2; k++) { defer_free(g_bgvq.mem[k]); g_bgvq.mem[k] = 0; }
+    g_bgvq.nx = 0;
+    for (int k = 0; k < 2; k++) {
+        pvr_ptr_t m = vram_alloc(BGVQ_PIECE);
+        if (!m) { for (int j = 0; j < k; j++) { defer_free(g_bgvq.mem[j]); g_bgvq.mem[j] = 0; } return 0; }
+        RT_BEGIN();
+        pvr_txr_load((const u8 *)blob + k * BGVQ_PIECE, m, BGVQ_PIECE);
+        RT_END(RT_UPLOAD);
+        g_bgvq.mem[k] = m;
+    }
+    g_bgvq.w = 512; g_bgvq.h = 256; g_bgvq.nx = 2; g_bgvq.ny = 1; g_bgvq.vq = 1; g_bgvq.linear = 0;
+    g_bgvq.xo[0] = 0; g_bgvq.xo[1] = 256; g_bgvq.xo[2] = 512; g_bgvq.yo[0] = 0; g_bgvq.yo[1] = 256;
+    g_bgvq.pw[0] = g_bgvq.pw[1] = 256; g_bgvq.ph[0] = 256;
+    return 1;
+}
+void RenderPvr_BgVqUse(u32 id) { g_bgvq_id = g_bgvq.nx ? id : 0; }
+
 static void pvr_draw(int prim, const RVertex *v, int n, const RState *s, const RTexture *t)
 {
     if (n <= 0) return;
     scene_begin();
-    Tex *tx = tex_get(t);
+    Tex *tx = t && g_bgvq_id && t->id == g_bgvq_id && t->w == 512 && t->h == 256 ? &g_bgvq : tex_get(t);
     if (s->fog && s->fog_color != g_fog_rgb) {
         g_fog_rgb = s->fog_color;
         pvr_fog_table_color(1.0f, (g_fog_rgb >> 16 & 0xFF) / 255.0f, (g_fog_rgb >> 8 & 0xFF) / 255.0f, (g_fog_rgb & 0xFF) / 255.0f);

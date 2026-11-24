@@ -58,6 +58,10 @@ $(OUT)/jpeg_test: tests/jpeg_test.c src/pc/jpeg.c
 	$(CC) -O2 -w -std=gnu11 -Iinclude -fexcess-precision=standard -o $@ $^ -lm
 jpeg-test: $(OUT)/jpeg_test
 	$(OUT)/jpeg_test game/Data check $(JPEG_REF)
+# the Dreamcast's camera backgrounds made ahead of time (tools/dreamcast/dc2_bgvq.c):
+# build/dc2_bgvq path/to/Data OUT, then OUT/BGVQ into the disc's Data folder
+$(OUT)/dc2_bgvq: tools/dreamcast/dc2_bgvq.c src/pc/jpeg.c src/port/dc/bgvq_format.h src/port/dc/bgvq_decode.h | $(OUT)
+	$(CC) -O2 -Wall -std=gnu11 -Iinclude -fexcess-precision=standard -o $@ tools/dreamcast/dc2_bgvq.c src/pc/jpeg.c -lm -lpthread
 # the mix's resampling (DC2_MIX_SMOOTH), checked on the host (tests/mix_test.c)
 $(OUT)/mix_test: tests/mix_test.c src/pc/mix_tap.h
 	$(CC) -O1 -Wall -Isrc/pc -o $@ $< -lm
