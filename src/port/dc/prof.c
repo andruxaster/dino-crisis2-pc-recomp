@@ -7,6 +7,7 @@
  * buckets as addresses; tools/dreamcast/dc2_prof.py turns them into
  * function names with the ELF the log came from. TMU0 (threads) and TMU2
  * (the clock) are KallistiOS's; TMU1 is free. */
+#include "dc_iso.h"
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -126,11 +127,12 @@ static void top_of(const char *what, volatile uint32_t *a)
 static void *watchdog(void *arg)
 {
     (void)arg;
-    unsigned last = *g_wd_frame, still = 0;
+    unsigned last = *g_wd_frame, still = 0, io = dc_iso_progress;
     for (;;) {
         thd_sleep(1000);
         unsigned f = *g_wd_frame;
         if (f != last) { last = f; still = 0; continue; }
+        if (dc_iso_progress != io) { io = dc_iso_progress; still = 0; continue; }   /* (a long load from a slow drive: not stuck) */
         still++;
         if (still == 3 || (still > 3 && still % 10 == 3)) {
             printf("HANG? frame %u has not ended for %u s\n", f, still);

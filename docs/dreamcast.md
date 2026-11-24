@@ -189,6 +189,25 @@ report), to find stalls, with how much of it went on the disc, the JPEG
 backgrounds and the texture uploads (`include/dc2/stall.h`,
 `DC2_STALL_TIMES`).
 
+## The disc
+
+`/cd` is read by the port (`src/port/dc/dc_iso.c`, after the Resident Evil
+port's `dc_iso.cpp`) rather than by KallistiOS's `fs_iso9660`, which looks a
+name up on every open by scanning the directory through a 16-sector cache:
+the Data folder's ~500 files are ~20 sectors, so every open read the whole
+directory again, a seek and many commands each on a real drive (a CD-R;
+GDEMU answers from its SD card and hid it). Here each folder is read once
+into a table sorted by name; a file's data comes with one CD stream per
+read (one seek, then sectors by DMA, whole sectors into aligned buffers),
+small reads through a 16 KB cache per open file; a failed stream falls back
+to sector commands. The files streamed as they play (music, speech, movies)
+get large stdio buffers (`Host_OpenStream`, 64-256 KB) and the music's
+reads let the sound lock go, so the drive is read seldom and the game
+never waits on it for a sound call. The watchdog counts finished reads as
+progress, so a long load from a slow drive is not reported as a hang.
+`DC2_DC_ISO=0` keeps KallistiOS's driver. `make dc-iso-test` checks the
+reader on the host against a Joliet image it makes.
+
 A camera switch is the usual stall: the game reads the camera's record
 from the room's DBS file, decodes its 320x240 JPEG background, and the
 picture goes to the PVR as a new texture. Each step is made cheaper:

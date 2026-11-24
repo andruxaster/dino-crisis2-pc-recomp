@@ -71,6 +71,11 @@ mix-test: $(OUT)/mix_test
 KOS_BASE ?= /opt/toolchains/dc/kos
 $(OUT)/aica_test: tests/aica_test.c src/port/dc/aica_sfx.c src/port/dc/aica_sfx.h
 	$(CC) -O1 -Wall -Wno-unused-function -Itests/aica_fake -Isrc/port/dc -Iinclude -I$(KOS_BASE)/kernel/arch/dreamcast/include -o $@ tests/aica_test.c src/port/dc/aica_sfx.c -lm
+# the Dreamcast's own /cd reader on a made-up Joliet image (tests/dc_iso_test.c)
+$(OUT)/dc_iso_test: tests/dc_iso_test.c src/port/dc/dc_iso.c src/port/dc/dc_iso.h | $(OUT)
+	$(CC) -O1 -w -Itests/dc_iso_fake -Isrc/port/dc -o $@ tests/dc_iso_test.c
+dc-iso-test: $(OUT)/dc_iso_test
+	python3 tests/dc_iso_mkiso.py $(OUT)/dc_iso_img && $(OUT)/dc_iso_test $(OUT)/dc_iso_img
 # the Dreamcast's streams on the AICA: their fill against the software mix (tests/strm_test.c)
 $(OUT)/strm_test: tests/strm_test.c src/pc/audio.c src/port/dc/aica_strm.h | $(OUT)
 	$(CC) -O1 -Wall -Wno-unused-function -DDC2_AICA -Iinclude -o $@ tests/strm_test.c src/pc/audio.c -lm
