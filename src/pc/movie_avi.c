@@ -159,12 +159,28 @@ static int read_chunk(u8 tag[4], u32 *size)
    the end. The file is read once, in order (no seeking back: on the disc a
    chunk read twice costs as much as reading it). */
 #define VQ_MAX 0x40000u                  /* video read ahead at most, waiting for sound */
+/* n bytes passed over by reading them, not with fseek: newlib drops a
+   stream's whole buffer on any seek when the buffer is not its own size
+   (setvbuf, Host_OpenStream: 256 KB on the Dreamcast), so a 1-byte pad
+   skipped with fseek read the next 256 KB from the disc again, at every
+   odd chunk: a seek and a quarter second on a CD-R, the movie stalled */
+static int skip(u32 n)
+{
+    u8 tmp[256];
+    while (n) {
+        u32 k = n < sizeof tmp ? n : (u32)sizeof tmp;
+        if (Host_Read(tmp, k, A.f) != k) return 0;
+        n -= k;
+    }
+    return 1;
+}
+
 static int next_chunk(void)
 {
     for (;;) {
         u8 tag[4]; u32 size;
         if (!read_chunk(tag, &size)) return 0;
-        if (!memcmp(tag, "LIST", 4)) { fseek(A.f, 4, SEEK_CUR); continue; }    /* ('rec ' lists: their chunks follow) */
+        if (!memcmp(tag, "LIST", 4)) { if (!skip(4)) return 0; continue; }    /* ('rec ' lists: their chunks follow) */
         u32 pad = size & 1;
         if (tag[2] == 'd' && (tag[3] == 'c' || tag[3] == 'b')) {
             if (A.vq_pos == A.vq_len) A.vq_pos = A.vq_len = 0;
@@ -173,7 +189,7 @@ static int next_chunk(void)
             memcpy(A.vq + A.vq_len, &size, 4);
             if (Host_Read(A.vq + A.vq_len + 4, size, A.f) != size) return 0;
             A.vq_len += 4 + size;
-            if (pad) fseek(A.f, 1, SEEK_CUR);
+            if (pad && !skip(1)) return 0;
             return 1;
         }
         if (tag[2] == 'w' && tag[3] == 'b' && A.a_ch) {
@@ -181,10 +197,10 @@ static int next_chunk(void)
             if (A.aq_len + size > A.aq_cap) { A.aq_cap = (A.aq_len + size) * 2; A.aq = realloc(A.aq, A.aq_cap); }
             if (Host_Read(A.aq + A.aq_len, size, A.f) != size) return 0;
             A.aq_len += size;
-            if (pad) fseek(A.f, 1, SEEK_CUR);
+            if (pad && !skip(1)) return 0;
             return 2;
         }
-        fseek(A.f, (long)(size + pad), SEEK_CUR);
+        if (!skip(size + pad)) return 0;
     }
 }
 
@@ -215,7 +231,7 @@ int Avi_Open(const char *path)
         }
         u8 *b = malloc(size ? size : 1);
         if (Host_Read(b, size, A.f) != size) { free(b); break; }
-        if (size & 1) fseek(A.f, 1, SEEK_CUR);
+        if ((size & 1) && !skip(1)) break;
         if (!memcmp(c, "avih", 4) && size >= 40) { A.us_per_frame = rd32(b); A.total = rd32(b + 16); }
         else if (!memcmp(c, "strh", 4) && size >= 8) { kind = rd32(b); if (kind == 0x73646976) vfourcc = rd32(b + 4); }  /* 'vids' */
         else if (!memcmp(c, "strf", 4)) {
