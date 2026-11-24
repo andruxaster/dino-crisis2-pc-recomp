@@ -141,6 +141,11 @@ size_t Host_Read(void *p, size_t n, void *file);
    drive a seek); elsewhere a plain fopen. Closed with Host_CloseStream. */
 void *Host_OpenStream(const char *path, size_t buf);
 void Host_CloseStream(void *file);
+/* the same for a sound's file (music, speech): the port's own reader first
+   (the Dreamcast keeps the read-ahead in sound RAM, g_audio_stream_hook),
+   else Host_OpenStream with a smaller main-RAM buffer there */
+void *Host_OpenAudioStream(const char *path, size_t buf);
+extern void *(*g_audio_stream_hook)(const char *path, size_t buf);
 u32 Host_ReadFailures(void);      /* the reads that needed another try (the log) */
 #endif
 #endif
