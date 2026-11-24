@@ -18,6 +18,8 @@ void *Aica_Load(const void *p, u32 a, u32 b, u32 c, u32 d) { return NULL; }
 void Aica_Unload(void *s) {} void Aica_Play(void *s, u32 f, int l, float a, float b) {} void Aica_Gains(void *s, float a, float b) {}
 int Aica_IsPlaying(void *s) { return 0; } void Aica_Stop(void *s) {} void Aica_Pause(void *s) {} void Aica_Resume(void *s) {}
 size_t Host_Read(void *p, size_t n, FILE *f) { return fread(p, 1, n, f); }
+void *Host_OpenStream(const char *path, size_t buf) { (void)buf; return fopen(path, "rb"); }
+void Host_CloseStream(void *f) { if (f) fclose(f); }
 static char g_root[256];
 int Pc_HostPath(const char *g, char *o, unsigned long n) { snprintf(o, n, "%s/%s", g_root, g); for (char *q = o; *q; q++) if (*q == '\\') *q = '/'; return 1; }
 u32 Snd_OpenFileVoice(const char *); void Snd_Play(u32, u32, u32); u32 Strm_OpenFile(const char *, u32, u32); void Strm_Play(u32);

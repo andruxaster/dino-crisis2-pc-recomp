@@ -190,7 +190,7 @@ static int next_chunk(void)
 
 void Avi_Close(void)
 {
-    if (A.f) fclose(A.f);
+    if (A.f) Host_CloseStream(A.f);
     free(A.pix); free(A.vq); free(A.aq); free(A.apcm);
     memset(&A, 0, sizeof A);
 }
@@ -198,7 +198,7 @@ void Avi_Close(void)
 int Avi_Open(const char *path)
 {
     Avi_Close();
-    if (!(A.f = fopen(path, "rb"))) return 0;
+    if (!(A.f = Host_OpenStream(path, 256 << 10))) return 0;
     setvbuf(A.f, NULL, _IOFBF, 0x8000);         /* fewer, larger reads from the disc */
     u8 h[12];
     if (Host_Read(h, 12, A.f) != 12 || memcmp(h, "RIFF", 4) || memcmp(h + 8, "AVI ", 4)) { Avi_Close(); return 0; }

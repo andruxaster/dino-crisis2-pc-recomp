@@ -137,6 +137,33 @@ s32 DC2CALL Pc_Open(gptr path, u32 a, u32 b)
 /* a read, again from the same place when it fails (see pcio.h) */
 static u32 g_read_retries;
 u32 Host_ReadFailures(void) { return g_read_retries; }
+static struct { FILE *f; void *buf; } g_streams[8];
+void *Host_OpenStream(const char *path, size_t buf)
+{
+    FILE *f = fopen(path, "rb");
+    if (!f) return NULL;
+#ifdef DC2_LOWMEM
+    for (int i = 0; i < 8; i++)
+        if (!g_streams[i].f) {
+            void *b = NULL;
+            if (posix_memalign(&b, 32, buf) == 0 && b) {
+                if (setvbuf(f, b, _IOFBF, buf) == 0) { g_streams[i].f = f; g_streams[i].buf = b; }
+                else free(b);
+            }
+            break;
+        }
+#else
+    (void)buf;
+#endif
+    return f;
+}
+void Host_CloseStream(void *file)
+{
+    if (!file) return;
+    fclose(file);
+    for (int i = 0; i < 8; i++)
+        if (g_streams[i].f == file) { free(g_streams[i].buf); g_streams[i].f = NULL; g_streams[i].buf = NULL; }
+}
 size_t Host_Read(void *p, size_t n, void *file)
 {
     FILE *f = file;
