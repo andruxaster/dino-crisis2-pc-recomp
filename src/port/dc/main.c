@@ -40,6 +40,7 @@
 #include "aica_sfx.h"
 #include "aica_strm.h"
 #include "bgvq.h"
+#include "dc_iso.h"
 #include "ctx_sh4.h"
 #include "vmu_save.h"
 #include "unaligned.h"
@@ -367,6 +368,11 @@ int main(int argc, char **argv)
     const Renderer *rend = RenderPvr_Open();
     if (!rend) { printf("PVR set-up failed\n"); return 1; }
     if (!load_image()) { printf("out of memory for the game's image (%u KB)\n", (unsigned)((IMAGE_SIZE - (IMAGE_DATA - IMAGE_BASE) + TMP_SIZE + HEAP_SIZE) >> 10)); return 1; }
+#if DC2_DC_ISO
+    /* /cd read by the port (dc_iso.c): KallistiOS's driver reads the Data
+       folder's directory again on every open, a seek each on a real drive */
+    if (!strncmp(DC2_DC_ROOT, "/cd", 3) && dc_iso_mount() != 0) printf("disc: /cd stays on KallistiOS's ISO 9660\n");
+#endif
     g_pc_root = DC2_DC_ROOT;
     {
         char probe[256];
@@ -455,6 +461,9 @@ int main(int argc, char **argv)
                    (unsigned)(mi.uordblks >> 10), (unsigned)(pvr_mem_available() >> 10), (unsigned)RenderPvr_Evicted(), (unsigned)RenderPvr_Fragmented(), (unsigned)Host_ReadFailures(),
                    (unsigned)BgVq_Loaded(), (unsigned)BgVq_Missing());
             DcUnaligned_Report();
+#if DC2_DC_ISO
+            dc_iso_report();
+#endif
             timing_report();
             if (f % 1800 == 0 && f) Prof_Report();
         }
