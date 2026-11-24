@@ -33,7 +33,7 @@ void Port_GameFrame(void)
         if (U32(G() + 0x1098) > 0x14996C4) U32(G() + 0x1098) = 0x14996C4;
     }
     if (!U8(0x74D74B)) Input_Frame(); else U8(0x74D74B)--;
-    if (Flag_Check(2, 5)) { printf("reset requested (not handled yet)\n"); return; }
+    if (Flag_Check(2, 5)) { Port_GameRestart(); return; }   /* (the options' "end the game") */
     if (!U8(0x74D749)) {
         Task_RunAll();
         Fade_Tick();
@@ -58,6 +58,26 @@ void Port_GameReset(void)
     Light_SetFar(0);
     PcDraw_SetFogEnable(0);
     PcIn_FixedKeys(0);
+}
+
+/* the game started again (WinMain's loop at 0x4707A1, flag 2/5 set by the
+   options' "end the game"): the room and a cutscene ended, the sounds and
+   streams released, the screen cleared, the tasks stopped, then the start
+   of a run as at the beginning (0x4704A3: Game_ResetFrame, the fade, the
+   first task: the title, or the demo's) */
+void Port_GameRestart(void)
+{
+    Room_Reset();
+    Cutscene_End();
+    Snd_ReleaseAll();
+    Strm_HaltAll();
+    Snd_ClearSlots();
+    PcDraw_Clear(3);
+    Task_Kill(0); Task_Kill(1); Task_Kill(2);
+    Port_GameReset();
+    Fade_Set(1, 1, 1);
+    Snd_ReleaseAll();
+    Task_Start(0, U8(0x87DE08) ? 0x471EC0 : 0x46D710);
 }
 
 /* the graphics part of the main loop (0x47053E): the last frame shown, this

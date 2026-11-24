@@ -4,6 +4,7 @@
 #include "dc2/types.h"
 void Port_GameFrame(void);     /* the game part of one frame of WinMain's loop */
 void Port_GameReset(void);     /* the start of a run (0x470980) */
+void Port_GameRestart(void);   /* the game started again (the options' reset, 0x4707A1) */
 void Port_DrawFrame(void);     /* the graphics part of the loop (0x47053E) */
 void Port_DumpState(void);     /* the player, script threads, objects and tasks, printed */
 /* once a frame: in game mode 3, nothing of the game's state changing for
