@@ -37,9 +37,17 @@ static mutex_t g_amx = RECURSIVE_MUTEX_INITIALIZER;
 #endif
 #if defined(DC2_AICA)
 #include "../port/dc/aica_sfx.h"
+#include "../port/dc/aica_strm.h"
 #endif
 #define MINIMP3_IMPLEMENTATION
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic push
+#pragma GCC diagnostic ignored "-Wstringop-overflow"   /* (minimp3 at -O3: a false alarm) */
+#endif
 #include "../../third_party/minimp3/minimp3.h"
+#if defined(__GNUC__) && !defined(__clang__)
+#pragma GCC diagnostic pop
+#endif
 #include <stdio.h>
 
 static int g_log = -1;   /* DC2_SNDLOG: the calls on stderr */
@@ -62,6 +70,7 @@ typedef struct {
     s32 vol, pan;       /* hundredths of a dB */
 #if defined(DC2_AICA)
     AicaSnd *hw;        /* played by the AICA's channels (a bank's sound), not mixed here */
+    int hs;             /* a file stream on a KOS stream (aica_strm.h): its slot + 1; 0 mixed here */
 #endif
 } Voice;
 
@@ -82,8 +91,52 @@ static s32 clamp_cb(s32 v, s32 lo, s32 hi) { return v < lo ? lo : v > hi ? hi : 
 /* v / 127 * range - range, as the PC layer's float to int (towards 0) */
 static s32 cb_of(s32 v, float range) { return (s32)((float)v * 0.007874016f * range - range); }
 
+#if defined(DC2_AICA)
+static int file_next_block(Voice *v);
+/* a file stream on the AICA (aica_strm.h): its blocks copied out at its own
+   rate in the sound thread, nothing mixed or resampled here */
+static u32 strm_fill(void *ctx, s16 *out, u32 frames)
+{
+    Voice *v = ctx;
+    u32 n = 0;
+    ALOCK();
+    while (v->hs && v->playing && v->f && n < frames) {
+        u32 at = (u32)v->pos;
+        if (at >= v->frames) {
+            v->pos = 0;
+            if (!file_next_block(v)) { v->playing = 0; v->frames = 0; break; }
+            continue;
+        }
+        u32 k = v->frames - at < frames - n ? v->frames - at : frames - n;
+        memcpy(out + n * v->ch, v->pcm + at * v->ch, k * v->ch * sizeof(s16));
+        n += k; v->pos = (xreal_pos)(at + k);
+    }
+    AUNLOCK();
+    return n;
+}
+static void hw_strm_stop(Voice *v) { if (v->hs) { AicaStrm_Close(v->hs - 1); v->hs = 0; } }
+/* a file voice that starts playing: on a KOS stream when one is free */
+static void hw_strm_start(Voice *v)
+{
+    hw_strm_stop(v);
+    if (!v->f || !v->playing) return;
+    v->pos = (xreal_pos)(u32)v->pos;                /* (whole frames from here) */
+    int s = AicaStrm_Open(v->freq ? v->freq : v->rate, v->ch, strm_fill, v, v->gl, v->gr);
+    if (s >= 0) v->hs = s + 1;
+    SLOG("file voice on the AICA's stream %d\n", s);
+}
+static void hw_strm_gains(Voice *v) { if (v->hs) AicaStrm_Gains(v->hs - 1, v->gl, v->gr); }
+#define HS(v) ((v)->hs)
+#else
+#define HS(v) 0
+#define hw_strm_stop(v) ((void)0)
+#define hw_strm_start(v) ((void)0)
+#define hw_strm_gains(v) ((void)0)
+#endif
+
 static void voice_free(Voice *v)
 {
+    hw_strm_stop(v);
 #if defined(DC2_AICA)
     Aica_Unload(v->hw);
 #endif
@@ -264,13 +317,13 @@ static void locked_Snd_Play(u32 h, u32 freq, u32 loop)
     if (v->hw) { v->loop = loop != 0; Aica_Play(v->hw, v->freq, loop, v->gl, v->gr); SLOG("snd %u play on the AICA freq %u loop %u\n", (unsigned)h, (unsigned)freq, (unsigned)loop); return; }
 #endif
     v->pos = 0; v->playing = 1; v->paused = 0; v->loop = loop != 0;
-    if (v->f) { fseek(v->f, (long)v->data_off, SEEK_SET); v->data_read = 0; v->frames = 0; }
+    if (v->f) { fseek(v->f, (long)v->data_off, SEEK_SET); v->data_read = 0; v->frames = 0; hw_strm_start(v); }
     SLOG("snd %u play freq %u loop %u (%u frames at %u)\n", (unsigned)h, (unsigned)freq, (unsigned)loop, (unsigned)v->frames, (unsigned)v->rate);
 }
 static void locked_Snd_SetVolume(u32 h, s32 vol)
 {
     if (h >= NBUF || !g_buf[h].used) return;
-    g_buf[h].vol = clamp_cb(cb_of(vol, 3000.0f), -10000, 0); gains(&g_buf[h]);
+    g_buf[h].vol = clamp_cb(cb_of(vol, 3000.0f), -10000, 0); gains(&g_buf[h]); hw_strm_gains(&g_buf[h]);
 #if defined(DC2_AICA)
     if (g_buf[h].hw) Aica_Gains(g_buf[h].hw, g_buf[h].gl, g_buf[h].gr);
 #endif
@@ -279,7 +332,7 @@ static void locked_Snd_SetVolume(u32 h, s32 vol)
 static void locked_Snd_SetPan(u32 h, u32 pan)
 {
     if (h >= NBUF || !g_buf[h].used) return;
-    g_buf[h].pan = clamp_cb((s32)((float)(s32)pan * 0.015625f * 10000.0f - 10000.0f), -10000, 10000); gains(&g_buf[h]);
+    g_buf[h].pan = clamp_cb((s32)((float)(s32)pan * 0.015625f * 10000.0f - 10000.0f), -10000, 10000); gains(&g_buf[h]); hw_strm_gains(&g_buf[h]);
 #if defined(DC2_AICA)
     if (g_buf[h].hw) Aica_Gains(g_buf[h].hw, g_buf[h].gl, g_buf[h].gr);
 #endif
@@ -298,17 +351,17 @@ static u32 locked_Snd_IsPlaying(u32 h)
     if (HW(h)) return (u32)Aica_IsPlaying(g_buf[h].hw);
     return h < NBUF && g_buf[h].used && g_buf[h].playing;
 }
-static void locked_Snd_Stop(u32 h) { if (HW(h)) Aica_Stop(g_buf[h].hw); else if (h < NBUF) g_buf[h].playing = 0; }
+static void locked_Snd_Stop(u32 h) { if (HW(h)) Aica_Stop(g_buf[h].hw); else if (h < NBUF) { g_buf[h].playing = 0; hw_strm_stop(&g_buf[h]); } }
 static void locked_Snd_Free(u32 h) { if (h < NBUF) voice_free(&g_buf[h]); }
 static void locked_Snd_Pause(u32 h)
 {
     if (HW(h)) { Aica_Pause(g_buf[h].hw); return; }
-    if (h < NBUF && g_buf[h].playing) { g_buf[h].playing = 0; g_buf[h].paused = 1; }
+    if (h < NBUF && g_buf[h].playing) { g_buf[h].playing = 0; g_buf[h].paused = 1; hw_strm_stop(&g_buf[h]); }
 }
 static void locked_Snd_Resume(u32 h)
 {
     if (HW(h)) { Aica_Resume(g_buf[h].hw); return; }
-    if (h < NBUF && g_buf[h].paused) { g_buf[h].paused = 0; g_buf[h].playing = 1; }
+    if (h < NBUF && g_buf[h].paused) { g_buf[h].paused = 0; g_buf[h].playing = 1; hw_strm_start(&g_buf[h]); }
 }
 
 /* ---- streams ---- */
@@ -392,22 +445,29 @@ static u32 locked_Strm_OpenFile(const char *file, u32 rec, u32 loop)
     return h;
 }
 
-static void locked_Strm_Play(u32 h) { SLOG("strm %u play\n", (unsigned)h); if (h < NSTRM && g_strm[h].used) { g_strm[h].playing = 1; g_strm[h].paused = 0; } }
-static void locked_Strm_Stop(u32 h) { if (h < NSTRM) g_strm[h].playing = 0; }
+static void locked_Strm_Play(u32 h)
+{
+    SLOG("strm %u play\n", (unsigned)h);
+    if (h < NSTRM && g_strm[h].used) { g_strm[h].playing = 1; g_strm[h].paused = 0; if (!HS(&g_strm[h])) hw_strm_start(&g_strm[h]); }
+}
+static void locked_Strm_Stop(u32 h) { if (h < NSTRM) { g_strm[h].playing = 0; hw_strm_stop(&g_strm[h]); } }
 static void locked_Strm_SetVolume(u32 h, s32 vol)
 {
     if (h >= NSTRM || !g_strm[h].used) return;
-    g_strm[h].vol = clamp_cb(cb_of(vol, 10000.0f), -10000, 0); gains(&g_strm[h]);
+    g_strm[h].vol = clamp_cb(cb_of(vol, 10000.0f), -10000, 0); gains(&g_strm[h]); hw_strm_gains(&g_strm[h]);
     SLOG("strm %u volume %d (%d)\n", (unsigned)h, (int)vol, (int)g_strm[h].vol);
 }
 static void locked_Strm_Close(u32 h) { if (h < NSTRM) voice_free(&g_strm[h]); }
-static void locked_Strm_Pause(u32 h) { if (h < NSTRM && g_strm[h].playing) { g_strm[h].playing = 0; g_strm[h].paused = 1; } }
-static void locked_Strm_Resume(u32 h) { if (h < NSTRM && g_strm[h].paused) { g_strm[h].paused = 0; g_strm[h].playing = 1; } }
+static void locked_Strm_Pause(u32 h) { if (h < NSTRM && g_strm[h].playing) { g_strm[h].playing = 0; g_strm[h].paused = 1; hw_strm_stop(&g_strm[h]); } }
+static void locked_Strm_Resume(u32 h) { if (h < NSTRM && g_strm[h].paused) { g_strm[h].paused = 0; g_strm[h].playing = 1; hw_strm_start(&g_strm[h]); } }
 
 /* ---- the mix ---- */
 
 static void mix_voice(Voice *v, float *acc, u32 frames)
 {
+#if defined(DC2_AICA)
+    if (v->hs) return;                              /* (on the AICA's stream) */
+#endif
     if (!v->playing || (!v->frames && !v->f)) { if (v->playing) v->playing = 0; return; }
     xreal_pos step = (xreal_pos)(v->freq ? v->freq : v->rate) / (xreal_pos)g_rate;
     for (u32 i = 0; i < frames; i++) {

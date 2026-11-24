@@ -18,6 +18,7 @@
 #include <stddef.h>
 #include <stdint.h>
 #include <dc/pvr.h>
+#include <arch/timer.h>
 #include <kos/dbglog.h>
 #include <string.h>
 #include <stdlib.h>
@@ -55,7 +56,14 @@ static u32 g_bg;
 /* headers and vertices staged, sent 8 KB at a time */
 static u8 g_ta[8192] __attribute__((aligned(32)));
 static u32 g_ta_used;
-static void ta_flush(void) { if (g_ta_used) { pvr_prim(g_ta, g_ta_used); g_ta_used = 0; } }
+/* where the drawing's time goes (the log's speed line): waiting for the PVR
+   to finish the scene before, the vertices into the TA, the textures'
+   uploads; microseconds since the last report */
+u32 g_rpvr_us[3];
+enum { RT_WAIT, RT_TA, RT_UPLOAD };
+#define RT_BEGIN() uint64_t rt_t0_ = timer_us_gettime64()
+#define RT_END(k) (g_rpvr_us[k] += (u32)(timer_us_gettime64() - rt_t0_))
+static void ta_flush(void) { if (g_ta_used) { RT_BEGIN(); pvr_prim(g_ta, g_ta_used); g_ta_used = 0; RT_END(RT_TA); } }
 static void *ta_alloc(void) { if (g_ta_used + 32 > sizeof g_ta) ta_flush(); void *r = g_ta + g_ta_used; g_ta_used += 32; return r; }
 
 static void defer_free(pvr_ptr_t m)
@@ -76,7 +84,7 @@ static void tex_release(Tex *e)
 static void scene_begin(void)
 {
     if (g_in_scene) return;
-    pvr_wait_ready();
+    { RT_BEGIN(); pvr_wait_ready(); RT_END(RT_WAIT); }
     g_cur ^= 1;                                  /* the scene before last is done now */
     for (int i = 0; i < g_npending[g_cur]; i++) pvr_mem_free(g_pending[g_cur][i]);
     g_npending[g_cur] = 0;
@@ -205,7 +213,10 @@ static Tex *tex_get(const RTexture *t)
             for (int i = 0; i < e->nx; i++) {
                 pvr_ptr_t m = vram_alloc((u32)e->pw[i] * e->ph[j] * 2);
                 e->mem[j * e->nx + i] = m;
-                if (!m || !tex_upload(t, m, e->xo[i], e->yo[j], e->xo[i + 1] - e->xo[i], e->yo[j + 1] - e->yo[j], e->pw[i], e->ph[j], e->linear)) {
+                RT_BEGIN();
+                int ok = m && tex_upload(t, m, e->xo[i], e->yo[j], e->xo[i + 1] - e->xo[i], e->yo[j + 1] - e->yo[j], e->pw[i], e->ph[j], e->linear);
+                RT_END(RT_UPLOAD);
+                if (!ok) {
                     tex_release(e);         /* (those made: freed after the scenes, as any) */
                     return 0;
                 }
@@ -398,9 +409,11 @@ static void pvr_present(void)
 {
     scene_begin();                                /* (an empty frame still shows the background colour) */
     ta_flush();
+    RT_BEGIN();
     pvr_list_finish();
     CRUMB('E');
     pvr_scene_finish();
+    RT_END(RT_TA);
     g_in_scene = 0;
 }
 

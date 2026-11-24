@@ -148,14 +148,20 @@ And in the shared code, behind switches that the PC builds leave off:
 
 With `DC2_DC_VERBOSE=1` every 300 frames also print a line like
 
-    speed: 24.3 game frames/s (the game wants 30); game 31.2 ms (max 48), drawing 9.1 ms (max 15), waiting 0.0 ms; sound mixing 6% of the CPU
+    speed: 24.3 game frames/s (the game wants 30); game 31.2 ms (max 48), drawing 9.1 ms (max 15), waiting 0.0 ms (of the drawing: PVR wait 0.4, TA 1.9, uploads 0.8, PC layer 6.0); sound 6% of the CPU; 40 sounds and 1 streams on the AICA, 1100 KB of its RAM free
 
 the real rate of game frames against the game's own (0x87DE00 sixtieths a
 frame, mostly 30 a second), then the average and worst time of the game's
 work (`Port_GameFrame`: logic, models, the order table), of the drawing
 (`Port_DrawFrame`: the PC layer, the PVR's submission) and of the wait for
-the next frame (0 when it runs late), and the share of the CPU the sound
-mixer takes.
+the next frame (0 when it runs late). The drawing is split: waiting for
+the PVR to finish the scene before (`pvr_wait_ready`), the vertices into
+the TA (`pvr_prim`, the list and scene finished), the texture uploads, and
+the rest, the PC layer (the order table walked, primitives to vertices,
+the backgrounds). Then the share of the CPU the sound thread takes (the
+mix and the streams), the banks' sounds and the streams (music, speech:
+`src/port/dc/aica_strm.c`, decoded at their own rate, the AICA resamples
+and mixes them) on the AICA's channels.
 
 The frames are paced by the display's vertical blanks (`pace`,
 `src/port/dc/main.c`): a frame ends at the blank the game's length after
