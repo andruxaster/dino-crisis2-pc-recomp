@@ -1389,8 +1389,10 @@ static int surface_create(u32 w, u32 h, gptr surf, u32 fmt)          /* 0x4B6960
 
 /* the 320 x 240 background image (15-bit, blue high) into the plain surface and its
    textures, when it changed (a sum of some of its words) */
+int (*g_pc_bg_hook)(gptr img);
 static void bg_upload(gptr img)                                      /* 0x4BE120 */
 {
+    if (g_pc_bg_hook && g_pc_bg_hook(img)) return;
     u32 sum = 0;
     for (u32 r = 0; r < 15; r++)
         for (u32 k = 0; k < 20; k++) sum += U32(img + r * 0x2800 + k * 0x20);

@@ -187,6 +187,8 @@ void DC2CALL Camera_Load(void)                                     /* 0x403AC0 *
     gptr name = Tmp_Push(0x28);
     Crt_sprintf1(name, 0x71D5BC, U32(0x71B230 + U16(rm + 4) * 4));
 #ifdef DC2_CAM_CACHE
+    char dbs[0x28];
+    memcpy(dbs, MEM(name), sizeof dbs); dbs[sizeof dbs - 1] = 0;
     gptr p = cam_cache_read(name, sec, size);
     Tmp_Pop(0x28);
     if (!p) return;
@@ -202,7 +204,7 @@ void DC2CALL Camera_Load(void)                                     /* 0x403AC0 *
     memmove(MEM(0x6B9500), MEM(p + 0x800), U32(p + 4));
     gptr jpg = p + 0x1000;
 #ifdef DC2_CAM_CACHE
-    if (!cam_cache_picture(MEM(0x6C1500))) {
+    if (!(g_cam_bg_hook && g_cam_bg_hook(dbs, sec, 0x6C1500)) && !cam_cache_picture(MEM(0x6C1500))) {
         u32 js = U32(p + 0x24);
         JPEG_Decode(0x6C1500, jpg, js, 2);
         if (js >= 2 && U8(jpg + js - 2) == 0xFF && U8(jpg + js - 1) == 0xD9)   /* (whole: decoding it again does nothing more) */

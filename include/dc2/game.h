@@ -822,6 +822,10 @@ void DC2CALL Hidden_UpdateAll(void);                                    /* 0x48F
 /* the GOG release's fixes to the game (docs/gog_patches.md): 0 in the
    harness (the reference exe is checked as it is), set by the ports */
 extern int g_gog_fixes;
+/* a port's camera picture made ahead (the Dreamcast's Data\BGVQ): the
+   picture of the record at sector sec of the DBS file dbs (the game's path)
+   put at dst instead of decoding the record's JPEG; 0 when it has none */
+extern int (*g_cam_bg_hook)(const char *dbs, u32 sec, gptr dst);
 #include "crumb.h"
 void DC2CALL Light_SetFar(u32 c);                                       /* 0x48FB50 */
 u32 DC2CALL Area_SoundArea(u32 area, u32 room);                         /* 0x491B10 */

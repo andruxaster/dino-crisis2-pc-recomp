@@ -832,6 +832,7 @@ static gptr se_entry(gptr r)
 }
 
 int g_gog_fixes;
+int (*g_cam_bg_hook)(const char *dbs, u32 sec, gptr dst);
 void (*g_crumb)(int c);
 
 /* sound id at object o (0: no place): every buffer of the sound. Sound 0x38
