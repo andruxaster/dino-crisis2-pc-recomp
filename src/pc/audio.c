@@ -28,6 +28,7 @@ typedef double xreal_pos;
    call into this file holds a recursive lock there; none on the PC */
 #if defined(__DREAMCAST__)
 #include <kos/mutex.h>
+#include <kos/thread.h>
 static mutex_t g_amx = RECURSIVE_MUTEX_INITIALIZER;
 #define ALOCK()   mutex_lock(&g_amx)
 #define AUNLOCK() mutex_unlock(&g_amx)
@@ -66,6 +67,7 @@ typedef struct {
     xreal_pos pos;         /* in frames */
     u8 used, playing, loop, paused;
     u8 borrowed;        /* pcm points into game memory (a sound bank), not owned */
+    volatile u8 reading; /* its file being read by the sound thread with the lock let go (the Dreamcast) */
     float gl, gr;       /* volume and pan */
     s32 vol, pan;       /* hundredths of a dB */
 #if defined(DC2_AICA)
@@ -91,8 +93,20 @@ static s32 clamp_cb(s32 v, s32 lo, s32 hi) { return v < lo ? lo : v > hi ? hi : 
 /* v / 127 * range - range, as the PC layer's float to int (towards 0) */
 static s32 cb_of(s32 v, float range) { return (s32)((float)v * 0.007874016f * range - range); }
 
-#if defined(DC2_AICA)
 static int file_next_block(Voice *v);
+/* the sound thread reads a stream's file without the lock (a read from a
+   real disc can take a quarter of a second, and the game's sound calls
+   would wait that long): whatever moves or frees that file waits for the
+   read to end first (the lock held once, as by the calls' wrappers) */
+static void wait_read(Voice *v)
+{
+#if defined(__DREAMCAST__)
+    while (v->reading) { AUNLOCK(); thd_sleep(1); ALOCK(); }
+#else
+    (void)v;
+#endif
+}
+#if defined(DC2_AICA)
 /* a file stream on the AICA (aica_strm.h): its blocks copied out at its own
    rate in the sound thread, nothing mixed or resampled here */
 static u32 strm_fill(void *ctx, s16 *out, u32 frames)
@@ -136,11 +150,12 @@ static void hw_strm_gains(Voice *v) { if (v->hs) AicaStrm_Gains(v->hs - 1, v->gl
 
 static void voice_free(Voice *v)
 {
+    wait_read(v);
     hw_strm_stop(v);
 #if defined(DC2_AICA)
     Aica_Unload(v->hw);
 #endif
-    if (v->f) fclose(v->f);
+    if (v->f) Host_CloseStream(v->f);
     free(v->blk);
     if (!v->borrowed) free(v->pcm);
     memset(v, 0, sizeof *v);
@@ -197,7 +212,17 @@ static int file_next_block(Voice *v)
     }
     u32 blk = v->fmt == 1 ? v->spb * v->align : v->align;
     u32 n = v->data_len - v->data_read < blk ? v->data_len - v->data_read : blk;
-    if (Host_Read(v->blk, n, v->f) != n) {      /* (the next try from this block's start, not mid-block) */
+#if defined(__DREAMCAST__)
+    v->reading = 1;
+    FILE *rf = v->f;
+    AUNLOCK();
+    size_t got = Host_Read(v->blk, n, rf);
+    ALOCK();
+    v->reading = 0;
+#else
+    size_t got = Host_Read(v->blk, n, v->f);
+#endif
+    if (got != n) {                             /* (the next try from this block's start, not mid-block) */
         clearerr(v->f);
         fseek(v->f, (long)(v->data_off + v->data_read), SEEK_SET);
         return 0;
@@ -256,11 +281,11 @@ static u32 locked_Snd_OpenFileVoice(const char *game_path)
 {
     char path[512];
     Pc_HostPath(game_path, path, sizeof path);
-    FILE *f = fopen(path, "rb");
+    FILE *f = Host_OpenStream(path, 64 << 10);
     if (!f) return 0xFFFFFFFF;
     Voice *v = &g_buf[0];
     voice_free(v);
-    if (!file_voice(v, f, 0, 1)) { fclose(f); memset(v, 0, sizeof *v); return 0xFFFFFFFF; }
+    if (!file_voice(v, f, 0, 1)) { Host_CloseStream(f); memset(v, 0, sizeof *v); return 0xFFFFFFFF; }
     SLOG("voice %s: %u Hz, %u ch, %u bits, %u bytes\n", path, (unsigned)v->rate, (unsigned)v->ch, (unsigned)v->bits, (unsigned)v->data_len);
     return 0;
 }
@@ -317,7 +342,7 @@ static void locked_Snd_Play(u32 h, u32 freq, u32 loop)
     if (v->hw) { v->loop = loop != 0; Aica_Play(v->hw, v->freq, loop, v->gl, v->gr); SLOG("snd %u play on the AICA freq %u loop %u\n", (unsigned)h, (unsigned)freq, (unsigned)loop); return; }
 #endif
     v->pos = 0; v->playing = 1; v->paused = 0; v->loop = loop != 0;
-    if (v->f) { fseek(v->f, (long)v->data_off, SEEK_SET); v->data_read = 0; v->frames = 0; hw_strm_start(v); }
+    if (v->f) { wait_read(v); fseek(v->f, (long)v->data_off, SEEK_SET); v->data_read = 0; v->frames = 0; hw_strm_start(v); }
     SLOG("snd %u play freq %u loop %u (%u frames at %u)\n", (unsigned)h, (unsigned)freq, (unsigned)loop, (unsigned)v->frames, (unsigned)v->rate);
 }
 static void locked_Snd_SetVolume(u32 h, s32 vol)
@@ -431,15 +456,15 @@ static u32 locked_Strm_OpenFile(const char *file, u32 rec, u32 loop)
     char wav[64];
     snprintf(wav, sizeof wav, "data\\BGM\\%s.WAV", line + strlen(want));
     Pc_HostPath(wav, path, sizeof path);
-    FILE *f = fopen(path, "rb");
+    FILE *f = Host_OpenStream(path, 128 << 10);    /* (~6 s of the music a read) */
     if (!f) { SLOG("strm: no %s\n", path); return 0xFFFFFFFF; }
     u32 h = 0;
     while (h < NSTRM && g_strm[h].used) h++;
-    if (h == NSTRM) { fclose(f); return 0xFFFFFFFF; }
+    if (h == NSTRM) { Host_CloseStream(f); return 0xFFFFFFFF; }
     Voice *v = &g_strm[h];
     memset(v, 0, sizeof *v);
     if (!file_voice(v, f, loop, 0)) {
-        SLOG("strm: %s is not an IMA ADPCM WAV\n", path); fclose(f); memset(v, 0, sizeof *v); return 0xFFFFFFFF;
+        SLOG("strm: %s is not an IMA ADPCM WAV\n", path); Host_CloseStream(f); memset(v, 0, sizeof *v); return 0xFFFFFFFF;
     }
     SLOG("strm %u open %s: %u Hz, %u ch, loop %u\n", (unsigned)h, path, (unsigned)v->rate, (unsigned)v->ch, (unsigned)loop);
     return h;

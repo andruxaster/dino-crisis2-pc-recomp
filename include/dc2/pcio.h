@@ -134,6 +134,13 @@ u32 Pc_HeapPeak(void);            /* the most of the heap used so far (bytes) */
    Previous DMA request is in progress"); n read, or less only at the end of
    the file or after the tries. Takes a FILE * (void * here: no stdio.h) */
 size_t Host_Read(void *p, size_t n, void *file);
+/* a file read from start to end as it plays (music, speech, movies): on a
+   real drive (DC2_LOWMEM builds, the Dreamcast) given a read buffer of
+   about `buf` bytes, 32-byte aligned, so the disc is read in large pieces
+   seldom rather than a block at a time (each read of another file costs the
+   drive a seek); elsewhere a plain fopen. Closed with Host_CloseStream. */
+void *Host_OpenStream(const char *path, size_t buf);
+void Host_CloseStream(void *file);
 u32 Host_ReadFailures(void);      /* the reads that needed another try (the log) */
 #endif
 #endif

@@ -40,7 +40,7 @@ static void *cb(snd_stream_hnd_t h, int req, int *got)
 int AicaStrm_Init(void)
 {
     for (g_n = 0; g_n < NS; g_n++) {
-        snd_stream_hnd_t h = snd_stream_alloc(cb, SND_STREAM_BUFFER_MAX / 4);
+        snd_stream_hnd_t h = snd_stream_alloc(cb, SND_STREAM_BUFFER_MAX / 2);   /* (~0.7 s at 22050 Hz: room for a slow disc read) */
         if (h == SND_STREAM_INVALID) break;
         g_s[g_n].h = h;
         snd_stream_set_userdata(h, &g_s[g_n]);
