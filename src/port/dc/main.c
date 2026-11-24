@@ -38,6 +38,7 @@
 #include "dc2/pcdraw.h"
 #include "render_pvr.h"
 #include "aica_sfx.h"
+#include "aica_strm.h"
 #include "ctx_sh4.h"
 #include "vmu_save.h"
 #include "unaligned.h"
@@ -224,9 +225,8 @@ static void *stream_cb(snd_stream_hnd_t h, int req, int *got)
     (void)h;
     u32 want = (u32)req / 4;                       /* bytes of stereo s16 */
     if (want > 4096) want = 4096;
-    uint64_t t0 = timer_us_gettime64();
     PcAudio_Mix(g_out, want);
-    g_mix_us += (u32)(timer_us_gettime64() - t0); g_mix_calls++;
+    g_mix_calls++;
     *got = (int)(want * 4);
     return g_out;
 }
@@ -234,7 +234,13 @@ static void *stream_cb(snd_stream_hnd_t h, int req, int *got)
 static void *audio_thread(void *arg)
 {
     (void)arg;
-    for (;;) { snd_stream_poll(g_strm); thd_sleep(5); }
+    for (;;) {
+        uint64_t t0 = timer_us_gettime64();        /* (the report: the sound thread's time, mixing and streams) */
+        snd_stream_poll(g_strm);
+        AicaStrm_Poll();
+        g_mix_us += (u32)(timer_us_gettime64() - t0);
+        thd_sleep(5);
+    }
     return NULL;
 }
 
@@ -244,6 +250,7 @@ static void audio_open(void)
     Aica_Init();                                   /* (the banks' sounds on the AICA's channels) */
     g_strm = snd_stream_alloc(stream_cb, SND_STREAM_BUFFER_MAX / 4);
     if (g_strm == SND_STREAM_INVALID) return;
+    printf("sound: %d streams for the music and speech on the AICA\n", AicaStrm_Init());
     PcAudio_Init(SND_RATE, NULL);                  /* (no sink: mixed when the stream asks) */
     snd_stream_start(g_strm, SND_RATE, 1);
     kthread_attr_t a = {0};
@@ -316,9 +323,16 @@ static void timing_report(void)
                (unsigned)(g_tm.game / g_tm.n / 1000), (unsigned)(g_tm.game / g_tm.n / 100 % 10), (unsigned)(g_tm.game_max / 1000),
                (unsigned)(g_tm.draw / g_tm.n / 1000), (unsigned)(g_tm.draw / g_tm.n / 100 % 10), (unsigned)(g_tm.draw_max / 1000),
                (unsigned)(g_tm.wait / g_tm.n / 1000), (unsigned)(g_tm.wait / g_tm.n / 100 % 10));
+        /* the drawing's parts (render_pvr.c): the PVR's wait, the TA, the uploads; the rest is the PC layer */
+        extern u32 g_rpvr_us[3];
+        u32 d = g_tm.draw, pw = g_rpvr_us[0], ta = g_rpvr_us[1], up = g_rpvr_us[2], rest = d > pw + ta + up ? d - pw - ta - up : 0;
+#define MS10(x) (unsigned)((x) / g_tm.n / 1000), (unsigned)((x) / g_tm.n / 100 % 10)
+        printf(" (of the drawing: PVR wait %u.%u, TA %u.%u, uploads %u.%u, PC layer %u.%u)", MS10(pw), MS10(ta), MS10(up), MS10(rest));
+#undef MS10
+        memset(g_rpvr_us, 0, sizeof g_rpvr_us);
 #if DC2_DC_AUDIO
-        printf("; sound mixing %u%% of the CPU; %u sounds on the AICA, %u KB of its RAM free", (unsigned)(g_mix_us / (span / 100 ? span / 100 : 1)),
-               (unsigned)Aica_Count(), (unsigned)(Aica_Free() >> 10));
+        printf("; sound %u%% of the CPU; %u sounds and %u streams on the AICA, %u KB of its RAM free", (unsigned)(g_mix_us / (span / 100 ? span / 100 : 1)),
+               (unsigned)Aica_Count(), (unsigned)AicaStrm_Live(), (unsigned)(Aica_Free() >> 10));
         g_mix_us = 0; g_mix_calls = 0;
 #endif
         printf("\n");

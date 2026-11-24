@@ -34,7 +34,7 @@ DC2_DC_HEAP    ?= 0x300000
 DC2_REV := $(shell git describe --always --dirty 2>/dev/null || echo unknown)
 
 GAME_SRCS := $(wildcard src/game/*.c) $(wildcard src/pc/*.c) $(wildcard src/data/*.c) src/hook/hooks.c src/port/frame.c
-DC_SRCS   := src/port/dc/main.c src/port/dc/render_pvr.c src/port/dc/vmu_save.c src/port/dc/unaligned.c src/port/dc/aica_sfx.c src/port/dc/prof.c
+DC_SRCS   := src/port/dc/main.c src/port/dc/render_pvr.c src/port/dc/vmu_save.c src/port/dc/unaligned.c src/port/dc/aica_sfx.c src/port/dc/aica_strm.c src/port/dc/prof.c
 DC_ASM    := src/port/dc/ctx_sh4.S
 
 OBJS := $(patsubst %.c,$(BUILD)/%.o,$(GAME_SRCS) $(DC_SRCS)) $(patsubst %.S,$(BUILD)/%.o,$(DC_ASM))
@@ -45,19 +45,26 @@ DEFS := $(if $(filter 1,$(DC2_UNALIGNED)),-DDC2_UNALIGNED) -DDC2_LOWMEM $(if $(f
 # (plain aligned accesses; the rare unaligned ones are emulated by
 # src/port/dc/unaligned.c, DC2_UNALIGNED=1 makes every one byte-safe instead)
 CFLAGS_DC := -std=gnu11 -O2 -fno-strict-aliasing -fwrapv -Wall -Wno-unused-parameter -Wno-unused-function -Iinclude $(DEFS)
+# DC2_DC_FAST=1 (the default): the PC layer and the port (src/pc, src/port:
+# drawing, JPEG, sound, the PVR) at -O3 with the SH-4's fast float (fsrra,
+# fsca, multiply-adds, no errno or traps; infinities and NaNs kept). The
+# game's own code (src/game) stays at -O2 with exact floats, as the harness
+# checks it.
+DC2_DC_FAST ?= 1
+CFLAGS_FAST := $(if $(filter 1,$(DC2_DC_FAST)),-O3 -fno-math-errno -funsafe-math-optimizations -fno-trapping-math -ffp-contract=fast -mfsrra -mfsca)
 
 # rebuild everything when the switches change (make does not track -D values)
 STAMP := $(BUILD)/.defs
-ifneq ($(file < $(STAMP)),$(DEFS))
+ifneq ($(file < $(STAMP)),$(DEFS) $(CFLAGS_FAST))
 $(shell mkdir -p $(BUILD))
-$(file > $(STAMP),$(DEFS))
+$(file > $(STAMP),$(DEFS) $(CFLAGS_FAST))
 endif
 
 all: $(TARGET)
 
 $(BUILD)/%.o: %.c $(STAMP)
 	@mkdir -p $(dir $@)
-	kos-cc $(CFLAGS_DC) -c $< -o $@
+	kos-cc $(CFLAGS_DC) $(if $(filter src/pc/% src/port/%,$<),$(CFLAGS_FAST)) -c $< -o $@
 
 $(BUILD)/%.o: %.S
 	@mkdir -p $(dir $@)
