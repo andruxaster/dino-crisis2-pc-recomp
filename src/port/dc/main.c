@@ -41,6 +41,7 @@
 #include "aica_strm.h"
 #include "bgvq.h"
 #include "dc_iso.h"
+#include "aica_ra.h"
 #include "ctx_sh4.h"
 #include "vmu_save.h"
 #include "unaligned.h"
@@ -249,7 +250,8 @@ static void *audio_thread(void *arg)
 static void audio_open(void)
 {
     if (snd_stream_init() < 0) return;
-    Aica_Init();                                   /* (the banks' sounds on the AICA's channels) */
+    Aica_Init();
+    g_audio_stream_hook = AicaRa_Open;              /* (the music's and speech's read-ahead in sound RAM) */                                   /* (the banks' sounds on the AICA's channels) */
     g_strm = snd_stream_alloc(stream_cb, SND_STREAM_BUFFER_MAX / 4);
     if (g_strm == SND_STREAM_INVALID) return;
     printf("sound: %d streams for the music and speech on the AICA\n", AicaStrm_Init());
@@ -333,8 +335,9 @@ static void timing_report(void)
 #undef MS10
         memset(g_rpvr_us, 0, sizeof g_rpvr_us);
 #if DC2_DC_AUDIO
-        printf("; sound %u%% of the CPU; %u sounds and %u streams on the AICA, %u KB of its RAM free", (unsigned)(g_mix_us / (span / 100 ? span / 100 : 1)),
-               (unsigned)Aica_Count(), (unsigned)AicaStrm_Live(), (unsigned)(Aica_Free() >> 10));
+        printf("; sound %u%% of the CPU; %u sounds and %u streams on the AICA, %u KB of its RAM free; %u files read ahead there (%u pieces from the disc)",
+               (unsigned)(g_mix_us / (span / 100 ? span / 100 : 1)), (unsigned)Aica_Count(), (unsigned)AicaStrm_Live(), (unsigned)(Aica_Free() >> 10),
+               (unsigned)AicaRa_Open_Count(), (unsigned)AicaRa_Pieces());
         g_mix_us = 0; g_mix_calls = 0;
 #endif
         printf("\n");

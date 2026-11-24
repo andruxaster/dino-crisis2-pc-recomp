@@ -157,6 +157,16 @@ void *Host_OpenStream(const char *path, size_t buf)
 #endif
     return f;
 }
+void *(*g_audio_stream_hook)(const char *path, size_t buf);
+void *Host_OpenAudioStream(const char *path, size_t buf)
+{
+    if (g_audio_stream_hook) {
+        void *f = g_audio_stream_hook(path, buf);
+        if (f) return f;
+        return Host_OpenStream(path, buf < (32 << 10) ? buf : 32 << 10);   /* (no room for it there: a small buffer here) */
+    }
+    return Host_OpenStream(path, buf);
+}
 void Host_CloseStream(void *file)
 {
     if (!file) return;

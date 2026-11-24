@@ -201,8 +201,11 @@ into a table sorted by name; a file's data comes with one CD stream per
 read (one seek, then sectors by DMA, whole sectors into aligned buffers),
 small reads through a 16 KB cache per open file; a failed stream falls back
 to sector commands. The files streamed as they play (music, speech, movies)
-get large stdio buffers (`Host_OpenStream`, 64-256 KB) and the music's
-reads let the sound lock go, so the drive is read seldom and the game
+are read in large pieces (the music 128 KB, ~6 s; the speech 64 KB; the
+movies 256 KB): the music's and the speech's pieces are kept in the AICA's
+sound RAM (`src/port/dc/aica_ra.c`, through one 32 KB bounce in main RAM;
+a 32 KB main-RAM buffer when sound RAM has no room), the movies' in main
+RAM (`Host_OpenStream`); the music's reads let the sound lock go, so the drive is read seldom and the game
 never waits on it for a sound call. The watchdog counts finished reads as
 progress, so a long load from a slow drive is not reported as a hang.
 `DC2_DC_ISO=0` keeps KallistiOS's driver. `make dc-iso-test` checks the

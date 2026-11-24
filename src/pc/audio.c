@@ -281,7 +281,7 @@ static u32 locked_Snd_OpenFileVoice(const char *game_path)
 {
     char path[512];
     Pc_HostPath(game_path, path, sizeof path);
-    FILE *f = Host_OpenStream(path, 64 << 10);
+    FILE *f = Host_OpenAudioStream(path, 64 << 10);
     if (!f) return 0xFFFFFFFF;
     Voice *v = &g_buf[0];
     voice_free(v);
@@ -456,7 +456,7 @@ static u32 locked_Strm_OpenFile(const char *file, u32 rec, u32 loop)
     char wav[64];
     snprintf(wav, sizeof wav, "data\\BGM\\%s.WAV", line + strlen(want));
     Pc_HostPath(wav, path, sizeof path);
-    FILE *f = Host_OpenStream(path, 128 << 10);    /* (~6 s of the music a read) */
+    FILE *f = Host_OpenAudioStream(path, 128 << 10);   /* (~6 s of the music a read) */
     if (!f) { SLOG("strm: no %s\n", path); return 0xFFFFFFFF; }
     u32 h = 0;
     while (h < NSTRM && g_strm[h].used) h++;
