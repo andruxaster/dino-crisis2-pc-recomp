@@ -3,7 +3,7 @@
 A recompilation of **Dino Crisis 2** (PC, `Dino2.exe`, 2002) into C: the
 game's code rewritten function by function with the original's behaviour,
 checked against the original exe. It runs natively on Linux and Windows
-(SDL2 + OpenGL) and on the **Dreamcast** (KallistiOS).
+(SDL2 + OpenGL) and on the **Dreamcast** (KallistiOS) (VERY UNSTABLE).
 
 **No game data is included.** You need your own copy of the game; its
 `Data` folder (and, optionally, `MOVIE` and `SPEECH` from the CD) is read at
